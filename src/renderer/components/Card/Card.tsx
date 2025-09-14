@@ -24,20 +24,21 @@ interface Props {
     selected?: boolean;
 }
 
-const Card: React.FC<Props> = ({
-    current,
-    total,
-    coverPath: defaultCoverPath,
-    title,
-    onClick,
-    onKeyDown,
-    countLabel,
-    overlayContent,
-    selected = false,
-}) => {
-    const [coverPath, setCoverPath] = useState<string | null>(defaultCoverPath);
+function Card(props: Props): JSX.Element {
+    const {
+        current,
+        total,
+        coverPath: defaultCoverPath,
+        title,
+        onClick,
+        onKeyDown,
+        countLabel,
+        overlayContent,
+        selected = false,
+    } = props;
 
-    const [isOverlayVisible, setIsOverlayVisible] = useState(false);
+    const [coverPath, setCoverPath] = useState<string | null>(defaultCoverPath ?? null);
+    const [isOverlayVisible, setIsOverlayVisible] = useState<boolean>(false);
     const { params } = useParams();
 
     // Keep local coverPath in sync when parent provides a new cover (async fetch)
@@ -45,10 +46,12 @@ const Card: React.FC<Props> = ({
         setCoverPath(defaultCoverPath ?? null);
     }, [defaultCoverPath]);
 
-    const onToggleOverlay = useCallback((e: React.MouseEvent) => {
+    const handleToggleOverlay = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        setIsOverlayVisible(!isOverlayVisible);
-    }, [isOverlayVisible]);
+        setIsOverlayVisible((v) => !v);
+    }, []);
+
+    const handleMouseLeave = useCallback(() => setIsOverlayVisible(false), []);
 
     const needProgressBar = useMemo(() => {
         return (
@@ -59,20 +62,28 @@ const Card: React.FC<Props> = ({
         );
     }, [current, total]);
 
+    const progressPercent = useMemo(() => {
+        if (!needProgressBar) return 0;
+        const c = current ?? 0;
+        const t = total ?? 1;
+        return Math.max(0, Math.min(100, Math.round((c / t) * 100)));
+    }, [needProgressBar, current, total]);
+
     return (
         <div
             className={`manga-card ${selected ? 'selected' : ''}`}
-            onMouseLeave={() => setIsOverlayVisible(false)}
+            onMouseLeave={handleMouseLeave}
             onClick={onClick}
             role="button"
             tabIndex={0}
             onKeyDown={onKeyDown}
+            aria-pressed={selected}
         >
             <div className="manga-card-cover">
                 {coverPath ? (
                     <img
-                        src={coverPath as string}
-                        alt={`Cover for ${title}`}
+                        src={coverPath}
+                        alt={title ? `Cover for ${title}` : 'Cover'}
                         onError={() => setCoverPath(null)}
                     />
                 ) : (
@@ -82,7 +93,11 @@ const Card: React.FC<Props> = ({
                 {isOverlayVisible ? (
                     <div className="manga-card-overlay" onClick={(e) => e.stopPropagation()}>
                         { overlayContent?.map((item, idx) => (
-                            <button key={idx} onClick={item.onClick}>
+                            <button
+                                key={idx}
+                                onClick={item.onClick}
+                                type="button"
+                            >
                                 {item.label}
                             </button>
                         )) }
@@ -90,7 +105,11 @@ const Card: React.FC<Props> = ({
                 ) : overlayContent && (
                     <button
                         className="manga-card-overlay-open"
-                        onClick={onToggleOverlay}
+                        onClick={handleToggleOverlay}
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded={isOverlayVisible}
+                        onMouseDown={(e) => e.stopPropagation()}
                     >
                         <span>...</span>
                     </button>
@@ -103,7 +122,7 @@ const Card: React.FC<Props> = ({
                     <div className="manga-card-progress-track">
                         <div
                             className="manga-card-progress-fill"
-                            style={{ width: `${Math.max(0, Math.min(100, Math.round(((current || 0) / (total || 1)) * 100))) }%` }} />
+                            style={{ width: `${progressPercent}%` }} />
                     </div>
                     <div className="manga-card-progress-text">
                         {`${current}/${total}`}
@@ -118,6 +137,6 @@ const Card: React.FC<Props> = ({
         ) : null}
         </div>
     );
-};
+}
 
 export default Card;

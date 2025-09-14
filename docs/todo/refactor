@@ -1,0 +1,48 @@
+# Files to rework to follow best practices
+
+## Components
+
+### Urgent
+
+### Important
+
+- src/renderer/components/SearchAndSort/SearchAndSort.tsx
+- src/renderer/components/Reader/Reader.tsx
+- src/renderer/components/Reader/ImageViewer.tsx
+- src/renderer/components/MangaManger/MangaManager.tsx
+- src/renderer/components/MangaCard/MangaCard.tsx
+- src/renderer/components/Modal/modales/TagsModalContent.tsx
+- src/renderer/components/Modal/modales/SettingsModalContent.tsx
+- src/renderer/components/Modal/modales/EditMangaModal.tsx
+- src/renderer/components/Modal/modales/BatchEditModal.tsx
+- src/renderer/components/Modal/modales/BatchEditModalContent.tsx
+- src/renderer/components/JapaneseAnalyse/JapaneseAnalyse.tsx
+
+### Moyen
+
+- src/renderer/components/utils/CardList/CardList.tsx
+- src/renderer/components/utils/Form/fields/TagPickerField.tsx
+- src/renderer/components/Reader/OcrPanel.tsx
+- src/renderer/components/JapaneseAnalyse/DetailsPanel.tsx
+- src/renderer/components/JapaneseAnalyse/TokensList.tsx
+
+### Minor
+
+- src/renderer/components/utils/Form/Form.tsx
+- src/renderer/components/Tag/TagItem.tsx
+- src/renderer/components/utils/Form/fields/TextField.tsx
+- src/renderer/components/utils/Form/fields/TextareaField.tsx
+- src/renderer/components/utils/Form/fields/SelectField.tsx
+- src/renderer/components/utils/Form/fields/RadioField.tsx
+- src/renderer/components/utils/Form/fields/NumberField.tsx
+- src/renderer/components/utils/Form/fields/MultiSelectField.tsx
+- src/renderer/components/utils/Form/fields/FileField.tsx
+- src/renderer/components/utils/Form/fields/CheckboxField.tsx
+- src/renderer/components/Reader/ReaderHeader.tsx
+- src/renderer/components/Modal/modales/SettingsModal.tsx
+- src/renderer/components/JapaneseAnalyse/DetectedText.tsx
+- src/renderer/components/JapaneseAnalyse/Header.tsx
+
+## Scss
+
+-

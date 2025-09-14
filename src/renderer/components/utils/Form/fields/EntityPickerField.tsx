@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Field } from '../types'
 import TagItem from '@/renderer/components/Tag/TagItem'
 import './EntityPickerField.scss'
@@ -50,13 +50,10 @@ export default function EntityPickerField({
   const selected = value || []
   const hiddenRef = useRef<HTMLInputElement | null>(null)
 
-  // ensure hidden input starts with the prop value
-  useEffect(() => {
-    if (hiddenRef.current) hiddenRef.current.value = JSON.stringify(value || [])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Keep hidden input in sync if `value`/`selected` changes from initialValues
+  // Keep hidden input in sync with the controlled `value` prop.
+  // We only write JSON to the hidden input — the Form implementation expects
+  // a DOM snapshot. The external API (`onChange({ target: { value } })`) is
+  // preserved when committing changes.
   useEffect(() => {
     if (hiddenRef.current) hiddenRef.current.value = JSON.stringify(selected)
   }, [selected])
@@ -80,26 +77,25 @@ export default function EntityPickerField({
     document.addEventListener('mousedown', onDocDown)
     return () => document.removeEventListener('mousedown', onDocDown)
   }, [])
-
-  const commit = (next: string[]) => {
+  const commit = useCallback((next: string[]) => {
     if (hiddenRef.current) hiddenRef.current.value = JSON.stringify(next)
     onChange({ target: { value: next } })
-  }
+  }, [onChange])
 
-  const add = (id: string) => {
+  const add = useCallback((id: string) => {
     if (selected.includes(id)) return
     const next = [...selected, id]
     commit(next)
     if (!keepOpenOnAdd) setOpen(false)
     setQuery('')
-  }
+  }, [selected, commit, keepOpenOnAdd])
 
-  const remove = (id: string) => {
+  const remove = useCallback((id: string) => {
     const next = selected.filter(x => x !== id)
     commit(next)
-  }
+  }, [selected, commit])
 
-  const getById = (id: string) => options.find(x => x.id === id) || { id, name: id }
+  const getById = useCallback((id: string) => options.find(x => x.id === id) || { id, name: id }, [options])
 
   return (
     <div className="mh-entity-picker" ref={containerRef}>
@@ -109,22 +105,28 @@ export default function EntityPickerField({
       <div className="mh-entity-picker__row">
         <input
           type="text"
+          aria-label={field.label || field.name}
           placeholder={placeholder || field.placeholder || 'Rechercher...'}
           value={query}
           readOnly={disableSearch}
           onChange={e => { if (!disableSearch) { setQuery(e.target.value) } setOpen(true) }}
           onFocus={() => setOpen(true)}
+          onKeyDown={e => {
+            // support Escape to close
+            if (e.key === 'Escape') setOpen(false)
+          }}
         />
       </div>
 
       {open && filtered.length > 0 ? (
-        <div className="mh-entity-picker__results" role="listbox">
+        <div className="mh-entity-picker__results" role="listbox" tabIndex={-1}>
           {filtered.map(opt => (
             <button
               key={opt.id}
               className="mh-entity-picker__result"
               onClick={() => add(opt.id)}
               role="option"
+              aria-selected={false}
             >
               <p>{opt.name}</p>
             </button>
