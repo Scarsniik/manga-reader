@@ -1,0 +1,73 @@
+### Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+### TypeScript
+dist/
+out/
+*.tsbuildinfo
+
+### Vite / Build
+.vite/
+.vite-deps/
+.cache/
+.parcel-cache/
+
+### Electron
+*.asar
+dist/electron/
+build/
+app-builder*
+*.exe
+*.dll
+
+### Sass / CSS preprocessor
+.sass-cache/
+.cache-loader/
+
+### Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+### Environment
+.env
+.env.*.local
+.env.local
+
+### OS files
+.DS_Store
+Thumbs.db
+
+### Editors / IDEs
+.vscode/
+*.code-workspace
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+### Testing / Coverage
+coverage/
+.nyc_output/
+
+### Misc
+*.tgz
+*.zip
+*.7z
+tmp/
+temp/
+.cache/
+
+# Generated / local artifacts
+jpdb_response.json
+package-lock.json
+
+# NOTE: files already tracked by git will not be removed from the index automatically.
+# To stop tracking an already committed file, run: git rm --cached <file> and commit.
