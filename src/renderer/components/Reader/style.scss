@@ -1,0 +1,213 @@
+
+.reader {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 16px;
+	color: #eee;
+}
+
+.reader-header {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 12px;
+  max-width: 1100px;
+}
+
+.reader-info {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.reader-body {
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	min-height: 60vh;
+	gap: 16px;
+	/* allow children to shrink/expand correctly inside this flex container */
+	min-width: 0;
+}
+
+.reader-body img.reader-image {
+	max-width: 1100px;
+	width: 100%;
+	height: auto;
+	object-fit: contain;
+	border-radius: 4px;
+}
+
+.image-wrap {
+	position: relative;
+	display: block;
+	width: 100%;
+}
+
+.image-wrap .reader-image {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.overlay-box {
+	position: absolute;
+	border: 2px solid rgba(255,255,255,0.6);
+	background: rgba(255,255,255,0.02);
+	cursor: pointer;
+	padding: 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	overflow: hidden;
+}
+
+.overlay-box.selected {
+	border-color: rgba(60,120,220,0.9);
+	background: rgba(60,120,220,0.08);
+}
+
+.overlay-box .overlay-label {
+	font-size: 11px;
+	color: #fff;
+	background: rgba(0,0,0,0.45);
+	padding: 2px 4px;
+	margin: 4px;
+	border-radius: 3px;
+}
+
+.reader-body.ocr-on {
+	display: flex;
+	align-items: flex-start;
+
+	.reader-view {
+		margin-right: auto;
+	}
+}
+
+.reader-view {
+	/* keep the reader at its max width and avoid being shrunk by the OCR panel */
+	flex: 0 0 auto;
+	width: 100%;
+	max-width: 1100px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.reader-translation-placeholder {
+	background: rgba(0,0,0,0.45);
+	color: #fff;
+	padding: 10px;
+	border-radius: 6px;
+	margin-top: 8px;
+}
+
+
+
+.reader-controls {
+		margin-top: 12px;
+		display: flex;
+		gap: 8px;
+}
+
+/* OCR panel should take the remaining available width without reducing the reader */
+.reader-ocr-panel {
+	flex: 1 1 0;
+	min-width: 320px; /* keep the panel usable at small sizes */
+	max-width: 100%;
+}
+
+/* On smaller viewports stack the reader and OCR panel to avoid overflow */
+@media (max-width: 1000px) {
+	.reader-body {
+		flex-direction: column;
+		align-items: center;
+	}
+	.reader-ocr-panel {
+		width: 100%;
+		min-width: 0;
+	}
+	.reader-view {
+		width: 100%;
+		max-width: 1100px;
+	}
+}
+
+.reader-controls button {
+	background: rgba(255,255,255,0.06);
+	color: #fff;
+	border: 1px solid rgba(255,255,255,0.08);
+	padding: 8px 14px;
+	border-radius: 6px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 150ms, transform 100ms;
+}
+
+.reader-controls button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.reader-controls button:not(:disabled):hover {
+	background: rgba(255,255,255,0.12);
+	transform: translateY(-1px);
+}
+
+.reader-controls button:focus {
+	outline: 2px solid rgba(255,255,255,0.12);
+	outline-offset: 2px;
+}
+
+.reader-empty {
+	text-align: center;
+	color: #ccc;
+}
+
+.reader-debug {
+	margin-top: 8px;
+	text-align: left;
+	padding: 8px;
+	border-radius: 4px;
+	max-width: 1100px;
+}
+
+.debug-list ul {
+	max-height: 200px;
+	overflow: auto;
+	margin: 4px 0;
+	padding-left: 18px;
+}
+
+.debug-error {
+	color: #ff8080;
+	margin-top: 8px;
+}
+
+.debug-cover img {
+	margin-top: 8px;
+	border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* small screens */
+@media (max-width: 600px) {
+	.reader-body {
+		padding: 8px;
+	}
+	.reader-body img.reader-image {
+		max-width: 100%;
+	}
+}
+
+.reader-back {
+	color: #fff;
+	text-decoration: none;
+	font-weight: 600;
+	font-size: 20px;
+}
+

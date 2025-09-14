@@ -1,0 +1,16 @@
+@import './_theme.scss';
+
+.jp-analyse-header { display:flex; align-items:center; justify-content:space-between; gap:12px }
+
+.close-btn {
+	background: transparent;
+	border: 1px solid $jp-border;
+	color: $jp-text;
+	padding: 6px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
+}
+
+.close-btn:hover { background: rgba(255,255,255,0.02); transform: translateY(-1px) }
+.close-btn:focus { box-shadow: $jp-focus-shadow }

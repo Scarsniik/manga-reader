@@ -1,0 +1,110 @@
+.searchAndSort {
+  border: 1px solid rgba(0,0,0,0.08);
+  padding: 10px;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.searchAndSort .tag-summary {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.searchAndSort .search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.searchAndSort .search-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 4px;
+}
+
+.searchAndSort .toggle-filters {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: white;
+  display: inline-block; /* allow transform */
+  transition: transform 150ms ease-in-out;
+}
+
+.searchAndSort .toggle-filters[title] { opacity: 0.9 }
+
+.searchAndSort.collapsed .filters { display: none; }
+
+.searchAndSort.expanded { box-shadow: 0 8px 20px rgba(0,0,0,0.04); }
+
+.searchAndSort.expanded .toggle-filters {
+  transform: rotate(180deg);
+}
+
+.searchAndSort .filters {
+  margin-top: 10px;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-direction: column; /* stack filter lines vertically */
+}
+.searchAndSort .filter-group {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.searchAndSort .filter-group:last-child { border-bottom: none; }
+
+.searchAndSort .filter-row { display: flex; gap: 16px; width: 100%; }
+.searchAndSort .filter-item { flex: 1; }
+.searchAndSort .filter-item.checkbox-group {
+  padding-top: 22px;
+
+  .filter-control {
+    display: flex;
+  }
+  input {
+    width: unset;
+  }
+}
+.searchAndSort .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 0; }
+.searchAndSort .tag-item { display: inline-flex; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.03); }
+
+/* Responsive: place filters in a row on wide screens */
+@media (min-width: 900px) {
+  .searchAndSort .filters { flex-direction: column; }
+  .searchAndSort .filter-group { flex: 1 1 0; padding: 0; border-bottom: none; }
+  .searchAndSort .filter-row { gap: 24px; }
+}
+
+/* filter line layout */
+.searchAndSort .filter-line { display: flex; align-items: center; width: 100%; }
+.searchAndSort .filter-label { width: 160px; color: #888; font-size: 13px; }
+.searchAndSort .filter-control { flex: 1; }
+.searchAndSort .filter-control > * { margin-top: 0; }
+.searchAndSort .label-above { display: flex; flex-direction: column; gap: 6px; }
+.searchAndSort .label-above .filter-label { width: auto; }
+.searchAndSort .checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 899px) {
+  .searchAndSort .filter-label { width: 110px; }
+}
+
+.searchAndSort .filter-actions { display: flex; gap: 8px; align-items: center; }
+.searchAndSort .filter-actions button { padding: 6px 10px; }

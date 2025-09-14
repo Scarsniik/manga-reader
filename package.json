@@ -1,0 +1,54 @@
+{
+  "name": "manga-helper",
+  "version": "1.0.0",
+  "description": "A lightweight desktop application for learning Japanese through manga.",
+  "author": "",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "prestart": "tsc -p tsconfig.json",
+    "build": "vite build",
+    "dev": "vite",
+    "build:app": "npm run prestart && npm run build",
+    "build:all": "npm run prestart && npm run build && npm run package",
+    "dev:electron": "vite & powershell -NoProfile -Command \"$env:VITE_DEV_SERVER_URL=(Get-Content .vite/deps/temp | Out-String); npm run start\"",
+    "prepackage": "powershell -NoProfile -Command \"Stop-Process -Name 'manga-helper','app-builder','app-builder.exe','electron','node' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path 'build\\win-unpacked') { Remove-Item -LiteralPath 'build\\win-unpacked' -Recurse -Force -ErrorAction SilentlyContinue }\"",
+    "package": "electron-builder"
+  },
+  "dependencies": {
+    "image-size": "^1.0.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^6.14.1",
+  "sharp": "^0.34.3",
+  "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.0",
+    "@types/react": "^18.2.28",
+    "@types/react-dom": "^18.2.8",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron-builder": "^26.0.12",
+    "electron": "^38.0.0",
+    "sass": "^1.92.1",
+    "vite": "^7.1.4"
+  },
+  "build": {
+    "appId": "com.example.mangahelper",
+    "files": [
+      "dist/**/*",
+      "dist/electron/**/*",
+      "data/**/*"
+    ],
+    "win": {
+  "target": ["portable"],
+  "forceCodeSigning": false,
+  "verifyUpdateCodeSignature": false
+    },
+    "directories": {
+      "output": "build"
+    }
+  },
+  "homepage": "https://github.com/yourusername/manga-helper",
+  "license": "MIT"
+}

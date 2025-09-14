@@ -1,0 +1,117 @@
+// This file contains the main styles for the application, written in SCSS.
+
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #121212; /* dark background */
+    color: #e6e6e6;
+    margin: 0;
+    padding: 0;
+}
+
+h1, h2, h3 {
+    color: #fff;
+}
+
+.container {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: #1f1f1f;
+    border-right: 1px solid #2b2b2b;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.reader {
+    flex-grow: 1;
+    background-color: #151515;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.link-item {
+    padding: 8px;
+    border-bottom: 1px solid #222;
+    cursor: pointer;
+    color: #ddd;
+}
+
+.link-item:hover {
+    background-color: #262626;
+}
+
+.button {
+    padding: 10px 15px;
+    background-color: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.button:hover {
+    background-color: #135ba1;
+}
+
+// Form / input global styles used across the app (modals, forms, inline inputs)
+label {
+    display: block;
+    margin-bottom: 6px;
+    color: #cfcfcf;
+    font-size: 0.95rem;
+}
+
+.form-row {
+    margin-bottom: 12px;
+}
+
+input,
+input[type="text"],
+input[type="search"],
+input[type="url"],
+input[type="password"],
+textarea,
+select {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: #1a1a1a;
+    color: #e6e6e6;
+    border: 1px solid #2b2b2b;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 4px rgba(25,118,210,0.08);
+}
+
+/* modal-specific small helpers */
+.app-modal .edit-manga-modal {
+    min-width: 360px;
+}
+.edit-manga-modal input {
+    font-size: 0.95rem;
+}
+
+.app-modal-btn.primary {
+    background-color: #1976d2;
+    color: white;
+}
+.app-modal-btn.secondary {
+    background-color: transparent;
+    color: #e6e6e6;
+    border: 1px solid #333;
+}
+
+.edit-manga-modal > div {
+    margin-bottom: 6px;
+}

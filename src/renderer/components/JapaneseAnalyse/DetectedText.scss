@@ -1,0 +1,41 @@
+@import './_theme.scss';
+
+.detected-text {
+	margin-bottom: 12px;
+	background: $jp-surface;
+	padding: 10px;
+	border-radius: $jp-radius;
+	color: $jp-text;
+	border: 1px solid $jp-border;
+}
+
+.manual-input {
+    display:flex;
+    flex-wrap: wrap;
+    align-items:center;
+    gap:8px;
+}
+
+.manual-input__input {
+	flex: 1 1 100%;
+	margin-right: 8px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	border: 1px solid $jp-border;
+	background: transparent;
+	color: $jp-text;
+}
+
+/* When .manual-input__input is a textarea, prevent manual resize and hide scrollbars.
+	 The textarea will be auto-resized by JS. */
+.manual-input__input[rows] {
+	resize: none; /* prevent manual resizing */
+	overflow: hidden; /* hide scrollbars */
+}
+
+.manual-input__input::placeholder { color: $jp-muted; font-size: $jp-font-size-sm }
+.validate-btn, .clear-btn { padding: 6px 10px; border-radius: 6px; border: 1px solid $jp-border; background: transparent; color: $jp-text; cursor: pointer }
+.validate-btn:hover, .clear-btn:hover { background: rgba(255,255,255,0.02) }
+.validate-btn:focus, .clear-btn:focus { box-shadow: $jp-focus-shadow }
+
+.auto-text { margin-top: 8px; color: $jp-muted; font-size: 12px }

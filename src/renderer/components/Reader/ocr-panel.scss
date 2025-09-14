@@ -1,0 +1,83 @@
+.reader-ocr-panel {
+  min-width: 320px;
+  background: #0f1113; /* dark panel */
+  border-left: 1px solid rgba(255,255,255,0.04);
+  box-shadow: -2px 0 8px rgba(0,0,0,0.6);
+  font-size: 13px;
+  color: #e6e6e6;
+
+  position: fixed;
+  right: 30px;
+  top: 30px;
+  width: 742px;
+}
+
+.ocr-panel-inner {
+  padding: 12px;
+}
+
+.ocr-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ocr-panel-controls button {
+  margin-left: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  color: #e6e6e6;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 4px;
+}
+
+.ocr-panel-controls button:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.ocr-box-list {
+  margin-top: 12px;
+}
+
+.ocr-box-list ul {
+  padding-left: 12px;
+}
+
+.ocr-box-list button {
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  text-align: left;
+  color: #e6e6e6;
+  width: 100%;
+}
+
+.ocr-box-list button:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.ocr-status {
+  margin-top: 8px;
+  color: #9aa0a6;
+}
+
+/* Rows inside the panel with default top spacing */
+.ocr-panel-row {
+  margin-top: 8px;
+}
+
+/* Checkbox row: label is a flex container with gap */
+.ocr-checkbox-row .ocr-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ocr-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}

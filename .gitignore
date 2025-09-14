@@ -68,6 +68,10 @@ temp/
 # Generated / local artifacts
 jpdb_response.json
 package-lock.json
+node_modules/
+tsc.log
+tsc_full.log
+build/*.exe
 
 # NOTE: files already tracked by git will not be removed from the index automatically.
 # To stop tracking an already committed file, run: git rm --cached <file> and commit.

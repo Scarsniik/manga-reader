@@ -1,0 +1,169 @@
+.manga-card {
+  /* Fill parent (CardList-item) which enforces the aspect ratio */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  color: #e6e6e6;
+  position: relative;
+  cursor: pointer;
+}
+
+.manga-card .manga-card-cover {
+  /* The CardList wrapper controls the aspect ratio and height.
+     Keep the cover as a positioned container so the image can be absolutely positioned inside. */
+  position: relative;
+  width: 100%;
+  background: linear-gradient(180deg, #222, #1a1a1a);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  color: #999;
+  border: 1px solid #2b2b2b;
+  overflow: hidden;
+}
+
+.manga-card .manga-card-cover img {
+  /* Image is absolutely positioned by CardList styles to fill the cover.
+     Keep border-radius small to match cover container if required. */
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.manga-card .manga-card-cover .no-cover {
+  padding: 8px;
+  text-align: center;
+}
+
+.manga-card .manga-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.manga-card .manga-card-title {
+  /* Limit title to max 2 lines and show ellipsis when overflowing */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.manga-card .manga-card-pages {
+  font-size: 12px;
+  color: #bdbdbd;
+}
+
+/* Progress bar shown when currentPage is available */
+.manga-card .manga-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.manga-card .manga-card-progress-track {
+  flex: 1 1 auto;
+  background: rgba(0,0,0,0.18); /* subtle dark track */
+  height: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.manga-card .manga-card-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #bdbdbd 0%, #9e9e9e 100%); /* neutral gray fill */
+  border-radius: 6px 0 0 6px;
+  width: 0%;
+  transition: width 220ms ease;
+}
+.manga-card .manga-card-progress-text {
+  font-size: 12px;
+  color: #bdbdbd;
+  white-space: nowrap;
+}
+
+/* Title line count variants */
+.manga-card .manga-card-title[class*="title-lines-"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.manga-card .title-lines-1 { -webkit-line-clamp: 1; line-clamp: 1; }
+.manga-card .title-lines-2 { -webkit-line-clamp: 2; line-clamp: 2; }
+.manga-card .title-lines-3 { -webkit-line-clamp: 3; line-clamp: 3; }
+.manga-card .title-lines-4 { -webkit-line-clamp: 4; line-clamp: 4; }
+
+.manga-card .manga-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.3s ease;
+
+  button {
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 4px 0;
+    width: 90%;
+
+    &:hover {
+      background: #135ba1;
+    }
+  }
+}
+
+.manga-card {
+  .manga-card-overlay-open {
+    opacity: 0;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    height: 25px;
+    width: 35px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    cursor: pointer;
+    font-size: 25px;
+    line-height: 1px;
+
+    span {
+      margin-top: -11px;
+      display: block;
+    }
+  }
+
+  &:hover {
+    .manga-card-overlay-open {
+      opacity: 1;
+    }
+  }
+}
+
+.manga-card.selected {
+  outline: 3px solid rgba(29, 155, 240, 0.9);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(29, 155, 240, 0.12) inset;
+}
+

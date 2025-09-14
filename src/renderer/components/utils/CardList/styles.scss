@@ -1,0 +1,71 @@
+/* CardList responsive grid
+	 - mobile: 2 columns
+	 - >=640px (sm): 3 columns
+	 - >=768px (md): 4 columns
+	 - >=1024px (lg): 6 columns
+*/
+.cardList {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+}
+
+@media (min-width: 640px) {
+	.cardList {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+@media (min-width: 768px) {
+	.cardList {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+@media (min-width: 1024px) {
+	.cardList {
+		grid-template-columns: repeat(6, 1fr);
+	}
+}
+
+.cardList > * {
+	/* ensure cards take full cell width */
+	width: 100%;
+}
+
+/* Item wrapper enforces aspect ratio so cards have proportional height */
+
+.cardList-item {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Make the cover element keep its ratio while the card text flows below */
+.cardList-item .manga-card-cover {
+	/* Force the cover box to a specific aspect ratio and hide overflow */
+	width: 100%;
+	flex: 0 0 auto; /* do not stretch; let the cover determine its own height */
+	position: relative;
+	aspect-ratio: 1280 / 1811; /* portrait cover ratio; adjust if needed */
+	overflow: hidden;
+}
+
+/* Fallback for browsers that don't support aspect-ratio: use padding-top */
+.cardList-item .manga-card-cover::before {
+	content: '';
+	display: block;
+	/* (height/width)*100% -> (1811/1280)*100 ≈ 141.64% */
+	padding-top: 141.640625%;
+}
+
+/* Ensure the cover image is centered and zoomed (cropped) to fill the box */
+.cardList-item .manga-card-cover img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover; /* scale and crop to fill */
+	object-position: center center; /* center the crop */
+	display: block;
+}

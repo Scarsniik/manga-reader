@@ -1,0 +1,161 @@
+.mh-tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.mh-tag-item__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mh-tag-item__label {
+  font-weight: 500;
+}
+
+.mh-tag-item__input {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.mh-tag-item__hidden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.mh-tag-item__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mh-button {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.mh-button--primary {
+  background: #0366d6;
+  color: #fff;
+}
+
+.mh-button--secondary {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* Styles moved from TagsModalContent.scss to make tag styles available to TagItem everywhere */
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 6px 10px;
+  background: #262626;
+  border: 1px solid #363636;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+  transition: background 0.12s ease, transform 0.08s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  &.editing {
+    background: rgba(0,0,0,0.03);
+  }
+
+  .tag-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .tag-title {
+    font-size: 13px;
+    padding: 2px 4px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tag-ghost {
+    margin-left: 6px;
+    opacity: 0.9;
+    font-size: 12px;
+  }
+
+  .tag-title-input {
+    font-size: 13px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: none;
+    background: rgb(51, 51, 51);
+    min-width: 120px;
+    outline: none;
+  }
+
+  .tag-hidden-checkbox {
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    accent-color: var(--primary-color, #2b8aef);
+  }
+
+  .tag-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-left: 0;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 12px;
+  }
+
+  .icon-btn--transparent {
+    color: var(--muted-color, #666);
+    opacity: 0.95;
+  }
+
+  .icon-btn--confirm {
+    background: var(--success-color, #2ecc71);
+    color: white;
+  }
+
+  &.editing {
+    .icon-btn--transparent {
+      display: none;
+    }
+  }
+
+  .tag-form {
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}

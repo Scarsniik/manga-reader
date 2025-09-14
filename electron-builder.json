@@ -1,0 +1,50 @@
+{
+  "appId": "com.mangahelper.app",
+  "productName": "Manga Helper",
+  "version": "1.0.0",
+  "files": [
+    "dist/**/*",
+    "data/**/*",
+    "node_modules/**/*"
+  ],
+  "directories": {
+    "output": "build"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.ico"
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.icns"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.png"
+  },
+  "publish": {
+    "provider": "generic",
+    "url": "https://your-update-server.com/"
+  }
+}

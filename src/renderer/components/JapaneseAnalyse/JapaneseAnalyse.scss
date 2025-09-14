@@ -1,0 +1,27 @@
+@import './_theme.scss';
+
+.jp-analyse {
+  padding: 12px;
+  font-size: $jp-font-size-base;
+  color: $jp-text;
+  background: transparent;
+}
+
+.jp-analyse .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+
+.jp-analyse .detected-text { padding: 10px; }
+
+.jp-analyse .tokens { margin-top:10px; }
+
+.jp-analyse .token-btn { cursor:pointer }
+
+.jp-analyse .details { margin-top:10px; }
+
+.jp-analyse__text { margin-top: 10px; color: $jp-muted; font-size: $jp-font-size-sm }
+.translation { margin-bottom: 8px; color: $jp-text; background: transparent }
+.translation-truncated { color: $jp-muted; font-size: $jp-font-size-sm }
+
+// Small helpers
+.jp-analyse .row { display:flex; gap:10px; align-items:center }
+
+.jp-analyse :focus { outline: none; box-shadow: $jp-focus-shadow }

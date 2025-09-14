@@ -1,0 +1,35 @@
+
+@import './_theme.scss';
+
+.tokens { margin-bottom: 10px }
+.tokens-list {
+	display:inline; /* keep flow like text */
+	line-height: 1.6;
+}
+
+.token-btn {
+	display: inline;
+	margin: 0 2px 0 0; /* small spacing like natural word gap */
+	padding: 0; /* remove button padding so it reads as inline text */
+	border: none;
+	background: transparent;
+	color: $jp-text;
+	font-size: $jp-font-size-base;
+	cursor: pointer;
+	text-decoration: none;
+	transition: color 120ms ease, background 120ms ease;
+}
+
+/* Hover only changes text color to indicate clickability — not a button */
+.token-btn:hover {
+	color: $jp-accent; /* accent color on hover */
+}
+
+.token-btn:focus {
+	outline: none;
+	box-shadow: $jp-focus-shadow;
+}
+
+.token-btn.active { color: $jp-accent }
+
+.token-spacer { display:inline-block; padding-right: 4px }

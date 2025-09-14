@@ -1,0 +1,21 @@
+.tags-modal-content {
+  .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tags-header {
+    margin-bottom: 20px;
+  }
+
+  .btn-primary {
+    background: none;
+    border: none;
+    font-size: 15px;
+    color: white;
+    cursor: pointer;
+  }
+
+  /* tag styles moved to Tag component stylesheet */
+}
