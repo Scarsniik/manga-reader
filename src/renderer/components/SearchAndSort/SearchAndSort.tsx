@@ -54,11 +54,11 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             const tagsArr = tagsParam ? tagsParam.split(',').filter(Boolean) : [];
             const sort = qs.get('sort') ?? defaultSort;
             const exp = qs.get('expanded') === '1';
-            const status = qs.get('status') ?? 'Tous';
+            const status = qs.get('status');
             const unfinished = qs.get('unfinished') === '1';
             return { q, tagsArr, sort, exp, status, unfinished };
         } catch (e) {
-            return { q: defaultSearch, tagsArr: [], sort: defaultSort, exp: false, status: 'Tous', unfinished: false };
+            return { q: defaultSearch, tagsArr: [], sort: defaultSort, exp: false, unfinished: false };
         }
     };
 
