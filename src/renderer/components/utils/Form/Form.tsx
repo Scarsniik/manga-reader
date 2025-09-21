@@ -1,14 +1,15 @@
 import React, { useState, ChangeEvent, FormEvent, useEffect, useCallback, useMemo } from 'react'
 import { Field } from './types'
-import TextField from './fields/TextField'
-import NumberField from './fields/NumberField'
-import TextareaField from './fields/TextareaField'
-import SelectField from './fields/SelectField'
-import MultiSelectField from './fields/MultiSelectField'
-import TagPickerField from './fields/TagPickerField'
-import RadioField from './fields/RadioField'
-import CheckboxField from './fields/CheckboxField'
-import FileField from './fields/FileField'
+import TextField from "./fields/TextField";
+import NumberField from "./fields/NumberField";
+import TextareaField from "./fields/TextareaField";
+import SelectField from "./fields/SelectField";
+import MultiSelectField from "./fields/MultiSelectField";
+import TagPickerField from "./fields/TagPickerField";
+import RadioField from "./fields/RadioField";
+import CheckboxField from "./fields/CheckboxField";
+import FileField from "./fields/FileField";
+import SeriesField from "./fields/SeriesField";
 import './style.scss'
 
 type Props = {
@@ -225,15 +226,16 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
             <div key={f.name} className="mh-form__field">
             {f.label ? <label htmlFor={f.name}>{f.label}{f.required ? ' *' : ''}</label> : null}
 
-            {f.type === 'text' ? <TextField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'number' ? <NumberField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'textarea' ? <TextareaField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'select' ? <SelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'selectMulti' ? <MultiSelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'tagsPicker' ? <TagPickerField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'radio' ? <RadioField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'checkbox' ? <CheckboxField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === 'file' ? <FileField field={f} onChange={handleChange(f) as any} /> : null}
+            {f.type === "text" ? <TextField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "number" ? <NumberField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "textarea" ? <TextareaField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "select" ? <SelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "selectMulti" ? <MultiSelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "tagsPicker" ? <TagPickerField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "radio" ? <RadioField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "checkbox" ? <CheckboxField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "file" ? <FileField field={f} onChange={handleChange(f) as any} /> : null}
+            {f.type === "series" ? <SeriesField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
 
             {mergedFieldError(f.name) ? <div className="mh-form__field-error">{mergedFieldError(f.name)}</div> : null}
             </div>

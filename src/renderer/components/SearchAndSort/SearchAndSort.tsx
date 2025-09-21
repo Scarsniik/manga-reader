@@ -5,6 +5,9 @@ import TagPickerField from '@/renderer/components/utils/Form/fields/TagPickerFie
 import { Field } from '@/renderer/components/utils/Form/types';
 import useParams from '@/renderer/hooks/useParams';
 import './styles.scss';
+import SeriesField from '@/renderer/components/utils/Form/fields/SeriesField';
+import EntityPickerField, { EntityOption } from '@/renderer/components/utils/Form/fields/EntityPickerField';
+import { languages } from '@/renderer/consts/languages';
 
 type Props = {
     mangaList: Manga[];
@@ -63,11 +66,19 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
     const [query, setQuery] = useState<string>(initial.q);
     const [selectedTags, setSelectedTags] = useState<string[]>(initial.tagsArr);
+    const [selectedLanguageIds, setSelectedLanguageIds] = useState<string[]>([]);
     const [sortBy, setSortBy] = useState<string>(initial.sort);
     const [expanded, setExpanded] = useState<boolean>(initial.exp);
     // new: status filter and unfinished-first option
-    const [statusFilter, setStatusFilter] = useState<string>(initial['status'] ?? 'Tous');
+        const [statusFilter, setStatusFilter] = useState<string[]>(initial['status']
+            ? Array.isArray(initial['status'])
+                ? initial['status']
+                : String(initial['status']).split(',').filter(Boolean)
+            : []
+        );
     const [unfinishedFirst, setUnfinishedFirst] = useState<boolean>(initial['unfinished'] === true);
+    // Series filter
+    const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
     // applyFilters will be created via useCallback below and triggered automatically
 
@@ -93,6 +104,21 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 }
             }
 
+            // series filter
+            if (selectedSeriesId) {
+                if (m.seriesId !== selectedSeriesId) return false;
+            }
+
+            // language filter
+            if (selectedLanguageIds.length > 0) {
+                if (selectedLanguageIds.includes('')) {
+                    // Si "Aucune" est sélectionné, on ne garde que les mangas sans langue définie
+                    if (m.language !== undefined && m.language !== null && m.language !== '') return false;
+                } else {
+                    if (!m.language || !selectedLanguageIds.includes(m.language)) return false;
+                }
+            }
+
             if (searchLower) {
                 const title = (m.title || '').toLowerCase();
                 if (!title.includes(searchLower)) return false;
@@ -110,22 +136,31 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             // 'En cours' -> currentPage > 0 && currentPage < pages,
             // 'Non lu' -> currentPage is null/undefined or currentPage <= 0,
             // 'Tous' -> no filtering
-            if (statusFilter && statusFilter !== 'Tous') {
+                if (statusFilter && statusFilter.length > 0) {
                 // Coerce to numbers and consult async pages cache when pages not present
                 const pagesRaw = m.pages;
                 const cpRaw = m.currentPage;
                 const pagesCount = pagesRaw != null ? Number(pagesRaw) : (pagesCacheRef.current[m.id] ?? undefined);
                 const cp = cpRaw != null ? Number(cpRaw) : null;
 
-                if (statusFilter === 'Lu') {
-                    if (!pagesCount || cp === null || cp === undefined || Number.isNaN(cp)) return false;
-                    if (cp < pagesCount) return false;
-                } else if (statusFilter === 'En cours') {
-                    if (!pagesCount || cp === null || cp === undefined || Number.isNaN(cp)) return false;
-                    if (!(cp > 1 && cp < pagesCount)) return false;
-                } else if (statusFilter === 'Non lu') {
-                    if (cp !== null && cp !== undefined && !Number.isNaN(cp) && cp > 0) return false;
+                // Si plusieurs statuts sélectionnés, on garde si l'un d'eux correspond
+                let match = false;
+                for (const status of statusFilter) {
+                    if (status === 'Lu') {
+                        if (pagesCount && cp !== null && cp !== undefined && !Number.isNaN(cp) && cp >= pagesCount) {
+                            match = true;
+                        }
+                    } else if (status === 'En cours') {
+                        if (pagesCount && cp !== null && cp !== undefined && !Number.isNaN(cp) && cp > 1 && cp < pagesCount) {
+                            match = true;
+                        }
+                    } else if (status === 'Non lu') {
+                        if (!(cp !== null && cp !== undefined && !Number.isNaN(cp) && cp > 0)) {
+                            match = true;
+                        }
+                    }
                 }
+                if (!match) return false;
             }
 
             return true;
@@ -171,8 +206,20 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         }
 
         onSearch(result);
-    }, [mangaList, query, selectedTags, sortBy, tags, params, statusFilter, unfinishedFirst, pagesVersion, onSearch]);
-    // include pagesVersion so filters re-run when async page counts arrive
+    }, [
+        mangaList,
+        query,
+        selectedTags,
+        sortBy,
+        tags,
+        params,
+        statusFilter,
+        selectedLanguageIds,
+        unfinishedFirst,
+        pagesVersion,
+        onSearch,
+        selectedSeriesId
+    ]);
 
 
     // trigger search whenever input state changes
@@ -188,7 +235,11 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             if (selectedTags && selectedTags.length > 0) qs.set('tags', selectedTags.join(',')); else qs.delete('tags');
             if (sortBy) qs.set('sort', sortBy); else qs.delete('sort');
             if (expanded) qs.set('expanded', '1'); else qs.delete('expanded');
-            if (statusFilter && statusFilter !== 'Tous') qs.set('status', statusFilter); else qs.delete('status');
+            if (statusFilter && statusFilter.length > 0 && !(statusFilter.length === 1 && statusFilter[0] === 'Tous')) {
+                qs.set('status', statusFilter.join(','));
+            } else {
+                qs.delete('status');
+            }
             if (unfinishedFirst) qs.set('unfinished', '1'); else qs.delete('unfinished');
             const newQs = qs.toString();
             const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}${window.location.hash || ''}`;
@@ -197,6 +248,19 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             console.warn('Failed to sync search params to URL', e);
         }
     }, [query, selectedTags, sortBy, expanded, statusFilter, unfinishedFirst]);
+
+    // Options pour l'entity picker statut
+    const statusOptions: EntityOption[] = [
+        { id: 'Lu', name: 'Lu' },
+        { id: 'Non lu', name: 'Non lu' },
+        { id: 'En cours', name: 'En cours' }
+    ];
+
+    // Options pour l'entity picker langue
+    const languageOptions: EntityOption[] = [
+        { id: '', name: 'Aucune' },
+        ...languages.map(l => ({ id: l.code, name: l.frenchName }))
+    ];
 
     return (
         <div className={`searchAndSort ${expanded ? 'expanded' : 'collapsed'}`}>
@@ -220,12 +284,17 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                             <div className="filter-label">Statut</div>
                             <div className="filter-line">
                                 <div className="filter-control">
-                                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                                        <option value="Tous">Tous</option>
-                                        <option value="Lu">Lu</option>
-                                        <option value="Non lu">Non lu</option>
-                                        <option value="En cours">En cours</option>
-                                    </select>
+                                    <EntityPickerField
+                                        field={{ name: 'status', placeholder: 'Filtrer par statut...' } as Field}
+                                        options={statusOptions}
+                                        value={statusFilter}
+                                        onChange={(e: any) => {
+                                        const val = Array.isArray(e?.target?.value) ? e.target.value : [];
+                                        setStatusFilter(val);
+                                        }}
+                                        placeholder="Filtrer par statut..."
+                                        keepOpenOnAdd={true}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -270,6 +339,44 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                                         <option value="title-asc">Titre (A → Z)</option>
                                         <option value="title-desc">Titre (Z → A)</option>
                                     </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Row 2: Language / Series */}
+                    <div className="filter-row">
+                        <div className="filter-item label-above">
+                            <div className="filter-label">Langue</div>
+                            <div className="filter-line">
+                                <div className="filter-control">
+                                    <EntityPickerField
+                                        field={{ name: 'language', placeholder: 'Rechercher des langues...' } as Field}
+                                        options={languageOptions}
+                                        value={selectedLanguageIds}
+                                        onChange={(e: any) => {
+                                            const val = Array.isArray(e?.target?.value) ? e.target.value : [];
+                                            setSelectedLanguageIds(val);
+                                        }}
+                                        placeholder="Rechercher des langues..."
+                                        keepOpenOnAdd={true}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="filter-item label-above">
+                            <div className="filter-label">Séries</div>
+                            <div className="filter-line">
+                                <div className="filter-control">
+                                    <SeriesField
+                                        field={{ name: 'series', placeholder: 'Rechercher des séries...' } as Field}
+                                        value={selectedSeriesId}
+                                        onChange={(e: any) => {
+                                            const val = e?.target?.value;
+                                            setSelectedSeriesId(val);
+                                        }}
+                                        disableCreate
+                                    />
                                 </div>
                             </div>
                         </div>

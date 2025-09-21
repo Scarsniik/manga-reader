@@ -1,0 +1,130 @@
+
+// Bouton de suppression (croix)
+.mh-series-field__delete {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  background: none;
+  border: none;
+  color: #ff5c5c;
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+  &:hover {
+    background: #ff5c5c22;
+    color: #fff;
+  }
+  &:active {
+    background: #ff5c5c;
+    color: #fff;
+  }
+}
+.mh-series-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// Wrapper autour du select et du bouton delete
+.mh-series-field__select-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.mh-series-field__select {
+  flex: 1;
+  min-width: 0;
+  background: #23242a;
+  color: #f2f2f2;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 1rem;
+  outline: none;
+  transition: border 0.2s;
+  &:focus {
+    border-color: #3a8dde;
+  }
+}
+
+// Champ création série (input + bouton)
+.mh-series-field__create {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.mh-series-field__input {
+  background: #23242a;
+  color: #f2f2f2;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 1rem;
+  outline: none;
+  transition: border 0.2s;
+  width: 120px;
+  &:focus {
+    border-color: #3a8dde;
+  }
+  &::placeholder {
+    color: #888;
+  }
+}
+
+.mh-series-field__add {
+  background: none;
+  color: #3a8dde;
+  border: 1.5px solid #3a8dde;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, border 0.18s;
+  box-shadow: none;
+  &:hover:not(:disabled) {
+    background: #3a8dde22;
+    color: #fff;
+    border-color: #256bb5;
+  }
+  &:active:not(:disabled) {
+    background: #256bb5;
+    color: #fff;
+    border-color: #256bb5;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: none;
+    color: #888;
+    border-color: #444;
+  }
+}
+
+.mh-series-field__error {
+  color: #ff5c5c;
+  font-size: 0.95em;
+  margin-left: 8px;
+  white-space: nowrap;
+}
