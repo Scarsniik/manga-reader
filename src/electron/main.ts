@@ -20,6 +20,7 @@ const createWindow = () => {
             webSecurity: false,
             sandbox: false,
         },
+        autoHideMenuBar: app.isPackaged, // Cache la barre de menu en prod
     });
 
 
@@ -27,6 +28,8 @@ const createWindow = () => {
         // En production, charge le build Vite dans dist/renderer (chemin absolu, compatible asar et portable)
         const indexPath = path.join(app.getAppPath(), 'dist', 'renderer', 'index.html');
         mainWindow.loadFile(indexPath);
+        // Supprime la barre de menu native pour un vrai mode prod
+        mainWindow.setMenuBarVisibility(false);
     } else {
         // En dev, charge le serveur Vite
         const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000';
@@ -37,8 +40,28 @@ const createWindow = () => {
         mainWindow = null;
     });
 
-    // Ouvre DevTools au démarrage pour debug
-    mainWindow.webContents.openDevTools();
+    // Ouvre DevTools seulement en développement
+    if (!app.isPackaged) {
+        mainWindow.webContents.openDevTools();
+    } else {
+        // En production, bloque toute ouverture des DevTools
+        mainWindow.webContents.on('before-input-event', (event, input) => {
+            // Bloque Ctrl+Shift+I, F12
+            if ((input.control && input.shift && input.key.toLowerCase() === 'i') || input.key === 'F12') {
+                event.preventDefault();
+            }
+        });
+        // Bloque l'ouverture via menu contextuel
+        mainWindow.webContents.on('context-menu', (e) => {
+            e.preventDefault();
+        });
+        // Bloque toute ouverture par code
+        mainWindow.webContents.on('devtools-opened', () => {
+            if (mainWindow) {
+                mainWindow.webContents.closeDevTools();
+            }
+        });
+    }
 };
 
 // Register a custom protocol to serve local files from the filesystem.
