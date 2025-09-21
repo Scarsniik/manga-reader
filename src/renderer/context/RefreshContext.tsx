@@ -28,4 +28,3 @@ export const RefreshProvider: React.FC<{ children: ReactNode }> = ({ children })
   );
 };
 
-export default RefreshContext;

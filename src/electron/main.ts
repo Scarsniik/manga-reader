@@ -15,22 +15,30 @@ const createWindow = () => {
         height: 600,
         webPreferences: {
             // Use the compiled preload in `dist` during development and when packaged.
-            preload: path.join(basePath, 'dist', 'electron', 'preload.js'),
+            preload: path.join(basePath, 'dist', 'preload.js'),
             contextIsolation: true,
-            // Allow loading local file resources (file://) from pages served by the
-            // Vite dev server while in development. This relaxes same-origin/CORS
-            // checks and should NOT be enabled in production for security reasons.
-            webSecurity: app.isPackaged ? true : false,
+            webSecurity: false,
+            sandbox: false,
         },
     });
 
-    // In development, allow the Vite dev server URL to be injected via env (handles dynamic ports)
-    const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000';
-    mainWindow.loadURL(devServerUrl);
+
+    if (app.isPackaged) {
+        // En production, charge le build Vite dans dist/renderer (chemin absolu, compatible asar et portable)
+        const indexPath = path.join(app.getAppPath(), 'dist', 'renderer', 'index.html');
+        mainWindow.loadFile(indexPath);
+    } else {
+        // En dev, charge le serveur Vite
+        const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000';
+        mainWindow.loadURL(devServerUrl);
+    }
 
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
+
+    // Ouvre DevTools au démarrage pour debug
+    mainWindow.webContents.openDevTools();
 };
 
 // Register a custom protocol to serve local files from the filesystem.

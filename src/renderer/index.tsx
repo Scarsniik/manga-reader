@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '@/renderer/App';
 import { ModalProvider } from '@/renderer/context/ModalContext';
-import { RefreshProvider, RefreshContext } from '@/renderer/context/RefreshContext';
+import { RefreshProvider, RefreshContext } from './context/RefreshContext';
 import { useContext } from 'react';
 import { TagsProvider } from '@/renderer/context/TagsContext';
 import { AuthorsProvider } from '@/renderer/context/AuthorsContext';

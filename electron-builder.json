@@ -3,7 +3,10 @@
   "productName": "Manga Helper",
   "version": "1.0.0",
   "files": [
-    "dist/**/*",
+    "dist/main.js",
+    "dist/preload.js",
+    "dist/renderer/index.html",
+    "dist/renderer/assets/**/*",
     "data/**/*",
     "node_modules/**/*"
   ],
@@ -14,6 +17,12 @@
     "target": [
       {
         "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
         "arch": [
           "x64"
         ]

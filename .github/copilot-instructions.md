@@ -35,6 +35,7 @@ The project is a desktop application to learn japansese through reading manga.
 - Try to do generic component when possible.
 - use function declaration instead of arrow functions for components.
 - Destructure props in the function directly. (const {prop1, prop2} = props)
+- Don't use css-in-js solutions, use scss instead.
 
 ## Scss
 

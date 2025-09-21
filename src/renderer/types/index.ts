@@ -41,9 +41,11 @@ export interface Manga {
     /** optional current open page (1-based). kept in sync from Reader */
     currentPage?: number | null;
     pages?: number | null;
+    language?: string | null; // ISO 639-1 code
     authorIds: string[];
     tagIds: string[];
-    chapter?: Chapter;
+    seriesId?: string | null;
+    chapters?: string;
 }
 
 export type MangasList = Manga[];

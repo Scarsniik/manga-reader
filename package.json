@@ -3,17 +3,19 @@
   "version": "1.0.0",
   "description": "A lightweight desktop application for learning Japanese through manga.",
   "author": "",
-  "main": "dist/electron/main.js",
+  "main": "dist/main.js",
   "scripts": {
     "start": "electron .",
     "prestart": "tsc -p tsconfig.json",
     "build": "vite build",
+    "build:electron": "tsc --project tsconfig.electron.json",
     "dev": "vite",
     "build:app": "npm run prestart && npm run build",
-    "build:all": "npm run prestart && npm run build && npm run package",
+    "build:all": "npm run build:electron && npm run build && npm run package",
     "dev:electron": "vite & powershell -NoProfile -Command \"$env:VITE_DEV_SERVER_URL=(Get-Content .vite/deps/temp | Out-String); npm run start\"",
     "prepackage": "powershell -NoProfile -Command \"Stop-Process -Name 'manga-helper','app-builder','app-builder.exe','electron','node' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path 'build\\win-unpacked') { Remove-Item -LiteralPath 'build\\win-unpacked' -Recurse -Force -ErrorAction SilentlyContinue }\"",
-    "package": "electron-builder"
+    "package": "electron-builder",
+    "dist": "npm run build:electron && npm run build && npx electron-builder --win portable"
   },
   "dependencies": {
     "image-size": "^1.0.1",

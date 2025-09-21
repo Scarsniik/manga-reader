@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import RefreshContext from '@/renderer/context/RefreshContext';
+import { RefreshContext } from '@/renderer/context/RefreshContext';
 
 export function useRefresh() {
   const ctx = useContext(RefreshContext);
