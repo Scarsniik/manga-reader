@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
 import CardList from '@/renderer/components/utils/CardList/CardList';
 import './style.scss';
@@ -9,6 +10,10 @@ import buildBatchEditModal from '@/renderer/components/Modal/modales/BatchEditMo
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
+import {
+    readMangaManagerViewState,
+    writeMangaManagerViewState,
+} from '@/renderer/utils/readerNavigation';
 
 declare global {
     interface Window {
@@ -17,6 +22,7 @@ declare global {
 }
 
 const MangaManager: React.FC = () => {
+    const [hasLoadedMangas, setHasLoadedMangas] = useState<boolean>(false);
     const [mangas, setMangas] = useState<Manga[]>([]);
     const [filtered, setFiltered] = useState<Manga[] | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -25,6 +31,17 @@ const MangaManager: React.FC = () => {
     const { params } = useParams();
     const { openModal } = useModal();
     const contentRef = useRef<HTMLDivElement | null>(null);
+    const hasRestoredViewRef = useRef(false);
+    const location = useLocation();
+    const navigate = useNavigate();
+    const getCurrentScrollTop = useCallback(() => {
+        const elementScrollTop = contentRef.current?.scrollTop ?? 0;
+        const windowScrollTop = typeof window !== 'undefined'
+            ? (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0)
+            : 0;
+
+        return Math.max(elementScrollTop, windowScrollTop);
+    }, []);
 
     const loadMangas = useCallback(async () => {
         try {
@@ -36,14 +53,33 @@ const MangaManager: React.FC = () => {
             setMangas(data || []);
         } catch (err) {
             console.error('Failed to load mangas', err);
+        } finally {
+            setHasLoadedMangas(true);
         }
     }, []);
+
+    const restoreScrollPosition = useCallback((scrollTop: number) => {
+        requestAnimationFrame(() => {
+            const el = contentRef.current;
+            if (el) {
+                el.scrollTop = scrollTop;
+            }
+            window.scrollTo({ top: scrollTop, left: 0, behavior: 'auto' });
+            writeMangaManagerViewState({ scrollTop });
+        });
+    }, []);
+
+    const reloadMangasPreservingScroll = useCallback(async () => {
+        const scrollTop = getCurrentScrollTop();
+        await loadMangas();
+        restoreScrollPosition(scrollTop);
+    }, [getCurrentScrollTop, loadMangas, restoreScrollPosition]);
 
     useEffect(() => {
         loadMangas();
 
         const onUpdated = () => {
-            loadMangas();
+            reloadMangasPreservingScroll();
         };
         window.addEventListener('mangas-updated', onUpdated as EventListener);
 
@@ -169,49 +205,26 @@ const MangaManager: React.FC = () => {
             window.removeEventListener('dragover', handleDragOver);
             window.removeEventListener('mangas-updated', onUpdated as EventListener);
         };
-    }, [loadMangas]);
+    }, [loadMangas, reloadMangasPreservingScroll]);
 
-    // Restore scroll position from query string on mount
-    useEffect(() => {
-        try {
-            const qs = new URLSearchParams(window.location.search);
-            const scrollStr = qs.get('scroll');
-            if (scrollStr && contentRef.current) {
-                const val = parseInt(scrollStr, 10);
-                if (!Number.isNaN(val)) contentRef.current.scrollTop = val;
-            }
-        } catch (e) {
-            // ignore
-        }
-    }, []);
-
-    // Save scroll position to query string (debounced)
     useEffect(() => {
         const el = contentRef.current;
-        if (!el) return;
-
         let raf = 0;
         const onScroll = () => {
             if (raf) cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => {
-                try {
-                    const qs = new URLSearchParams(window.location.search);
-                    qs.set('scroll', String(el.scrollTop));
-                    const newQs = qs.toString();
-                    const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}${window.location.hash || ''}`;
-                    window.history.replaceState({}, '', newUrl);
-                } catch (e) {
-                    // ignore
-                }
+                writeMangaManagerViewState({ scrollTop: getCurrentScrollTop() });
             });
         };
 
-        el.addEventListener('scroll', onScroll, { passive: true });
+        el?.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('scroll', onScroll, { passive: true });
         return () => {
-            el.removeEventListener('scroll', onScroll);
+            el?.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onScroll);
             if (raf) cancelAnimationFrame(raf);
         };
-    }, [contentRef.current]);
+    }, [getCurrentScrollTop]);
 
     const onAddClick = async () => {
         // Use native folder picker to ensure we get an absolute path
@@ -263,6 +276,62 @@ const MangaManager: React.FC = () => {
         }
     };
 
+    useEffect(() => {
+        if (!hasLoadedMangas) return;
+        if (hasRestoredViewRef.current) return;
+
+        const el = contentRef.current;
+        if (!el) return;
+
+        const savedViewState = readMangaManagerViewState();
+        const focusParam = new URLSearchParams(location.search).get('focus');
+        const focusMangaId = focusParam || savedViewState?.focusMangaId;
+        const savedScrollTop = typeof savedViewState?.scrollTop === 'number'
+            ? savedViewState.scrollTop
+            : null;
+        const hasSavedScroll = savedScrollTop !== null;
+        const shouldUseFocusFallback = Boolean(focusMangaId) && (!hasSavedScroll || savedScrollTop <= 0);
+
+        if (!hasSavedScroll && !focusMangaId) {
+            hasRestoredViewRef.current = true;
+            return;
+        }
+
+        hasRestoredViewRef.current = true;
+
+        requestAnimationFrame(() => {
+            if (hasSavedScroll) {
+                restoreScrollPosition(savedScrollTop ?? 0);
+            }
+
+            if (shouldUseFocusFallback) {
+                const card = Array.from(el.querySelectorAll<HTMLElement>('[data-manga-id]'))
+                    .find(node => node.dataset.mangaId === focusMangaId);
+
+                if (card) {
+                    card.scrollIntoView({ block: 'center', behavior: 'auto' });
+                    card.focus();
+                }
+            }
+
+            if (focusMangaId) {
+                writeMangaManagerViewState({ focusMangaId: null });
+            }
+
+            if (focusParam) {
+                const nextSearch = new URLSearchParams(location.search);
+                nextSearch.delete('focus');
+                navigate(
+                    {
+                        pathname: location.pathname,
+                        search: nextSearch.toString() ? `?${nextSearch.toString()}` : '',
+                    },
+                    { replace: true }
+                );
+            }
+        });
+    }, [displayedMangas.length, hasLoadedMangas, location.pathname, location.search, navigate]);
+
     return (
         <div className="mangaManager">
             <div className="mangaManager-header">
@@ -294,24 +363,10 @@ const MangaManager: React.FC = () => {
                         onCardUpdated={(id: string) => {
                             // reload mangas and clear filtered so SearchAndSort recomputes
                             // preserve scroll position to avoid jumping
-                            const el = contentRef.current;
-                            const pos = el ? el.scrollTop : 0;
+                            const pos = getCurrentScrollTop();
                             (async () => {
                                 await loadMangas();
-                                setFiltered(null);
-                                // restore scroll position (small timeout to let layout update)
-                                requestAnimationFrame(() => {
-                                    try {
-                                        if (el) el.scrollTop = pos;
-                                        const qs = new URLSearchParams(window.location.search);
-                                        qs.set('scroll', String(pos));
-                                        const newQs = qs.toString();
-                                        const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}${window.location.hash || ''}`;
-                                        window.history.replaceState({}, '', newUrl);
-                                    } catch (e) {
-                                        // ignore
-                                    }
-                                });
+                                restoreScrollPosition(pos);
                             })();
                         }}
                         selectedIds={selectedIds}

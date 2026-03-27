@@ -39,9 +39,15 @@
 	width: 100%;
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
 }
 
 /* Make the cover element keep its ratio while the card text flows below */
+.cardList-item .manga-card {
+	width: 100%;
+	height: 100%;
+}
+
 .cardList-item .manga-card-cover {
 	/* Force the cover box to a specific aspect ratio and hide overflow */
 	width: 100%;
@@ -51,12 +57,12 @@
 	overflow: hidden;
 }
 
-/* Fallback for browsers that don't support aspect-ratio: use padding-top */
-.cardList-item .manga-card-cover::before {
-	content: '';
-	display: block;
-	/* (height/width)*100% -> (1811/1280)*100 ≈ 141.64% */
-	padding-top: 141.640625%;
+@supports not (aspect-ratio: 1 / 1) {
+	.cardList-item .manga-card-cover {
+		height: 0;
+		/* (height/width)*100% -> (1811/1280)*100 ≈ 141.64% */
+		padding-top: 141.640625%;
+	}
 }
 
 /* Ensure the cover image is centered and zoomed (cropped) to fill the box */

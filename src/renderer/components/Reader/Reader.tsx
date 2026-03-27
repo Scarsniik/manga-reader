@@ -1,11 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import './style.scss';
 import { Manga } from '@/renderer/types';
 import ReaderHeader from './ReaderHeader';
 import ImageViewer from './ImageViewer';
 import OcrPanel from './OcrPanel';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
+
+type ReaderLocationState = {
+    from?: {
+        pathname: string;
+        search?: string;
+    };
+    mangaId?: string;
+} | null;
 
 // We'll read location once and derive query params from it
 
@@ -20,7 +28,33 @@ const Reader: React.FC = () => {
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const location = useLocation();
+    const navigate = useNavigate();
     const query = new URLSearchParams(location.search);
+    const locationState = location.state as ReaderLocationState;
+
+    const handleBack = useCallback(() => {
+        const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
+            ? window.history.state.idx
+            : null;
+        if (historyIndex !== null && historyIndex > 0) {
+            navigate(-1);
+            return;
+        }
+
+        const fallbackSearch = new URLSearchParams(locationState?.from?.search ?? '');
+        const focusMangaId = manga?.id ?? locationState?.mangaId ?? query.get('id');
+        if (focusMangaId && !fallbackSearch.get('focus')) {
+            fallbackSearch.set('focus', String(focusMangaId));
+        }
+
+        navigate(
+            {
+                pathname: locationState?.from?.pathname ?? '/',
+                search: fallbackSearch.toString() ? `?${fallbackSearch.toString()}` : '',
+            },
+            { replace: true }
+        );
+    }, [locationState, manga?.id, navigate, query]);
 
     useEffect(() => {
         const init = async () => {
@@ -264,6 +298,7 @@ const Reader: React.FC = () => {
                 imagesLength={images.length}
                 currentIndex={currentIndex}
                 ocrEnabled={ocrEnabled}
+                onBack={handleBack}
                 onToggleOcr={() => setOcrEnabled(v => !v)}
             />
 

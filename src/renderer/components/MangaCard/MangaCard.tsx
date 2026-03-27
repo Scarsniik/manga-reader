@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
 import useModal from '@/renderer/hooks/useModal';
 import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaModal';
 import useParams from '@/renderer/hooks/useParams';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
+import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
 
 interface Props {
     manga: Manga;
@@ -28,8 +29,39 @@ const MangaCard: React.FC<Props> = ({
     const [coverPath, setCoverPath] = useState<string | null>(null);
     const [isOverlayVisible, setIsOverlayVisible] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const { openModal } = useModal();
     const { params } = useParams();
+
+    const rememberReaderReturnPoint = useCallback(() => {
+        const content = document.querySelector('.mangaManager-content');
+        const elementScrollTop = content instanceof HTMLElement ? content.scrollTop : 0;
+        const windowScrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+        const scrollTop = Math.max(elementScrollTop, windowScrollTop);
+
+        writeMangaManagerViewState({
+            focusMangaId: manga.id,
+            scrollTop,
+        });
+    }, [manga.id]);
+
+    const openReader = useCallback(() => {
+        rememberReaderReturnPoint();
+
+        const validPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
+        navigate(
+            `/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(validPage))}`,
+            {
+                state: {
+                    from: {
+                        pathname: location.pathname,
+                        search: location.search,
+                    },
+                    mangaId: manga.id,
+                },
+            }
+        );
+    }, [location.pathname, location.search, manga.currentPage, manga.id, navigate, rememberReaderReturnPoint]);
 
     useEffect(() => {
         const fetchPages = async () => {
@@ -98,10 +130,8 @@ const MangaCard: React.FC<Props> = ({
             if (onToggleSelect) onToggleSelect(manga.id, additive);
             return;
         }
-        // Navigate to reader page. If manga has a valid currentPage between 1 and pages, open that page.
-        const validPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
-        navigate(`/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(validPage))}`);
-    }, [manga.id, manga.currentPage, navigate, onToggleSelect, selectionMode]);
+        openReader();
+    }, [manga.id, onToggleSelect, openReader, selectionMode]);
 
     const onEditClick = useCallback(() => {
         try {
@@ -113,10 +143,9 @@ const MangaCard: React.FC<Props> = ({
 
     const onCardKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
-            const validPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
-            navigate(`/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(validPage))}`);
+            openReader();
         }
-    }, [manga.id, manga.currentPage, navigate]);
+    }, [openReader]);
 
     const onToggleRead = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -205,6 +234,7 @@ const MangaCard: React.FC<Props> = ({
             key={manga.id}
             coverPath={coverSrc}
             title={manga.title}
+            dataMangaId={manga.id}
             current={currentPage}
             countLabel="pages"
             overlayContent={overlayContent}

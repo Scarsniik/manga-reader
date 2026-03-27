@@ -123,7 +123,9 @@ export default function EntityPickerField({
           {filtered.map(opt => (
             <button
               key={opt.id}
+              type="button"
               className="mh-entity-picker__result"
+              onMouseDown={e => e.preventDefault()}
               onClick={() => add(opt.id)}
               role="option"
               aria-selected={false}

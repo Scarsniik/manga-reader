@@ -23,6 +23,7 @@ const Modal: React.FC<{
           {actions.map((a, i) => (
             <button
               key={i}
+              type="button"
               id={a.id}
               className={`app-modal-btn ${a.variant === 'primary' ? 'primary' : 'secondary'}`}
               onClick={() => {

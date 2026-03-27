@@ -34,6 +34,10 @@
 }
 
 .manga-card .manga-card-cover .no-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
   padding: 8px;
   text-align: center;
 }
@@ -58,6 +62,7 @@
 .manga-card .manga-card-pages {
   font-size: 12px;
   color: #bdbdbd;
+  min-height: 1.2em;
 }
 
 /* Progress bar shown when currentPage is available */
@@ -92,11 +97,12 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-height: calc(var(--title-lines, 2) * 1.2em);
 }
-.manga-card .title-lines-1 { -webkit-line-clamp: 1; line-clamp: 1; }
-.manga-card .title-lines-2 { -webkit-line-clamp: 2; line-clamp: 2; }
-.manga-card .title-lines-3 { -webkit-line-clamp: 3; line-clamp: 3; }
-.manga-card .title-lines-4 { -webkit-line-clamp: 4; line-clamp: 4; }
+.manga-card .title-lines-1 { --title-lines: 1; -webkit-line-clamp: 1; line-clamp: 1; }
+.manga-card .title-lines-2 { --title-lines: 2; -webkit-line-clamp: 2; line-clamp: 2; }
+.manga-card .title-lines-3 { --title-lines: 3; -webkit-line-clamp: 3; line-clamp: 3; }
+.manga-card .title-lines-4 { --title-lines: 4; -webkit-line-clamp: 4; line-clamp: 4; }
 
 .manga-card .manga-card-overlay {
   position: absolute;

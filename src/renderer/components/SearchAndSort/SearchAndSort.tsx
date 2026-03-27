@@ -54,31 +54,76 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             const tagsArr = tagsParam ? tagsParam.split(',').filter(Boolean) : [];
             const sort = qs.get('sort') ?? defaultSort;
             const exp = qs.get('expanded') === '1';
+            // Support multi-language: language=fr,en
+            const languageParam = qs.get('language');
+            const language = languageParam ? languageParam.split(',').filter(Boolean) : [];
             const status = qs.get('status');
             const unfinished = qs.get('unfinished') === '1';
-            return { q, tagsArr, sort, exp, status, unfinished };
+            return { q, tagsArr, sort, exp, language, status, unfinished };
         } catch (e) {
-            return { q: defaultSearch, tagsArr: [], sort: defaultSort, exp: false, unfinished: false };
+            return { q: defaultSearch, tagsArr: [], sort: defaultSort, exp: false, language: [], status: null, unfinished: false };
         }
     };
 
+    // Initialisation des filtres depuis l'URL uniquement au premier rendu
     const initial = parseQuery();
-
     const [query, setQuery] = useState<string>(initial.q);
     const [selectedTags, setSelectedTags] = useState<string[]>(initial.tagsArr);
-    const [selectedLanguageIds, setSelectedLanguageIds] = useState<string[]>([]);
+    const [selectedLanguageIds, setSelectedLanguageIds] = useState<string[]>(initial.language ?? []);
     const [sortBy, setSortBy] = useState<string>(initial.sort);
     const [expanded, setExpanded] = useState<boolean>(initial.exp);
-    // new: status filter and unfinished-first option
-        const [statusFilter, setStatusFilter] = useState<string[]>(initial['status']
-            ? Array.isArray(initial['status'])
-                ? initial['status']
-                : String(initial['status']).split(',').filter(Boolean)
-            : []
-        );
+    const [statusFilter, setStatusFilter] = useState<string[]>(initial['status']
+        ? Array.isArray(initial['status'])
+            ? initial['status']
+            : String(initial['status']).split(',').filter(Boolean)
+        : []
+    );
     const [unfinishedFirst, setUnfinishedFirst] = useState<boolean>(initial['unfinished'] === true);
-    // Series filter
     const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+
+    // Réinitialise les filtres depuis l'URL lors d'un retour ou reload (popstate)
+    useEffect(() => {
+        const onPopState = () => {
+            const initial = parseQuery();
+            setQuery(initial.q);
+            setSelectedTags(initial.tagsArr);
+            setSelectedLanguageIds(initial.language ?? []);
+            setSortBy(initial.sort);
+            setExpanded(initial.exp);
+            setStatusFilter(initial['status']
+                ? Array.isArray(initial['status'])
+                    ? initial['status']
+                    : String(initial['status']).split(',').filter(Boolean)
+                : []
+            );
+            setUnfinishedFirst(initial['unfinished'] === true);
+            setSelectedSeriesId(null); // Optionnel: à adapter si la série est dans l'URL
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
+
+    // Réinitialise les filtres depuis l'URL lors d'un retour ou reload (popstate)
+    useEffect(() => {
+        const onPopState = () => {
+            const initial = parseQuery();
+            setQuery(initial.q);
+            setSelectedTags(initial.tagsArr);
+            setSelectedLanguageIds(initial.language ?? []);
+            setSortBy(initial.sort);
+            setExpanded(initial.exp);
+            setStatusFilter(initial['status']
+                ? Array.isArray(initial['status'])
+                    ? initial['status']
+                    : String(initial['status']).split(',').filter(Boolean)
+                : []
+            );
+            setUnfinishedFirst(initial['unfinished'] === true);
+            setSelectedSeriesId(null); // Optionnel: à adapter si la série est dans l'URL
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     // applyFilters will be created via useCallback below and triggered automatically
 
@@ -109,13 +154,23 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 if (m.seriesId !== selectedSeriesId) return false;
             }
 
-            // language filter
-            if (selectedLanguageIds.length > 0) {
-                if (selectedLanguageIds.includes('')) {
-                    // Si "Aucune" est sélectionné, on ne garde que les mangas sans langue définie
+            // language filter multi
+            if (selectedLanguageIds && selectedLanguageIds.length > 0) {
+                const hasAucune = selectedLanguageIds.includes('');
+                const otherLangs = selectedLanguageIds.filter(l => l !== '');
+                if (hasAucune && otherLangs.length === 0) {
+                    // Uniquement "Aucune" : mangas sans langue définie
                     if (m.language !== undefined && m.language !== null && m.language !== '') return false;
-                } else {
-                    if (!m.language || !selectedLanguageIds.includes(m.language)) return false;
+                } else if (!hasAucune && otherLangs.length > 0) {
+                    // Uniquement des langues précises
+                    if (!m.language || !otherLangs.includes(m.language)) return false;
+                } else if (hasAucune && otherLangs.length > 0) {
+                    // "Aucune" + d'autres langues : on garde les mangas sans langue OU dans la liste
+                    if ((m.language === undefined || m.language === null || m.language === '') || otherLangs.includes(m.language)) {
+                        // ok
+                    } else {
+                        return false;
+                    }
                 }
             }
 
@@ -136,7 +191,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             // 'En cours' -> currentPage > 0 && currentPage < pages,
             // 'Non lu' -> currentPage is null/undefined or currentPage <= 0,
             // 'Tous' -> no filtering
-                if (statusFilter && statusFilter.length > 0) {
+            if (statusFilter && statusFilter.length > 0) {
                 // Coerce to numbers and consult async pages cache when pages not present
                 const pagesRaw = m.pages;
                 const cpRaw = m.currentPage;
@@ -239,6 +294,12 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 qs.set('status', statusFilter.join(','));
             } else {
                 qs.delete('status');
+            }
+            if (selectedLanguageIds && selectedLanguageIds.length > 0) {
+                // Multi-langue: stocker toutes les langues séparées par des virgules
+                qs.set('language', selectedLanguageIds.join(','));
+            } else {
+                qs.delete('language');
             }
             if (unfinishedFirst) qs.set('unfinished', '1'); else qs.delete('unfinished');
             const newQs = qs.toString();

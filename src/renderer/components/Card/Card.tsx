@@ -12,6 +12,7 @@ interface Props {
     title?: string;
     countLabel: string;
     coverPath: string | null;
+    dataMangaId?: string;
     /** current page/tome/chapter */
     current?: number | null;
     /** total total/tomes/chapter */
@@ -29,6 +30,7 @@ function Card(props: Props): JSX.Element {
         current,
         total,
         coverPath: defaultCoverPath,
+        dataMangaId,
         title,
         onClick,
         onKeyDown,
@@ -72,6 +74,7 @@ function Card(props: Props): JSX.Element {
     return (
         <div
             className={`manga-card ${selected ? 'selected' : ''}`}
+            data-manga-id={dataMangaId}
             onMouseLeave={handleMouseLeave}
             onClick={onClick}
             role="button"

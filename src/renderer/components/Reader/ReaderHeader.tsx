@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
 
 type Props = {
@@ -7,13 +6,21 @@ type Props = {
     imagesLength: number;
     currentIndex: number;
     ocrEnabled: boolean;
+    onBack: () => void;
     onToggleOcr: () => void;
 };
 
-const ReaderHeader: React.FC<Props> = ({ manga, imagesLength, currentIndex, ocrEnabled, onToggleOcr }) => {
+const ReaderHeader: React.FC<Props> = ({
+    manga,
+    imagesLength,
+    currentIndex,
+    ocrEnabled,
+    onBack,
+    onToggleOcr,
+}) => {
     return (
         <div className="reader-header">
-            <Link to="/" className="reader-back" aria-label="Retour">←</Link>
+            <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
             <div className="reader-info">
                 {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}
                 <span className="page-counter">
