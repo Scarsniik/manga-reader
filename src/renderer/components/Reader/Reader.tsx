@@ -22,6 +22,7 @@ const Reader: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState<number>(0);
     const [manga, setManga] = useState<Manga | null>(null);
     const [ocrEnabled, setOcrEnabled] = useState<boolean>(false);
+    const [copyFeedback, setCopyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showBoxes, setShowBoxes] = useState<boolean>(true);
     const [detectedBoxes, setDetectedBoxes] = useState<Array<{ id: string; text: string; bbox: { x: number; y: number; w: number; h: number } }>>([]);
     const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
@@ -141,6 +142,33 @@ const Reader: React.FC = () => {
     const next = () => goTo(currentIndex + 1);
     const prev = () => goTo(currentIndex - 1);
 
+    const showCopyFeedback = useCallback((type: 'success' | 'error', message: string) => {
+        setCopyFeedback({ type, message });
+    }, []);
+
+    const copyCurrentImage = useCallback(async () => {
+        const currentImage = images[currentIndex];
+        if (!currentImage) {
+            showCopyFeedback('error', 'Aucune image');
+            return;
+        }
+
+        if (!window.api || typeof window.api.copyImageToClipboard !== 'function') {
+            showCopyFeedback('error', 'Copie indisponible');
+            return;
+        }
+
+        try {
+            const result = await window.api.copyImageToClipboard(currentImage);
+            if (!result || result.ok !== true) {
+                throw new Error(result && result.error ? result.error : 'Impossible de copier l\'image');
+            }
+            showCopyFeedback('success', 'Image copiee');
+        } catch (err: any) {
+            showCopyFeedback('error', err && err.message ? err.message : 'Echec de copie');
+        }
+    }, [currentIndex, images, showCopyFeedback]);
+
     // When page changes, ensure the image is scrolled to the top of the container/view
     useEffect(() => {
         try {
@@ -206,10 +234,37 @@ const Reader: React.FC = () => {
         }
     }, [currentIndex, images, manga]);
 
+    useEffect(() => {
+        if (!copyFeedback) return;
+
+        const timer = window.setTimeout(() => {
+            setCopyFeedback(null);
+        }, 2200);
+
+        return () => window.clearTimeout(timer);
+    }, [copyFeedback]);
+
     // Keyboard controls
     useEffect(() => {
+        const isEditableTarget = (target: EventTarget | null) => {
+            if (!(target instanceof HTMLElement)) return false;
+            if (target.isContentEditable) return true;
+            const tagName = target.tagName.toLowerCase();
+            return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+        };
+
         const onKey = (e: KeyboardEvent) => {
+            if (isEditableTarget(e.target)) {
+                return;
+            }
+
             const key = e.key.toLowerCase();
+            const selectedText = window.getSelection ? window.getSelection()?.toString() : '';
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && key === 'c' && !selectedText) {
+                try { e.preventDefault(); } catch {}
+                void copyCurrentImage();
+                return;
+            }
             // Page navigation
             if (key === 'arrowright' || key === 'd') {
                 next();
@@ -230,7 +285,7 @@ const Reader: React.FC = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex, images]);
+    }, [copyCurrentImage, currentIndex, images]);
 
     // Mouse click on image: left -> next, right -> prev
     useEffect(() => {
@@ -298,7 +353,12 @@ const Reader: React.FC = () => {
                 imagesLength={images.length}
                 currentIndex={currentIndex}
                 ocrEnabled={ocrEnabled}
+                canCopyImage={images.length > 0}
+                copyFeedback={copyFeedback}
                 onBack={handleBack}
+                onCopyImage={() => {
+                    void copyCurrentImage();
+                }}
                 onToggleOcr={() => setOcrEnabled(v => !v)}
             />
 

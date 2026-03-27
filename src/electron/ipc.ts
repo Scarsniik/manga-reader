@@ -6,6 +6,7 @@ import * as mangas from "./handlers/mangas";
 import * as params from "./handlers/params";
 import * as links from "./handlers/links";
 import * as pages from "./handlers/pages";
+import * as clipboardHandlers from "./handlers/clipboard";
 import * as ocr from "./handlers/ocr";
 import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
@@ -54,6 +55,7 @@ ipcMain.handle("count-pages", async (event: IpcMainInvokeEvent, folderPath: stri
 ipcMain.handle("get-cover", async (event: IpcMainInvokeEvent, folderPath: string) => pages.getCover(event, folderPath));
 ipcMain.handle("get-cover-data", async (event: IpcMainInvokeEvent, folderPath: string) => pages.getCoverData(event, folderPath));
 ipcMain.handle("list-pages", async (event: IpcMainInvokeEvent, folderPath: string) => pages.listPages(event, folderPath));
+ipcMain.handle("copy-image-to-clipboard", async (event: IpcMainInvokeEvent, imagePathOrUrl: string) => clipboardHandlers.copyImageToClipboard(event, imagePathOrUrl));
 
 // Open a folder picker and return the selected directory path (fallback for renderer)
 ipcMain.handle("open-directory", async (event: IpcMainInvokeEvent) => {

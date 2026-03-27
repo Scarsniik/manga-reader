@@ -13,13 +13,58 @@
 	align-items: center;
 	gap: 12px;
 	margin-bottom: 12px;
-  max-width: 1100px;
+	max-width: 1100px;
 }
 
 .reader-info {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.reader-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.reader-action-button {
+	background: rgba(255,255,255,0.06);
+	color: #fff;
+	border: 1px solid rgba(255,255,255,0.08);
+	padding: 8px 12px;
+	border-radius: 6px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 150ms, transform 100ms, border-color 150ms;
+}
+
+.reader-action-button:hover:not(:disabled) {
+	background: rgba(255,255,255,0.12);
+	transform: translateY(-1px);
+}
+
+.reader-action-button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.reader-action-button.success {
+	border-color: rgba(58, 181, 74, 0.65);
+	background: rgba(58, 181, 74, 0.16);
+}
+
+.reader-action-button.error {
+	border-color: rgba(255, 128, 128, 0.65);
+	background: rgba(255, 128, 128, 0.14);
+}
+
+.reader-action-button.ocr-toggle.active {
+	border-color: rgba(100, 150, 255, 0.8);
+	background: rgba(100, 150, 255, 0.18);
 }
 
 .reader-body {
@@ -124,6 +169,15 @@
 
 /* On smaller viewports stack the reader and OCR panel to avoid overflow */
 @media (max-width: 1000px) {
+	.reader-header {
+		flex-wrap: wrap;
+	}
+
+	.reader-actions {
+		width: 100%;
+		justify-content: flex-end;
+	}
+
 	.reader-body {
 		flex-direction: column;
 		align-items: center;

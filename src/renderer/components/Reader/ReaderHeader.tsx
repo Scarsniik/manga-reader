@@ -6,7 +6,10 @@ type Props = {
     imagesLength: number;
     currentIndex: number;
     ocrEnabled: boolean;
+    canCopyImage: boolean;
+    copyFeedback: { type: 'success' | 'error'; message: string } | null;
     onBack: () => void;
+    onCopyImage: () => void;
     onToggleOcr: () => void;
 };
 
@@ -15,7 +18,10 @@ const ReaderHeader: React.FC<Props> = ({
     imagesLength,
     currentIndex,
     ocrEnabled,
+    canCopyImage,
+    copyFeedback,
     onBack,
+    onCopyImage,
     onToggleOcr,
 }) => {
     return (
@@ -28,12 +34,22 @@ const ReaderHeader: React.FC<Props> = ({
                 </span>
             </div>
 
-            <div className="reader-ocr-toggle">
+            <div className="reader-actions">
                 <button
-                    className={"ocr-toggle" + (ocrEnabled ? ' active' : '')}
+                    type="button"
+                    className={"reader-action-button" + (copyFeedback ? ` ${copyFeedback.type}` : '')}
+                    onClick={onCopyImage}
+                    disabled={!canCopyImage}
+                    title="Copier l'image courante dans le presse-papiers (Ctrl/Cmd+C)"
+                >
+                    {copyFeedback?.message ?? 'Copier (Ctrl/Cmd+C)'}
+                </button>
+                <button
+                    type="button"
+                    className={"reader-action-button ocr-toggle" + (ocrEnabled ? ' active' : '')}
+                    title="Activer/Désactiver OCR"
                     onClick={onToggleOcr}
                     aria-pressed={ocrEnabled}
-                    title="Activer/Désactiver OCR (placeholder)"
                 >
                     OCR
                 </button>
