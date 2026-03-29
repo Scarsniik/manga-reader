@@ -6,6 +6,17 @@ export type AppParams = {
     showPageNumbers?: boolean;
     showHiddens?: boolean;
     titleLineCount?: number;
+    persistMangaFilters?: boolean;
+    mangaListFilters?: {
+        query: string;
+        selectedTags: string[];
+        selectedLanguageIds: string[];
+        sortBy: string;
+        expanded: boolean;
+        statusFilter: string[];
+        unfinishedFirst: boolean;
+        selectedSeriesId: string | null;
+    } | null;
     [key: string]: any;
 };
 

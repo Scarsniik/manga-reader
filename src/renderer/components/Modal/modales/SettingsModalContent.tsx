@@ -38,9 +38,16 @@ export default function SettingsModalContent() {
       type: 'text',
       required: false,
     },
+    {
+      name: 'persistMangaFilters',
+      label: 'Conserver les filtres de la liste au redémarrage',
+      type: 'checkbox',
+    },
   ]
 
   const onSubmit = async (values: Record<string, any>) => {
+    const persistMangaFilters = values.persistMangaFilters !== false
+
     // convert types
     const toSave: Record<string, any> = {
       libraryPath: values.libraryPath || '',
@@ -48,6 +55,8 @@ export default function SettingsModalContent() {
       showHiddens: !!values.showHiddens,
       titleLineCount: Number(values.titleLineCount) || 1,
       jpdbApiKey: values.jpdbApiKey || '',
+      persistMangaFilters,
+      mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
     }
     await setParams(toSave)
   }

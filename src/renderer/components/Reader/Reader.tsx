@@ -15,6 +15,98 @@ type ReaderLocationState = {
     mangaId?: string;
 } | null;
 
+const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob) {
+                resolve(blob);
+                return;
+            }
+
+            reject(new Error('Impossible de preparer l\'image'));
+        }, type);
+    });
+};
+
+const drawImageToPngBlob = async (
+    source: CanvasImageSource,
+    width: number,
+    height: number
+): Promise<Blob> => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        throw new Error('Canvas indisponible');
+    }
+
+    context.drawImage(source, 0, 0, width, height);
+    return canvasToBlob(canvas, 'image/png');
+};
+
+const copyImageViaBrowserClipboard = async (
+    imageSrc: string,
+    imageElement: HTMLImageElement | null
+): Promise<void> => {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+        throw new Error('Redemarre l\'app pour activer la copie');
+    }
+
+    try {
+        const response = await fetch(imageSrc);
+        if (!response.ok) {
+            throw new Error(`Chargement impossible (${response.status})`);
+        }
+
+        const fetchedBlob = await response.blob();
+        let clipboardBlob = fetchedBlob;
+        if (fetchedBlob.type.toLowerCase() !== 'image/png') {
+            if (typeof createImageBitmap === 'function') {
+                const bitmap = await createImageBitmap(fetchedBlob);
+                try {
+                    clipboardBlob = await drawImageToPngBlob(bitmap, bitmap.width, bitmap.height);
+                } finally {
+                    if (typeof bitmap.close === 'function') {
+                        bitmap.close();
+                    }
+                }
+            } else {
+                throw new Error('Conversion image indisponible');
+            }
+        }
+
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                [clipboardBlob.type || 'image/png']: clipboardBlob,
+            }),
+        ]);
+        return;
+    } catch (error) {
+        if (
+            imageElement
+            && imageElement.complete
+            && imageElement.naturalWidth > 0
+            && imageElement.naturalHeight > 0
+        ) {
+            const clipboardBlob = await drawImageToPngBlob(
+                imageElement,
+                imageElement.naturalWidth,
+                imageElement.naturalHeight
+            );
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [clipboardBlob.type || 'image/png']: clipboardBlob,
+                }),
+            ]);
+            return;
+        }
+
+        throw error;
+    }
+};
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -153,19 +245,30 @@ const Reader: React.FC = () => {
             return;
         }
 
-        if (!window.api || typeof window.api.copyImageToClipboard !== 'function') {
-            showCopyFeedback('error', 'Copie indisponible');
-            return;
+        let electronError: string | null = null;
+
+        try {
+            if (window.api && typeof window.api.copyImageToClipboard === 'function') {
+                const result = await window.api.copyImageToClipboard(currentImage);
+                if (result && result.ok === true) {
+                    showCopyFeedback('success', 'Image copiee');
+                    return;
+                }
+
+                electronError = result && result.error
+                    ? String(result.error)
+                    : 'Impossible de copier l\'image';
+            }
+        } catch (err: any) {
+            electronError = err && err.message ? err.message : 'Echec de copie';
         }
 
         try {
-            const result = await window.api.copyImageToClipboard(currentImage);
-            if (!result || result.ok !== true) {
-                throw new Error(result && result.error ? result.error : 'Impossible de copier l\'image');
-            }
+            await copyImageViaBrowserClipboard(currentImage, imgRef.current);
             showCopyFeedback('success', 'Image copiee');
         } catch (err: any) {
-            showCopyFeedback('error', err && err.message ? err.message : 'Echec de copie');
+            const fallbackError = err && err.message ? err.message : null;
+            showCopyFeedback('error', fallbackError || electronError || 'Echec de copie');
         }
     }, [currentIndex, images, showCopyFeedback]);
 
