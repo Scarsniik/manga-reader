@@ -67,6 +67,34 @@ function encodeArrayParam(values: string[], emptyToken?: string): string {
         .join(',');
 }
 
+function toPositiveNumber(value: unknown): number | null {
+    if (value == null) return null;
+
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return null;
+
+    return num;
+}
+
+function getReadingStatus(currentPageValue: unknown, pagesValue: unknown): 'Lu' | 'En cours' | 'Non lu' {
+    const currentPage = toPositiveNumber(currentPageValue);
+    const pages = toPositiveNumber(pagesValue);
+
+    if (currentPage === null) {
+        return 'Non lu';
+    }
+
+    if (pages !== null && currentPage !== null && currentPage >= pages) {
+        return 'Lu';
+    }
+
+    if (currentPage > 1 && (pages === null || currentPage < pages)) {
+        return 'En cours';
+    }
+
+    return 'Non lu';
+}
+
 function normalizePersistedFilters(
     value: unknown,
     defaultSort: string,
@@ -278,34 +306,16 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 if (!hasAll) return false;
             }
 
-            // status filter: expect m.currentPage and m.pages to derive status
-            // statuses: 'Lu' (read) -> currentPage === pages (and pages > 0),
-            // 'En cours' -> currentPage > 0 && currentPage < pages,
-            // 'Non lu' -> currentPage is null/undefined or currentPage <= 0,
+            // status filter: keep statuses mutually exclusive.
+            // page 1 is considered "Non lu" unless it is also the last page.
             if (statusFilter && statusFilter.length > 0) {
-                // Coerce to numbers and consult async pages cache when pages not present
                 const pagesRaw = m.pages;
                 const cpRaw = m.currentPage;
-                const pagesCount = pagesRaw != null ? Number(pagesRaw) : (pagesCacheRef.current[m.id] ?? undefined);
-                const cp = cpRaw != null ? Number(cpRaw) : null;
+                const pagesCount = pagesRaw != null ? pagesRaw : (pagesCacheRef.current[m.id] ?? undefined);
+                const readingStatus = getReadingStatus(cpRaw, pagesCount);
 
                 // Si plusieurs statuts sélectionnés, on garde si l'un d'eux correspond
-                let match = false;
-                for (const status of statusFilter) {
-                    if (status === 'Lu') {
-                        if (pagesCount && cp !== null && cp !== undefined && !Number.isNaN(cp) && cp >= pagesCount) {
-                            match = true;
-                        }
-                    } else if (status === 'En cours') {
-                        if (pagesCount && cp !== null && cp !== undefined && !Number.isNaN(cp) && cp > 1 && cp < pagesCount) {
-                            match = true;
-                        }
-                    } else if (status === 'Non lu') {
-                        if (!(cp !== null && cp !== undefined && !Number.isNaN(cp) && cp > 0)) {
-                            match = true;
-                        }
-                    }
-                }
+                const match = statusFilter.some(status => status === readingStatus);
                 if (!match) return false;
             }
 
@@ -331,21 +341,15 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         }
 
         if (unfinishedFirst) {
-            // Promote mangas that are "En cours" (currentPage > 0 && currentPage < pages) to the top
+            // Promote mangas that are actually "En cours" using the same status logic as filters.
             result = result.slice().sort((a, b) => {
-                // Coerce to numbers (in case pages/currentPage are strings)
                 const aPagesRaw = a.pages;
                 const bPagesRaw = b.pages;
-                const aCpRaw = a.currentPage;
-                const bCpRaw = b.currentPage;
+                const aPages = aPagesRaw != null ? aPagesRaw : (pagesCacheRef.current[a.id] ?? undefined);
+                const bPages = bPagesRaw != null ? bPagesRaw : (pagesCacheRef.current[b.id] ?? undefined);
 
-                const aPages = aPagesRaw != null ? Number(aPagesRaw) : (pagesCacheRef.current[a.id] ?? undefined);
-                const bPages = bPagesRaw != null ? Number(bPagesRaw) : (pagesCacheRef.current[b.id] ?? undefined);
-                const aCp = aCpRaw != null ? Number(aCpRaw) : null;
-                const bCp = bCpRaw != null ? Number(bCpRaw) : null;
-
-                const aInProgress = (aPages !== undefined && aCp !== null && !Number.isNaN(aCp) && aCp > 1 && aCp < aPages);
-                const bInProgress = (bPages !== undefined && bCp !== null && !Number.isNaN(bCp) && bCp > 1 && bCp < bPages);
+                const aInProgress = getReadingStatus(a.currentPage, aPages) === 'En cours';
+                const bInProgress = getReadingStatus(b.currentPage, bPages) === 'En cours';
                 if (aInProgress === bInProgress) return 0; // preserve relative order for same status
                 return aInProgress ? -1 : 1; // in-progress first
             });
@@ -405,7 +409,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
         const timeoutId = window.setTimeout(() => {
             lastPersistedSnapshotRef.current = serializedSnapshot;
-            setParams({ mangaListFilters: currentFilterSnapshot });
+            setParams({ mangaListFilters: currentFilterSnapshot }, { broadcast: false });
         }, 250);
 
         return () => window.clearTimeout(timeoutId);
@@ -414,7 +418,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     // Clear any saved filter snapshot when persistence is disabled.
     useEffect(() => {
         if (loading || !hydratedFiltersRef.current || persistMangaFilters || params?.mangaListFilters == null) return;
-        setParams({ mangaListFilters: null });
+        setParams({ mangaListFilters: null }, { broadcast: false });
     }, [loading, params?.mangaListFilters, persistMangaFilters, setParams]);
 
     // Options pour l'entity picker statut

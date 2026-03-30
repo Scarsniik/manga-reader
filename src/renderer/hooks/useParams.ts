@@ -20,11 +20,23 @@ export type AppParams = {
     [key: string]: any;
 };
 
+type SetParamsOptions = {
+    broadcast?: boolean;
+};
+
 export function useParams() {
     const [params, setParamsState] = useState<AppParams | null>(null);
     const [loading, setLoading] = useState(true);
 
     const {refresh} = useRefresh();
+
+    const dispatchSettingsUpdated = useCallback(() => {
+        try {
+            window.dispatchEvent(new CustomEvent('settings-updated'));
+        } catch (e) {
+            /* noop */
+        }
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -53,7 +65,7 @@ export function useParams() {
             if (window.api && typeof window.api.saveSettings === 'function') {
                 await window.api.saveSettings(next);
                 setParamsState(next);
-                try { window.dispatchEvent(new CustomEvent('settings-updated')); } catch (e) { /* noop */ }
+                dispatchSettingsUpdated();
                 refresh();
                 return next;
             }
@@ -64,10 +76,11 @@ export function useParams() {
             console.error('useParams: failed to save settings', err);
             throw err;
         }
-    }, []);
+    }, [dispatchSettingsUpdated, refresh]);
 
     // setParams accepts a Partial of AppParams, applies an optimistic update and saves in background
-    const setParams = useCallback((partial: Partial<AppParams>) => {
+    const setParams = useCallback((partial: Partial<AppParams>, options?: SetParamsOptions) => {
+        const { broadcast = true } = options || {};
         const current = params || {};
         const next = { ...current, ...partial } as AppParams;
 
@@ -79,7 +92,9 @@ export function useParams() {
             try {
                 if (window.api && typeof window.api.saveSettings === 'function') {
                     await window.api.saveSettings(next);
-                    try { window.dispatchEvent(new CustomEvent('settings-updated')); } catch (e) { /* noop */ }
+                    if (broadcast) {
+                        dispatchSettingsUpdated();
+                    }
                 }
             } catch (err) {
                 console.error('useParams: background save failed', err);
@@ -87,7 +102,7 @@ export function useParams() {
         })();
 
         return next;
-    }, [params]);
+    }, [dispatchSettingsUpdated, params]);
 
     return { params, loading, reload: load, save, setParams } as const;
 }
