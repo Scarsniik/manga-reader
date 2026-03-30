@@ -120,6 +120,7 @@ const Reader: React.FC = () => {
     const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const openedCompletedRef = useRef<boolean>(false);
     const location = useLocation();
     const navigate = useNavigate();
     const query = new URLSearchParams(location.search);
@@ -173,6 +174,7 @@ const Reader: React.FC = () => {
             const found = id ? mangas.find(m => String(m.id) === String(id)) || null : null;
             console.debug('Reader: found manga', found);
             setManga(found);
+            openedCompletedRef.current = false;
 
             // If manga found and has a path, list pages
             if (found && found.path) {
@@ -185,14 +187,20 @@ const Reader: React.FC = () => {
                     const imgs: string[] = await window.api.listPages(found.path);
                     console.debug('Reader: listPages returned', imgs && imgs.length);
                     setImages(imgs || []);
+                    const totalPages = (imgs || []).length;
+                    openedCompletedRef.current = totalPages > 0
+                        && typeof found.currentPage === 'number'
+                        && found.currentPage >= totalPages;
                     // clamp start page
-                    const idx = Math.max(0, Math.min((imgs || []).length - 1, startPage - 1));
+                    const idx = Math.max(0, Math.min(totalPages - 1, startPage - 1));
                     setCurrentIndex(idx);
                 } catch (err) {
                     console.error('Reader: listPages threw', err);
+                    openedCompletedRef.current = false;
                     setImages([]);
                 }
             } else {
+                openedCompletedRef.current = false;
                 setImages([]);
             }
         };
@@ -303,7 +311,19 @@ const Reader: React.FC = () => {
             try {
                 if (!manga || !manga.id) return;
                 if (!window.api || typeof window.api.updateManga !== 'function') return;
-                const payload: Partial<any> = { id: manga.id, currentPage: images && images.length > 0 ? currentIndex + 1 : null };
+                const visiblePage = images && images.length > 0 ? currentIndex + 1 : null;
+                const totalPages = images && images.length > 0 ? images.length : null;
+                let persistedPage = visiblePage;
+
+                // If the manga was already completed when opened, closing on page 1 or the last
+                // page should keep it marked as completed. Any middle page exits the completed state.
+                if (openedCompletedRef.current && visiblePage !== null && totalPages !== null) {
+                    if (visiblePage === 1 || visiblePage >= totalPages) {
+                        persistedPage = totalPages;
+                    }
+                }
+
+                const payload: Partial<any> = { id: manga.id, currentPage: persistedPage };
                 await window.api.updateManga(payload);
                 try { window.dispatchEvent(new CustomEvent('mangas-updated')); } catch (e) { /* noop */ }
             } catch (err) {

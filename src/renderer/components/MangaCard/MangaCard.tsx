@@ -45,12 +45,39 @@ const MangaCard: React.FC<Props> = ({
         });
     }, [manga.id]);
 
-    const openReader = useCallback(() => {
+    const resolveTotalPages = useCallback(async (): Promise<number | null> => {
+        const knownPages = typeof pages === 'number' && pages > 0
+            ? pages
+            : (typeof manga.pages === 'number' && manga.pages > 0 ? manga.pages : null);
+
+        if (knownPages !== null) {
+            return knownPages;
+        }
+
+        if (manga.path && window.api && typeof window.api.countPages === 'function') {
+            try {
+                const count = await window.api.countPages(manga.path);
+                const normalizedCount = typeof count === 'number' && count > 0 ? count : null;
+                setPages(normalizedCount);
+                return normalizedCount;
+            } catch (err) {
+                console.warn('Failed to count pages before opening reader', err);
+            }
+        }
+
+        return null;
+    }, [manga.pages, manga.path, pages]);
+
+    const openReader = useCallback(async () => {
         rememberReaderReturnPoint();
 
-        const validPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
+        const savedPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
+        const totalPages = await resolveTotalPages();
+        const shouldRestartFromBeginning = totalPages !== null && savedPage >= totalPages;
+        const targetPage = shouldRestartFromBeginning ? 1 : savedPage;
+
         navigate(
-            `/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(validPage))}`,
+            `/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(targetPage))}`,
             {
                 state: {
                     from: {
@@ -61,7 +88,7 @@ const MangaCard: React.FC<Props> = ({
                 },
             }
         );
-    }, [location.pathname, location.search, manga.currentPage, manga.id, navigate, rememberReaderReturnPoint]);
+    }, [location.pathname, location.search, manga.currentPage, manga.id, navigate, rememberReaderReturnPoint, resolveTotalPages]);
 
     useEffect(() => {
         const fetchPages = async () => {
