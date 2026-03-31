@@ -231,6 +231,137 @@ def score_raw_result(result: dict[str, Any]) -> float:
     return score
 
 
+def compact_text(text: str) -> str:
+    return "".join(ch for ch in text if not ch.isspace())
+
+
+def score_block_candidate(block: dict[str, Any]) -> float:
+    text = "".join(str(line or "") for line in (block.get("lines") or []))
+    compact = compact_text(text)
+    if not compact:
+        return -100.0
+
+    meaningful = count_meaningful_chars(compact)
+    japanese = count_japanese_chars(compact)
+    latin = count_latin_chars(compact)
+    punctuation = max(0, len(compact) - meaningful)
+    line_count = len([line for line in (block.get("lines") or []) if str(line or "").strip()])
+    mask_score = safe_float(block.get("mask_score"))
+
+    score = (
+        japanese * 2.8
+        + max(meaningful - japanese, 0) * 1.1
+        + line_count * 3.5
+        - latin * 1.8
+        - punctuation * 1.3
+    )
+
+    if japanese > 0 and latin > 0:
+        score -= min(japanese, latin) * 1.15
+    if japanese == 0 and latin > 0:
+        score -= 6.0
+    if mask_score is not None:
+        score += mask_score * 8.0
+
+    return score
+
+
+def block_box_tuple(block: dict[str, Any]):
+    box = block.get("box") or [0, 0, 0, 0]
+    return tuple(int(v) for v in box[:4])
+
+
+def box_overlap_metrics(left_box, right_box):
+    lx1, ly1, lx2, ly2 = left_box
+    rx1, ry1, rx2, ry2 = right_box
+
+    ix1 = max(lx1, rx1)
+    iy1 = max(ly1, ry1)
+    ix2 = min(lx2, rx2)
+    iy2 = min(ly2, ry2)
+
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0, 0.0
+
+    intersection = float((ix2 - ix1) * (iy2 - iy1))
+    left_area = max(1.0, float((lx2 - lx1) * (ly2 - ly1)))
+    right_area = max(1.0, float((rx2 - rx1) * (ry2 - ry1)))
+    union = max(1.0, left_area + right_area - intersection)
+    return intersection / min(left_area, right_area), intersection / union
+
+
+def estimate_page_colorfulness(img) -> float:
+    import numpy as np
+
+    if img.ndim < 3 or img.shape[2] < 3:
+        return 0.0
+
+    return float(np.std(img.astype(np.float32), axis=2).mean() / 255.0)
+
+
+def build_line_crop_variants(line_crop):
+    import cv2
+
+    if line_crop.ndim == 2:
+        gray = line_crop
+    else:
+        gray = cv2.cvtColor(line_crop, cv2.COLOR_RGB2GRAY)
+
+    normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
+    adaptive = cv2.adaptiveThreshold(
+        normalized,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        9,
+    )
+    adaptive_inv = cv2.bitwise_not(adaptive)
+
+    return [
+        ("orig", line_crop if line_crop.ndim == 3 else cv2.cvtColor(line_crop, cv2.COLOR_GRAY2RGB)),
+        ("norm", cv2.cvtColor(normalized, cv2.COLOR_GRAY2RGB)),
+        ("clahe", cv2.cvtColor(clahe, cv2.COLOR_GRAY2RGB)),
+        ("adaptive_inv", cv2.cvtColor(adaptive_inv, cv2.COLOR_GRAY2RGB)),
+    ]
+
+
+def should_try_line_variants(blk, line_crop, baseline_text: str) -> bool:
+    font_size = safe_float(getattr(blk, "font_size", None)) or 0.0
+    baseline_score = score_text_quality(baseline_text)
+    height, width = line_crop.shape[:2]
+    crop_ratio = (max(height, width) / max(1, min(height, width)))
+
+    if baseline_score < 18.0:
+        return True
+    if getattr(blk, "vertical", False) and font_size <= 32:
+        return True
+    if getattr(blk, "vertical", False) and crop_ratio >= 2.2:
+        return True
+    return False
+
+
+def recognize_line_crop_best(engine, blk, line_crop):
+    from PIL import Image
+
+    baseline_text = engine.mocr(Image.fromarray(line_crop))
+    if not should_try_line_variants(blk, line_crop, baseline_text):
+        return baseline_text
+
+    best_text = baseline_text
+    best_score = score_text_quality(baseline_text)
+
+    for variant_name, variant_img in build_line_crop_variants(line_crop)[1:]:
+        candidate_text = engine.mocr(Image.fromarray(variant_img))
+        candidate_score = score_text_quality(candidate_text)
+        if candidate_score > best_score + 0.75:
+            best_text = candidate_text
+            best_score = candidate_score
+
+    return best_text
+
+
 def line_axis_and_edges(line_poly, vertical: bool):
     import numpy as np
 
@@ -347,7 +478,6 @@ def extend_line_with_mask(mask_refined, line_poly, font_size: float, vertical: b
 
 def recognize_block_lines(engine, img, mask_refined, blk):
     import cv2
-    from PIL import Image
 
     lines_coords = []
     lines_text = []
@@ -368,7 +498,7 @@ def recognize_block_lines(engine, img, mask_refined, blk):
         for line_crop in line_crops:
             if blk.vertical:
                 line_crop = cv2.rotate(line_crop, cv2.ROTATE_90_CLOCKWISE)
-            line_text += engine.mocr(Image.fromarray(line_crop))
+            line_text += recognize_line_crop_best(engine, blk, line_crop)
 
         lines_coords.append(line.tolist())
         lines_text.append(line_text)
@@ -542,22 +672,40 @@ def recognize_manual_crop(image_path: str):
     return detected_result
 
 
-def recognize_with_metadata(image_path: str):
-    from mokuro import __version__
-    from mokuro.utils import imread
+def build_page_detection_variants(img, base_block_count: int):
+    import cv2
 
-    engine = build_engine()
-    img = imread(image_path)
-    if img is None:
-        raise ValueError("Invalid or unsupported image")
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
+    adaptive = cv2.adaptiveThreshold(
+        normalized,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        41,
+        11,
+    )
+    adaptive_inv = cv2.bitwise_not(adaptive)
 
-    height, width, *_ = img.shape
-    result = {"version": __version__, "img_width": width, "img_height": height, "blocks": []}
+    colorfulness = estimate_page_colorfulness(img)
+    variants = []
 
-    if getattr(engine, "disable_ocr", False):
-        return result
+    if base_block_count <= 14:
+        variants.append(("clahe", cv2.cvtColor(clahe, cv2.COLOR_GRAY2RGB)))
 
-    _mask, mask_refined, blk_list = engine.text_detector(img, refine_mode=1, keep_undetected_mask=True)
+    if base_block_count <= 14 or colorfulness < 0.015:
+        variants.append(("adaptive_inv", cv2.cvtColor(adaptive_inv, cv2.COLOR_GRAY2RGB)))
+
+    return variants
+
+
+def recognize_blocks_for_variant(engine, detect_img, recognition_img=None):
+    if recognition_img is None:
+        recognition_img = detect_img
+
+    _mask, mask_refined, blk_list = engine.text_detector(detect_img, refine_mode=1, keep_undetected_mask=True)
+    result_blocks = []
 
     for blk in blk_list:
         result_blk = {
@@ -573,9 +721,9 @@ def recognize_with_metadata(image_path: str):
             "lines": [],
         }
 
-        result_blk["lines_coords"], result_blk["lines"] = recognize_block_lines(engine, img, mask_refined, blk)
+        result_blk["lines_coords"], result_blk["lines"] = recognize_block_lines(engine, recognition_img, mask_refined, blk)
 
-        refined_block = maybe_refine_truncated_large_block(engine, img, mask_refined, blk, result_blk["lines"])
+        refined_block = maybe_refine_truncated_large_block(engine, recognition_img, mask_refined, blk, result_blk["lines"])
         if refined_block is not None:
             refined_blk, refined_lines_coords, refined_lines = refined_block
             result_blk["box"] = list(refined_blk.xyxy)
@@ -584,7 +732,118 @@ def recognize_with_metadata(image_path: str):
             result_blk["mask_score"] = safe_bbox_mask_score(mask_refined, refined_blk.xyxy)
             result_blk["aspect_ratio"] = safe_aspect_ratio(refined_blk)
 
-        result["blocks"].append(result_blk)
+        result_blocks.append(result_blk)
+
+    return result_blocks
+
+
+def merge_variant_blocks(base_blocks, variant_blocks):
+    merged_blocks = [copy.deepcopy(block) for block in base_blocks]
+
+    for candidate in variant_blocks:
+        candidate_text = "".join(str(line or "") for line in (candidate.get("lines") or [])).strip()
+        candidate_score = score_block_candidate(candidate)
+        if not candidate_text or candidate_score < 6.0:
+            continue
+
+        candidate_box = block_box_tuple(candidate)
+        replace_indexes = []
+        skip_candidate = False
+
+        for idx, existing in enumerate(merged_blocks):
+            overlap_on_smaller, iou = box_overlap_metrics(candidate_box, block_box_tuple(existing))
+            if iou < 0.80 and overlap_on_smaller < 0.72:
+                continue
+
+            existing_score = score_block_candidate(existing)
+            if candidate_score > existing_score + 4.0:
+                replace_indexes.append(idx)
+                continue
+
+            skip_candidate = True
+            break
+
+        if skip_candidate:
+            continue
+
+        for idx in reversed(replace_indexes):
+            merged_blocks.pop(idx)
+
+        merged_blocks.append(candidate)
+
+    return merged_blocks
+
+
+def build_focus_regions(width: int, height: int, base_block_count: int, colorfulness: float):
+    if base_block_count > 14 or colorfulness >= 0.02:
+        return []
+
+    top = int(round(height * 0.14))
+    bottom = int(round(height * 0.94))
+    left_focus = (0, top, int(round(width * 0.62)), bottom)
+    right_focus = (int(round(width * 0.38)), top, width, bottom)
+    return [left_focus, right_focus]
+
+
+def offset_block_coordinates(blocks, offset_x: int, offset_y: int):
+    shifted_blocks = []
+
+    for block in blocks:
+        shifted = copy.deepcopy(block)
+        box = shifted.get("box") or [0, 0, 0, 0]
+        shifted["box"] = [
+            int(box[0]) + offset_x,
+            int(box[1]) + offset_y,
+            int(box[2]) + offset_x,
+            int(box[3]) + offset_y,
+        ]
+
+        shifted_lines = []
+        for polygon in shifted.get("lines_coords") or []:
+            shifted_polygon = []
+            for point in polygon:
+                shifted_polygon.append([
+                    int(point[0]) + offset_x,
+                    int(point[1]) + offset_y,
+                ])
+            shifted_lines.append(shifted_polygon)
+        shifted["lines_coords"] = shifted_lines
+        shifted_blocks.append(shifted)
+
+    return shifted_blocks
+
+
+def recognize_with_metadata(image_path: str):
+    from mokuro import __version__
+    from mokuro.utils import imread
+
+    engine = build_engine()
+    img = imread(image_path)
+    if img is None:
+        raise ValueError("Invalid or unsupported image")
+
+    height, width, *_ = img.shape
+    result = {"version": __version__, "img_width": width, "img_height": height, "blocks": []}
+
+    if getattr(engine, "disable_ocr", False):
+        return result
+
+    colorfulness = estimate_page_colorfulness(img)
+    merged_blocks = recognize_blocks_for_variant(engine, img, img)
+
+    for _variant_name, variant_img in build_page_detection_variants(img, len(merged_blocks)):
+        variant_blocks = recognize_blocks_for_variant(engine, variant_img, img)
+        merged_blocks = merge_variant_blocks(merged_blocks, variant_blocks)
+
+    for x1, y1, x2, y2 in build_focus_regions(width, height, len(merged_blocks), colorfulness):
+        region_img = img[y1:y2, x1:x2]
+        if region_img is None or getattr(region_img, "size", 0) == 0:
+            continue
+        region_blocks = recognize_blocks_for_variant(engine, region_img, region_img)
+        shifted_blocks = offset_block_coordinates(region_blocks, x1, y1)
+        merged_blocks = merge_variant_blocks(merged_blocks, shifted_blocks)
+
+    result["blocks"] = merged_blocks
 
     return result
 

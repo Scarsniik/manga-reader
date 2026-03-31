@@ -1306,11 +1306,16 @@ const Reader: React.FC = () => {
                         onSimulate={async () => {
                             setOcrError(null);
                             setOcrLoading(true);
+                            const requestToken = ocrRequestTokenRef.current + 1;
+                            ocrRequestTokenRef.current = requestToken;
                             try {
                                 if (!images || images.length === 0) throw new Error('No image to OCR');
                                 const src = images[currentIndex];
                                 clearOcrBoxesForPage(src);
                                 const result = await loadOcrBoxesForPage(src, currentIndex, false, { forceRefresh: true });
+                                if (requestToken !== ocrRequestTokenRef.current) {
+                                    return;
+                                }
                                 applyCurrentPageOcrBoxes(result.boxes);
                                 setSelectedBoxes([]);
                                 const sourceLabel = getOcrSourceLabel(result.source);
@@ -1319,10 +1324,16 @@ const Reader: React.FC = () => {
                                     : `Source: ${sourceLabel}${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
                                 );
                             } catch (err: any) {
+                                if (requestToken !== ocrRequestTokenRef.current) {
+                                    return;
+                                }
                                 applyCurrentPageOcrBoxes([]);
                                 setOcrError(String(err && err.message ? err.message : err));
                                 setOcrStatusNote(null);
                             } finally {
+                                if (requestToken !== ocrRequestTokenRef.current) {
+                                    return;
+                                }
                                 setOcrLoading(false);
                             }
                         }}

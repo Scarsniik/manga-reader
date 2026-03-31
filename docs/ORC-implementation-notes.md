@@ -202,6 +202,17 @@ Impact sur le comportement du reader :
 - quand une selection manuelle recouvre deja des boxes auto valides sur la page, le reader peut reutiliser ces boxes comme candidate OCR :
   - il compare ensuite cette candidate avec l'OCR du crop
   - il garde la version la plus riche/coherente
+- la detection OCR page entiere fait maintenant une seconde passe selective sur des variantes contrastees :
+  - `clahe` sur les pages qui detectent peu de blocs
+  - `adaptive_inv` sur les pages faibles en couleur ou qui detectent peu de blocs
+  - les blocs issus de ces variantes sont fusionnes avec la detection originale quand ils apportent une meilleure box ou une box manquante
+- pour les pages manga tres grises qui detectent peu de blocs, le worker fait aussi une passe sur deux grandes zones focus gauche / droite :
+  - cela aide a recuperer des bulles trop faibles ou trop petites a l'echelle de la page entiere
+  - les blocs regionaux sont reprojetes dans les coordonnees de page puis fusionnes avec les blocs existants
+- l'OCR des petites lignes verticales de bulles essaie maintenant plusieurs variantes du crop de ligne et garde la lecture la plus plausible
+- les resultats OCR persistants par page sont maintenant invalides en douceur via `manga-ocr-page-v4` :
+  - une page deja stockee est recalculee a sa prochaine visite
+  - les selections manuelles existantes sont conservees pendant ce recalcul
 
 Impact sur l'import :
 

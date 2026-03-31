@@ -108,6 +108,7 @@ type OcrLanguageDetection = {
 };
 
 type MangaOcrPageEntry = {
+  schemaVersion?: string;
   status: "pending" | "done" | "error";
   pageIndex: number;
   pageNumber: number;
@@ -219,9 +220,10 @@ type BundledOcrAssets = {
 
 const OCR_CACHE_DIR = path.join(dataDir, "ocr-cache");
 const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
-const CACHE_SCHEMA_VERSION = "mokuro-page-v4";
+const CACHE_SCHEMA_VERSION = "mokuro-page-v7";
 const MANGA_OCR_FILE_NAME = ".manga-helper.ocr.json";
 const MANGA_OCR_SCHEMA_VERSION = "manga-ocr-file-v1";
+const MANGA_OCR_PAGE_SCHEMA_VERSION = "manga-ocr-page-v4";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
 const WORKER_REQUEST_TIMEOUT_MS = 5 * 60_000;
 const WORKER_PREWARM_TIMEOUT_MS = 10 * 60_000;
@@ -713,6 +715,10 @@ function isStoredPageUpToDate(entry: MangaOcrPageEntry | undefined, fingerprint:
     return false;
   }
 
+  if (entry.schemaVersion !== MANGA_OCR_PAGE_SCHEMA_VERSION) {
+    return false;
+  }
+
   return entry.imagePath === fingerprint.imagePath
     && Number(entry.sourceSize || 0) === Number(fingerprint.size)
     && Number(entry.sourceMtimeMs || 0) === Number(fingerprint.mtimeMs);
@@ -979,6 +985,7 @@ async function persistPageResultForManga(
   const boxes = Array.isArray(result.boxes) ? result.boxes : [];
 
   file.pages[pageKey] = {
+    schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     status: "done",
     pageIndex,
     pageNumber: pageIndex + 1,
@@ -1040,6 +1047,7 @@ async function addManualBoxesToMangaPage(
   const existingManualBoxes = Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [];
 
   file.pages[pageKey] = {
+    schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     status: existingEntry?.status === "error" ? "done" : (existingEntry?.status || "done"),
     pageIndex,
     pageNumber: pageIndex + 1,
@@ -1082,6 +1090,7 @@ async function removeManualBoxFromMangaPage(
     throw new Error("Manual OCR selection not found");
   }
 
+  entry.schemaVersion = MANGA_OCR_PAGE_SCHEMA_VERSION;
   entry.manualBoxes = nextManualBoxes;
   file.pages[pageKey] = entry;
   recomputeMangaFileProgress(file, pageFiles.length, file.progress.mode || "on_demand");
