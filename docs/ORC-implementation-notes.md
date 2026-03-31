@@ -131,6 +131,67 @@ Important :
 - cela inclut le script Python
 - cela n'inclut pas encore un runtime Python embarque ni les dependances OCR
 
+### 7. Passage a un OCR persistant par manga
+
+Fichiers modifies :
+
+- [ocr.ts](/d:/Cacahouete/Manga-reader/manga-helper/src/electron/handlers/ocr.ts)
+- [mangas.ts](/d:/Cacahouete/Manga-reader/manga-helper/src/electron/handlers/mangas.ts)
+- [pages.ts](/d:/Cacahouete/Manga-reader/manga-helper/src/electron/handlers/pages.ts)
+- [ipc.ts](/d:/Cacahouete/Manga-reader/manga-helper/src/electron/ipc.ts)
+- [preload.ts](/d:/Cacahouete/Manga-reader/manga-helper/src/electron/preload.ts)
+- [Reader.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Reader/Reader.tsx)
+- [MangaCard.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/MangaCard/MangaCard.tsx)
+- [MangaManager.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/MangaManger/MangaManager.tsx)
+- [SettingsModalContent.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/SettingsModalContent.tsx)
+- [MangaOcrModal.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/MangaOcrModal.tsx)
+- [MangaOcrModalContent.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/MangaOcrModalContent.tsx)
+- [OcrQueueModal.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/OcrQueueModal.tsx)
+- [OcrQueueModalContent.tsx](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/OcrQueueModalContent.tsx)
+- [OcrModalContent.scss](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/modales/OcrModalContent.scss)
+- [style.scss](/d:/Cacahouete/Manga-reader/manga-helper/src/renderer/components/Modal/style.scss)
+
+Ce qui a ete ajoute dans cette phase :
+
+- le fichier OCR source de verite par manga : `.manga-helper.ocr.json` dans le dossier du manga
+- lecture prioritaire de ce fichier avant le cache applicatif pour l'OCR du reader
+- ecriture incrementalement page par page dans ce fichier lors de l'OCR a la volee
+- conservation du cache applicatif en acceleration, mais plus comme source principale
+- detection du japonais par echantillonnage de quelques pages
+- auto-assignation optionnelle de la langue `ja` pour les mangas detectes comme japonais
+- queue OCR globale cote Electron pour les jobs longs de manga complet
+- actions IPC pour :
+  - statut OCR d'un manga
+  - lancement OCR d'un manga
+  - lancement OCR de toute la bibliotheque
+  - lecture de la file
+  - pause / reprise / annulation d'un job
+- bouton `OCR` sur chaque carte manga dans la bibliotheque
+- bouton `Avancement OCR` dans l'en-tete de la bibliotheque
+- popup de gestion OCR par manga avec :
+  - reprise
+  - relance en ecrasant
+  - confirmation si la langue est incertaine ou non japonaise
+- popup d'avancement global avec :
+  - affichage des jobs
+  - progression par manga
+  - action `OCR toute la bibliotheque`
+  - choix `seulement sans OCR` ou `reecraser tout`
+- option de lancement automatique de l'OCR complet a l'importation
+- option pour activer ou desactiver l'application automatique de la langue japonaise
+
+Impact sur le comportement du reader :
+
+- quand le reader OCRise une page, le resultat peut maintenant etre persiste dans le fichier OCR du manga
+- si cette page y existe deja et correspond toujours a l'image courante, le reader peut la relire directement depuis le fichier OCR
+- le panneau OCR distingue maintenant aussi le cas `fichier OCR du manga`
+
+Impact sur l'import :
+
+- si l'option d'import OCR automatique est active
+- l'ajout d'un manga peut declencher une detection de langue puis une mise en file OCR
+- le systeme reste conservateur : seuls les mangas detectes comme japonais sont auto-lances
+
 ## Ce qui a ete fait hors du repo applicatif
 
 Pour disposer d'une base locale a jour de reference, les copies suivantes ont ete clonees :

@@ -7,6 +7,7 @@ import { useModal } from '@/renderer/hooks/useModal';
 import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModal';
 import buildTagsModal from '@/renderer/components/Modal/modales/TagsModal';
 import buildBatchEditModal from '@/renderer/components/Modal/modales/BatchEditModal';
+import buildOcrQueueModal from '@/renderer/components/Modal/modales/OcrQueueModal';
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
@@ -338,6 +339,7 @@ const MangaManager: React.FC = () => {
                 <h1>Gestion des mangas</h1>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <button onClick={() => openModal(buildTagsModal())}>Tags</button>
+                    <button onClick={() => openModal(buildOcrQueueModal())}>Avancement OCR</button>
                     <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
                     <button onClick={onAddClick}>Ajouter</button>
                     <button

@@ -29,6 +29,7 @@ type ReaderOcrLoadResult = {
     fromCache: boolean;
     computedAt: string | null;
     forceRefreshUsed: boolean;
+    source?: string | null;
 };
 
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
@@ -634,6 +635,7 @@ const Reader: React.FC = () => {
 
     const loadOcrBoxesForPage = useCallback(async (
         src: string,
+        pageIndex: number,
         useMemoryCache: boolean = true,
         options?: { forceRefresh?: boolean }
     ): Promise<ReaderOcrLoadResult> => {
@@ -647,6 +649,7 @@ const Reader: React.FC = () => {
                     fromCache: false,
                     computedAt: null,
                     forceRefreshUsed: false,
+                    source: 'reader-memory',
                 };
             }
         }
@@ -660,7 +663,16 @@ const Reader: React.FC = () => {
         const requestPromise = (async () => {
             const hasElectronOcrApi = !!(window.api && typeof window.api.ocrRecognize === 'function');
             const api = getOcrApi();
-            const ocrResult = await api(src, forceRefresh ? { forceRefresh: true } : undefined);
+            const ocrOptions = hasElectronOcrApi ? {
+                ...(forceRefresh ? { forceRefresh: true } : {}),
+                ...(manga ? {
+                    mangaId: manga.id,
+                    mangaPath: manga.path,
+                    mangaTitle: manga.title,
+                    pageIndex,
+                } : {}),
+            } : undefined;
+            const ocrResult = await api(src, ocrOptions);
 
             let { boxes } = ocrResult || {};
             if (!hasElectronOcrApi && (!Array.isArray(boxes) || boxes.length === 0)) {
@@ -675,6 +687,7 @@ const Reader: React.FC = () => {
                 fromCache: !!ocrResult?.fromCache,
                 computedAt: typeof ocrResult?.debug?.computedAt === 'string' ? ocrResult.debug.computedAt : null,
                 forceRefreshUsed: !!ocrResult?.debug?.forceRefreshUsed,
+                source: typeof ocrResult?.debug?.source === 'string' ? ocrResult.debug.source : null,
             };
         })();
 
@@ -687,7 +700,7 @@ const Reader: React.FC = () => {
                 ocrInFlightRef.current.delete(inFlightKey);
             }
         }
-    }, [rememberOcrBoxesForPage]);
+    }, [manga, rememberOcrBoxesForPage]);
 
     useEffect(() => {
         if (!ocrEnabled) {
@@ -731,14 +744,19 @@ const Reader: React.FC = () => {
 
         (async () => {
             try {
-                const result = await loadOcrBoxesForPage(src, false);
+                const result = await loadOcrBoxesForPage(src, currentIndex, false);
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
                 }
                 setDetectedBoxes(result.boxes);
+                const sourceLabel = result.source === 'manga-file'
+                    ? 'fichier OCR du manga'
+                    : result.source === 'app-cache'
+                        ? 'cache disque'
+                        : 'calcul backend';
                 setOcrStatusNote(result.fromCache
-                    ? `Source: cache disque, calcul initial ${result.computedAt ?? 'inconnu'}`
-                    : `Source: calcul backend${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
+                    ? `Source: ${sourceLabel}, calcul initial ${result.computedAt ?? 'inconnu'}`
+                    : `Source: ${sourceLabel}${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
                 );
             } catch (err: any) {
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
@@ -783,7 +801,11 @@ const Reader: React.FC = () => {
                 }
 
                 try {
-                    await loadOcrBoxesForPage(source, true);
+                    const pageIndex = images.indexOf(source);
+                    if (pageIndex < 0) {
+                        continue;
+                    }
+                    await loadOcrBoxesForPage(source, pageIndex, true);
                 } catch (error) {
                     if (cancelled) {
                         return;
@@ -916,12 +938,17 @@ const Reader: React.FC = () => {
                                 if (!images || images.length === 0) throw new Error('No image to OCR');
                                 const src = images[currentIndex];
                                 clearOcrBoxesForPage(src);
-                                const result = await loadOcrBoxesForPage(src, false, { forceRefresh: true });
+                                const result = await loadOcrBoxesForPage(src, currentIndex, false, { forceRefresh: true });
                                 setDetectedBoxes(result.boxes);
                                 setSelectedBoxes([]);
+                                const sourceLabel = result.source === 'manga-file'
+                                    ? 'fichier OCR du manga'
+                                    : result.source === 'app-cache'
+                                        ? 'cache disque'
+                                        : 'calcul backend';
                                 setOcrStatusNote(result.fromCache
-                                    ? `Source: cache disque, calcul initial ${result.computedAt ?? 'inconnu'}`
-                                    : `Source: calcul backend${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
+                                    ? `Source: ${sourceLabel}, calcul initial ${result.computedAt ?? 'inconnu'}`
+                                    : `Source: ${sourceLabel}${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
                                 );
                             } catch (err: any) {
                                 setDetectedBoxes([]);

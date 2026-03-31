@@ -80,6 +80,16 @@ export default function SettingsModalContent() {
       type: 'checkbox',
     },
     {
+      name: 'ocrAutoRunOnImport',
+      label: 'Lancer l\'OCR complet à l\'importation des mangas',
+      type: 'checkbox',
+    },
+    {
+      name: 'ocrAutoAssignJapaneseLanguage',
+      label: 'Appliquer automatiquement la langue japonaise si l\'OCR détecte un manga japonais',
+      type: 'checkbox',
+    },
+    {
       name: 'persistMangaFilters',
       label: 'Conserver les filtres de la liste au redémarrage',
       type: 'checkbox',
@@ -102,6 +112,8 @@ export default function SettingsModalContent() {
       ocrPythonPath: values.ocrPythonPath || '',
       ocrRepoPath: values.ocrRepoPath || '',
       ocrForceCpu: !!values.ocrForceCpu,
+      ocrAutoRunOnImport: !!values.ocrAutoRunOnImport,
+      ocrAutoAssignJapaneseLanguage: values.ocrAutoAssignJapaneseLanguage !== false,
       persistMangaFilters,
       mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
     }

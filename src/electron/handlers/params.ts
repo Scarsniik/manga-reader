@@ -26,6 +26,8 @@ const defaultSettings = {
     ocrPythonPath: "",
     ocrRepoPath: "",
     ocrForceCpu: false,
+    ocrAutoRunOnImport: false,
+    ocrAutoAssignJapaneseLanguage: true,
     persistMangaFilters: true,
     mangaListFilters: null,
 };

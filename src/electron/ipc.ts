@@ -23,7 +23,18 @@ ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => 
 
 // Mangas
 ipcMain.handle("get-mangas", async () => mangas.getMangas());
-ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => mangas.addManga(event, manga));
+ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => {
+    const updated = await mangas.addManga(event, manga);
+    try {
+        const insertedManga = Array.isArray(updated)
+            ? updated.find((item: any) => String(item.id) === String(manga?.id)) || manga
+            : manga;
+        await ocr.ocrQueueImportManga(insertedManga);
+    } catch (error) {
+        console.warn("Failed to auto-queue OCR after manga import", error);
+    }
+    return mangas.getMangas();
+});
 ipcMain.handle("remove-manga", async (event: IpcMainInvokeEvent, mangaId: string) => mangas.removeManga(event, mangaId));
 ipcMain.handle("update-manga", async (event: IpcMainInvokeEvent, updatedManga: any) => mangas.updateManga(event, updatedManga));
 ipcMain.handle("batch-update-tags", async (event: IpcMainInvokeEvent, payload: any) => mangas.batchUpdateTags(event, payload));
@@ -78,4 +89,11 @@ ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDat
     returnRaw: true,
     ...(opts || {}),
 }));
+ipcMain.handle("ocr-get-manga-status", async (event: IpcMainInvokeEvent, mangaId: string) => ocr.ocrGetMangaStatus(event, mangaId));
+ipcMain.handle("ocr-start-manga", async (event: IpcMainInvokeEvent, mangaId: string, opts?: Record<string, any>) => ocr.ocrStartManga(event, mangaId, opts));
+ipcMain.handle("ocr-start-library", async (event: IpcMainInvokeEvent, opts?: Record<string, any>) => ocr.ocrStartLibrary(event, opts));
+ipcMain.handle("ocr-queue-status", async () => ocr.ocrGetQueueStatus());
+ipcMain.handle("ocr-pause-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrPauseJob(event, jobId));
+ipcMain.handle("ocr-resume-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrResumeJob(event, jobId));
+ipcMain.handle("ocr-cancel-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrCancelJob(event, jobId));
 ipcMain.handle("ocr-terminate", async () => ocr.ocrTerminate());

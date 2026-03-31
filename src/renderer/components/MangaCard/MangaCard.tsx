@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
 import useModal from '@/renderer/hooks/useModal';
 import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaModal';
+import buildMangaOcrModal from '@/renderer/components/Modal/modales/MangaOcrModal';
 import useParams from '@/renderer/hooks/useParams';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
@@ -168,6 +169,14 @@ const MangaCard: React.FC<Props> = ({
         }
     }, [manga, openModal]);
 
+    const onOcrClick = useCallback(() => {
+        try {
+            openModal(buildMangaOcrModal(manga));
+        } catch (err) {
+            console.error('Failed to open OCR modal', err);
+        }
+    }, [manga, openModal]);
+
     const onCardKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
             openReader();
@@ -247,6 +256,10 @@ const MangaCard: React.FC<Props> = ({
             onClick: onEditClick
         },
         {
+            label: 'OCR',
+            onClick: onOcrClick
+        },
+        {
             label: pages === currentPage ? 'Marquer comme non lu' : 'Marquer comme lu',
             onClick: onToggleRead
         },
@@ -254,7 +267,7 @@ const MangaCard: React.FC<Props> = ({
             label: 'Supprimer',
             onClick: onDeleteClick
         }
-    ]), [onCardClick, onEditClick, onDeleteClick, onToggleRead, pages, currentPage]);
+    ]), [onCardClick, onDeleteClick, onEditClick, onOcrClick, onToggleRead, pages, currentPage]);
 
     return (
         <Card

@@ -1,342 +1,428 @@
-# Spécification OCR — Reader Manga Helper
+# Specification OCR - Reader Manga Helper
 
-Date de mise à jour : 2026-03-31
+Date de mise a jour : 2026-03-31
 
 ## Statut du document
 
-Ce document remplace l'ancien mock OCR.
+Ce document fixe la cible produit et technique de l'OCR pour Manga Helper.
 
-Le but n'est plus seulement de décrire l'UI, mais de fixer :
+Le premier jet actuellement branche dans le code existe deja, mais ce document decrit la direction voulue a moyen terme, pas seulement l'etat courant.
 
-- le besoin produit
-- le choix technique recommandé
-- les alternatives écartées
-- le contrat de données entre backend OCR et renderer
-- la stratégie d'intégration dans l'application Electron actuelle
-
-Le choix n'est pas juridiquement "figé", mais c'est la direction recommandée à ce stade.
-
-Pour l'état du premier jet déjà branché dans le code, voir aussi :
+Pour la trace des iterations deja codees, voir aussi :
 
 - [ORC-implementation-notes.md](/d:/Cacahouete/Manga-reader/manga-helper/docs/ORC-implementation-notes.md)
 
-## Résumé exécutif
+## Resume executif
 
-Nous conservons l'idée produit de l'ancien document :
+Nous gardons l'idee produit de base :
 
 - activer l'OCR dans le Reader
-- afficher des zones détectées par-dessus la page
-- permettre la sélection d'une ou plusieurs zones
-- envoyer le texte détecté dans `JapaneseAnalyse`
+- afficher des zones detectees sur l'image
+- permettre la selection d'une ou plusieurs zones
+- envoyer le texte detecte dans `JapaneseAnalyse`
 
-En revanche, le moteur OCR visé doit être clarifié.
+En revanche, la strategie de stockage et d'orchestration est maintenant la suivante :
 
-### Décision recommandée
+- deux modes OCR : `a la volee` et `OCR complet du manga`
+- une pipeline OCR japonaise de type `mokuro`
+- un fichier OCR unique par manga, stocke dans le dossier du manga
+- un petit cache applicatif possible en plus, mais uniquement comme acceleration
+- une file d'attente globale cote Electron pour gerer les OCR longs
+- une detection du japonais avant les traitements automatiques massifs
+- une option pour appliquer automatiquement la langue `japonais` aux mangas detectes comme japonais
 
-Pour obtenir un OCR solide sur des mangas japonais, la solution recommandée est :
-
-- détection des zones de texte via `comic-text-detector`
-- reconnaissance du texte japonais via `manga-ocr`
-- orchestration et format de sortie inspirés de `mokuro`
-
-Autrement dit :
-
-- `manga-ocr` seul n'est pas suffisant comme pipeline complète de page
-- `mokuro` est la meilleure base technique pour intégrer un OCR manga japonais robuste
-- notre application ne doit pas intégrer le reader HTML de mokuro, seulement sa pipeline OCR et son format logique
-
-### Mode de fonctionnement recommandé
-
-Le mode recommandé pour l'application est hybride :
-
-- par défaut : OCR à la volée, page par page
-- avec cache local obligatoire
-- avec possibilité de pré-rendu optionnel en arrière-plan ou à la demande
-
-Ce mode donne le meilleur compromis entre confort utilisateur et complexité raisonnable.
-
-## Contexte et constat sur l'état actuel du projet
-
-L'ancien document partait d'une bonne intuition UX, mais il restait ambigu sur le moteur OCR réel.
-
-Dans l'état actuel du repo :
-
-- le reader sait déjà afficher un panneau OCR et des boxes mockées
-- le contrat UI actuel attend essentiellement des objets `{ id, text, bbox }`
-- le backend Electron OCR est aujourd'hui un stub
-- le renderer retombe sur un mock si rien n'est renvoyé
-
-Conséquence :
-
-- l'interface peut donner l'impression que "l'OCR existe"
-- mais l'intégration OCR réelle n'est pas en place
-
-Le point le plus important à retenir est le suivant :
-
-- `manga-ocr` est un excellent moteur de reconnaissance japonaise pour le manga
-- mais ce n'est pas, à lui seul, un détecteur complet de zones sur page entière
-
-Pour un manga japonais, il faut une chaîne spécialisée, pas un OCR générique posé directement sur la page complète.
+La source de verite ne doit donc plus etre le cache applicatif. La source de verite doit etre le fichier OCR du manga.
 
 ## Besoin produit
 
-L'OCR doit être solide sur les cas typiques des mangas japonais :
+L'OCR doit etre solide sur les cas typiques des mangas japonais :
 
 - texte vertical
 - texte horizontal
 - furigana
-- texte sur fond illustré
-- bulles irrégulières
-- polices très variées
-- scans compressés ou de qualité moyenne
+- texte sur fond illustre
+- bulles irregulieres
+- polices tres variees
+- scans compresses ou de qualite moyenne
 - pages avec beaucoup de petits blocs texte
+- pages de titre ou pages decoratives plus difficiles
 
-Le besoin principal n'est pas de faire de la traduction automatique "magique".
+Le besoin principal n'est pas de faire une traduction automatique complete.
 
 Le besoin principal est :
 
-- extraire du texte japonais de façon fiable
-- le rattacher à des zones cliquables
+- extraire du texte japonais de facon fiable
+- le rattacher a des zones cliquables
 - permettre l'analyse lexicale ensuite
+- conserver ce resultat pour eviter de retraiter les memes pages
 
-## Exigences fonctionnelles
-
-### Expérience utilisateur
-
-- Quand l'utilisateur active l'OCR dans le Reader, le panneau OCR s'ouvre.
-- La page courante est analysée.
-- Les zones détectées apparaissent sur l'image.
-- L'utilisateur peut sélectionner une ou plusieurs zones.
-- `JapaneseAnalyse` affiche le texte sélectionné.
-- L'utilisateur peut corriger manuellement le texte si nécessaire.
-
-### Exigences techniques
-
-- L'OCR doit fonctionner en priorité hors-ligne après installation des dépendances et téléchargement des modèles.
-- Le texte détecté doit être rattaché à des boîtes exploitables dans le renderer.
-- Les résultats doivent être mis en cache.
-- Le système doit supporter le retraitement d'une page quand le cache est invalide.
-- L'échec de JPDB ne doit jamais être confondu avec un échec OCR.
-
-## Évaluation des options
-
-### Option 1 — `manga-ocr` seul
-
-Description :
-
-- utiliser directement `manga-ocr` sur l'image reçue
-
-Avantages :
-
-- excellent OCR japonais spécialisé manga
-- gère bien le texte multi-lignes
-- robuste sur furigana, texte vertical, texte sur image
-
-Limites :
-
-- ne résout pas la détection complète des zones texte sur page entière
-- ne fournit pas naturellement le contrat final attendu par le reader
-- pousser `manga-ocr` sur une page entière est une mauvaise hypothèse de départ
-
-Verdict :
-
-- très bonne brique de reconnaissance
-- mauvais choix comme solution complète
-
-### Option 2 — `mokuro` en interne
-
-Description :
-
-- utiliser la pipeline interne de `mokuro`
-- `comic-text-detector` pour localiser les blocs texte
-- `manga-ocr` pour reconnaître le contenu de chaque bloc/ligne
-
-Avantages :
-
-- pipeline spécialisée manga japonais
-- format de sortie déjà structuré par page
-- gestion de cache déjà pensée dans le projet amont
-- possibilité de traitement page par page ou volume par volume
-- bien aligné avec notre besoin d'overlay et de sélection
-
-Limites :
-
-- plus lourd à embarquer qu'un simple appel JS
-- dépendance Python
-- nécessite un worker persistant si on veut un mode "à la volée" fluide
-
-Verdict :
-
-- meilleur choix actuel
-
-### Option 3 — `PaddleOCR` seul
-
-Description :
-
-- utiliser un moteur OCR généraliste moderne qui détecte et reconnaît directement le texte
-
-Avantages :
-
-- pipeline plus simple conceptuellement
-- boîtes + texte + confiance souvent disponibles directement
-- progrès récents sur le japonais et le texte vertical
-
-Limites :
-
-- moins spécialisé manga que la chaîne `comic-text-detector + manga-ocr`
-- risque supérieur sur furigana, bruit visuel, styles manga
-
-Verdict :
-
-- bon plan B
-- pas le choix principal tant que la priorité reste "manga japonais robuste"
-
-### Option 4 — `Tesseract`
-
-Description :
-
-- OCR classique avec modèles japonais
-
-Avantages :
-
-- connu
-- local
-- léger à comparer à certaines solutions deep learning
-
-Limites :
-
-- moins robuste sur les cas manga difficiles
-- très mauvais candidat comme base principale pour ce projet
-
-Verdict :
-
-- à écarter comme moteur principal
-
-## Choix technique retenu
+## Decision technique recommandee
 
 ### Choix principal
 
-Le choix recommandé est :
+Le choix recommande reste :
 
-- pipeline `mokuro`
-- mais intégrée à notre application
-- sans embarquer le reader HTML de mokuro
+- detection des zones de texte via `comic-text-detector`
+- reconnaissance du texte japonais via `manga-ocr`
+- orchestration et logique de page inspirees de `mokuro`
 
-Plus précisément, nous voulons réutiliser ou reproduire cette logique :
+Autrement dit :
 
-1. chargement image
-2. détection des blocs texte
-3. OCR japonais des zones
-4. résultat structuré par page
-5. normalisation vers le contrat UI de Manga Helper
+- `manga-ocr` seul n'est pas suffisant comme pipeline complete
+- `mokuro` est la meilleure base technique actuelle pour un OCR manga japonais robuste
+- notre application n'a pas besoin du reader HTML de mokuro, seulement de sa pipeline OCR
 
-### Ce que nous gardons de notre doc initial
+### Pourquoi ce choix reste le bon
 
-- activation OCR depuis `ReaderHeader`
-- panneau OCR à droite
-- zones cliquables sur l'image
-- sélection multiple
-- envoi du texte vers `JapaneseAnalyse`
+Cette chaine est aujourd'hui la plus coherente avec notre besoin reel :
 
-### Ce que nous changeons
+- elle est specialisee manga japonais
+- elle gere mieux le texte vertical et le furigana qu'un OCR generaliste
+- elle est deja orientee blocs/ligne/page, donc compatible avec notre overlay
+- elle permet de traiter une page a la volee ou un manga entier
 
-- le backend OCR n'est plus pensé comme un simple `manga-ocr(image entière)`
-- nous introduisons une vraie pipeline page
-- nous ajoutons un cache local
-- nous distinguons clairement OCR, analyse JPDB, et éventuelle traduction
+## Modes de fonctionnement
 
-## Architecture cible
+### Mode 1 - OCR a la volee
 
-### Vue d'ensemble
+Quand l'utilisateur ouvre un manga dans le Reader :
 
-Chaîne recommandée :
+- la page courante est traitee en priorite
+- les pages voisines peuvent etre preparees ensuite pour fluidifier la lecture
+- le resultat OCR de chaque page est ecrit dans le fichier OCR du manga
+- si la page existe deja dans le fichier OCR, on la relit au lieu de la recalculer
 
-1. Le renderer demande l'OCR de la page courante.
-2. Electron regarde si un cache valide existe.
-3. Si oui, il renvoie immédiatement le résultat normalisé.
-4. Sinon, Electron envoie la requête à un worker Python persistant.
-5. Le worker charge ou réutilise les modèles.
-6. Le worker exécute la pipeline de type mokuro sur la page.
-7. Electron normalise le résultat et l'écrit en cache.
-8. Le renderer reçoit les boxes et les affiche.
+Important :
 
-### Pourquoi un worker Python persistant
+- `a la volee` ne veut pas dire `temporaire`
+- `a la volee` veut dire `calcule au moment du besoin, puis persiste`
 
-Le pire design serait :
+### Priorite de traitement en lecture
 
-- lancer un processus Python complet à chaque clic OCR
+Le comportement cible pour la lecture est :
 
-Ce design ajoute :
+1. page actuelle
+2. `x` pages suivantes
+3. `x` pages precedentes
+4. puis continuation par vagues jusqu'a la limite voulue
 
-- temps de démarrage
-- rechargement des modèles
-- expérience lente
+Exemple :
 
-Le design recommandé est :
+- page 40 ouverte
+- OCR page 40
+- puis 41 a 40 + x
+- puis 39 a 40 - x
+- puis 40 + x + 1 a 40 + 2x
+- puis 40 - x - 1 a 40 - 2x
 
-- un processus Python démarré une fois
-- communication simple via `stdin/stdout` en JSON
-- modèles gardés en mémoire tant que l'application tourne
+Ce comportement peut servir :
 
-### Pourquoi un cache local est obligatoire
+- soit comme simple confort de lecture autour de la page courante
+- soit comme base d'un traitement progressif qui finit par couvrir tout le manga
 
-Même en mode "à la volée", le cache n'est pas une optimisation facultative.
+### Mode 2 - OCR complet du manga
 
-Le cache est nécessaire pour :
+Ce mode prepare tout le manga, pas seulement les pages vues.
 
-- éviter de retraiter une page déjà vue
-- rendre l'app agréable sur CPU
-- permettre une réouverture quasi instantanée des pages déjà analysées
-- préparer un pré-rendu discret en arrière-plan
+Deux declencheurs sont prevus :
 
-## Mode à la volée vs pré-rendu
+- un bouton dans la bibliotheque pour lancer l'OCR complet d'un manga
+- une option dans les parametres pour lancer automatiquement l'OCR a l'importation
 
-### Recommandation produit
+Le resultat est ecrit dans le meme fichier OCR unique du manga.
 
-Le mode recommandé est :
+Si un OCR existe deja pour ce manga, on n'ecrase pas silencieusement.
 
-- OCR à la volée lors de la première ouverture d'une page
-- puis cache
-- puis préfetch éventuel des pages voisines
+Un dialogue doit s'ouvrir avec des choix du type :
 
-### Pré-rendu
+- `Ouvrir l'avancement`
+- `Reprendre`
+- `Relancer en ecrasant`
+- `Annuler`
 
-Le pré-rendu doit rester possible, mais comme option :
+## Stockage et persistance
 
-- préparer tout le volume
-- préparer le chapitre courant
-- préparer les N pages suivantes
-- préparer aussi les N pages precedentes pour fluidifier les retours immediats
+### Principe
 
-Ce mode est utile :
+La source de verite OCR doit etre stockee dans le dossier du manga.
 
-- pour les machines lentes
-- pour les sessions de lecture longues
-- pour réduire l'attente pendant la navigation
+La recommandation cible est :
 
-### Stratégie hybride recommandée
+```text
+<dossier-du-manga>/.manga-helper.ocr.json
+```
 
-- ouverture page : OCR si cache absent
-- navigation : lecture du cache si présent
-- arrière-plan : pré-analyse prioritaire des 1 à 3 pages suivantes, puis des pages précédentes
-- action utilisateur optionnelle : "Préparer l'OCR du manga" ou "Préparer l'OCR du chapitre"
+Il y a un seul fichier OCR par manga.
 
-Dans le premier jet actuellement branché dans le repo :
+Le cache applicatif peut rester utile pour :
 
-- quand le panneau OCR est actif, la page courante est traitée en priorité
-- puis le reader pré-rend l'OCR vers l'avant, page par page, dans l'ordre
-- puis il pré-rend aussi les pages précédentes
-- le nombre de pages anticipées de chaque cote suit `readerPreloadPageCount`
-- le worker OCR et ses modeles peuvent etre prechauffes en arriere-plan des le demarrage de l'application pour reduire l'attente au premier usage
-- un filtrage conservateur retire déjà certains faux positifs évidents sur les pages décoratives ou de titre
+- accelerer certaines lectures immediates
+- garder quelques pages chaudes en memoire
+- eviter des relectures disque inutiles a court terme
 
-## Contrat de données
+Mais ce cache ne doit pas etre la base fonctionnelle du systeme.
 
-Le renderer actuel est déjà aligné avec un contrat simple.
+### Contraintes de robustesse
 
-Nous devons conserver cette simplicité côté UI, mais accepter un format plus riche côté backend.
+Comme on veut un seul fichier par manga, il faut une ecriture robuste :
 
-### Contrat backend riche recommandé
+- ecriture incrementale
+- sauvegarde atomique via fichier temporaire puis remplacement
+- schema versionne
+- reprise possible apres fermeture ou crash
+
+Le fichier OCR doit pouvoir contenir :
+
+- les metadonnees du manga
+- la version du schema
+- le moteur OCR utilise
+- l'etat de progression global
+- les pages deja faites
+- les pages en erreur
+- les indicateurs de langue detectee
+- les parametres OCR importants
+
+### Structure cible recommandee
+
+Exemple logique :
+
+```json
+{
+  "version": "manga-ocr-file-v1",
+  "engine": "mokuro",
+  "manga": {
+    "id": "library-123",
+    "title": "Example",
+    "rootPath": "D:/Mangas/Example"
+  },
+  "languageDetection": {
+    "status": "likely_japanese",
+    "sampledPages": [3, 11, 27],
+    "score": 0.94,
+    "appliedLanguageTag": true
+  },
+  "progress": {
+    "totalPages": 180,
+    "completedPages": 52,
+    "failedPages": 1,
+    "lastProcessedPage": 53,
+    "mode": "full_manga"
+  },
+  "pages": {
+    "0001": {
+      "status": "done",
+      "width": 827,
+      "height": 1170,
+      "blocks": []
+    },
+    "0002": {
+      "status": "pending"
+    }
+  }
+}
+```
+
+Le contenu exact pourra evoluer, mais l'idee doit rester :
+
+- un fichier
+- des pages internes
+- une progression persistante
+
+## Detection du japonais avant OCR massif
+
+### Pourquoi cette etape est necessaire
+
+Nous ne voulons pas lancer automatiquement un OCR japonais complet sur :
+
+- un manga non japonais
+- un comic occidental
+- un dossier melange
+- des imports massifs non qualifies
+
+Il faut donc une etape d'eligibilite avant les traitements automatiques lourds.
+
+### Strategie recommandee
+
+Avant un OCR automatique complet :
+
+- echantillonner quelques pages du manga
+- lancer un OCR rapide sur ces pages
+- mesurer si le texte detecte ressemble majoritairement a du japonais
+
+Signaux utiles :
+
+- presence de hiragana
+- presence de katakana
+- presence de kanji
+- ratio de caracteres japonais par rapport aux caracteres latins
+- quantite minimale de texte utile detecte
+
+Le resultat de cette detection doit donner un des etats suivants :
+
+- `likely_japanese`
+- `likely_non_japanese`
+- `uncertain`
+
+### Regle de lancement
+
+- `likely_japanese` : autoriser le lancement automatique
+- `likely_non_japanese` : ne pas lancer automatiquement
+- `uncertain` : demander confirmation utilisateur
+
+### Cas incertain
+
+Si la detection est incertaine, l'application doit pouvoir ouvrir un dialogue montrant :
+
+- quelques pages echantillons
+- un resume tres court du diagnostic
+- une action `Lancer quand meme`
+- une action `Ne pas lancer`
+
+## Auto-assignation de la langue japonaise
+
+Quand un manga est detecte comme japonais pendant la phase OCR, l'application peut aussi lui appliquer automatiquement la langue `japonais`.
+
+Ce comportement doit etre controle par un parametre utilisateur :
+
+- `Activer la langue japonaise automatiquement pour les mangas detectes comme japonais`
+
+Comportement recommande :
+
+- active par defaut si l'OCR japonais global est active
+- desactivable dans les parametres
+
+Regle :
+
+- on ne modifie pas la langue du manga si la detection est `likely_non_japanese`
+- on ne la modifie pas automatiquement si la detection est `uncertain`
+- si la detection est `likely_japanese`, on peut appliquer le tag langue automatiquement si l'option est active
+
+Cette auto-assignation doit etre tracee dans le fichier OCR du manga pour savoir :
+
+- si la langue a ete detectee
+- si elle a ete appliquee automatiquement
+- sur quelle base
+
+## Actions utilisateur prevues
+
+### Bouton OCR dans la bibliotheque
+
+Chaque manga doit pouvoir exposer une action OCR dans la bibliotheque.
+
+Cas 1 :
+
+- pas de fichier OCR present
+- l'action lance l'OCR complet du manga
+
+Cas 2 :
+
+- un fichier OCR existe deja
+- l'action ouvre un dialogue
+
+Choix recommandes :
+
+- `Voir l'avancement`
+- `Reprendre`
+- `Relancer en ecrasant`
+- `Annuler`
+
+### Bouton d'avancement OCR
+
+L'application doit aussi proposer un bouton dedie a l'avancement OCR global.
+
+Quand l'utilisateur clique dessus, il doit voir :
+
+- la file d'attente OCR
+- chaque manga en file
+- l'etat de chaque manga
+- la progression par manga
+- l'eventuelle page en cours
+
+Et depuis cette vue, il faut aussi pouvoir lancer un OCR massif sur la bibliotheque entiere.
+
+### Action `OCR toute la bibliotheque`
+
+Depuis le panneau d'avancement, un bouton doit ouvrir un popup avec au minimum deux choix :
+
+- `Seulement les mangas sans OCR`
+- `Refaire une passe complete en ecrasant`
+
+Comportement recommande :
+
+- appliquer d'abord la detection du japonais pour les lancements automatiques
+- ne pas lancer aveuglement les mangas detectes `likely_non_japanese`
+- demander confirmation si certains mangas restent `uncertain`
+
+## File d'attente OCR
+
+### Principe
+
+La file d'attente OCR doit vivre cote Electron main process, pas seulement dans le renderer.
+
+Raisons :
+
+- la bibliotheque peut lancer plusieurs OCR de mangas
+- l'import peut ajouter plusieurs mangas d'un coup
+- la lecture ne doit pas perdre l'etat de la file a chaque changement d'ecran
+- il faut pouvoir suivre la progression globalement
+
+### Granularite
+
+La bonne unite de file est :
+
+- un job par manga
+
+Chaque job peut contenir :
+
+- le mode `on_demand`
+- ou le mode `full_manga`
+- l'etat de detection de langue
+- la progression par page
+
+### Etats recommandes
+
+Chaque job manga doit pouvoir etre dans un etat du type :
+
+- `queued`
+- `detecting_language`
+- `running`
+- `paused`
+- `completed`
+- `error`
+- `cancelled`
+
+### Gestion des imports multiples
+
+Point important :
+
+- un import massif peut ajouter plusieurs mangas a la fois
+
+Le systeme doit donc :
+
+- empiler les jobs proprement
+- eviter les doublons pour un meme manga
+- reouvrir le bon dialogue si un OCR existe deja
+- separer les jobs interactifs de lecture des jobs longs de bibliotheque
+
+### Priorites recommandees
+
+Pour garder une bonne UX :
+
+- priorite haute pour l'OCR interactif du Reader
+- priorite basse ou normale pour l'OCR complet de fond
+
+La version simple a viser d'abord est :
+
+- un seul manga traite a la fois pour les jobs lourds
+- mais avec possibilite de petites taches interactives prioritaires
+
+## Contrat de donnees OCR
+
+Le renderer actuel est deja aligne avec un contrat simple.
+
+Nous devons conserver cette simplicite cote UI, tout en gardant un format plus riche dans le fichier OCR du manga.
+
+### Contrat backend riche recommande
 
 ```ts
 type OcrLine = {
@@ -355,16 +441,25 @@ type OcrBlock = {
   confidence?: number | null;
 };
 
-type OcrPageResult = {
+type OcrPageEntry = {
+  status: "pending" | "done" | "error";
+  width?: number;
+  height?: number;
+  blocks?: OcrBlock[];
+  errorMessage?: string;
+};
+
+type MangaOcrFile = {
   version: string;
   engine: "mokuro";
-  source: {
-    imagePath: string;
-    width: number;
-    height: number;
+  progress: {
+    totalPages: number;
+    completedPages: number;
+    failedPages: number;
+    lastProcessedPage?: number;
+    mode?: "on_demand" | "full_manga";
   };
-  fromCache: boolean;
-  blocks: OcrBlock[];
+  pages: Record<string, OcrPageEntry>;
 };
 ```
 
@@ -384,306 +479,225 @@ type OcrRecognizeResult = {
   width: number;
   height: number;
   boxes: Box[];
-  page?: OcrPageResult;
+  page?: OcrPageEntry;
   fromCache?: boolean;
 };
 ```
 
-### Règle de normalisation
+### Regle de normalisation
 
 Depuis la sortie de mokuro :
 
 - `block.box = [x1, y1, x2, y2]`
-- `text = block.lines.join("")` par défaut
+- `text = block.lines.join("")` par defaut
 - `bbox.x = x1 / img_width`
 - `bbox.y = y1 / img_height`
 - `bbox.w = (x2 - x1) / img_width`
 - `bbox.h = (y2 - y1) / img_height`
 
-### Texte d'une zone
+## Architecture cible
 
-Le texte affiché dans le reader doit être :
+### Vue d'ensemble
 
-- `block.lines.join("")` par défaut
+Chaine cible :
 
-Option possible plus tard :
+1. Le Reader ou la Bibliotheque demande un OCR de page ou un OCR manga.
+2. Electron verifie d'abord le fichier OCR du manga.
+3. Si la page existe deja, Electron renvoie le resultat normalise.
+4. Sinon, Electron envoie la requete a un worker Python persistant.
+5. Le worker execute la pipeline de type mokuro.
+6. Electron normalise le resultat.
+7. Electron ecrit le resultat dans le fichier OCR du manga.
+8. Electron met a jour la progression du job si besoin.
+9. Le renderer affiche les boxes ou l'avancement.
 
-- `block.lines.join("\n")` pour mieux préserver la structure visuelle dans certains cas
+### Pourquoi un worker Python persistant
 
-## Exemple de résultat normalisé
+Le pire design serait :
 
-```json
-{
-  "engine": "mokuro",
-  "width": 827,
-  "height": 1170,
-  "fromCache": true,
-  "boxes": [
-    {
-      "id": "p000-b000",
-      "text": "あたしはナナ！！５さい！",
-      "bbox": { "x": 0.856, "y": 0.074, "w": 0.076, "h": 0.162 },
-      "vertical": true,
-      "lines": ["あたしはナナ！！", "５さい！"]
-    }
-  ]
-}
-```
+- lancer un processus Python complet a chaque clic OCR
 
-## Cache
+Ce design ajoute :
 
-### Principe
+- temps de demarrage
+- rechargement des modeles
+- experience lente
 
-Le cache doit être géré côté application, pas seulement laissé à l'amont.
+Le design recommande est :
 
-### Recommandation
+- un processus Python demarre une fois
+- communication simple via `stdin/stdout` en JSON
+- modeles gardes en memoire tant que l'application tourne
 
-Stocker un JSON par page OCR dans un dossier applicatif dédié, par exemple :
+### Separation des responsabilites
 
-```text
-<app-data>/ocr-cache/<manga-id-or-hash>/<page-key>.json
-```
-
-La clé de cache doit dépendre au minimum de :
-
-- chemin absolu de l'image
-- taille du fichier
-- date de modification
-- version moteur OCR
-- paramètres OCR importants
-
-### Pourquoi ne pas stocker uniquement à côté des images
-
-Écrire à côté des images du manga peut être pratique, mais présente plusieurs limites :
-
-- certains dossiers peuvent être en lecture seule
-- cela mélange données utilisateur et données d'application
-- cela complique la portabilité
-
-À court terme, le cache applicatif est plus sûr.
-
-## Détails d'intégration dans ce repo
-
-### Côté Electron
-
-Le fichier à remplacer en priorité est :
-
-- `src/electron/handlers/ocr.ts`
-
-Il doit :
-
-- vérifier le cache
-- lancer ou réutiliser le worker Python
-- récupérer le résultat brut
-- normaliser la sortie
-- renvoyer `{ boxes, ... }` au renderer
-
-### Côté preload / IPC
-
-L'API existante peut être conservée :
-
-```ts
-window.api.ocrRecognize(imagePathOrDataUrl)
-```
-
-Mais le résultat renvoyé doit devenir réel et non plus mocké.
-
-Extensions utiles possibles :
-
-- `window.api.ocrRecognize(imagePath, options?)`
-- `window.api.ocrPrefetch(imagePaths[])`
-- `window.api.ocrClearCache(mangaId?)`
-- `window.api.ocrTerminate()`
-
-### Côté renderer
-
-Le reader actuel peut rester globalement identique.
-
-Il faut toutefois corriger la philosophie :
-
-- le mock doit rester un outil de dev
-- il ne doit plus masquer un backend OCR cassé en production
-
-Autrement dit :
-
-- en dev pur front : fallback mock acceptable
-- en application réelle : un échec backend doit remonter comme erreur OCR
-
-### Côté `JapaneseAnalyse`
-
-`JapaneseAnalyse` ne doit pas être responsable du succès de l'OCR.
-
-Il faut bien séparer :
+Le systeme doit bien distinguer :
 
 - OCR
-- segmentation/analyse lexicale
+- stockage OCR
+- file d'attente OCR
+- analyse lexicale
 - traduction
+
+`JapaneseAnalyse` ne doit pas etre responsable du succes ou de l'echec de l'OCR.
 
 Si JPDB est indisponible :
 
-- le texte OCR doit quand même s'afficher
+- le texte OCR doit quand meme s'afficher
 - l'utilisateur doit pouvoir le corriger
-- le message d'erreur doit dire que l'analyse lexicale ou la traduction est indisponible, pas l'OCR
+- le message d'erreur doit parler d'analyse ou de traduction, pas d'OCR
 
-## Choix d'implémentation recommandé
+## Integration cible dans ce repo
 
-### Base recommandée
+### Cote Electron
 
-Nous ne devons pas intégrer :
+Les points d'integration principaux sont :
 
-- le reader HTML de mokuro
-- le format legacy HTML de mokuro
+- `src/electron/handlers/ocr.ts` pour le worker et la normalisation
+- un futur gestionnaire de file OCR dans le main process
+- la persistance du fichier OCR dans le dossier du manga
+- la detection du japonais avant les jobs automatiques massifs
 
-Nous devons intégrer :
+### Cote preload / IPC
 
-- `mokuro.manga_page_ocr.MangaPageOcr`
-- ou une logique équivalente dérivée de cette classe
+L'API existante peut evoluer vers des appels du type :
 
-### Pourquoi cette classe est intéressante
-
-Elle fait déjà le travail utile pour nous :
-
-- charge `comic-text-detector`
-- charge `manga-ocr`
-- traite une seule page
-- renvoie des blocs avec position, orientation et texte
-
-Elle est donc plus proche de notre besoin réel que la CLI volume complète.
-
-### Utilisation recommandée
-
-Le worker Python doit exposer quelque chose de très simple :
-
-```json
-{ "type": "recognize", "imagePath": "C:/..." }
+```ts
+window.api.ocrRecognize(imagePath, options?)
+window.api.ocrStartManga(mangaId, options?)
+window.api.ocrQueueStatus()
+window.api.ocrStartLibrary(options?)
+window.api.ocrPauseJob(mangaId)
+window.api.ocrResumeJob(mangaId)
 ```
 
-Réponse :
+### Cote renderer
 
-```json
-{
-  "ok": true,
-  "result": {
-    "version": "...",
-    "img_width": 827,
-    "img_height": 1170,
-    "blocks": [...]
-  }
-}
-```
+Le Reader reste focalise sur :
 
-## Packaging et distribution
+- afficher les boxes
+- permettre la selection
+- lancer ou relancer la page courante
 
-### Risque principal
+La Bibliotheque et le panneau d'avancement doivent porter :
 
-Le vrai coût d'intégration n'est pas seulement le code.
+- lancement OCR manga
+- lancement OCR bibliotheque
+- affichage de la file
+- affichage de la progression
 
-Le vrai coût est :
+### Parametres a prevoir
 
-- Python
-- PyTorch
-- modèles
-- packaging Windows portable
+Parametres produit recommandes :
 
-### Stratégie réaliste à court terme
-
-Pour un prototype ou une première version intégrée :
-
-- dépendre d'un environnement Python externe configuré par l'utilisateur ou par le développeur
-- documenter l'installation
-- laisser les modèles se télécharger au premier lancement
-
-### Stratégie à moyen terme
-
-Pour une vraie version utilisateur propre :
-
-- embarquer un runtime Python dédié
-- préinstaller les dépendances critiques
-- contrôler l'emplacement de cache des modèles
-
-### Ce qu'il ne faut pas sous-estimer
-
-- la taille des dépendances
-- les problèmes GPU/CPU
-- les problèmes antivirus ou SmartScreen sur Windows portable
+- activer/desactiver l'OCR japonais
+- nombre de pages prechargees autour de la page courante
+- lancer l'OCR complet a l'importation
+- appliquer automatiquement la langue japonaise si detectee
+- comportement par defaut si un fichier OCR existe deja
 
 ## Risques et mitigations
 
-### Risque 1 — Latence trop élevée
+### Risque 1 - Latence trop elevee
 
 Mitigation :
 
 - worker persistant
-- cache obligatoire
-- préfetch des pages voisines
+- priorite a la page courante
+- petit cache memoire/applicatif
+- prechauffage du moteur OCR au demarrage
 
-### Risque 2 — Packaging trop lourd
-
-Mitigation :
-
-- commencer avec une intégration Python externe
-- ne packager qu'après validation fonctionnelle
-
-### Risque 3 — Mauvaise qualité sur certaines pages
+### Risque 2 - Ecriture du fichier OCR trop fragile
 
 Mitigation :
 
+- ecriture atomique
+- schema versionne
+- progression persistante
+- reprise apres fermeture
+
+### Risque 3 - Mauvaise qualite sur certaines pages
+
+Mitigation :
+
+- filtrage des faux positifs
+- relance OCR
+- traitement special de certains gros blocs
 - correction manuelle du texte
-- possibilité de relancer l'OCR sur une zone sélectionnée
-- conserver le résultat riche, pas seulement le texte aplati
 
-### Risque 4 — Confusion entre panne OCR et panne JPDB
+### Risque 4 - Lancement automatique sur des mangas non japonais
 
 Mitigation :
 
-- séparer clairement les messages d'erreur
-- afficher le texte OCR même sans JPDB
+- detection prealable par echantillonnage
+- etat `uncertain`
+- dialogue utilisateur avant lancement
 
-## Roadmap recommandée
+### Risque 5 - File d'attente mal geree lors des imports multiples
 
-### Phase 1 — Intégration technique minimale
+Mitigation :
 
-- remplacer le stub OCR Electron
-- appeler un worker Python
-- traiter une page
-- normaliser vers `{ boxes }`
-- afficher les boxes réelles
+- file centrale dans le main process
+- deduplication par manga
+- priorites explicites
+- suivi visuel de la progression
 
-### Phase 2 — Cache et robustesse
+## Roadmap recommandee
 
-- ajouter cache par page
-- éviter le fallback mock en production
-- améliorer les erreurs et le logging
+### Phase 1 - Premier jet integre
 
-### Phase 3 — Confort utilisateur
+- worker Python persistant
+- OCR page par page dans le Reader
+- prechauffage du moteur
+- pre-render autour de la page courante
 
-- préfetch des pages voisines
-- bouton de pré-rendu du manga ou du chapitre
-- indicateur `cache / calcul en cours / erreur`
+### Phase 2 - Stockage cible par manga
 
-### Phase 4 — Correction et affinage
+- remplacer la source principale de cache par le fichier OCR du manga
+- ecrire les pages OCR au fil de l'eau dans ce fichier
+- garder le cache applicatif seulement comme acceleration
 
-- édition manuelle du texte OCR
-- fusion/split de zones
-- relance OCR sur zone recadrée
+### Phase 3 - Detection du japonais et auto-langue
+
+- echantillonnage de pages
+- score de langue
+- dialogue en cas d'incertitude
+- option d'auto-assignation de la langue japonaise
+
+### Phase 4 - OCR complet et file d'attente
+
+- bouton OCR par manga dans la bibliotheque
+- dialogue si OCR deja present
+- file d'attente globale
+- panneau d'avancement OCR
+
+### Phase 5 - OCR sur toute la bibliotheque
+
+- bouton `OCR toute la bibliotheque`
+- popup avec choix `sans OCR seulement` ou `reecraser tout`
+- bonne gestion des imports multiples
 
 ## Conclusion
 
-La bonne décision n'est pas "manga-ocr ou pas manga-ocr".
+La bonne decision n'est pas seulement `manga-ocr ou pas manga-ocr`.
 
-La bonne décision est :
+La bonne decision est :
 
 - utiliser `manga-ocr` comme moteur de reconnaissance
-- mais l'intégrer dans une vraie pipeline de détection de texte manga
+- l'integrer dans une vraie pipeline de detection de texte manga
+- faire du fichier OCR du manga la source de verite
+- garder le cache applicatif comme acceleration legere
+- gerer les OCR longs via une vraie file d'attente produit
 
-Le meilleur choix actuel pour ce projet est donc :
+L'objectif final est un systeme ou :
 
-- garder l'UX de ce document
-- remplacer le backend mock/stub par une intégration inspirée de `mokuro`
-- privilégier un mode à la volée avec cache
-- garder le pré-rendu comme optimisation et non comme obligation
+- le Reader reste fluide
+- l'OCR est persistant
+- la Bibliotheque peut lancer des traitements massifs
+- la langue japonaise peut etre deduite et appliquee intelligemment
+- l'utilisateur garde toujours le controle quand la detection est incertaine
 
-## Références
+## References
 
 - `manga-ocr` : https://github.com/kha-white/manga-ocr
 - `mokuro` : https://github.com/kha-white/mokuro

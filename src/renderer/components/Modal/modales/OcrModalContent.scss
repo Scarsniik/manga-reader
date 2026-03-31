@@ -1,0 +1,145 @@
+.ocr-modal-content {
+  display: grid;
+  gap: 16px;
+}
+
+.ocr-modal-actions-row,
+.ocr-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ocr-modal-actions-row button,
+.ocr-queue-actions button {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.ocr-modal-actions-row button.secondary,
+.ocr-queue-actions button.secondary {
+  background: transparent;
+  color: #e6e6e6;
+  border: 1px solid #3a3a3a;
+}
+
+.ocr-status-card,
+.ocr-queue-job {
+  border: 1px solid #2e2e2e;
+  border-radius: 8px;
+  padding: 12px;
+  background: #1b1b1b;
+}
+
+.ocr-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.ocr-status-item {
+  display: grid;
+  gap: 4px;
+}
+
+.ocr-status-item strong {
+  font-size: 12px;
+  color: #a7a7a7;
+}
+
+.ocr-status-item span {
+  color: #f2f2f2;
+}
+
+.ocr-confirm-samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.ocr-confirm-sample {
+  display: grid;
+  gap: 8px;
+}
+
+.ocr-confirm-sample img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #303030;
+}
+
+.ocr-confirm-sample small {
+  color: #a7a7a7;
+}
+
+.ocr-queue-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ocr-queue-job-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ocr-queue-job h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ocr-job-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #2f3f52;
+  color: #d7ebff;
+}
+
+.ocr-job-badge.completed {
+  background: #23462c;
+  color: #d7ffe1;
+}
+
+.ocr-job-badge.error,
+.ocr-job-badge.cancelled {
+  background: #5a2626;
+  color: #ffd7d7;
+}
+
+.ocr-job-badge.paused {
+  background: #544821;
+  color: #fff0c7;
+}
+
+.ocr-job-meta {
+  display: grid;
+  gap: 4px;
+  color: #c9c9c9;
+  font-size: 13px;
+}
+
+.ocr-library-choice {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #2e2e2e;
+  background: #181818;
+}
+
+.ocr-result-summary {
+  color: #cfcfcf;
+  font-size: 13px;
+}

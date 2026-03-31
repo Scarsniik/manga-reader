@@ -3,10 +3,44 @@ import { promises as fs } from "fs";
 import path from "path";
 import { ensureDataDir, mangasFilePath } from "../utils";
 
-export async function getMangas() {
+export async function readMangasFile() {
     try {
         const data = await fs.readFile(mangasFilePath, "utf-8");
         return JSON.parse(data);
+    } catch (error: any) {
+        if (error && error.code === "ENOENT") {
+            return [];
+        }
+        throw error;
+    }
+}
+
+export async function writeMangasFile(mangas: any[]) {
+    await ensureDataDir();
+    await fs.writeFile(mangasFilePath, JSON.stringify(mangas, null, 2));
+    return mangas;
+}
+
+export async function getMangaById(mangaId: string) {
+    const mangas = await readMangasFile();
+    return mangas.find((m: any) => String(m.id) === String(mangaId)) || null;
+}
+
+export async function patchMangaById(mangaId: string, patch: Record<string, any>) {
+    const mangas = await readMangasFile();
+    const idx = mangas.findIndex((m: any) => String(m.id) === String(mangaId));
+    if (idx === -1) {
+        throw new Error("Manga not found");
+    }
+
+    mangas[idx] = { ...mangas[idx], ...(patch || {}) };
+    await writeMangasFile(mangas);
+    return mangas[idx];
+}
+
+export async function getMangas() {
+    try {
+        return await readMangasFile();
     } catch (error: any) {
         if (error && error.code === "ENOENT") {
             await ensureDataDir();
@@ -20,14 +54,7 @@ export async function getMangas() {
 
 export async function addManga(event: IpcMainInvokeEvent, manga: any) {
     try {
-        let mangas: any[] = [];
-        try {
-            const data = await fs.readFile(mangasFilePath, "utf-8");
-            mangas = JSON.parse(data);
-        } catch (err: any) {
-            if (err && err.code === "ENOENT") mangas = [];
-            else throw err;
-        }
+        const mangas: any[] = await readMangasFile();
         if (manga && manga.path) {
             const resolvedPath = path.isAbsolute(manga.path) ? manga.path : path.resolve(manga.path);
             manga.path = resolvedPath;
@@ -41,8 +68,7 @@ export async function addManga(event: IpcMainInvokeEvent, manga: any) {
             }
         }
         mangas.push(manga);
-        await ensureDataDir();
-        await fs.writeFile(mangasFilePath, JSON.stringify(mangas, null, 2));
+        await writeMangasFile(mangas);
         return mangas;
     } catch (error) {
         console.error("Error adding manga:", error);
@@ -52,17 +78,9 @@ export async function addManga(event: IpcMainInvokeEvent, manga: any) {
 
 export async function removeManga(event: IpcMainInvokeEvent, mangaId: string) {
     try {
-        let mangas: any[] = [];
-        try {
-            const data = await fs.readFile(mangasFilePath, "utf-8");
-            mangas = JSON.parse(data);
-        } catch (err: any) {
-            if (err && err.code === "ENOENT") mangas = [];
-            else throw err;
-        }
+        const mangas: any[] = await readMangasFile();
         const updated = mangas.filter(m => m.id !== mangaId);
-        await ensureDataDir();
-        await fs.writeFile(mangasFilePath, JSON.stringify(updated, null, 2));
+        await writeMangasFile(updated);
         return updated;
     } catch (error) {
         console.error("Error removing manga:", error);
@@ -72,14 +90,7 @@ export async function removeManga(event: IpcMainInvokeEvent, mangaId: string) {
 
 export async function updateManga(event: IpcMainInvokeEvent, updatedManga: any) {
     try {
-        let mangas: any[] = [];
-        try {
-            const data = await fs.readFile(mangasFilePath, "utf-8");
-            mangas = JSON.parse(data);
-        } catch (err: any) {
-            if (err && err.code === "ENOENT") mangas = [];
-            else throw err;
-        }
+        const mangas: any[] = await readMangasFile();
 
         const idx = mangas.findIndex(m => String(m.id) === String(updatedManga.id));
         if (idx === -1) {
@@ -101,8 +112,7 @@ export async function updateManga(event: IpcMainInvokeEvent, updatedManga: any) 
 
         mangas[idx] = { ...mangas[idx], ...updatedManga };
 
-        await ensureDataDir();
-        await fs.writeFile(mangasFilePath, JSON.stringify(mangas, null, 2));
+        await writeMangasFile(mangas);
         return mangas;
     } catch (error) {
         console.error("Error updating manga:", error);
@@ -118,14 +128,7 @@ export async function batchUpdateTags(event: IpcMainInvokeEvent, payload: {
 }) {
     try {
         const { mangaIds = [], language = null, addTagIds = [], removeTagIds = [] } = payload || {};
-        let mangas: any[] = [];
-        try {
-            const data = await fs.readFile(mangasFilePath, 'utf-8');
-            mangas = JSON.parse(data);
-        } catch (err: any) {
-            if (err && err.code === 'ENOENT') mangas = [];
-            else throw err;
-        }
+        let mangas: any[] = await readMangasFile();
 
         const failed: { id: string; reason: string }[] = [];
         let updatedCount = 0;
@@ -156,8 +159,7 @@ export async function batchUpdateTags(event: IpcMainInvokeEvent, payload: {
             updatedCount++;
         }
 
-        await ensureDataDir();
-        await fs.writeFile(mangasFilePath, JSON.stringify(mangas, null, 2));
+        await writeMangasFile(mangas);
 
         return { success: true, updatedCount, failed };
     } catch (error) {
