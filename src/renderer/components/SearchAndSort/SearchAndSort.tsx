@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Manga } from '@/renderer/types';
 import useTags from '@/renderer/hooks/useTags';
-import TagPickerField from '@/renderer/components/utils/Form/fields/TagPickerField';
 import { Field } from '@/renderer/components/utils/Form/types';
 import useParams from '@/renderer/hooks/useParams';
 import './styles.scss';
@@ -149,6 +148,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     const { tags } = useTags();
     const { params, loading, setParams } = useParams();
     const persistMangaFilters = params?.persistMangaFilters !== false;
+    const hideHiddenTags = params?.showHiddens === false || params?.showHiddens === undefined;
 
     // Cache for page counts that are computed asynchronously by backend (like MangaCard)
     const pagesCacheRef = React.useRef<Record<string, number | null | undefined>>({});
@@ -167,6 +167,21 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     const [unfinishedFirst, setUnfinishedFirst] = useState<boolean>(initialUrlStateRef.current.filters.unfinishedFirst);
     const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(initialUrlStateRef.current.filters.selectedSeriesId);
 
+    const availableTags = useMemo(
+        () => hideHiddenTags ? tags.filter(tag => !tag.hidden) : tags,
+        [hideHiddenTags, tags],
+    );
+
+    const availableTagIds = useMemo(
+        () => new Set(availableTags.map(tag => tag.id)),
+        [availableTags],
+    );
+
+    const effectiveSelectedTags = useMemo(
+        () => hideHiddenTags ? selectedTags.filter(tagId => availableTagIds.has(tagId)) : selectedTags,
+        [availableTagIds, hideHiddenTags, selectedTags],
+    );
+
     const applyFilterState = useCallback((state: MangaListFilterState) => {
         setQuery(state.query);
         setSelectedTags(state.selectedTags);
@@ -180,7 +195,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
     const currentFilterSnapshot = useMemo<MangaListFilterState>(() => ({
         query,
-        selectedTags,
+        selectedTags: effectiveSelectedTags,
         selectedLanguageIds,
         sortBy,
         expanded,
@@ -189,14 +204,23 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         selectedSeriesId,
     }), [
         expanded,
+        effectiveSelectedTags,
         query,
         selectedLanguageIds,
         selectedSeriesId,
-        selectedTags,
         sortBy,
         statusFilter,
         unfinishedFirst,
     ]);
+
+    useEffect(() => {
+        const hasChanged = selectedTags.length !== effectiveSelectedTags.length
+            || selectedTags.some((tagId, index) => effectiveSelectedTags[index] !== tagId);
+
+        if (hasChanged) {
+            setSelectedTags(effectiveSelectedTags);
+        }
+    }, [effectiveSelectedTags, selectedTags]);
 
     // Fetch page counts for mangas that don't have a pages value yet but have a path.
     useEffect(() => {
@@ -252,10 +276,10 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     }, [applyFilterState, defaultSearch, defaultSort]);
 
     const tagSummary = useMemo(() => {
-        if (!selectedTags || selectedTags.length === 0) return 'Aucun filtre de tag';
-        const names = selectedTags.map(id => tags.find(t => t.id === id)?.name || id);
+        if (!effectiveSelectedTags || effectiveSelectedTags.length === 0) return 'Aucun filtre de tag';
+        const names = effectiveSelectedTags.map(id => availableTags.find(t => t.id === id)?.name || id);
         return `Tags: ${names.join(', ')}`;
-    }, [selectedTags, tags]);
+    }, [availableTags, effectiveSelectedTags]);
 
     const applyFilters = useCallback(() => {
         const searchLower = (query || '').trim().toLowerCase();
@@ -299,10 +323,10 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 if (!title.includes(searchLower)) return false;
             }
 
-            if (selectedTags.length > 0) {
+            if (effectiveSelectedTags.length > 0) {
                 // require manga to have all selected tags (AND semantics)
                 if (!Array.isArray(m.tagIds)) return false;
-                const hasAll = selectedTags.every(tid => m.tagIds!.includes(tid));
+                const hasAll = effectiveSelectedTags.every(tid => m.tagIds!.includes(tid));
                 if (!hasAll) return false;
             }
 
@@ -364,10 +388,10 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         query,
         selectedLanguageIds,
         selectedSeriesId,
-        selectedTags,
         sortBy,
         statusFilter,
         tags,
+        effectiveSelectedTags,
         unfinishedFirst,
     ]);
 
@@ -381,7 +405,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         try {
             const qs = new URLSearchParams(window.location.search);
             if (query) qs.set('q', query); else qs.delete('q');
-            if (selectedTags.length > 0) qs.set('tags', encodeArrayParam(selectedTags)); else qs.delete('tags');
+            if (effectiveSelectedTags.length > 0) qs.set('tags', encodeArrayParam(effectiveSelectedTags)); else qs.delete('tags');
             if (sortBy) qs.set('sort', sortBy); else qs.delete('sort');
             if (expanded) qs.set('expanded', '1'); else qs.delete('expanded');
             if (statusFilter.length > 0) qs.set('status', encodeArrayParam(statusFilter)); else qs.delete('status');
@@ -398,7 +422,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         } catch (e) {
             console.warn('Failed to sync search params to URL', e);
         }
-    }, [expanded, query, selectedLanguageIds, selectedSeriesId, selectedTags, sortBy, statusFilter, unfinishedFirst]);
+    }, [effectiveSelectedTags, expanded, query, selectedLanguageIds, selectedSeriesId, sortBy, statusFilter, unfinishedFirst]);
 
     // Persist filters in settings when the option is enabled.
     useEffect(() => {
@@ -488,13 +512,20 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                             <div className="filter-line">
                                 <div className="filter-control">
                                     <div className="tag-list">
-                                        <TagPickerField
+                                        <EntityPickerField
                                             field={{ name: 'search_tags', placeholder: 'Rechercher des tags...' } as Field}
-                                            value={selectedTags}
+                                            options={availableTags.map(tag => ({
+                                                id: tag.id,
+                                                name: tag.name,
+                                                hidden: !!tag.hidden,
+                                            }))}
+                                            value={effectiveSelectedTags}
                                             onChange={(e: any) => {
                                                 const val = Array.isArray(e?.target?.value) ? e.target.value : [];
                                                 setSelectedTags(val);
                                             }}
+                                            placeholder="Rechercher des tags..."
+                                            keepOpenOnAdd={true}
                                         />
                                     </div>
                                 </div>

@@ -434,6 +434,12 @@ const Reader: React.FC = () => {
     const [coverData, setCoverData] = useState<string | null>(null);
     const [ocrLoading, setOcrLoading] = useState<boolean>(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
+    const totalPages = images.length;
+    const currentPage = totalPages > 0 ? currentIndex + 1 : 0;
+    const readingProgress = totalPages > 0
+        ? Math.max(0, Math.min(100, (currentPage / totalPages) * 100))
+        : 0;
+    const isLastPage = totalPages > 0 && currentPage >= totalPages;
 
     const runDebugListPages = async () => {
         setDebugError(null);
@@ -487,64 +493,87 @@ const Reader: React.FC = () => {
 
             <div className={"reader-body" + (ocrEnabled ? ' ocr-on' : '')} ref={containerRef}>
                 <div className="reader-view">
-                    {images.length > 0 ? (
-                        <ImageViewer
-                            src={images[currentIndex]}
-                            imgRef={imgRef as any}
-                            ocrEnabled={ocrEnabled}
-                            showBoxes={showBoxes}
-                            detectedBoxes={detectedBoxes}
-                            selectedBoxes={selectedBoxes}
-                            onSelectBox={(id: string | null, additive?: boolean) => {
-                                if (!id) {
-                                    setSelectedBoxes([]);
-                                    return;
-                                }
-                                setSelectedBoxes(prev => {
-                                    const set = new Set(prev);
-                                    if (additive) {
-                                        if (set.has(id)) set.delete(id);
-                                        else set.add(id);
-                                        return Array.from(set);
-                                    }
-                                    return [id];
-                                });
-                            }}
-                        />
-                    ) : (
-                        <div className="reader-empty">
-                            <p>Aucune image à afficher.</p>
-                            <div className="reader-debug">
-                                <div><strong>Manga path:</strong> {manga && manga.path ? <code>{manga.path}</code> : <em>n/a</em>}</div>
-                                <div><strong>APIs:</strong>
-                                    <span> getMangas: {window.api && typeof window.api.getMangas === 'function' ? 'OK' : 'NO'}</span>
-                                    <span> listPages: {window.api && typeof window.api.listPages === 'function' ? 'OK' : 'NO'}</span>
-                                    <span> getCoverData: {window.api && typeof window.api.getCoverData === 'function' ? 'OK' : 'NO'}</span>
-                                </div>
-                                <div style={{ marginTop: 8 }}>
-                                    <button onClick={runDebugListPages} disabled={!manga || !manga.path}>Tester listPages</button>
-                                </div>
-                                {debugError && <div className="debug-error">Erreur: {debugError}</div>}
-                                {debugList && (
-                                    <div className="debug-list">
-                                        <div><strong>Pages trouvées ({debugList.length}):</strong></div>
-                                        <ul>
-                                            {debugList.map((d, i) => (
-                                                <li key={i}><code style={{ fontSize: 12 }}>{d}</code></li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                                {coverData && (
-                                    <div className="debug-cover">
-                                        <div><strong>Cover data:</strong></div>
-                                        <img src={coverData} alt="cover debug" style={{ maxWidth: 200, maxHeight: 200 }} />
-                                    </div>
-                                )}
+                    <div className="reader-stage">
+                        {totalPages > 0 && (
+                            <div
+                                className="reader-progress"
+                                role="progressbar"
+                                aria-label="Progression de lecture"
+                                aria-valuemin={1}
+                                aria-valuemax={totalPages}
+                                aria-valuenow={currentPage}
+                                aria-valuetext={`Page ${currentPage} sur ${totalPages}`}
+                                title={`Page ${currentPage} sur ${totalPages}`}
+                            >
+                                <span className="reader-progress-track">
+                                    <span
+                                        className={"reader-progress-fill" + (isLastPage ? ' completed' : '')}
+                                        style={{ height: `${readingProgress}%` }}
+                                    />
+                                </span>
                             </div>
-                        </div>
-                    )}
+                        )}
 
+                        <div className="reader-stage-content">
+                            {images.length > 0 ? (
+                                <ImageViewer
+                                    src={images[currentIndex]}
+                                    imgRef={imgRef as any}
+                                    ocrEnabled={ocrEnabled}
+                                    showBoxes={showBoxes}
+                                    detectedBoxes={detectedBoxes}
+                                    selectedBoxes={selectedBoxes}
+                                    onSelectBox={(id: string | null, additive?: boolean) => {
+                                        if (!id) {
+                                            setSelectedBoxes([]);
+                                            return;
+                                        }
+                                        setSelectedBoxes(prev => {
+                                            const set = new Set(prev);
+                                            if (additive) {
+                                                if (set.has(id)) set.delete(id);
+                                                else set.add(id);
+                                                return Array.from(set);
+                                            }
+                                            return [id];
+                                        });
+                                    }}
+                                />
+                            ) : (
+                                <div className="reader-empty">
+                                    <p>Aucune image à afficher.</p>
+                                    <div className="reader-debug">
+                                        <div><strong>Manga path:</strong> {manga && manga.path ? <code>{manga.path}</code> : <em>n/a</em>}</div>
+                                        <div><strong>APIs:</strong>
+                                            <span> getMangas: {window.api && typeof window.api.getMangas === 'function' ? 'OK' : 'NO'}</span>
+                                            <span> listPages: {window.api && typeof window.api.listPages === 'function' ? 'OK' : 'NO'}</span>
+                                            <span> getCoverData: {window.api && typeof window.api.getCoverData === 'function' ? 'OK' : 'NO'}</span>
+                                        </div>
+                                        <div style={{ marginTop: 8 }}>
+                                            <button onClick={runDebugListPages} disabled={!manga || !manga.path}>Tester listPages</button>
+                                        </div>
+                                        {debugError && <div className="debug-error">Erreur: {debugError}</div>}
+                                        {debugList && (
+                                            <div className="debug-list">
+                                                <div><strong>Pages trouvées ({debugList.length}):</strong></div>
+                                                <ul>
+                                                    {debugList.map((d, i) => (
+                                                        <li key={i}><code style={{ fontSize: 12 }}>{d}</code></li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {coverData && (
+                                            <div className="debug-cover">
+                                                <div><strong>Cover data:</strong></div>
+                                                <img src={coverData} alt="cover debug" style={{ maxWidth: 200, maxHeight: 200 }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 {ocrEnabled && (
