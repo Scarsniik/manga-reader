@@ -12,10 +12,12 @@
     "dev": "vite",
     "build:app": "npm run prestart && npm run build",
     "build:all": "npm run build:electron && npm run build && npm run package",
+    "package:all": "npm run build:electron && npm run build && npm run package",
     "dev:electron": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron.ps1",
-    "prepackage": "powershell -NoProfile -Command \"Stop-Process -Name 'manga-helper','app-builder','app-builder.exe','electron','node' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path 'build\\win-unpacked') { Remove-Item -LiteralPath 'build\\win-unpacked' -Recurse -Force -ErrorAction SilentlyContinue }\"",
+    "clean:package": "powershell -NoProfile -Command \"$workspace = (Get-Location).Path; $buildDir = [System.IO.Path]::GetFullPath((Join-Path $workspace 'build')); if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to clean outside the workspace.' }; Stop-Process -Name 'manga-helper','app-builder','app-builder.exe','electron' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path $buildDir) { Get-ChildItem -LiteralPath $buildDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.lnk' } | Remove-Item -Force -ErrorAction SilentlyContinue; $winUnpacked = Join-Path $buildDir 'win-unpacked'; if (Test-Path $winUnpacked) { Remove-Item -LiteralPath $winUnpacked -Recurse -Force -ErrorAction SilentlyContinue } }\"",
+    "prepackage": "npm run clean:package",
     "package": "electron-builder",
-    "dist": "npm run build:electron && npm run build && npx electron-builder --win portable"
+    "dist": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --win portable"
   },
   "dependencies": {
     "image-size": "^1.0.1",
