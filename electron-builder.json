@@ -10,6 +10,15 @@
     "data/**/*",
     "node_modules/**/*"
   ],
+  "extraResources": [
+    {
+      "from": "build-resources/ocr-bundle",
+      "to": "ocr-bundle",
+      "filter": [
+        "**/*"
+      ]
+    }
+  ],
   "directories": {
     "output": "build"
   },

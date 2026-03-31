@@ -202,6 +202,19 @@ type OcrWorkerState = {
   stderrLines: string[];
 };
 
+type BundledOcrAssets = {
+  root: string;
+  workerScriptPath?: string;
+  pythonExecutable?: string;
+  pythonHome?: string;
+  pythonLib?: string;
+  pythonSitePackages?: string;
+  modelDir?: string;
+  cacheRoot?: string;
+  repoRoot?: string;
+  pathEntries: string[];
+};
+
 const OCR_CACHE_DIR = path.join(dataDir, "ocr-cache");
 const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
 const CACHE_SCHEMA_VERSION = "mokuro-page-v4";
@@ -946,7 +959,7 @@ async function readStoredPageFromMangaFile(mangaPath: string, imagePath: string,
 }
 
 async function findExistingPath(candidates: string[]) {
-  for (const candidate of candidates) {
+  for (const candidate of candidates.filter(Boolean)) {
     try {
       await fs.access(candidate);
       return candidate;
@@ -955,13 +968,6 @@ async function findExistingPath(candidates: string[]) {
     }
   }
   return null;
-}
-
-async function resolveWorkerScriptPath() {
-  return findExistingPath([
-    path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
-    path.join(process.cwd(), "scripts", "ocr_worker.py"),
-  ]);
 }
 
 function collectAncestorDirs(startPath: string) {
@@ -984,9 +990,109 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function buildCandidateRoots(settings: any): string[] {
+function getBundledOcrRootCandidates() {
+  return uniqueStrings([
+    process.env.MANGA_HELPER_OCR_BUNDLE_DIR || "",
+    process.resourcesPath ? path.join(process.resourcesPath, "ocr-bundle") : "",
+    path.join(path.dirname(app.getAppPath()), "ocr-bundle"),
+    path.join(app.getAppPath(), "ocr-bundle"),
+    path.join(process.cwd(), "build-resources", "ocr-bundle"),
+  ]);
+}
+
+async function collectExistingPaths(candidates: string[]) {
+  const existing: string[] = [];
+
+  for (const candidate of uniqueStrings(candidates)) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      await fs.access(candidate);
+      existing.push(candidate);
+    } catch {
+      // ignore missing candidates
+    }
+  }
+
+  return existing;
+}
+
+async function resolveBundledOcrAssets(): Promise<BundledOcrAssets | null> {
+  for (const root of getBundledOcrRootCandidates()) {
+    try {
+      await fs.access(root);
+    } catch {
+      continue;
+    }
+
+    const workerScriptPath = await findExistingPath([
+      path.join(root, "scripts", "ocr_worker.py"),
+      path.join(root, "ocr_worker.py"),
+    ]);
+    const pythonExecutable = await findExistingPath([
+      path.join(root, "python", "python.exe"),
+    ]);
+    const pythonHome = pythonExecutable ? path.dirname(pythonExecutable) : undefined;
+    const pythonLib = pythonHome ? path.join(pythonHome, "Lib") : undefined;
+    const pythonSitePackages = pythonHome
+      ? await findExistingPath([
+        path.join(pythonHome, "Lib", "site-packages"),
+      ]) || undefined
+      : undefined;
+    const repoRoot = await findExistingPath([
+      path.join(root, "repos"),
+    ]) || undefined;
+    const modelDir = await findExistingPath([
+      path.join(root, "models", "manga-ocr-base"),
+    ]) || undefined;
+    const cacheRoot = await findExistingPath([
+      path.join(root, "cache", "manga-ocr"),
+    ]) || undefined;
+    const pathEntries = await collectExistingPaths([
+      pythonHome || "",
+      pythonHome ? path.join(pythonHome, "DLLs") : "",
+      pythonSitePackages || "",
+      pythonSitePackages ? path.join(pythonSitePackages, "torch", "lib") : "",
+      pythonSitePackages ? path.join(pythonSitePackages, "numpy.libs") : "",
+      pythonSitePackages ? path.join(pythonSitePackages, "PIL.libs") : "",
+      pythonSitePackages ? path.join(pythonSitePackages, "pillow.libs") : "",
+      pythonSitePackages ? path.join(pythonSitePackages, "opencv_python.libs") : "",
+    ]);
+
+    return {
+      root,
+      workerScriptPath: workerScriptPath || undefined,
+      pythonExecutable: pythonExecutable || undefined,
+      pythonHome,
+      pythonLib,
+      pythonSitePackages,
+      modelDir,
+      cacheRoot,
+      repoRoot,
+      pathEntries,
+    };
+  }
+
+  return null;
+}
+
+async function resolveWorkerScriptPath(bundledAssets?: BundledOcrAssets | null) {
+  return findExistingPath([
+    bundledAssets?.workerScriptPath || "",
+    path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
+    path.join(process.cwd(), "scripts", "ocr_worker.py"),
+  ]);
+}
+
+function buildCandidateRoots(settings: any, bundledAssets?: BundledOcrAssets | null): string[] {
   const roots: string[] = [];
   const appRoots = uniqueStrings([app.getAppPath(), process.cwd()]);
+
+  if (bundledAssets?.repoRoot) {
+    roots.push(bundledAssets.repoRoot);
+  }
 
   for (const base of appRoots) {
     const ancestors = collectAncestorDirs(base);
@@ -1004,16 +1110,52 @@ function buildCandidateRoots(settings: any): string[] {
   return uniqueStrings(roots);
 }
 
-function buildWorkerEnvironment(settings: any) {
-  const candidateRoots = buildCandidateRoots(settings);
-
-  return {
+async function buildWorkerEnvironment(settings: any, bundledAssets?: BundledOcrAssets | null) {
+  const candidateRoots = buildCandidateRoots(settings, bundledAssets);
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     PYTHONIOENCODING: "utf-8",
     PYTHONUNBUFFERED: "1",
     MANGA_HELPER_OCR_CANDIDATE_ROOTS: candidateRoots.join(path.delimiter),
     MANGA_HELPER_OCR_FORCE_CPU: settings?.ocrForceCpu ? "1" : "0",
   };
+
+  if (bundledAssets?.pythonHome) {
+    env.PYTHONHOME = bundledAssets.pythonHome;
+    env.PYTHONNOUSERSITE = "1";
+    env.PYTHONDONTWRITEBYTECODE = "1";
+    env.PYTHONPYCACHEPREFIX = path.join(dataDir, "python-cache");
+
+    const pythonPathEntries = uniqueStrings([
+      bundledAssets.pythonLib || "",
+      bundledAssets.pythonSitePackages || "",
+      process.env.PYTHONPATH || "",
+    ]);
+    if (pythonPathEntries.length > 0) {
+      env.PYTHONPATH = pythonPathEntries.join(path.delimiter);
+    }
+
+    const pathEntries = uniqueStrings([
+      ...bundledAssets.pathEntries,
+      process.env.PATH || "",
+    ]);
+    if (pathEntries.length > 0) {
+      env.PATH = pathEntries.join(path.delimiter);
+    }
+  }
+
+  if (bundledAssets?.cacheRoot) {
+    env.MANGA_HELPER_OCR_CACHE_ROOT = bundledAssets.cacheRoot;
+  }
+
+  if (bundledAssets?.modelDir) {
+    env.MANGA_HELPER_OCR_MODEL = bundledAssets.modelDir;
+    env.TRANSFORMERS_OFFLINE = "1";
+    env.HF_HUB_OFFLINE = "1";
+    env.HF_HUB_DISABLE_TELEMETRY = "1";
+  }
+
+  return env;
 }
 
 function wireWorkerOutput(state: OcrWorkerState) {
@@ -1100,21 +1242,23 @@ async function ensureWorker(settings: any): Promise<OcrWorkerState> {
     return workerState;
   }
 
-  const scriptPath = await resolveWorkerScriptPath();
+  const bundledAssets = await resolveBundledOcrAssets();
+  const scriptPath = await resolveWorkerScriptPath(bundledAssets);
   if (!scriptPath) {
-    throw new Error("OCR worker script not found. Expected scripts/ocr_worker.py in the application.");
+    throw new Error("OCR worker script not found. Expected scripts/ocr_worker.py or a packaged ocr-bundle.");
   }
 
   const pythonExecutable = String(
     settings?.ocrPythonPath
     || process.env.MANGA_HELPER_PYTHON
+    || bundledAssets?.pythonExecutable
     || process.env.PYTHON
     || "python"
   );
 
   const proc = spawn(pythonExecutable, ["-u", scriptPath], {
-    cwd: app.getAppPath(),
-    env: buildWorkerEnvironment(settings),
+    cwd: bundledAssets?.root || path.dirname(scriptPath),
+    env: await buildWorkerEnvironment(settings, bundledAssets),
     stdio: ["pipe", "pipe", "pipe"],
   });
 

@@ -76,16 +76,43 @@ def configure_python_path() -> list[str]:
 ADDED_PATHS = configure_python_path()
 
 
+def configure_runtime_overrides():
+    cache_root_raw = os.environ.get("MANGA_HELPER_OCR_CACHE_ROOT", "").strip()
+    detector_cache_root = None
+
+    if cache_root_raw:
+        detector_cache_root = Path(cache_root_raw).expanduser()
+        detector_cache_root.mkdir(parents=True, exist_ok=True)
+
+        from mokuro.cache import cache as mokuro_cache
+
+        mokuro_cache.root = detector_cache_root
+
+    return detector_cache_root
+
+
 def build_engine():
     global ENGINE
 
     if ENGINE is not None:
         return ENGINE
 
+    detector_cache_root = configure_runtime_overrides()
     from mokuro.manga_page_ocr import MangaPageOcr
 
     pretrained_model_name_or_path = os.environ.get("MANGA_HELPER_OCR_MODEL", "kha-white/manga-ocr-base")
     force_cpu = bool_from_env("MANGA_HELPER_OCR_FORCE_CPU", default=False)
+
+    if detector_cache_root is not None:
+        detector_model_path = detector_cache_root / "comictextdetector.pt"
+        if not detector_model_path.is_file():
+            raise FileNotFoundError(
+                f"Bundled comic text detector model missing: {detector_model_path}"
+            )
+
+    model_path = Path(pretrained_model_name_or_path).expanduser()
+    if pretrained_model_name_or_path and model_path.exists():
+        pretrained_model_name_or_path = str(model_path)
 
     ENGINE = MangaPageOcr(
         pretrained_model_name_or_path=pretrained_model_name_or_path,
