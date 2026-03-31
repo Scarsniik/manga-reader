@@ -189,6 +189,19 @@ Impact sur le comportement du reader :
 - quand le reader OCRise une page, le resultat peut maintenant etre persiste dans le fichier OCR du manga
 - si cette page y existe deja et correspond toujours a l'image courante, le reader peut la relire directement depuis le fichier OCR
 - le panneau OCR distingue maintenant aussi le cas `fichier OCR du manga`
+- le reader permet maintenant de dessiner une zone manuelle sur l'image pour ajouter des selections OCR persistantes
+- ces selections manuelles sont stockees separement des bulles detectees automatiquement dans le fichier OCR du manga
+- le panneau OCR affiche une section `Selections manuelles` distincte, avec suppression individuelle
+- l'OCR de selection manuelle passe maintenant par un mode crop dedie cote worker Python :
+  - lecture directe du crop via `manga-ocr`
+  - variantes de pretraitement du crop
+  - retour sur la detection classique du crop seulement si le resultat direct semble faible
+- une zone manuelle enregistree correspond maintenant a une seule entree persistante :
+  - si l'OCR du crop retourne plusieurs fragments, ils sont fusionnes dans l'ordre de lecture
+  - la box sauvegardee correspond a la zone tracee par l'utilisateur, pas aux sous-fragments internes
+- quand une selection manuelle recouvre deja des boxes auto valides sur la page, le reader peut reutiliser ces boxes comme candidate OCR :
+  - il compare ensuite cette candidate avec l'OCR du crop
+  - il garde la version la plus riche/coherente
 
 Impact sur l'import :
 

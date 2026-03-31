@@ -38,6 +38,11 @@
   background: rgba(255,255,255,0.06);
 }
 
+.ocr-panel-controls button.is-active {
+  border-color: rgba(92, 155, 255, 0.6);
+  background: rgba(92, 155, 255, 0.14);
+}
+
 .ocr-box-list {
   margin-top: 12px;
 }
@@ -46,7 +51,7 @@
   padding-left: 12px;
 }
 
-.ocr-box-list button {
+.ocr-box-select {
   font-size: 13px;
   background: transparent;
   border: none;
@@ -54,15 +59,24 @@
   text-align: left;
   color: #e6e6e6;
   width: 100%;
+  border-radius: 6px;
 }
 
-.ocr-box-list button:hover {
+.ocr-box-select:hover {
   background: rgba(255,255,255,0.02);
+}
+
+.ocr-box-select.is-selected {
+  background: rgba(92, 155, 255, 0.14);
 }
 
 .ocr-status {
   margin-top: 8px;
   color: #9aa0a6;
+}
+
+.ocr-status-error {
+  color: #ff7f7f;
 }
 
 .ocr-status-note {
@@ -87,4 +101,50 @@
 .ocr-checkbox-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
+}
+
+.ocr-box-section + .ocr-box-section {
+  margin-top: 14px;
+}
+
+.ocr-box-section-title {
+  margin-bottom: 8px;
+}
+
+.ocr-manual-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ocr-manual-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ocr-manual-item + .ocr-manual-item {
+  margin-top: 6px;
+}
+
+.ocr-manual-remove {
+  flex: 0 0 auto;
+  margin-top: 5px;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: rgba(255, 128, 128, 0.08);
+  color: #ffd2d2;
+  border: 1px solid rgba(255, 128, 128, 0.18);
+  border-radius: 6px;
+}
+
+.ocr-manual-remove:hover:not(:disabled) {
+  background: rgba(255, 128, 128, 0.14);
+}
+
+.ocr-manual-remove:disabled {
+  opacity: 0.5;
+}
+
+.ocr-analysis {
+  margin-top: 12px;
 }

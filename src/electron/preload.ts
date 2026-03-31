@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     // OCR
     ocrRecognize: (imagePathOrDataUrl: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl, options),
+    ocrAddManualSelections: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-add-manual-selections', payload),
+    ocrDeleteManualSelection: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-delete-manual-selection', payload),
     ocrGetMangaStatus: (mangaId: string) => ipcRenderer.invoke('ocr-get-manga-status', mangaId),
     ocrStartManga: (mangaId: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-start-manga', mangaId, options),
     ocrStartLibrary: (options?: Record<string, any>) => ipcRenderer.invoke('ocr-start-library', options),

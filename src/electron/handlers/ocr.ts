@@ -37,6 +37,7 @@ type NormalizedBox = {
   bbox: { x: number; y: number; w: number; h: number };
   vertical?: boolean;
   lines?: string[];
+  manual?: boolean;
 };
 
 type NormalizedPageBlock = {
@@ -118,6 +119,7 @@ type MangaOcrPageEntry = {
   height?: number;
   boxes?: NormalizedBox[];
   blocks?: NormalizedPageBlock[];
+  manualBoxes?: NormalizedBox[];
   computedAt?: string;
   errorMessage?: string;
 };
@@ -484,6 +486,16 @@ async function deleteCache(cacheKey: string) {
   }
 }
 
+async function invalidateCacheForImagePath(imagePath: string) {
+  try {
+    const fingerprint = await getImageFingerprint(imagePath);
+    const cacheKey = buildCacheKey(fingerprint);
+    await deleteCache(cacheKey);
+  } catch {
+    // ignore cache invalidation failures
+  }
+}
+
 const getMangaOcrFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_OCR_FILE_NAME);
 
 const toLocalFileUrl = (filePath: string) => pathToFileURL(filePath).href.replace(/^file:\/\//, "local://");
@@ -579,6 +591,50 @@ async function writeMangaOcrFile(mangaPath: string, file: MangaOcrFile) {
   return nextFile;
 }
 
+function normalizeManualBoxes(boxes: unknown): NormalizedBox[] {
+  if (!Array.isArray(boxes)) {
+    return [];
+  }
+
+  return boxes.reduce<NormalizedBox[]>((acc, box, index) => {
+      const candidate = box as Partial<NormalizedBox>;
+      const text = typeof candidate?.text === "string" ? candidate.text.trim() : "";
+      const bbox = candidate?.bbox;
+      const x = Number(bbox?.x);
+      const y = Number(bbox?.y);
+      const w = Number(bbox?.w);
+      const h = Number(bbox?.h);
+
+      if (!text || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) {
+        return acc;
+      }
+
+      const normalizedBox: NormalizedBox = {
+        id: typeof candidate.id === "string" && candidate.id.trim().length > 0
+          ? candidate.id
+          : `manual-${randomUUID()}-${index}`,
+        text,
+        bbox: {
+          x: clamp(x, 0, 1),
+          y: clamp(y, 0, 1),
+          w: clamp(w, 0, 1),
+          h: clamp(h, 0, 1),
+        },
+        vertical: !!candidate.vertical,
+        lines: Array.isArray(candidate.lines)
+          ? candidate.lines.filter((line): line is string => typeof line === "string" && line.trim().length > 0)
+          : undefined,
+        manual: true,
+      };
+
+      if (normalizedBox.bbox.w > 0 && normalizedBox.bbox.h > 0) {
+        acc.push(normalizedBox);
+      }
+
+      return acc;
+    }, []);
+}
+
 function buildMangaPageKey(pageIndex?: number | null, imagePath?: string | null) {
   if (typeof pageIndex === "number" && Number.isFinite(pageIndex) && pageIndex >= 0) {
     return String(pageIndex + 1).padStart(4, "0");
@@ -618,7 +674,11 @@ function pageEntryToNormalized(entry: MangaOcrPageEntry, imagePath: string, sour
     return null;
   }
 
-  const boxes = Array.isArray(entry.boxes) ? entry.boxes : [];
+  const autoBoxes = Array.isArray(entry.boxes) ? entry.boxes : [];
+  const manualBoxes = Array.isArray(entry.manualBoxes)
+    ? entry.manualBoxes.map((box) => ({ ...box, manual: true }))
+    : [];
+  const boxes = [...autoBoxes, ...manualBoxes];
   const blocks = Array.isArray(entry.blocks) ? entry.blocks : [];
 
   return {
@@ -914,6 +974,7 @@ async function persistPageResultForManga(
   const pageFiles = await listImageFiles(manga.path);
   const file = await ensureMangaOcrFile(manga, pageFiles.length);
   const pageKey = buildMangaPageKey(pageIndex, imagePath);
+  const existingEntry = file.pages[pageKey];
   const blocks = Array.isArray(result.page?.blocks) ? result.page?.blocks : [];
   const boxes = Array.isArray(result.boxes) ? result.boxes : [];
 
@@ -929,6 +990,7 @@ async function persistPageResultForManga(
     height: result.height,
     boxes,
     blocks,
+    manualBoxes: Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [],
     computedAt: result.debug?.computedAt || new Date().toISOString(),
   };
 
@@ -955,6 +1017,76 @@ async function readStoredPageFromMangaFile(mangaPath: string, imagePath: string,
     return null;
   }
 
+  return pageEntryToNormalized(entry, imagePath, "manga-file");
+}
+
+async function addManualBoxesToMangaPage(
+  manga: any,
+  imagePath: string,
+  pageIndex: number,
+  boxes: NormalizedBox[]
+) {
+  const normalizedBoxes = normalizeManualBoxes(boxes);
+  if (normalizedBoxes.length === 0) {
+    throw new Error("No manual OCR boxes to save");
+  }
+
+  const pageFiles = await listImageFiles(manga.path);
+  const file = await ensureMangaOcrFile(manga, pageFiles.length);
+  const pageKey = buildMangaPageKey(pageIndex, imagePath);
+  const fingerprint = await getImageFingerprint(imagePath);
+  const imageSize = await getImageSize(imagePath);
+  const existingEntry = file.pages[pageKey];
+  const existingManualBoxes = Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [];
+
+  file.pages[pageKey] = {
+    status: existingEntry?.status === "error" ? "done" : (existingEntry?.status || "done"),
+    pageIndex,
+    pageNumber: pageIndex + 1,
+    fileName: path.basename(imagePath),
+    imagePath,
+    sourceSize: fingerprint.size,
+    sourceMtimeMs: fingerprint.mtimeMs,
+    width: Number(existingEntry?.width || imageSize.width || 0),
+    height: Number(existingEntry?.height || imageSize.height || 0),
+    boxes: Array.isArray(existingEntry?.boxes) ? existingEntry.boxes : [],
+    blocks: Array.isArray(existingEntry?.blocks) ? existingEntry.blocks : [],
+    manualBoxes: [...existingManualBoxes, ...normalizedBoxes],
+    computedAt: existingEntry?.computedAt || new Date().toISOString(),
+    errorMessage: undefined,
+  };
+
+  recomputeMangaFileProgress(file, pageFiles.length, file.progress.mode || "on_demand");
+  await writeMangaOcrFile(manga.path, file);
+  await invalidateCacheForImagePath(imagePath);
+  return pageEntryToNormalized(file.pages[pageKey], imagePath, "manga-file");
+}
+
+async function removeManualBoxFromMangaPage(
+  manga: any,
+  imagePath: string,
+  pageIndex: number,
+  boxId: string
+) {
+  const pageFiles = await listImageFiles(manga.path);
+  const file = await ensureMangaOcrFile(manga, pageFiles.length);
+  const pageKey = buildMangaPageKey(pageIndex, imagePath);
+  const entry = file.pages[pageKey];
+  if (!entry) {
+    throw new Error("No OCR data stored for this page");
+  }
+
+  const manualBoxes = Array.isArray(entry.manualBoxes) ? entry.manualBoxes : [];
+  const nextManualBoxes = manualBoxes.filter((box) => box.id !== boxId);
+  if (nextManualBoxes.length === manualBoxes.length) {
+    throw new Error("Manual OCR selection not found");
+  }
+
+  entry.manualBoxes = nextManualBoxes;
+  file.pages[pageKey] = entry;
+  recomputeMangaFileProgress(file, pageFiles.length, file.progress.mode || "on_demand");
+  await writeMangaOcrFile(manga.path, file);
+  await invalidateCacheForImagePath(imagePath);
   return pageEntryToNormalized(entry, imagePath, "manga-file");
 }
 
@@ -1280,9 +1412,17 @@ async function ensureWorker(settings: any): Promise<OcrWorkerState> {
   return nextState;
 }
 
-async function callWorkerRecognize(imagePath: string, settings: any): Promise<RawOcrResult> {
+async function callWorkerRecognize(
+  imagePath: string,
+  settings: any,
+  options?: { mode?: "manual_crop" }
+): Promise<RawOcrResult> {
   const state = await ensureWorker(settings);
-  const response = await sendWorkerRequest(state, { type: "recognize", imagePath });
+  const response = await sendWorkerRequest(state, {
+    type: "recognize",
+    imagePath,
+    ...(options?.mode ? { mode: options.mode } : {}),
+  });
 
   if (!response.ok) {
     const details = [response.error, response.python ? `python=${response.python}` : "", response.candidatePaths?.length ? `candidatePaths=${response.candidatePaths.join(", ")}` : ""]
@@ -1776,6 +1916,14 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
   const { imagePath, cleanup } = await resolveWorkerInput(imagePathOrDataUrl);
 
   try {
+    if (opts?.manualCropMode) {
+      const raw = await callWorkerRecognize(imagePath, settings, { mode: "manual_crop" });
+      return normalizeRawResult(raw, imagePath, false, {
+        computedAt: new Date().toISOString(),
+        forceRefreshUsed: true,
+      });
+    }
+
     const mangaContext = opts?.mangaId && opts?.mangaPath
       ? {
         id: String(opts.mangaId),
@@ -1797,6 +1945,80 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
       await cleanup();
     }
   }
+}
+
+export async function ocrAddManualSelections(
+  _event: IpcMainInvokeEvent,
+  payload?: Record<string, any>
+) {
+  const mangaId = payload?.mangaId;
+  const imagePathValue = payload?.imagePath;
+  const pageIndexValue = payload?.pageIndex;
+  const boxes = payload?.boxes;
+
+  if (!mangaId) {
+    throw new Error("Missing mangaId for manual OCR selection");
+  }
+
+  if (typeof imagePathValue !== "string" || !imagePathValue.trim()) {
+    throw new Error("Missing imagePath for manual OCR selection");
+  }
+
+  if (typeof pageIndexValue !== "number" || !Number.isFinite(pageIndexValue) || pageIndexValue < 0) {
+    throw new Error("Missing pageIndex for manual OCR selection");
+  }
+
+  const manga = await getMangaById(String(mangaId));
+  if (!manga) {
+    throw new Error("Manga not found");
+  }
+
+  const imagePath = resolveImagePath(imagePathValue);
+  const result = await addManualBoxesToMangaPage(manga, imagePath, Math.floor(pageIndexValue), boxes as NormalizedBox[]);
+  if (!result) {
+    throw new Error("Unable to save manual OCR selections");
+  }
+
+  return result;
+}
+
+export async function ocrDeleteManualSelection(
+  _event: IpcMainInvokeEvent,
+  payload?: Record<string, any>
+) {
+  const mangaId = payload?.mangaId;
+  const imagePathValue = payload?.imagePath;
+  const pageIndexValue = payload?.pageIndex;
+  const boxId = payload?.boxId;
+
+  if (!mangaId) {
+    throw new Error("Missing mangaId for manual OCR removal");
+  }
+
+  if (typeof imagePathValue !== "string" || !imagePathValue.trim()) {
+    throw new Error("Missing imagePath for manual OCR removal");
+  }
+
+  if (typeof pageIndexValue !== "number" || !Number.isFinite(pageIndexValue) || pageIndexValue < 0) {
+    throw new Error("Missing pageIndex for manual OCR removal");
+  }
+
+  if (typeof boxId !== "string" || !boxId.trim()) {
+    throw new Error("Missing boxId for manual OCR removal");
+  }
+
+  const manga = await getMangaById(String(mangaId));
+  if (!manga) {
+    throw new Error("Manga not found");
+  }
+
+  const imagePath = resolveImagePath(imagePathValue);
+  const result = await removeManualBoxFromMangaPage(manga, imagePath, Math.floor(pageIndexValue), boxId.trim());
+  if (!result) {
+    throw new Error("Unable to remove manual OCR selection");
+  }
+
+  return result;
 }
 
 export async function ocrGetMangaStatus(_event: IpcMainInvokeEvent, mangaId: string) {

@@ -89,6 +89,8 @@ ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDat
     returnRaw: true,
     ...(opts || {}),
 }));
+ipcMain.handle("ocr-add-manual-selections", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrAddManualSelections(event, payload));
+ipcMain.handle("ocr-delete-manual-selection", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrDeleteManualSelection(event, payload));
 ipcMain.handle("ocr-get-manga-status", async (event: IpcMainInvokeEvent, mangaId: string) => ocr.ocrGetMangaStatus(event, mangaId));
 ipcMain.handle("ocr-start-manga", async (event: IpcMainInvokeEvent, mangaId: string, opts?: Record<string, any>) => ocr.ocrStartManga(event, mangaId, opts));
 ipcMain.handle("ocr-start-library", async (event: IpcMainInvokeEvent, opts?: Record<string, any>) => ocr.ocrStartLibrary(event, opts));

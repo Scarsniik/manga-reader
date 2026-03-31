@@ -158,6 +158,79 @@ def normalize_compare_text(text: str) -> str:
     return "".join(ch for ch in text if ch.isalnum() or "\u3040" <= ch <= "\u9fff")
 
 
+def count_japanese_chars(text: str) -> int:
+    return sum(
+        1
+        for ch in text
+        if ("\u3040" <= ch <= "\u30ff") or ("\u3400" <= ch <= "\u9fff")
+    )
+
+
+def count_latin_chars(text: str) -> int:
+    return sum(1 for ch in text if ("A" <= ch <= "Z") or ("a" <= ch <= "z"))
+
+
+def has_suspicious_repeated_char_run(text: str) -> bool:
+    if not text:
+        return False
+
+    last_char = None
+    run_length = 0
+    for char in text:
+        if char == last_char:
+            run_length += 1
+            if run_length >= 6:
+                return True
+        else:
+            last_char = char
+            run_length = 1
+
+    return False
+
+
+def score_text_quality(text: str) -> float:
+    compact = "".join(ch for ch in text if not ch.isspace())
+    if not compact:
+        return -100.0
+
+    meaningful = count_meaningful_chars(compact)
+    japanese = count_japanese_chars(compact)
+    latin = count_latin_chars(compact)
+    punctuation = max(0, len(compact) - meaningful)
+
+    score = (
+        meaningful * 2.0
+        + japanese * 1.35
+        + min(latin, meaningful) * 0.4
+        - punctuation * 1.15
+    )
+
+    if meaningful == 0:
+        score -= 20.0
+    if len(compact) <= 2:
+        score -= 6.0
+    if has_suspicious_repeated_char_run(compact):
+        score -= 10.0
+
+    return score
+
+
+def score_raw_result(result: dict[str, Any]) -> float:
+    blocks = result.get("blocks") or []
+    if not blocks:
+        return -100.0
+
+    score = 0.0
+    for block in blocks:
+        for line in block.get("lines") or []:
+            score += score_text_quality(str(line or ""))
+
+    if len(blocks) > 2:
+        score -= (len(blocks) - 2) * 1.25
+
+    return score
+
+
 def line_axis_and_edges(line_poly, vertical: bool):
     import numpy as np
 
@@ -351,6 +424,124 @@ def maybe_refine_truncated_large_block(engine, img, mask_refined, blk, original_
     return refined_blk, refined_lines_coords, refined_lines
 
 
+def upscale_for_manual_crop(img):
+    import cv2
+
+    height, width = img.shape[:2]
+    if height <= 0 or width <= 0:
+        return img
+
+    longest_side = max(height, width)
+    scale = min(2.5, max(1.0, 1400.0 / float(longest_side)))
+    if scale <= 1.05:
+        return img
+
+    target_width = max(1, int(round(width * scale)))
+    target_height = max(1, int(round(height * scale)))
+    return cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
+
+
+def ensure_three_channels(img):
+    import cv2
+
+    if img.ndim == 2:
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    return img
+
+
+def build_manual_crop_variants(img):
+    import cv2
+
+    base = upscale_for_manual_crop(img)
+    base_rgb = ensure_three_channels(base)
+    gray = cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    _otsu_threshold, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    inverted = cv2.bitwise_not(binary)
+
+    variants = [
+        ("original", base_rgb),
+        ("binary", cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)),
+        ("binary_inverted", cv2.cvtColor(inverted, cv2.COLOR_GRAY2RGB)),
+    ]
+
+    height, width = base_rgb.shape[:2]
+    if height >= width * 1.3 or width >= height * 1.3:
+        rotated = cv2.rotate(base_rgb, cv2.ROTATE_90_CLOCKWISE)
+        rotated_binary = cv2.rotate(binary, cv2.ROTATE_90_CLOCKWISE)
+        variants.extend([
+            ("rotated_original", rotated),
+            ("rotated_binary", cv2.cvtColor(rotated_binary, cv2.COLOR_GRAY2RGB)),
+        ])
+
+    return variants
+
+
+def build_manual_crop_result(version: str, img_shape, text: str, variant_name: str):
+    height, width = img_shape[:2]
+    box = [0, 0, width, height]
+    polygon = [[0, 0], [width, 0], [width, height], [0, height]]
+    vertical = height >= width * 1.2 and not variant_name.startswith("rotated_")
+
+    return {
+        "version": version,
+        "img_width": width,
+        "img_height": height,
+        "blocks": [
+            {
+                "box": box,
+                "vertical": vertical,
+                "font_size": None,
+                "angle": None,
+                "prob": None,
+                "language": "ja",
+                "aspect_ratio": float(height / width) if width else None,
+                "mask_score": None,
+                "lines_coords": [polygon],
+                "lines": [text],
+            }
+        ],
+    }
+
+
+def recognize_manual_crop(image_path: str):
+    from mokuro import __version__
+    from mokuro.utils import imread
+    from PIL import Image
+
+    engine = build_engine()
+    img = imread(image_path)
+    if img is None:
+        raise ValueError("Invalid or unsupported image")
+
+    best_variant_name = None
+    best_text = ""
+    best_score = -1000.0
+
+    for variant_name, variant_img in build_manual_crop_variants(img):
+        candidate_text = engine.mocr(Image.fromarray(variant_img))
+        candidate_score = score_text_quality(candidate_text)
+        if candidate_score > best_score:
+            best_score = candidate_score
+            best_text = candidate_text
+            best_variant_name = variant_name
+
+    direct_result = build_manual_crop_result(__version__, img.shape, best_text, best_variant_name or "original")
+    direct_score = score_raw_result(direct_result)
+
+    detected_result = recognize_with_metadata(image_path)
+    detected_score = score_raw_result(detected_result)
+    detected_blocks = detected_result.get("blocks") or []
+
+    if detected_blocks and detected_score >= max(8.0, direct_score - 3.0):
+        return detected_result
+
+    if direct_score > detected_score:
+        return direct_result
+
+    return detected_result
+
+
 def recognize_with_metadata(image_path: str):
     from mokuro import __version__
     from mokuro.utils import imread
@@ -475,7 +666,10 @@ def handle_recognize(request_id, payload):
     if not image_path:
         raise ValueError("Missing imagePath")
 
-    result = recognize_with_metadata(image_path)
+    if payload.get("mode") == "manual_crop":
+        result = recognize_manual_crop(image_path)
+    else:
+        result = recognize_with_metadata(image_path)
 
     return {
         "id": request_id,

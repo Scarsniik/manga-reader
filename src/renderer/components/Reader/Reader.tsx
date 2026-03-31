@@ -22,6 +22,7 @@ type ReaderOcrBox = {
     bbox: { x: number; y: number; w: number; h: number };
     vertical?: boolean;
     lines?: string[];
+    manual?: boolean;
 };
 
 type ReaderOcrLoadResult = {
@@ -30,6 +31,13 @@ type ReaderOcrLoadResult = {
     computedAt: string | null;
     forceRefreshUsed: boolean;
     source?: string | null;
+};
+
+type ManualSelection = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
 };
 
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
@@ -144,6 +152,176 @@ const filterVisibleOcrBoxes = (boxes: ReaderOcrBox[]): ReaderOcrBox[] => (
     boxes.filter((box) => typeof box.text === 'string' && box.text.trim().length > 0)
 );
 
+const splitReaderOcrBoxes = (boxes: ReaderOcrBox[]) => ({
+    detected: boxes.filter((box) => !box.manual),
+    manual: boxes.filter((box) => !!box.manual),
+});
+
+const blobToDataUrl = (blob: Blob): Promise<string> => (
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+                return;
+            }
+
+            reject(new Error('Conversion image indisponible'));
+        };
+        reader.onerror = () => reject(reader.error || new Error('Conversion image indisponible'));
+        reader.readAsDataURL(blob);
+    })
+);
+
+const cropImageSelectionToDataUrl = async (
+    imageElement: HTMLImageElement,
+    selection: ManualSelection
+): Promise<string> => {
+    const naturalWidth = imageElement.naturalWidth;
+    const naturalHeight = imageElement.naturalHeight;
+    if (!naturalWidth || !naturalHeight) {
+        throw new Error('Image non chargee');
+    }
+
+    const sourceX = Math.max(0, Math.min(naturalWidth - 1, Math.floor(selection.x * naturalWidth)));
+    const sourceY = Math.max(0, Math.min(naturalHeight - 1, Math.floor(selection.y * naturalHeight)));
+    const sourceWidth = Math.max(1, Math.min(naturalWidth - sourceX, Math.ceil(selection.w * naturalWidth)));
+    const sourceHeight = Math.max(1, Math.min(naturalHeight - sourceY, Math.ceil(selection.h * naturalHeight)));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sourceWidth;
+    canvas.height = sourceHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        throw new Error('Canvas indisponible');
+    }
+
+    context.drawImage(
+        imageElement,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        sourceWidth,
+        sourceHeight
+    );
+
+    const blob = await canvasToBlob(canvas, 'image/png');
+    return blobToDataUrl(blob);
+};
+
+const orderManualCropBoxesForReading = (
+    boxes: ReaderOcrBox[],
+): ReaderOcrBox[] => {
+    if (boxes.length <= 1) {
+        return [...boxes];
+    }
+
+    const verticalCount = boxes.filter((box) => !!box.vertical).length;
+    const treatAsVertical = verticalCount >= Math.ceil(boxes.length / 2);
+
+    if (treatAsVertical) {
+        const averageWidth = boxes.reduce((sum, box) => sum + box.bbox.w, 0) / boxes.length;
+        const sameColumnThreshold = Math.max(averageWidth * 0.75, 0.03);
+
+        return [...boxes].sort((left, right) => {
+            if (Math.abs(left.bbox.x - right.bbox.x) > sameColumnThreshold) {
+                return right.bbox.x - left.bbox.x;
+            }
+            return left.bbox.y - right.bbox.y;
+        });
+    }
+
+    const averageHeight = boxes.reduce((sum, box) => sum + box.bbox.h, 0) / boxes.length;
+    const sameRowThreshold = Math.max(averageHeight * 0.75, 0.03);
+
+    return [...boxes].sort((left, right) => {
+        if (Math.abs(left.bbox.y - right.bbox.y) > sameRowThreshold) {
+            return left.bbox.y - right.bbox.y;
+        }
+        return left.bbox.x - right.bbox.x;
+    });
+};
+
+const createMergedManualSelection = (
+    boxes: ReaderOcrBox[],
+    selection: ManualSelection,
+    selectionKey: string
+): ReaderOcrBox => {
+    const orderedBoxes = orderManualCropBoxesForReading(boxes);
+    const lineChunks = orderedBoxes.flatMap((box) => {
+        if (Array.isArray(box.lines) && box.lines.length > 0) {
+            return box.lines.map((line) => String(line).trim()).filter(Boolean);
+        }
+        return [String(box.text || '').trim()].filter(Boolean);
+    });
+
+    const mergedText = lineChunks.join('').trim();
+    const mergedVertical = orderedBoxes.filter((box) => !!box.vertical).length >= Math.ceil(orderedBoxes.length / 2);
+
+    return {
+        id: `${selectionKey}-merged`,
+        text: mergedText,
+        bbox: {
+            x: selection.x,
+            y: selection.y,
+            w: selection.w,
+            h: selection.h,
+        },
+        vertical: mergedVertical,
+        lines: lineChunks,
+        manual: true,
+    };
+};
+
+const getNormalizedOverlapArea = (
+    left: { x: number; y: number; w: number; h: number },
+    right: { x: number; y: number; w: number; h: number }
+): number => {
+    const x1 = Math.max(left.x, right.x);
+    const y1 = Math.max(left.y, right.y);
+    const x2 = Math.min(left.x + left.w, right.x + right.w);
+    const y2 = Math.min(left.y + left.h, right.y + right.h);
+
+    if (x2 <= x1 || y2 <= y1) {
+        return 0;
+    }
+
+    return (x2 - x1) * (y2 - y1);
+};
+
+const getManualSelectionPageBoxCandidates = (
+    boxes: ReaderOcrBox[],
+    selection: ManualSelection
+): ReaderOcrBox[] => {
+    const selectionArea = Math.max(selection.w * selection.h, 0.000001);
+
+    return boxes.filter((box) => {
+        const overlapArea = getNormalizedOverlapArea(box.bbox, selection);
+        if (overlapArea <= 0) {
+            return false;
+        }
+
+        const boxArea = Math.max(box.bbox.w * box.bbox.h, 0.000001);
+        const overlapOnBox = overlapArea / boxArea;
+        const overlapOnSelection = overlapArea / selectionArea;
+        return overlapOnBox >= 0.35 || overlapOnSelection >= 0.12;
+    });
+};
+
+const scoreManualSelectionCandidate = (box: ReaderOcrBox | null): number => {
+    if (!box || !box.text) {
+        return -1000;
+    }
+
+    const compactText = box.text.replace(/\s+/g, '');
+    const lineCount = Array.isArray(box.lines) ? box.lines.filter(Boolean).length : 0;
+    return compactText.length + (lineCount * 6);
+};
+
 const getMaxOcrPageMemoryCache = (preloadPageCount: number | null): number => (
     Math.max(BASE_OCR_PAGE_MEMORY_CACHE, ((preloadPageCount ?? 0) * 2) + 1)
 );
@@ -179,6 +357,16 @@ const getOrderedOcrPreRenderSources = (
     return sources;
 };
 
+const getOcrSourceLabel = (source?: string | null) => (
+    source === 'manga-file'
+        ? 'fichier OCR du manga'
+        : source === 'app-cache'
+            ? 'cache disque'
+            : source === 'reader-memory'
+                ? 'cache memoire du reader'
+                : 'calcul backend'
+);
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -189,13 +377,16 @@ const Reader: React.FC = () => {
     const [copyFeedback, setCopyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showBoxes, setShowBoxes] = useState<boolean>(true);
     const [detectedBoxes, setDetectedBoxes] = useState<ReaderOcrBox[]>([]);
+    const [manualBoxes, setManualBoxes] = useState<ReaderOcrBox[]>([]);
     const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
+    const [manualSelectionEnabled, setManualSelectionEnabled] = useState<boolean>(false);
+    const [manualSelectionLoading, setManualSelectionLoading] = useState<boolean>(false);
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = useRef<boolean>(false);
     const preloadedImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
     const ocrPageCacheRef = useRef<Map<string, ReaderOcrBox[]>>(new Map());
-    const ocrInFlightRef = useRef<Map<string, Promise<ReaderOcrBox[]>>>(new Map());
+    const ocrInFlightRef = useRef<Map<string, Promise<ReaderOcrLoadResult>>>(new Map());
     const ocrRequestTokenRef = useRef<number>(0);
     const location = useLocation();
     const navigate = useNavigate();
@@ -633,6 +824,32 @@ const Reader: React.FC = () => {
         ocrPageCacheRef.current.delete(src);
     }, []);
 
+    const applyCurrentPageOcrBoxes = useCallback((boxes: ReaderOcrBox[]) => {
+        const splitBoxes = splitReaderOcrBoxes(boxes);
+        setDetectedBoxes(splitBoxes.detected);
+        setManualBoxes(splitBoxes.manual);
+    }, []);
+
+    const updateSelectedBoxes = useCallback((id: string | null, additive?: boolean) => {
+        if (!id) {
+            setSelectedBoxes([]);
+            return;
+        }
+
+        setSelectedBoxes((prev) => {
+            const nextSelection = new Set(prev);
+            if (additive) {
+                if (nextSelection.has(id)) {
+                    nextSelection.delete(id);
+                } else {
+                    nextSelection.add(id);
+                }
+                return Array.from(nextSelection);
+            }
+            return [id];
+        });
+    }, []);
+
     const loadOcrBoxesForPage = useCallback(async (
         src: string,
         pageIndex: number,
@@ -702,34 +919,201 @@ const Reader: React.FC = () => {
         }
     }, [manga, rememberOcrBoxesForPage]);
 
+    const handleManualSelectionComplete = useCallback(async (selection: ManualSelection) => {
+        const src = images[currentIndex];
+        const imageElement = imgRef.current;
+        if (!src || !imageElement) {
+            setOcrError('Image indisponible pour la selection manuelle');
+            return;
+        }
+
+        setManualSelectionLoading(true);
+        setOcrError(null);
+
+        try {
+            const selectionKey = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const pageCandidates = getManualSelectionPageBoxCandidates(detectedBoxes, selection);
+            const pageMergedBox = pageCandidates.length > 0
+                ? createMergedManualSelection(pageCandidates, selection, `${selectionKey}-page`)
+                : null;
+
+            const cropDataUrl = await cropImageSelectionToDataUrl(imageElement, selection);
+            const hasElectronOcrApi = !!(window.api && typeof window.api.ocrRecognize === 'function');
+            const api = getOcrApi();
+            const ocrResult = await api(
+                cropDataUrl,
+                hasElectronOcrApi ? { forceRefresh: true, manualCropMode: true } : undefined
+            );
+
+            let cropBoxes = Array.isArray(ocrResult?.boxes) ? ocrResult.boxes as ReaderOcrBox[] : [];
+            if (!hasElectronOcrApi && cropBoxes.length === 0) {
+                const fallback = await mockOcrRecognize(cropDataUrl);
+                cropBoxes = Array.isArray(fallback?.boxes) ? fallback.boxes as ReaderOcrBox[] : [];
+            }
+
+            let visibleCropBoxes = filterVisibleOcrBoxes(cropBoxes);
+            if (hasElectronOcrApi && visibleCropBoxes.length === 0) {
+                const fallbackResult = await api(cropDataUrl, { forceRefresh: true });
+                const fallbackBoxes = Array.isArray(fallbackResult?.boxes) ? fallbackResult.boxes as ReaderOcrBox[] : [];
+                visibleCropBoxes = filterVisibleOcrBoxes(fallbackBoxes);
+            }
+
+            const cropMergedBox = visibleCropBoxes.length > 0
+                ? createMergedManualSelection(visibleCropBoxes, selection, `${selectionKey}-crop`)
+                : null;
+
+            const chosenManualBox = (() => {
+                if (pageMergedBox && cropMergedBox) {
+                    const pageScore = scoreManualSelectionCandidate(pageMergedBox);
+                    const cropScore = scoreManualSelectionCandidate(cropMergedBox);
+
+                    if (pageScore >= cropScore + 2) {
+                        return pageMergedBox;
+                    }
+
+                    if (
+                        pageMergedBox.text.length > cropMergedBox.text.length
+                        && cropMergedBox.text.length > 0
+                        && pageMergedBox.text.includes(cropMergedBox.text)
+                    ) {
+                        return pageMergedBox;
+                    }
+
+                    return cropMergedBox;
+                }
+
+                return pageMergedBox || cropMergedBox;
+            })();
+
+            if (!chosenManualBox) {
+                setOcrStatusNote('Selection manuelle: aucun texte detecte');
+                return;
+            }
+            let nextBoxes = [...detectedBoxes, ...manualBoxes, chosenManualBox];
+
+            if (
+                manga
+                && window.api
+                && typeof window.api.ocrAddManualSelections === 'function'
+            ) {
+                const storedResult = await window.api.ocrAddManualSelections({
+                    mangaId: manga.id,
+                    imagePath: src,
+                    pageIndex: currentIndex,
+                    boxes: [chosenManualBox],
+                });
+
+                nextBoxes = filterVisibleOcrBoxes(
+                    Array.isArray(storedResult?.boxes)
+                        ? storedResult.boxes as ReaderOcrBox[]
+                        : nextBoxes
+                );
+            }
+
+            rememberOcrBoxesForPage(src, nextBoxes);
+            applyCurrentPageOcrBoxes(nextBoxes);
+            setSelectedBoxes([chosenManualBox.id]);
+            setOcrStatusNote('Selection manuelle ajoutee');
+            setManualSelectionEnabled(false);
+        } catch (err: any) {
+            setOcrError(String(err && err.message ? err.message : err));
+        } finally {
+            setManualSelectionLoading(false);
+        }
+    }, [
+        applyCurrentPageOcrBoxes,
+        currentIndex,
+        detectedBoxes,
+        images,
+        manualBoxes,
+        manga,
+        rememberOcrBoxesForPage,
+    ]);
+
+    const handleRemoveManualBox = useCallback(async (boxId: string) => {
+        const src = images[currentIndex];
+        if (!src) {
+            return;
+        }
+
+        setManualSelectionLoading(true);
+        setOcrError(null);
+
+        try {
+            let nextBoxes = [...detectedBoxes, ...manualBoxes.filter((box) => box.id !== boxId)];
+
+            if (
+                manga
+                && window.api
+                && typeof window.api.ocrDeleteManualSelection === 'function'
+            ) {
+                const storedResult = await window.api.ocrDeleteManualSelection({
+                    mangaId: manga.id,
+                    imagePath: src,
+                    pageIndex: currentIndex,
+                    boxId,
+                });
+
+                nextBoxes = filterVisibleOcrBoxes(
+                    Array.isArray(storedResult?.boxes)
+                        ? storedResult.boxes as ReaderOcrBox[]
+                        : nextBoxes
+                );
+            }
+
+            rememberOcrBoxesForPage(src, nextBoxes);
+            applyCurrentPageOcrBoxes(nextBoxes);
+            setSelectedBoxes((prev) => prev.filter((id) => id !== boxId));
+            setOcrStatusNote('Selection manuelle retiree');
+        } catch (err: any) {
+            setOcrError(String(err && err.message ? err.message : err));
+        } finally {
+            setManualSelectionLoading(false);
+        }
+    }, [
+        applyCurrentPageOcrBoxes,
+        currentIndex,
+        detectedBoxes,
+        images,
+        manualBoxes,
+        manga,
+        rememberOcrBoxesForPage,
+    ]);
+
     useEffect(() => {
         if (!ocrEnabled) {
-            setDetectedBoxes([]);
+            applyCurrentPageOcrBoxes([]);
             setSelectedBoxes([]);
             setOcrError(null);
             setOcrLoading(false);
             setOcrStatusNote(null);
+            setManualSelectionEnabled(false);
+            setManualSelectionLoading(false);
             return;
         }
 
         const src = images[currentIndex];
         if (!src) {
-            setDetectedBoxes([]);
+            applyCurrentPageOcrBoxes([]);
             setSelectedBoxes([]);
             setOcrError(null);
             setOcrLoading(false);
             setOcrStatusNote(null);
+            setManualSelectionEnabled(false);
+            setManualSelectionLoading(false);
             return;
         }
 
         const cachedBoxes = ocrPageCacheRef.current.get(src);
         setSelectedBoxes([]);
+        setManualSelectionEnabled(false);
+        setManualSelectionLoading(false);
 
         if (cachedBoxes) {
-            setDetectedBoxes(cachedBoxes);
+            applyCurrentPageOcrBoxes(cachedBoxes);
             setOcrError(null);
             setOcrLoading(false);
-            setOcrStatusNote("Source: cache memoire du reader");
+            setOcrStatusNote('Source: cache memoire du reader');
             return;
         }
 
@@ -748,12 +1132,8 @@ const Reader: React.FC = () => {
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
                 }
-                setDetectedBoxes(result.boxes);
-                const sourceLabel = result.source === 'manga-file'
-                    ? 'fichier OCR du manga'
-                    : result.source === 'app-cache'
-                        ? 'cache disque'
-                        : 'calcul backend';
+                applyCurrentPageOcrBoxes(result.boxes);
+                const sourceLabel = getOcrSourceLabel(result.source);
                 setOcrStatusNote(result.fromCache
                     ? `Source: ${sourceLabel}, calcul initial ${result.computedAt ?? 'inconnu'}`
                     : `Source: ${sourceLabel}${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
@@ -762,7 +1142,7 @@ const Reader: React.FC = () => {
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
                 }
-                setDetectedBoxes([]);
+                applyCurrentPageOcrBoxes([]);
                 setOcrError(String(err && err.message ? err.message : err));
                 setOcrStatusNote(null);
             } finally {
@@ -776,7 +1156,7 @@ const Reader: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage]);
+    }, [applyCurrentPageOcrBoxes, currentIndex, images, loadOcrBoxesForPage, ocrEnabled]);
 
     useEffect(() => {
         if (!ocrEnabled || preloadPageCount === null || images.length === 0) {
@@ -821,8 +1201,8 @@ const Reader: React.FC = () => {
         };
     }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
 
-    // selected bubble data derived from detectedBoxes
-    const selectedBoxData = selectedBoxes.length > 0 ? detectedBoxes.find(b => b.id === selectedBoxes[0]) || null : null;
+    const allOcrBoxes = [...detectedBoxes, ...manualBoxes];
+    const selectedBoxData = selectedBoxes.length > 0 ? allOcrBoxes.find(b => b.id === selectedBoxes[0]) || null : null;
     const vocabItems = selectedBoxData ? selectedBoxData.text.split(/\s+/).filter(Boolean).slice(0, 3) : [];
 
     return (
@@ -871,22 +1251,13 @@ const Reader: React.FC = () => {
                                     imgRef={imgRef as any}
                                     ocrEnabled={ocrEnabled}
                                     showBoxes={showBoxes}
-                                    detectedBoxes={detectedBoxes}
+                                    detectedBoxes={allOcrBoxes}
                                     selectedBoxes={selectedBoxes}
-                                    onSelectBox={(id: string | null, additive?: boolean) => {
-                                        if (!id) {
-                                            setSelectedBoxes([]);
-                                            return;
-                                        }
-                                        setSelectedBoxes(prev => {
-                                            const set = new Set(prev);
-                                            if (additive) {
-                                                if (set.has(id)) set.delete(id);
-                                                else set.add(id);
-                                                return Array.from(set);
-                                            }
-                                            return [id];
-                                        });
+                                    onSelectBox={updateSelectedBoxes}
+                                    manualSelectionEnabled={manualSelectionEnabled}
+                                    manualSelectionLoading={manualSelectionLoading}
+                                    onManualSelectionComplete={(selection) => {
+                                        void handleManualSelectionComplete(selection);
                                     }}
                                 />
                             ) : (
@@ -930,6 +1301,7 @@ const Reader: React.FC = () => {
                     <OcrPanel
                         ocrEnabled={ocrEnabled}
                         detectedBoxes={detectedBoxes}
+                        manualBoxes={manualBoxes}
                         selectedBoxes={selectedBoxes}
                         onSimulate={async () => {
                             setOcrError(null);
@@ -939,19 +1311,15 @@ const Reader: React.FC = () => {
                                 const src = images[currentIndex];
                                 clearOcrBoxesForPage(src);
                                 const result = await loadOcrBoxesForPage(src, currentIndex, false, { forceRefresh: true });
-                                setDetectedBoxes(result.boxes);
+                                applyCurrentPageOcrBoxes(result.boxes);
                                 setSelectedBoxes([]);
-                                const sourceLabel = result.source === 'manga-file'
-                                    ? 'fichier OCR du manga'
-                                    : result.source === 'app-cache'
-                                        ? 'cache disque'
-                                        : 'calcul backend';
+                                const sourceLabel = getOcrSourceLabel(result.source);
                                 setOcrStatusNote(result.fromCache
                                     ? `Source: ${sourceLabel}, calcul initial ${result.computedAt ?? 'inconnu'}`
                                     : `Source: ${sourceLabel}${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
                                 );
                             } catch (err: any) {
-                                setDetectedBoxes([]);
+                                applyCurrentPageOcrBoxes([]);
                                 setOcrError(String(err && err.message ? err.message : err));
                                 setOcrStatusNote(null);
                             } finally {
@@ -960,21 +1328,23 @@ const Reader: React.FC = () => {
                         }}
                         onClear={() => {
                             clearOcrBoxesForPage(images[currentIndex]);
-                            setDetectedBoxes([]);
+                            applyCurrentPageOcrBoxes([]);
                             setSelectedBoxes([]);
                             setOcrError(null);
                             setOcrStatusNote(null);
+                            setManualSelectionEnabled(false);
                         }}
-                        onSelectBox={(id, additive) => {
-                            if (!id) { setSelectedBoxes([]); return; }
-                            setSelectedBoxes(prev => {
-                                const set = new Set(prev);
-                                if (additive) {
-                                    if (set.has(id)) set.delete(id); else set.add(id);
-                                    return Array.from(set);
-                                }
-                                return [id];
-                            });
+                        onSelectBox={updateSelectedBoxes}
+                        manualSelectionEnabled={manualSelectionEnabled}
+                        manualSelectionLoading={manualSelectionLoading}
+                        onToggleManualSelection={() => {
+                            if (manualSelectionLoading) {
+                                return;
+                            }
+                            setManualSelectionEnabled((value) => !value);
+                        }}
+                        onRemoveManualBox={(boxId) => {
+                            void handleRemoveManualBox(boxId);
                         }}
                         selectedBoxData={selectedBoxData}
                         vocabItems={vocabItems}

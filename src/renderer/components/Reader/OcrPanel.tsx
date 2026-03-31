@@ -1,16 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import JapaneseAnalyse, { Box as JBox } from '../JapaneseAnalyse/JapaneseAnalyse';
 import './ocr-panel.scss';
 
-type Box = JBox;
+type Box = JBox & {
+    manual?: boolean;
+};
 
 type Props = {
     ocrEnabled: boolean;
     detectedBoxes: Box[];
+    manualBoxes: Box[];
     selectedBoxes: string[];
     onSimulate: () => void | Promise<void>;
     onClear: () => void;
     onSelectBox: (id: string | null, additive?: boolean) => void;
+    onToggleManualSelection?: () => void;
+    onRemoveManualBox?: (id: string) => void | Promise<void>;
+    manualSelectionEnabled?: boolean;
+    manualSelectionLoading?: boolean;
     selectedBoxData?: Box | null;
     vocabItems: string[];
     loading?: boolean;
@@ -20,11 +27,26 @@ type Props = {
     onToggleShowBoxes?: (next: boolean) => void;
 };
 
-const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, onSimulate, onClear, onSelectBox, selectedBoxData, vocabItems, loading, error, statusNote, showBoxes = true, onToggleShowBoxes }) => {
-    const [boxes, setBoxes] = useState<Box[]>(detectedBoxes || []);
-
-    // sync incoming detectedBoxes
-    useEffect(() => setBoxes(detectedBoxes || []), [detectedBoxes]);
+const OcrPanel: React.FC<Props> = ({
+    detectedBoxes,
+    manualBoxes,
+    selectedBoxes,
+    onSimulate,
+    onClear,
+    onSelectBox,
+    onToggleManualSelection,
+    onRemoveManualBox,
+    manualSelectionEnabled = false,
+    manualSelectionLoading = false,
+    vocabItems,
+    loading,
+    error,
+    statusNote,
+    showBoxes = true,
+    onToggleShowBoxes,
+}) => {
+    const selectedBoxSet = new Set(selectedBoxes);
+    const selectedForAnalyse = [...detectedBoxes, ...manualBoxes].filter((box) => selectedBoxSet.has(box.id));
 
     return (
         <aside className="reader-ocr-panel" aria-label="OCR panel">
@@ -32,8 +54,19 @@ const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, o
                 <div className="ocr-panel-header">
                     <strong>OCR</strong>
                     <div className="ocr-panel-controls">
-                        <button onClick={() => onSimulate()}>Relancer</button>
-                        <button onClick={() => { setBoxes([]); onClear(); }}>Clear</button>
+                        <button onClick={() => onSimulate()} disabled={manualSelectionLoading}>Relancer</button>
+                        <button onClick={() => onClear()} disabled={manualSelectionLoading}>Clear</button>
+                        <button
+                            onClick={() => {
+                                if (typeof onToggleManualSelection === 'function') {
+                                    onToggleManualSelection();
+                                }
+                            }}
+                            disabled={manualSelectionLoading}
+                            className={manualSelectionEnabled ? 'is-active' : ''}
+                        >
+                            {manualSelectionEnabled ? 'Annuler zone' : 'Zone manuelle'}
+                        </button>
                     </div>
                 </div>
 
@@ -43,7 +76,9 @@ const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, o
                             type="checkbox"
                             checked={!!showBoxes}
                             onChange={(e) => {
-                                if (typeof onToggleShowBoxes === 'function') onToggleShowBoxes((e.target as HTMLInputElement).checked);
+                                if (typeof onToggleShowBoxes === 'function') {
+                                    onToggleShowBoxes((e.target as HTMLInputElement).checked);
+                                }
                             }}
                         />
                         Afficher les carrés
@@ -52,28 +87,69 @@ const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, o
 
                 <div className="ocr-status">
                     {loading ? <div>Chargement OCR…</div> : null}
-                    {error ? <div style={{ color: 'crimson' }}>{error}</div> : null}
+                    {manualSelectionLoading ? <div>Analyse de la selection manuelle…</div> : null}
+                    {manualSelectionEnabled ? (
+                        <div className="ocr-status-note">Dessine une zone sur l&apos;image pour ajouter une selection manuelle.</div>
+                    ) : null}
+                    {error ? <div className="ocr-status-error">{error}</div> : null}
                     {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
                 </div>
 
                 <div className="ocr-box-list">
-                    {boxes.length === 0 ? <div><em>Aucune bulle détectée</em></div> : (
-                        <div>
-                            <div style={{ marginBottom: 8 }}><strong>Bulles détectées</strong></div>
+                    <div className="ocr-box-section">
+                        <div className="ocr-box-section-title"><strong>Bulles détectées</strong></div>
+                        {detectedBoxes.length === 0 ? <div><em>Aucune bulle détectée</em></div> : (
                             <ul>
-                                {boxes.map(b => (
-                                    <li key={b.id}>
-                                        <button className="" onClick={(e) => onSelectBox(b.id, (e as any).ctrlKey || (e as any).metaKey)}>{b.text || '(vide)'}</button>
+                                {detectedBoxes.map((box) => (
+                                    <li key={box.id}>
+                                        <button
+                                            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
+                                            onClick={(event) => onSelectBox(box.id, event.ctrlKey || event.metaKey)}
+                                        >
+                                            {box.text || '(vide)'}
+                                        </button>
                                     </li>
                                 ))}
                             </ul>
-                        </div>
-                    )}
+                        )}
+                    </div>
+
+                    <div className="ocr-box-section">
+                        <div className="ocr-box-section-title"><strong>Sélections manuelles</strong></div>
+                        {manualBoxes.length === 0 ? <div><em>Aucune sélection manuelle</em></div> : (
+                            <ul className="ocr-manual-list">
+                                {manualBoxes.map((box) => (
+                                    <li key={box.id} className="ocr-manual-item">
+                                        <button
+                                            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
+                                            onClick={(event) => onSelectBox(box.id, event.ctrlKey || event.metaKey)}
+                                        >
+                                            {box.text || '(vide)'}
+                                        </button>
+                                        <button
+                                            className="ocr-manual-remove"
+                                            onClick={() => {
+                                                if (typeof onRemoveManualBox === 'function') {
+                                                    void onRemoveManualBox(box.id);
+                                                }
+                                            }}
+                                            disabled={manualSelectionLoading}
+                                        >
+                                            Retirer
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                 </div>
 
-                <div style={{ marginTop: 12 }}>
-                    {selectedBoxes && selectedBoxes.length > 0 ? (
-                        <JapaneseAnalyse selectedBoxes={boxes.filter(b => selectedBoxes.indexOf(b.id) >= 0)} onClose={() => onSelectBox(null)} />
+                <div className="ocr-analysis">
+                    {selectedForAnalyse.length > 0 ? (
+                        <JapaneseAnalyse
+                            selectedBoxes={selectedForAnalyse}
+                            onClose={() => onSelectBox(null)}
+                        />
                     ) : null}
                 </div>
             </div>
