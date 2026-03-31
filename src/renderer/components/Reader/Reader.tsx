@@ -16,6 +16,14 @@ type ReaderLocationState = {
     mangaId?: string;
 } | null;
 
+type ReaderOcrBox = {
+    id: string;
+    text: string;
+    bbox: { x: number; y: number; w: number; h: number };
+    vertical?: boolean;
+    lines?: string[];
+};
+
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -110,6 +118,7 @@ const copyImageViaBrowserClipboard = async (
 
 const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
 const MAX_READER_PRELOAD_PAGE_COUNT = 10;
+const BASE_OCR_PAGE_MEMORY_CACHE = 6;
 
 const normalizeReaderPreloadPageCount = (value: unknown): number => {
     const parsed = typeof value === 'number'
@@ -123,6 +132,37 @@ const normalizeReaderPreloadPageCount = (value: unknown): number => {
     return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
 };
 
+const filterVisibleOcrBoxes = (boxes: ReaderOcrBox[]): ReaderOcrBox[] => (
+    boxes.filter((box) => typeof box.text === 'string' && box.text.trim().length > 0)
+);
+
+const getMaxOcrPageMemoryCache = (preloadPageCount: number | null): number => (
+    Math.max(BASE_OCR_PAGE_MEMORY_CACHE, ((preloadPageCount ?? 0) * 2) + 1)
+);
+
+const getOrderedOcrPreRenderSources = (
+    images: string[],
+    currentIndex: number,
+    preloadPageCount: number | null
+): string[] => {
+    if (images.length === 0) {
+        return [];
+    }
+
+    const additionalPages = Math.max(0, preloadPageCount ?? 0);
+    const endIndex = Math.min(images.length - 1, currentIndex + additionalPages);
+    const sources: string[] = [];
+
+    for (let index = currentIndex; index <= endIndex; index += 1) {
+        const source = images[index];
+        if (source) {
+            sources.push(source);
+        }
+    }
+
+    return sources;
+};
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -132,12 +172,15 @@ const Reader: React.FC = () => {
     const [ocrEnabled, setOcrEnabled] = useState<boolean>(false);
     const [copyFeedback, setCopyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showBoxes, setShowBoxes] = useState<boolean>(true);
-    const [detectedBoxes, setDetectedBoxes] = useState<Array<{ id: string; text: string; bbox: { x: number; y: number; w: number; h: number } }>>([]);
+    const [detectedBoxes, setDetectedBoxes] = useState<ReaderOcrBox[]>([]);
     const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = useRef<boolean>(false);
     const preloadedImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+    const ocrPageCacheRef = useRef<Map<string, ReaderOcrBox[]>>(new Map());
+    const ocrInFlightRef = useRef<Map<string, Promise<ReaderOcrBox[]>>>(new Map());
+    const ocrRequestTokenRef = useRef<number>(0);
     const location = useLocation();
     const navigate = useNavigate();
     const { params, loading: settingsLoading } = useParams();
@@ -550,6 +593,171 @@ const Reader: React.FC = () => {
         }
     };
 
+    const rememberOcrBoxesForPage = useCallback((src: string, boxes: ReaderOcrBox[]) => {
+        const cache = ocrPageCacheRef.current;
+        if (cache.has(src)) {
+            cache.delete(src);
+        }
+        cache.set(src, boxes);
+
+        while (cache.size > getMaxOcrPageMemoryCache(preloadPageCount)) {
+            const oldestKey = cache.keys().next().value;
+            if (!oldestKey) {
+                break;
+            }
+            cache.delete(oldestKey);
+        }
+    }, [preloadPageCount]);
+
+    const clearOcrBoxesForPage = useCallback((src?: string | null) => {
+        if (!src) {
+            return;
+        }
+        ocrPageCacheRef.current.delete(src);
+    }, []);
+
+    const loadOcrBoxesForPage = useCallback(async (src: string, useMemoryCache: boolean = true): Promise<ReaderOcrBox[]> => {
+        if (useMemoryCache) {
+            const cachedBoxes = ocrPageCacheRef.current.get(src);
+            if (cachedBoxes) {
+                return cachedBoxes;
+            }
+        }
+
+        const inFlightRequest = ocrInFlightRef.current.get(src);
+        if (inFlightRequest) {
+            return inFlightRequest;
+        }
+
+        const requestPromise = (async () => {
+            const hasElectronOcrApi = !!(window.api && typeof window.api.ocrRecognize === 'function');
+            const api = getOcrApi();
+            const ocrResult = await api(src);
+
+            let { boxes } = ocrResult || {};
+            if (!hasElectronOcrApi && (!Array.isArray(boxes) || boxes.length === 0)) {
+                const fallback = await mockOcrRecognize(src);
+                boxes = fallback.boxes || [];
+            }
+
+            const nextBoxes = filterVisibleOcrBoxes(Array.isArray(boxes) ? boxes as ReaderOcrBox[] : []);
+            rememberOcrBoxesForPage(src, nextBoxes);
+            return nextBoxes;
+        })();
+
+        ocrInFlightRef.current.set(src, requestPromise);
+
+        try {
+            return await requestPromise;
+        } finally {
+            if (ocrInFlightRef.current.get(src) === requestPromise) {
+                ocrInFlightRef.current.delete(src);
+            }
+        }
+    }, [rememberOcrBoxesForPage]);
+
+    useEffect(() => {
+        if (!ocrEnabled) {
+            setDetectedBoxes([]);
+            setSelectedBoxes([]);
+            setOcrError(null);
+            setOcrLoading(false);
+            return;
+        }
+
+        const src = images[currentIndex];
+        if (!src) {
+            setDetectedBoxes([]);
+            setSelectedBoxes([]);
+            setOcrError(null);
+            setOcrLoading(false);
+            return;
+        }
+
+        const cachedBoxes = ocrPageCacheRef.current.get(src);
+        setSelectedBoxes([]);
+
+        if (cachedBoxes) {
+            setDetectedBoxes(cachedBoxes);
+            setOcrError(null);
+            setOcrLoading(false);
+            return;
+        }
+
+        const requestToken = ocrRequestTokenRef.current + 1;
+        ocrRequestTokenRef.current = requestToken;
+
+        setDetectedBoxes([]);
+        setOcrError(null);
+        setOcrLoading(true);
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const boxes = await loadOcrBoxesForPage(src, false);
+                if (cancelled || requestToken !== ocrRequestTokenRef.current) {
+                    return;
+                }
+                setDetectedBoxes(boxes);
+            } catch (err: any) {
+                if (cancelled || requestToken !== ocrRequestTokenRef.current) {
+                    return;
+                }
+                setDetectedBoxes([]);
+                setOcrError(String(err && err.message ? err.message : err));
+            } finally {
+                if (cancelled || requestToken !== ocrRequestTokenRef.current) {
+                    return;
+                }
+                setOcrLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage]);
+
+    useEffect(() => {
+        if (!ocrEnabled || preloadPageCount === null || images.length === 0) {
+            return;
+        }
+
+        const orderedSources = getOrderedOcrPreRenderSources(images, currentIndex, preloadPageCount);
+        if (orderedSources.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+
+        (async () => {
+            for (const source of orderedSources) {
+                if (cancelled) {
+                    return;
+                }
+
+                if (ocrPageCacheRef.current.has(source)) {
+                    continue;
+                }
+
+                try {
+                    await loadOcrBoxesForPage(source, true);
+                } catch (error) {
+                    if (cancelled) {
+                        return;
+                    }
+
+                    console.warn('Reader: OCR pre-render failed', { source, error });
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
+
     // selected bubble data derived from detectedBoxes
     const selectedBoxData = selectedBoxes.length > 0 ? detectedBoxes.find(b => b.id === selectedBoxes[0]) || null : null;
     const vocabItems = selectedBoxData ? selectedBoxData.text.split(/\s+/).filter(Boolean).slice(0, 3) : [];
@@ -666,23 +874,23 @@ const Reader: React.FC = () => {
                             try {
                                 if (!images || images.length === 0) throw new Error('No image to OCR');
                                 const src = images[currentIndex];
-                                const api = getOcrApi();
-                                const ocrResult = await api(src);
-
-                                let { boxes } = ocrResult || {};
-                                if (!Array.isArray(boxes) || boxes.length === 0) {
-                                    // fallback to built-in mock to ensure dev sees boxes
-                                    const fallback = await mockOcrRecognize(src);
-                                    boxes = fallback.boxes || [];
-                                }
-                                setDetectedBoxes(Array.isArray(boxes) ? boxes : []);
+                                clearOcrBoxesForPage(src);
+                                const boxes = await loadOcrBoxesForPage(src, false);
+                                setDetectedBoxes(boxes);
+                                setSelectedBoxes([]);
                             } catch (err: any) {
+                                setDetectedBoxes([]);
                                 setOcrError(String(err && err.message ? err.message : err));
                             } finally {
                                 setOcrLoading(false);
                             }
                         }}
-                        onClear={() => { setDetectedBoxes([]); setSelectedBoxes([]); setOcrError(null); }}
+                        onClear={() => {
+                            clearOcrBoxesForPage(images[currentIndex]);
+                            setDetectedBoxes([]);
+                            setSelectedBoxes([]);
+                            setOcrError(null);
+                        }}
                         onSelectBox={(id, additive) => {
                             if (!id) { setSelectedBoxes([]); return; }
                             setSelectedBoxes(prev => {

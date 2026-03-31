@@ -20,31 +20,16 @@ type Props = {
 };
 
 const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, onSimulate, onClear, onSelectBox, selectedBoxData, vocabItems, loading, error, showBoxes = true, onToggleShowBoxes }) => {
-    const [localLoading, setLocalLoading] = useState<boolean>(false);
-    const [localError, setLocalError] = useState<string | null>(null);
     const [boxes, setBoxes] = useState<Box[]>(detectedBoxes || []);
 
     // sync incoming detectedBoxes
     useEffect(() => setBoxes(detectedBoxes || []), [detectedBoxes]);
 
-    useEffect(() => {
-        // when panel opens, ask parent to run detection if no boxes
-        if (ocrEnabled && (!boxes || boxes.length === 0)) {
-            // call parent's onSimulate to populate Reader.detectedBoxes
-            try {
-                if (typeof onSimulate === 'function') onSimulate();
-            } catch (err) {
-                // ignore errors; Reader will surface them via props
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ocrEnabled]);
-
     return (
         <aside className="reader-ocr-panel" aria-label="OCR panel">
             <div className="ocr-panel-inner">
                 <div className="ocr-panel-header">
-                    <strong>OCR (mock)</strong>
+                    <strong>OCR</strong>
                     <div className="ocr-panel-controls">
                         <button onClick={() => onSimulate()}>Relancer</button>
                         <button onClick={() => { setBoxes([]); onClear(); }}>Clear</button>
@@ -65,8 +50,8 @@ const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, o
                 </div>
 
                 <div className="ocr-status">
-                    {loading || localLoading ? <div>Chargement OCR…</div> : null}
-                    {error || localError ? <div style={{ color: 'crimson' }}>{error || localError}</div> : null}
+                    {loading ? <div>Chargement OCR…</div> : null}
+                    {error ? <div style={{ color: 'crimson' }}>{error}</div> : null}
                 </div>
 
                 <div className="ocr-box-list">

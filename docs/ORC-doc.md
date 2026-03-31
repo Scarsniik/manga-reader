@@ -16,6 +16,10 @@ Le but n'est plus seulement de décrire l'UI, mais de fixer :
 
 Le choix n'est pas juridiquement "figé", mais c'est la direction recommandée à ce stade.
 
+Pour l'état du premier jet déjà branché dans le code, voir aussi :
+
+- [ORC-implementation-notes.md](/d:/Cacahouete/Manga-reader/manga-helper/docs/ORC-implementation-notes.md)
+
 ## Résumé exécutif
 
 Nous conservons l'idée produit de l'ancien document :
@@ -315,6 +319,12 @@ Ce mode est utile :
 - navigation : lecture du cache si présent
 - arrière-plan : pré-analyse des 1 à 3 pages suivantes
 - action utilisateur optionnelle : "Préparer l'OCR du manga" ou "Préparer l'OCR du chapitre"
+
+Dans le premier jet actuellement branché dans le repo :
+
+- quand le panneau OCR est actif, la page courante est traitée en priorité
+- puis le reader pré-rend l'OCR vers l'avant, page par page, dans l'ordre
+- le nombre de pages anticipées suit `readerPreloadPageCount`
 
 ## Contrat de données
 

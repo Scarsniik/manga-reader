@@ -49,7 +49,7 @@ export default function SettingsModalContent() {
     },
     {
       name: 'readerPreloadPageCount',
-      label: 'Précharger N pages avant et après la page actuelle',
+      label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant',
       type: 'number',
       min: 0,
       max: MAX_READER_PRELOAD_PAGE_COUNT,
@@ -61,6 +61,23 @@ export default function SettingsModalContent() {
       label: 'JPDB API Key (optionnel)',
       type: 'text',
       required: false,
+    },
+    {
+      name: 'ocrPythonPath',
+      label: 'Chemin Python OCR (optionnel)',
+      type: 'text',
+      required: false,
+    },
+    {
+      name: 'ocrRepoPath',
+      label: 'Chemin repo OCR (optionnel)',
+      type: 'text',
+      required: false,
+    },
+    {
+      name: 'ocrForceCpu',
+      label: 'Forcer OCR sur CPU',
+      type: 'checkbox',
     },
     {
       name: 'persistMangaFilters',
@@ -82,6 +99,9 @@ export default function SettingsModalContent() {
       titleLineCount: Number(values.titleLineCount) || 1,
       readerPreloadPageCount,
       jpdbApiKey: values.jpdbApiKey || '',
+      ocrPythonPath: values.ocrPythonPath || '',
+      ocrRepoPath: values.ocrRepoPath || '',
+      ocrForceCpu: !!values.ocrForceCpu,
       persistMangaFilters,
       mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
     }

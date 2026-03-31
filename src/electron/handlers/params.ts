@@ -23,6 +23,9 @@ const defaultSettings = {
     titleLineCount: 2,
     readerPreloadPageCount: DEFAULT_READER_PRELOAD_PAGE_COUNT,
     jpdbApiKey: "",
+    ocrPythonPath: "",
+    ocrRepoPath: "",
+    ocrForceCpu: false,
     persistMangaFilters: true,
     mangaListFilters: null,
 };

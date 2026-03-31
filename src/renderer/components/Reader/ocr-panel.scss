@@ -5,11 +5,13 @@
   box-shadow: -2px 0 8px rgba(0,0,0,0.6);
   font-size: 13px;
   color: #e6e6e6;
-
-  position: fixed;
-  right: 30px;
-  top: 30px;
-  width: 742px;
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border-radius: 10px;
 }
 
 .ocr-panel-inner {
