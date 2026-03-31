@@ -616,15 +616,22 @@ const Reader: React.FC = () => {
         ocrPageCacheRef.current.delete(src);
     }, []);
 
-    const loadOcrBoxesForPage = useCallback(async (src: string, useMemoryCache: boolean = true): Promise<ReaderOcrBox[]> => {
-        if (useMemoryCache) {
+    const loadOcrBoxesForPage = useCallback(async (
+        src: string,
+        useMemoryCache: boolean = true,
+        options?: { forceRefresh?: boolean }
+    ): Promise<ReaderOcrBox[]> => {
+        const forceRefresh = !!options?.forceRefresh;
+
+        if (!forceRefresh && useMemoryCache) {
             const cachedBoxes = ocrPageCacheRef.current.get(src);
             if (cachedBoxes) {
                 return cachedBoxes;
             }
         }
 
-        const inFlightRequest = ocrInFlightRef.current.get(src);
+        const inFlightKey = forceRefresh ? `${src}::force-refresh` : src;
+        const inFlightRequest = ocrInFlightRef.current.get(inFlightKey);
         if (inFlightRequest) {
             return inFlightRequest;
         }
@@ -632,7 +639,7 @@ const Reader: React.FC = () => {
         const requestPromise = (async () => {
             const hasElectronOcrApi = !!(window.api && typeof window.api.ocrRecognize === 'function');
             const api = getOcrApi();
-            const ocrResult = await api(src);
+            const ocrResult = await api(src, forceRefresh ? { forceRefresh: true } : undefined);
 
             let { boxes } = ocrResult || {};
             if (!hasElectronOcrApi && (!Array.isArray(boxes) || boxes.length === 0)) {
@@ -645,13 +652,13 @@ const Reader: React.FC = () => {
             return nextBoxes;
         })();
 
-        ocrInFlightRef.current.set(src, requestPromise);
+        ocrInFlightRef.current.set(inFlightKey, requestPromise);
 
         try {
             return await requestPromise;
         } finally {
-            if (ocrInFlightRef.current.get(src) === requestPromise) {
-                ocrInFlightRef.current.delete(src);
+            if (ocrInFlightRef.current.get(inFlightKey) === requestPromise) {
+                ocrInFlightRef.current.delete(inFlightKey);
             }
         }
     }, [rememberOcrBoxesForPage]);
@@ -875,7 +882,7 @@ const Reader: React.FC = () => {
                                 if (!images || images.length === 0) throw new Error('No image to OCR');
                                 const src = images[currentIndex];
                                 clearOcrBoxesForPage(src);
-                                const boxes = await loadOcrBoxesForPage(src, false);
+                                const boxes = await loadOcrBoxesForPage(src, false, { forceRefresh: true });
                                 setDetectedBoxes(boxes);
                                 setSelectedBoxes([]);
                             } catch (err: any) {

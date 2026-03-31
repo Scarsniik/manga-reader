@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('api', {
     listPages: (folderPath: string) => ipcRenderer.invoke('list-pages', folderPath),
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     // OCR
-    ocrRecognize: (imagePathOrDataUrl: string) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl),
+    ocrRecognize: (imagePathOrDataUrl: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl, options),
     ocrTerminate: () => ipcRenderer.invoke('ocr-terminate'),
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),

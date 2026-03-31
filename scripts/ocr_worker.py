@@ -4,7 +4,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 
 ENGINE = None
@@ -93,6 +93,94 @@ def build_engine():
     return ENGINE
 
 
+def safe_float(value: Any):
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def safe_bbox_mask_score(mask_refined, xyxy):
+    try:
+        x1, y1, x2, y2 = [int(v) for v in xyxy]
+        if x2 <= x1 or y2 <= y1:
+            return None
+        block_mask = mask_refined[y1:y2, x1:x2]
+        if block_mask is None or getattr(block_mask, "size", 0) == 0:
+            return None
+        return float(block_mask.mean() / 255.0)
+    except Exception:
+        return None
+
+
+def safe_aspect_ratio(blk):
+    try:
+        return float(blk.aspect_ratio())
+    except Exception:
+        return None
+
+
+def recognize_with_metadata(image_path: str):
+    import cv2
+    from PIL import Image
+    from mokuro import __version__
+    from mokuro.utils import imread
+
+    engine = build_engine()
+    img = imread(image_path)
+    if img is None:
+        raise ValueError("Invalid or unsupported image")
+
+    height, width, *_ = img.shape
+    result = {"version": __version__, "img_width": width, "img_height": height, "blocks": []}
+
+    if getattr(engine, "disable_ocr", False):
+        return result
+
+    _mask, mask_refined, blk_list = engine.text_detector(img, refine_mode=1, keep_undetected_mask=True)
+
+    for blk in blk_list:
+        result_blk = {
+            "box": list(blk.xyxy),
+            "vertical": blk.vertical,
+            "font_size": blk.font_size,
+            "angle": safe_float(getattr(blk, "angle", None)),
+            "prob": safe_float(getattr(blk, "prob", None)),
+            "language": getattr(blk, "language", None),
+            "aspect_ratio": safe_aspect_ratio(blk),
+            "mask_score": safe_bbox_mask_score(mask_refined, blk.xyxy),
+            "lines_coords": [],
+            "lines": [],
+        }
+
+        for line_idx, line in enumerate(blk.lines_array()):
+            max_ratio = engine.max_ratio_vert if blk.vertical else engine.max_ratio_hor
+            line_crops, _cut_points = engine.split_into_chunks(
+                img,
+                mask_refined,
+                blk,
+                line_idx,
+                textheight=engine.text_height,
+                max_ratio=max_ratio,
+                anchor_window=engine.anchor_window,
+            )
+
+            line_text = ""
+            for line_crop in line_crops:
+                if blk.vertical:
+                    line_crop = cv2.rotate(line_crop, cv2.ROTATE_90_CLOCKWISE)
+                line_text += engine.mocr(Image.fromarray(line_crop))
+
+            result_blk["lines_coords"].append(line.tolist())
+            result_blk["lines"].append(line_text)
+
+        result["blocks"].append(result_blk)
+
+    return result
+
+
 def write_message(payload):
     sys.stdout.write(json.dumps(to_jsonable(payload), ensure_ascii=False) + "\n")
     sys.stdout.flush()
@@ -156,8 +244,7 @@ def handle_recognize(request_id, payload):
     if not image_path:
         raise ValueError("Missing imagePath")
 
-    engine = build_engine()
-    result = engine(image_path)
+    result = recognize_with_metadata(image_path)
 
     return {
         "id": request_id,

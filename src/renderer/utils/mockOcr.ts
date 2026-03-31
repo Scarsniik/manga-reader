@@ -4,7 +4,7 @@ export type Box = {
   bbox: { x: number; y: number; w: number; h: number };
 };
 
-export async function mockOcrRecognize(_src?: string): Promise<{ boxes: Box[] }> {
+export async function mockOcrRecognize(_src?: string, _options?: Record<string, any>): Promise<{ boxes: Box[] }> {
   // Return the sample from ORC-doc.md
   return {
     boxes: [
@@ -22,7 +22,7 @@ export function getOcrApi() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w: any = typeof window !== 'undefined' ? window : {};
   if (w.api && typeof w.api.ocrRecognize === 'function') {
-    return async (src?: string) => w.api.ocrRecognize(src);
+    return async (src?: string, options?: Record<string, any>) => w.api.ocrRecognize(src, options);
   }
   return mockOcrRecognize;
 }

@@ -325,6 +325,7 @@ Dans le premier jet actuellement branché dans le repo :
 - quand le panneau OCR est actif, la page courante est traitée en priorité
 - puis le reader pré-rend l'OCR vers l'avant, page par page, dans l'ordre
 - le nombre de pages anticipées suit `readerPreloadPageCount`
+- un filtrage conservateur retire déjà certains faux positifs évidents sur les pages décoratives ou de titre
 
 ## Contrat de données
 

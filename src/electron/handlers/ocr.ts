@@ -13,6 +13,11 @@ type RawOcrBlock = {
   box?: [number, number, number, number] | number[];
   vertical?: boolean;
   font_size?: number;
+  angle?: number | null;
+  prob?: number | null;
+  language?: string | null;
+  aspect_ratio?: number | null;
+  mask_score?: number | null;
   lines?: string[];
   lines_coords?: Array<Array<[number, number]>>;
 };
@@ -39,8 +44,15 @@ type NormalizedPageBlock = {
   bbox: { x: number; y: number; w: number; h: number };
   vertical: boolean;
   fontSize?: number;
+  angle?: number | null;
+  detectorConfidence?: number | null;
+  language?: string | null;
+  aspectRatio?: number | null;
+  maskScore?: number | null;
   lines: Array<{ text: string; polygon?: Array<[number, number]> }>;
   confidence?: number | null;
+  filteredOut?: boolean;
+  filterReason?: string | null;
 };
 
 type NormalizedOcrResult = {
@@ -86,13 +98,107 @@ type OcrWorkerState = {
 
 const OCR_CACHE_DIR = path.join(dataDir, "ocr-cache");
 const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
-const CACHE_SCHEMA_VERSION = "mokuro-page-v1";
+const CACHE_SCHEMA_VERSION = "mokuro-page-v2";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
 const WORKER_REQUEST_TIMEOUT_MS = 5 * 60_000;
 
 let workerState: OcrWorkerState | null = null;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const OCR_TEXT_SEGMENT_SPLIT_RE = /[\s\u3000、。．，,・･…‥！？!?：:；;「」『』（）()［］\[\]【】〈〉《》]+/u;
+const OCR_WORD_LIKE_CHAR_RE = /[0-9A-Za-z\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff々〆ヵヶ]/u;
+
+const countMeaningfulOcrChars = (text: string) => (
+  Array.from(text).reduce((count, char) => count + (OCR_WORD_LIKE_CHAR_RE.test(char) ? 1 : 0), 0)
+);
+
+const getSuspiciousRepeatedSegment = (text: string): string | null => {
+  const segments = text
+    .split(OCR_TEXT_SEGMENT_SPLIT_RE)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length >= 3);
+
+  if (segments.length < 3) {
+    return null;
+  }
+
+  const counts = new Map<string, number>();
+  for (const segment of segments) {
+    counts.set(segment, (counts.get(segment) || 0) + 1);
+  }
+
+  for (const [segment, count] of counts.entries()) {
+    const coverage = segment.length * count;
+    if (count >= 3 && coverage >= Math.max(10, text.length * 0.45)) {
+      return segment;
+    }
+  }
+
+  return null;
+};
+
+const hasSuspiciousRepeatedCharRun = (text: string) => /(.)\1{5,}/u.test(text);
+
+const isTextDensitySuspicious = (block: NormalizedPageBlock, meaningfulChars: number) => {
+  if (!block.fontSize || block.fontSize <= 0 || meaningfulChars < 10) {
+    return false;
+  }
+
+  const blockWidth = Math.max(1, block.bboxPx.x2 - block.bboxPx.x1);
+  const blockHeight = Math.max(1, block.bboxPx.y2 - block.bboxPx.y1);
+  const lineCount = Math.max(1, block.lines.length);
+  const charsPerLineCapacity = block.vertical
+    ? blockHeight / block.fontSize
+    : blockWidth / block.fontSize;
+  const expectedChars = Math.max(1, charsPerLineCapacity * lineCount);
+
+  return meaningfulChars > Math.max(14, expectedChars * 2.75);
+};
+
+const isMaskCoverageSuspicious = (block: NormalizedPageBlock, meaningfulChars: number) => {
+  if (block.maskScore == null || meaningfulChars < 10) {
+    return false;
+  }
+
+  const blockAreaRatio = block.bbox.w * block.bbox.h;
+  return block.maskScore < 0.12 && blockAreaRatio < 0.08;
+};
+
+const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | null => {
+  const compactText = block.text.replace(/\s+/g, "");
+  if (!compactText) {
+    return "empty-text";
+  }
+
+  const totalChars = Array.from(compactText).length;
+  const meaningfulChars = countMeaningfulOcrChars(compactText);
+  if (meaningfulChars === 0 && totalChars >= 6) {
+    return "punctuation-only";
+  }
+
+  if (totalChars >= 8 && meaningfulChars / totalChars < 0.25) {
+    return "mostly-punctuation";
+  }
+
+  if (hasSuspiciousRepeatedCharRun(compactText)) {
+    return "repeated-char-run";
+  }
+
+  const repeatedSegment = getSuspiciousRepeatedSegment(compactText);
+  if (repeatedSegment) {
+    return `repeated-segment:${repeatedSegment}`;
+  }
+
+  if (isTextDensitySuspicious(block, meaningfulChars)) {
+    return "text-density-mismatch";
+  }
+
+  if (isMaskCoverageSuspicious(block, meaningfulChars)) {
+    return "low-mask-coverage";
+  }
+
+  return null;
+};
 
 const resolveImagePath = (imagePathOrDataUrl: string): string => {
   if (!imagePathOrDataUrl) {
@@ -200,6 +306,15 @@ async function writeCache(cacheKey: string, result: NormalizedOcrResult) {
   const cachePath = getCachePath(cacheKey);
   await fs.mkdir(path.dirname(cachePath), { recursive: true });
   await fs.writeFile(cachePath, JSON.stringify(result, null, 2), "utf-8");
+}
+
+async function deleteCache(cacheKey: string) {
+  const cachePath = getCachePath(cacheKey);
+  try {
+    await fs.unlink(cachePath);
+  } catch {
+    // ignore missing cache entries
+  }
 }
 
 async function findExistingPath(candidates: string[]) {
@@ -427,8 +542,7 @@ async function normalizeRawResult(raw: RawOcrResult, sourceImagePath: string, fr
     const lines = Array.isArray(block.lines) ? block.lines.map((line) => String(line)) : [];
     const text = lines.join("");
     const id = `b${String(index + 1).padStart(4, "0")}`;
-
-    return {
+    const normalizedBlock: NormalizedPageBlock = {
       id,
       text,
       bboxPx: { x1, y1, x2, y2 },
@@ -440,15 +554,42 @@ async function normalizeRawResult(raw: RawOcrResult, sourceImagePath: string, fr
       },
       vertical: !!block.vertical,
       fontSize: typeof block.font_size === "number" ? block.font_size : undefined,
+      angle: typeof block.angle === "number" ? block.angle : null,
+      detectorConfidence: typeof block.prob === "number" ? block.prob : null,
+      language: typeof block.language === "string" ? block.language : null,
+      aspectRatio: typeof block.aspect_ratio === "number" ? block.aspect_ratio : null,
+      maskScore: typeof block.mask_score === "number" ? block.mask_score : null,
       lines: lines.map((line, lineIndex) => ({
         text: line,
         polygon: Array.isArray(block.lines_coords?.[lineIndex]) ? block.lines_coords?.[lineIndex] : undefined,
       })),
       confidence: null,
+      filteredOut: false,
+      filterReason: null,
     };
+
+    const filterReason = getOcrBlockFilterReason(normalizedBlock);
+    normalizedBlock.filteredOut = !!filterReason;
+    normalizedBlock.filterReason = filterReason;
+    return normalizedBlock;
   }).filter((block) => block.text.trim().length > 0);
 
-  const boxes: NormalizedBox[] = blocks.map((block) => ({
+  const visibleBlocks = blocks.filter((block) => !block.filteredOut);
+  const filteredBlockCount = blocks.length - visibleBlocks.length;
+
+  if (filteredBlockCount > 0) {
+    console.info("[ocr] Filtered suspicious OCR blocks", {
+      sourceImagePath,
+      filteredBlockCount,
+      keptBlockCount: visibleBlocks.length,
+      reasons: blocks
+        .filter((block) => block.filteredOut)
+        .map((block) => block.filterReason)
+        .filter(Boolean),
+    });
+  }
+
+  const boxes: NormalizedBox[] = visibleBlocks.map((block) => ({
     id: block.id,
     text: block.text,
     bbox: block.bbox,
@@ -476,7 +617,7 @@ async function normalizeRawResult(raw: RawOcrResult, sourceImagePath: string, fr
   };
 }
 
-export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUrl: string, _opts?: Record<string, any>) {
+export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) {
   if (!imagePathOrDataUrl) {
     throw new Error("No image provided for OCR");
   }
@@ -489,9 +630,15 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
   try {
     const fingerprint = await getImageFingerprint(imagePath);
     const cacheKey = buildCacheKey(fingerprint);
-    const cached = await readCache(cacheKey);
-    if (cached) {
-      return cached;
+    const forceRefresh = !!opts?.forceRefresh;
+
+    if (forceRefresh) {
+      await deleteCache(cacheKey);
+    } else {
+      const cached = await readCache(cacheKey);
+      if (cached) {
+        return cached;
+      }
     }
 
     const raw = await callWorkerRecognize(imagePath, settings);

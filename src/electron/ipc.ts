@@ -73,8 +73,9 @@ ipcMain.handle("open-directory", async (event: IpcMainInvokeEvent) => {
 });
 
 // OCR
-ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDataUrl: string) => ocr.ocrRecognize(event, imagePathOrDataUrl, {
+ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) => ocr.ocrRecognize(event, imagePathOrDataUrl, {
     debug: true,
     returnRaw: true,
+    ...(opts || {}),
 }));
 ipcMain.handle("ocr-terminate", async () => ocr.ocrTerminate());

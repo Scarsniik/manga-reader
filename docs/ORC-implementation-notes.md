@@ -97,6 +97,18 @@ Corrections ajoutees apres les premiers tests dans l'application :
 - ajout d'un leger debordement du rectangle affiche autour de la box OCR pour qu'il colle moins au texte reconnu, sans dessiner un deuxieme cadre
 - pre-rendu OCR sequentiel base sur `readerPreloadPageCount`, dans l'ordre page courante puis pages suivantes
 - cache memoire OCR ajuste selon `readerPreloadPageCount` pour garder plus de pages chaudes lors des allers-retours
+- enrichissement des metadonnees OCR backend pour chaque bloc : angle, langue, score de masque, aspect ratio
+- filtrage conservateur des faux positifs evidents sur les pages compliquees
+- passage du schema de cache OCR a `mokuro-page-v2` pour forcer le recalcul avec le nouveau filtrage
+- le bouton `Relancer` force maintenant un nouveau calcul OCR backend au lieu de relire le cache disque
+
+Le filtrage ajoute ne cherche pas encore a "comprendre" toute la page. Il retire surtout les cas les plus suspects :
+
+- texte tres charge en ponctuation sans vrai contenu lexical
+- longues suites du meme caractere
+- segments de texte repetes plusieurs fois dans un meme bloc
+- densite de texte reconnue incoherente par rapport a la taille de la box et a la taille de police estimee
+- faible couverture du masque texte pour les petits blocs qui renvoient quand meme un texte long
 
 ### 6. Packaging de base du script Python
 
@@ -153,6 +165,7 @@ Test OCR reel realise sur un exemple local :
 - le chargement de `manga-ocr`
 - l'execution OCR
 - la serialisation du resultat
+- le renvoi des metadonnees supplementaires de bloc
 
 Resultat :
 
