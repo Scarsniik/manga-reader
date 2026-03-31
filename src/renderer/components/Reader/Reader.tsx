@@ -6,6 +6,7 @@ import ReaderHeader from './ReaderHeader';
 import ImageViewer from './ImageViewer';
 import OcrPanel from './OcrPanel';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
+import useParams from '@/renderer/hooks/useParams';
 
 type ReaderLocationState = {
     from?: {
@@ -107,6 +108,21 @@ const copyImageViaBrowserClipboard = async (
     }
 };
 
+const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
+const MAX_READER_PRELOAD_PAGE_COUNT = 10;
+
+const normalizeReaderPreloadPageCount = (value: unknown): number => {
+    const parsed = typeof value === 'number'
+        ? value
+        : (typeof value === 'string' && value.trim().length > 0 ? Number(value) : Number.NaN);
+
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_READER_PRELOAD_PAGE_COUNT;
+    }
+
+    return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
+};
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -121,10 +137,15 @@ const Reader: React.FC = () => {
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = useRef<boolean>(false);
+    const preloadedImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
     const location = useLocation();
     const navigate = useNavigate();
+    const { params, loading: settingsLoading } = useParams();
     const query = new URLSearchParams(location.search);
     const locationState = location.state as ReaderLocationState;
+    const preloadPageCount = settingsLoading
+        ? null
+        : normalizeReaderPreloadPageCount(params?.readerPreloadPageCount);
 
     const handleBack = useCallback(() => {
         const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
@@ -292,6 +313,64 @@ const Reader: React.FC = () => {
             // ignore
         }
     }, [currentIndex]);
+
+    useEffect(() => {
+        if (preloadPageCount === null || images.length === 0 || preloadPageCount <= 0) {
+            preloadedImagesRef.current.clear();
+            return;
+        }
+
+        const targetSources = new Set<string>();
+        const startIndex = Math.max(0, currentIndex - preloadPageCount);
+        const endIndex = Math.min(images.length - 1, currentIndex + preloadPageCount);
+
+        for (let index = startIndex; index <= endIndex; index += 1) {
+            if (index === currentIndex) {
+                continue;
+            }
+
+            const source = images[index];
+            if (source) {
+                targetSources.add(source);
+            }
+        }
+
+        const preloadedImages = preloadedImagesRef.current;
+        const staleSources: string[] = [];
+
+        for (const source of preloadedImages.keys()) {
+            if (!targetSources.has(source)) {
+                staleSources.push(source);
+            }
+        }
+
+        for (const source of staleSources) {
+            preloadedImages.delete(source);
+        }
+
+        for (const source of targetSources) {
+            if (preloadedImages.has(source)) {
+                continue;
+            }
+
+            const image = new window.Image();
+            image.decoding = 'async';
+            image.loading = 'eager';
+            image.src = source;
+
+            if (typeof image.decode === 'function') {
+                void image.decode().catch(() => undefined);
+            }
+
+            preloadedImages.set(source, image);
+        }
+    }, [currentIndex, images, preloadPageCount]);
+
+    useEffect(() => {
+        return () => {
+            preloadedImagesRef.current.clear();
+        };
+    }, []);
 
     // Persist current page into the manga object (optional) and notify backend.
     useEffect(() => {

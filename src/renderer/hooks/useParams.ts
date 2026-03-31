@@ -6,6 +6,7 @@ export type AppParams = {
     showPageNumbers?: boolean;
     showHiddens?: boolean;
     titleLineCount?: number;
+    readerPreloadPageCount?: number;
     persistMangaFilters?: boolean;
     mangaListFilters?: {
         query: string;

@@ -7,6 +7,9 @@ export type Field = {
   options?: Option[]
   placeholder?: string
   required?: boolean
+  min?: number
+  max?: number
+  step?: number
   accept?: string // for file inputs
   multiple?: boolean // for file or multi select
 }

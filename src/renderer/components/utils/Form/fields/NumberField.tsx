@@ -9,6 +9,16 @@ type Props = {
 
 export default function NumberField({ field, value, onChange }: Props) {
   return (
-    <input id={field.name} name={field.name} type="number" placeholder={field.placeholder} value={value ?? ''} onChange={onChange} />
+    <input
+      id={field.name}
+      name={field.name}
+      type="number"
+      placeholder={field.placeholder}
+      value={value ?? ''}
+      min={field.min}
+      max={field.max}
+      step={field.step}
+      onChange={onChange}
+    />
   )
 }

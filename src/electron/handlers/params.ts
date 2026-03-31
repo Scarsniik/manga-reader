@@ -1,11 +1,27 @@
 import { promises as fs } from "fs";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
+const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
+const MAX_READER_PRELOAD_PAGE_COUNT = 10;
+
+const normalizeReaderPreloadPageCount = (value: unknown): number => {
+    const parsed = typeof value === "number"
+        ? value
+        : (typeof value === "string" && value.trim().length > 0 ? Number(value) : Number.NaN);
+
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_READER_PRELOAD_PAGE_COUNT;
+    }
+
+    return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
+};
+
 const defaultSettings = {
     libraryPath: "",
     showPageNumbers: true,
     showHiddens: false,
     titleLineCount: 2,
+    readerPreloadPageCount: DEFAULT_READER_PRELOAD_PAGE_COUNT,
     jpdbApiKey: "",
     persistMangaFilters: true,
     mangaListFilters: null,
@@ -21,7 +37,11 @@ export async function getSettings() {
         }
         try {
             const parsed = JSON.parse(data);
-            const merged = { ...defaultSettings, ...(parsed || {}) };
+            const merged = {
+                ...defaultSettings,
+                ...(parsed || {}),
+            };
+            merged.readerPreloadPageCount = normalizeReaderPreloadPageCount(merged.readerPreloadPageCount);
             if (JSON.stringify(parsed) !== JSON.stringify(merged)) {
                 await ensureDataDir();
                 await fs.writeFile(paramsFilePath, JSON.stringify(merged, null, 2));
@@ -46,9 +66,15 @@ export async function getSettings() {
 
 export async function saveSettings(event: any, settings: any) {
     try {
+        const nextSettings = {
+            ...defaultSettings,
+            ...(settings || {}),
+        };
+        nextSettings.readerPreloadPageCount = normalizeReaderPreloadPageCount(nextSettings.readerPreloadPageCount);
+
         await ensureDataDir();
-        await fs.writeFile(paramsFilePath, JSON.stringify(settings || {}, null, 2));
-        return settings || {};
+        await fs.writeFile(paramsFilePath, JSON.stringify(nextSettings, null, 2));
+        return nextSettings;
     } catch (error) {
         console.error("Error saving params file:", error);
         throw new Error("Failed to save params");
