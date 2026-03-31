@@ -339,7 +339,14 @@ const MangaManager: React.FC = () => {
                 <h1>Gestion des mangas</h1>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <button onClick={() => openModal(buildTagsModal())}>Tags</button>
-                    <button onClick={() => openModal(buildOcrQueueModal())}>Avancement OCR</button>
+                    <button
+                        onClick={() => openModal(buildOcrQueueModal({
+                            selectedMangaIds: selectedIds,
+                            filteredMangaIds: displayedMangas.map((m) => m.id),
+                        }))}
+                    >
+                        Avancement OCR
+                    </button>
                     <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
                     <button onClick={onAddClick}>Ajouter</button>
                     <button

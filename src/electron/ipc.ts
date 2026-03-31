@@ -96,4 +96,5 @@ ipcMain.handle("ocr-queue-status", async () => ocr.ocrGetQueueStatus());
 ipcMain.handle("ocr-pause-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrPauseJob(event, jobId));
 ipcMain.handle("ocr-resume-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrResumeJob(event, jobId));
 ipcMain.handle("ocr-cancel-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrCancelJob(event, jobId));
+ipcMain.handle("ocr-cancel-all-jobs", async () => ocr.ocrCancelAllJobs());
 ipcMain.handle("ocr-terminate", async () => ocr.ocrTerminate());

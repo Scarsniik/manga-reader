@@ -176,7 +176,11 @@ Ce qui a ete ajoute dans cette phase :
   - affichage des jobs
   - progression par manga
   - action `OCR toute la bibliotheque`
+  - action `Tout annuler` pour couper tous les jobs OCR encore actifs d'un coup
+  - implementation prioritaire via annulation job par job, pour reposer sur le meme chemin fiable que le bouton `Annuler` individuel
   - choix `seulement sans OCR` ou `reecraser tout`
+  - leger espace ajoute au-dessus des boutons d'action par manga dans la liste d'avancement pour mieux separer les controles du texte de statut
+  - liste d'avancement rendue scrollable independamment pour garder les boutons du haut visibles pendant la navigation dans les jobs
 - option de lancement automatique de l'OCR complet a l'importation
 - option pour activer ou desactiver l'application automatique de la langue japonaise
 

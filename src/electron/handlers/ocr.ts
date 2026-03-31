@@ -1699,7 +1699,13 @@ export async function ocrStartManga(_event: IpcMainInvokeEvent, mangaId: string,
 }
 
 export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Record<string, any>) {
-  const mangas = await getMangas();
+  const allMangas = await getMangas();
+  const requestedIds = Array.isArray(options?.mangaIds)
+    ? new Set(options.mangaIds.map((id: unknown) => String(id)))
+    : null;
+  const mangas = requestedIds
+    ? allMangas.filter((manga: any) => requestedIds.has(String(manga.id)))
+    : allMangas;
   const settings = await getSettings();
   const mode = options?.mode === "overwrite_all" ? "overwrite_all" : "missing_only";
   const queuedJobs: OcrQueueJobSnapshot[] = [];
@@ -1733,6 +1739,8 @@ export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Reco
   }
 
   return {
+    scope: requestedIds ? "subset" : "library",
+    requestedCount: mangas.length,
     queuedCount: queuedJobs.length,
     queuedJobs,
     skippedExisting,
@@ -1837,14 +1845,38 @@ export async function ocrCancelJob(_event: IpcMainInvokeEvent, jobId: string) {
     throw new Error("OCR job not found");
   }
 
+  const shouldCancelNow = !["completed", "cancelled", "error"].includes(job.status);
   touchQueueJob(job, {
     cancelRequested: true,
-    status: job.status === "queued" || job.status === "paused" ? "cancelled" : job.status,
+    pauseRequested: false,
+    status: shouldCancelNow ? "cancelled" : job.status,
     message: "Annulation demandee",
-    completedAt: job.status === "queued" || job.status === "paused" ? new Date().toISOString() : job.completedAt,
+    completedAt: shouldCancelNow ? new Date().toISOString() : job.completedAt,
   });
 
   return cloneQueueJob(job);
+}
+
+export async function ocrCancelAllJobs() {
+  const activeJobs = ocrQueueOrder
+    .map((jobId) => ocrQueueJobs.get(jobId))
+    .filter((job): job is OcrQueueJob => !!job)
+    .filter((job) => !["completed", "cancelled", "error"].includes(job.status));
+
+  for (const job of activeJobs) {
+    touchQueueJob(job, {
+      cancelRequested: true,
+      pauseRequested: false,
+      status: "cancelled",
+      message: "Annulation demandee",
+      completedAt: new Date().toISOString(),
+    });
+  }
+
+  return {
+    cancelledCount: activeJobs.length,
+    status: await ocrGetQueueStatus(),
+  };
 }
 
 export async function prewarmOcrEngine() {

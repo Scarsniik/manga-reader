@@ -2,10 +2,20 @@ import React from 'react';
 import { ModalOptions } from '@/renderer/context/ModalContext';
 import OcrQueueModalContent from './OcrQueueModalContent';
 
-export default function buildOcrQueueModal(): ModalOptions {
+type OcrQueueModalInput = {
+  selectedMangaIds?: string[];
+  filteredMangaIds?: string[];
+};
+
+export default function buildOcrQueueModal(options?: OcrQueueModalInput): ModalOptions {
   return {
     title: 'Avancement OCR',
-    content: <OcrQueueModalContent />,
+    content: (
+      <OcrQueueModalContent
+        selectedMangaIds={options?.selectedMangaIds || []}
+        filteredMangaIds={options?.filteredMangaIds || []}
+      />
+    ),
     actions: [
       { label: 'Fermer', variant: 'secondary' },
     ],

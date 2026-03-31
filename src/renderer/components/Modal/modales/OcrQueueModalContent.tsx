@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './OcrModalContent.scss';
 
+type Props = {
+  selectedMangaIds: string[];
+  filteredMangaIds: string[];
+};
+
 const formatJobStatus = (status?: string | null) => {
   switch (status) {
     case 'queued':
@@ -22,11 +27,11 @@ const formatJobStatus = (status?: string | null) => {
   }
 };
 
-const OcrQueueModalContent: React.FC = () => {
+const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredMangaIds }) => {
   const [queue, setQueue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [libraryChoiceOpen, setLibraryChoiceOpen] = useState(false);
+  const [choiceScope, setChoiceScope] = useState<'library' | 'selection' | 'filtered' | null>(null);
   const [lastLibraryResult, setLastLibraryResult] = useState<any>(null);
 
   const loadQueue = useCallback(async () => {
@@ -53,16 +58,24 @@ const OcrQueueModalContent: React.FC = () => {
     return () => window.clearInterval(timer);
   }, [loadQueue]);
 
-  const startLibrary = useCallback(async (mode: 'missing_only' | 'overwrite_all') => {
+  const startLibrary = useCallback(async (
+    mode: 'missing_only' | 'overwrite_all',
+    scope: 'library' | 'selection' | 'filtered'
+  ) => {
     if (!window.api || typeof window.api.ocrStartLibrary !== 'function') {
       setError('API OCR indisponible');
       return;
     }
 
     try {
-      const result = await window.api.ocrStartLibrary({ mode });
+      const mangaIds = scope === 'selection'
+        ? selectedMangaIds
+        : scope === 'filtered'
+          ? filteredMangaIds
+          : undefined;
+      const result = await window.api.ocrStartLibrary({ mode, mangaIds });
       setLastLibraryResult(result);
-      setLibraryChoiceOpen(false);
+      setChoiceScope(null);
       await loadQueue();
       try {
         window.dispatchEvent(new CustomEvent('mangas-updated'));
@@ -72,7 +85,7 @@ const OcrQueueModalContent: React.FC = () => {
     } catch (err: any) {
       setError(String(err?.message || err || 'Impossible de lancer l\'OCR de la bibliotheque'));
     }
-  }, [loadQueue]);
+  }, [filteredMangaIds, loadQueue, selectedMangaIds]);
 
   const runJobAction = useCallback(async (action: 'pause' | 'resume' | 'cancel', jobId: string) => {
     const apiName = action === 'pause'
@@ -93,45 +106,129 @@ const OcrQueueModalContent: React.FC = () => {
     }
   }, [loadQueue]);
 
+  const cancelAllJobs = useCallback(async () => {
+    if (!window.api) {
+      setError('API OCR indisponible');
+      return;
+    }
+
+    const activeJobs = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status));
+    if (activeJobs.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Annuler ${activeJobs.length} job(s) OCR encore actifs ?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setQueue((prev: any) => ({
+        ...(prev || {}),
+        jobs: (prev?.jobs || []).map((job: any) => (
+          ['completed', 'cancelled', 'error'].includes(job.status)
+            ? job
+            : {
+              ...job,
+              status: 'cancelled',
+              message: 'Annulation demandee',
+            }
+        )),
+      }));
+
+      if (typeof window.api.ocrCancelJob === 'function') {
+        for (const job of activeJobs) {
+          await window.api.ocrCancelJob(job.id);
+        }
+      } else if (typeof window.api.ocrCancelAllJobs === 'function') {
+        const result = await window.api.ocrCancelAllJobs();
+        if (result?.status) {
+          setQueue(result.status);
+        }
+      } else {
+        throw new Error('API OCR indisponible');
+      }
+
+      await loadQueue();
+    } catch (err: any) {
+      setError(String(err?.message || err || 'Impossible d\'annuler toute la file OCR'));
+    }
+  }, [loadQueue, queue?.jobs]);
+
+  const activeJobCount = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status)).length;
+
   return (
-    <div className="ocr-modal-content">
-      {loading ? <div>Chargement de la file OCR...</div> : null}
-      {error ? <div>{error}</div> : null}
+    <div className="ocr-modal-content ocr-queue-modal-content">
+      <div className="ocr-queue-top">
+        {loading ? <div>Chargement de la file OCR...</div> : null}
+        {error ? <div>{error}</div> : null}
 
-      <div className="ocr-queue-actions">
-        <button type="button" onClick={() => setLibraryChoiceOpen((value) => !value)}>
-          OCR toute la bibliotheque
-        </button>
-        <button type="button" className="secondary" onClick={() => { void loadQueue(); }}>
-          Actualiser
-        </button>
-      </div>
+        <div className="ocr-queue-actions">
+          <button type="button" onClick={() => setChoiceScope((value) => value === 'library' ? null : 'library')}>
+            OCR toute la bibliotheque
+          </button>
+          <button
+            type="button"
+            onClick={() => setChoiceScope((value) => value === 'selection' ? null : 'selection')}
+            disabled={selectedMangaIds.length === 0}
+          >
+            OCR selection ({selectedMangaIds.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setChoiceScope((value) => value === 'filtered' ? null : 'filtered')}
+            disabled={filteredMangaIds.length === 0}
+          >
+            OCR mangas affiches ({filteredMangaIds.length})
+          </button>
+          <button type="button" className="secondary" onClick={() => { void loadQueue(); }}>
+            Actualiser
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => { void cancelAllJobs(); }}
+            disabled={activeJobCount === 0}
+          >
+            Tout annuler ({activeJobCount})
+          </button>
+        </div>
 
-      {libraryChoiceOpen ? (
-        <div className="ocr-library-choice">
-          <div>Choisis comment lancer l'OCR sur la bibliotheque.</div>
-          <div className="ocr-queue-actions">
-            <button type="button" onClick={() => { void startLibrary('missing_only'); }}>
-              Seulement sans OCR
-            </button>
-            <button type="button" onClick={() => { void startLibrary('overwrite_all'); }}>
-              Refaire en ecrasant
-            </button>
-            <button type="button" className="secondary" onClick={() => setLibraryChoiceOpen(false)}>
-              Annuler
-            </button>
+        {choiceScope ? (
+          <div className="ocr-library-choice">
+            <div>
+              {choiceScope === 'library'
+                ? 'Choisis comment lancer l\'OCR sur toute la bibliotheque.'
+                : choiceScope === 'selection'
+                  ? 'Choisis comment lancer l\'OCR sur la selection courante.'
+                  : 'Choisis comment lancer l\'OCR sur les mangas actuellement affiches par les filtres.'}
+            </div>
+            <div className="ocr-queue-actions">
+              <button type="button" onClick={() => { void startLibrary('missing_only', choiceScope); }}>
+                Seulement sans OCR
+              </button>
+              <button type="button" onClick={() => { void startLibrary('overwrite_all', choiceScope); }}>
+                Refaire en ecrasant
+              </button>
+              <button type="button" className="secondary" onClick={() => setChoiceScope(null)}>
+                Annuler
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {lastLibraryResult ? (
-        <div className="ocr-result-summary">
-          {lastLibraryResult.queuedCount || 0} manga(s) ajoutes a la file.
-          {(lastLibraryResult.skippedExisting || []).length > 0 ? ` ${lastLibraryResult.skippedExisting.length} deja OCRises ignores.` : ''}
-          {(lastLibraryResult.skippedNonJapanese || []).length > 0 ? ` ${lastLibraryResult.skippedNonJapanese.length} non japonais ignores.` : ''}
-          {(lastLibraryResult.uncertain || []).length > 0 ? ` ${lastLibraryResult.uncertain.length} incertains ignores.` : ''}
-        </div>
-      ) : null}
+        {lastLibraryResult ? (
+          <div className="ocr-result-summary">
+            {lastLibraryResult.scope === 'subset'
+              ? `${lastLibraryResult.requestedCount || 0} manga(s) cibles. `
+              : ''}
+            {lastLibraryResult.queuedCount || 0} manga(s) ajoutes a la file.
+            {(lastLibraryResult.skippedExisting || []).length > 0 ? ` ${lastLibraryResult.skippedExisting.length} deja OCRises ignores.` : ''}
+            {(lastLibraryResult.skippedNonJapanese || []).length > 0 ? ` ${lastLibraryResult.skippedNonJapanese.length} non japonais ignores.` : ''}
+            {(lastLibraryResult.uncertain || []).length > 0 ? ` ${lastLibraryResult.uncertain.length} incertains ignores.` : ''}
+          </div>
+        ) : null}
+      </div>
 
       <div className="ocr-queue-list">
         {(queue?.jobs || []).length === 0 ? (

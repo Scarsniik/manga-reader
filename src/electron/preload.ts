@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
     ocrPauseJob: (jobId: string) => ipcRenderer.invoke('ocr-pause-job', jobId),
     ocrResumeJob: (jobId: string) => ipcRenderer.invoke('ocr-resume-job', jobId),
     ocrCancelJob: (jobId: string) => ipcRenderer.invoke('ocr-cancel-job', jobId),
+    ocrCancelAllJobs: () => ipcRenderer.invoke('ocr-cancel-all-jobs'),
     ocrTerminate: () => ipcRenderer.invoke('ocr-terminate'),
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),
