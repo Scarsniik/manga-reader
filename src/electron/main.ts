@@ -1,11 +1,24 @@
 import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { prewarmOcrEngine } from './handlers/ocr';
 
 // Ensure IPC handlers (links, mangas, count-pages...) are registered
 import './ipc';
 
 let mainWindow: BrowserWindow | null;
+
+const startOcrPrewarmInBackground = () => {
+    setTimeout(() => {
+        void prewarmOcrEngine()
+            .then(() => {
+                console.info('[ocr] Engine prewarmed during app startup');
+            })
+            .catch((error) => {
+                console.warn('[ocr] Engine prewarm skipped or failed during startup:', error);
+            });
+    }, 250);
+};
 
 const createWindow = () => {
     const basePath = app.getAppPath();
@@ -97,6 +110,7 @@ app.whenReady().then(() => {
     }
 
     createWindow();
+    startOcrPrewarmInBackground();
 });
 
 app.on('window-all-closed', () => {

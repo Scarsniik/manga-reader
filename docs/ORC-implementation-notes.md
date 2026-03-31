@@ -106,6 +106,7 @@ Corrections ajoutees apres les premiers tests dans l'application :
 - le panneau OCR peut maintenant afficher d'ou vient le resultat : cache disque, cache memoire reader, ou recalcul backend
 - tentative automatique de recuperation des gros blocs mono-ligne tronques via extension guidee par `mask_refined`, puis re-OCR avec le meme chunking que la pipeline standard
 - passage du schema de cache OCR a `mokuro-page-v4` pour forcer le recalcul avec cette tentative de recuperation
+- prechauffage OCR au demarrage de l'application : worker Python lance en arriere-plan puis chargement des modeles avant le premier usage dans le reader
 
 Le filtrage ajoute ne cherche pas encore a "comprendre" toute la page. Il retire surtout les cas les plus suspects :
 

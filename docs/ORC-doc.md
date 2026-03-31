@@ -327,6 +327,7 @@ Dans le premier jet actuellement branché dans le repo :
 - puis le reader pré-rend l'OCR vers l'avant, page par page, dans l'ordre
 - puis il pré-rend aussi les pages précédentes
 - le nombre de pages anticipées de chaque cote suit `readerPreloadPageCount`
+- le worker OCR et ses modeles peuvent etre prechauffes en arriere-plan des le demarrage de l'application pour reduire l'attente au premier usage
 - un filtrage conservateur retire déjà certains faux positifs évidents sur les pages décoratives ou de titre
 
 ## Contrat de données

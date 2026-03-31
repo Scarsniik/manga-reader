@@ -107,8 +107,10 @@ const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
 const CACHE_SCHEMA_VERSION = "mokuro-page-v4";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
 const WORKER_REQUEST_TIMEOUT_MS = 5 * 60_000;
+const WORKER_PREWARM_TIMEOUT_MS = 10 * 60_000;
 
 let workerState: OcrWorkerState | null = null;
+let workerPrewarmPromise: Promise<boolean> | null = null;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const OCR_TEXT_SEGMENT_SPLIT_RE = /[\s\u3000、。．，,・･…‥！？!?：:；;「」『』（）()［］\[\]【】〈〉《》]+/u;
@@ -568,6 +570,20 @@ async function callWorkerRecognize(imagePath: string, settings: any): Promise<Ra
   return (response.result || {}) as RawOcrResult;
 }
 
+async function callWorkerPrewarm(settings: any): Promise<boolean> {
+  const state = await ensureWorker(settings);
+  const response = await sendWorkerRequest(state, { type: "prewarm" }, WORKER_PREWARM_TIMEOUT_MS);
+
+  if (!response.ok) {
+    const details = [response.error, response.python ? `python=${response.python}` : "", response.candidatePaths?.length ? `candidatePaths=${response.candidatePaths.join(", ")}` : ""]
+      .filter(Boolean)
+      .join(" | ");
+    throw new Error(details || "Unknown OCR worker prewarm error");
+  }
+
+  return true;
+}
+
 async function normalizeRawResult(
   raw: RawOcrResult,
   sourceImagePath: string,
@@ -713,6 +729,26 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
   }
 }
 
+export async function prewarmOcrEngine() {
+  if (workerPrewarmPromise) {
+    return workerPrewarmPromise;
+  }
+
+  workerPrewarmPromise = (async () => {
+    const settings = await getSettings();
+    await ensureOcrDirs();
+    await callWorkerPrewarm(settings);
+    return true;
+  })();
+
+  try {
+    return await workerPrewarmPromise;
+  } catch (error) {
+    workerPrewarmPromise = null;
+    throw error;
+  }
+}
+
 export async function processOcrResult(res: any, originalPathOrDataUrl: string, _options?: Record<string, any>) {
   const { imagePath, cleanup } = await resolveWorkerInput(originalPathOrDataUrl);
 
@@ -743,5 +779,6 @@ export async function ocrTerminate() {
   }
 
   workerState = null;
+  workerPrewarmPromise = null;
   return true;
 }

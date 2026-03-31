@@ -429,6 +429,20 @@ def handle_ping(request_id):
     }
 
 
+def handle_prewarm(request_id):
+    engine = build_engine()
+    return {
+        "id": request_id,
+        "ok": True,
+        "result": {
+            "status": "prewarmed",
+            "python": sys.executable,
+            "candidatePaths": ADDED_PATHS,
+            "engineReady": engine is not None,
+        },
+    }
+
+
 def handle_recognize(request_id, payload):
     image_path = payload.get("imagePath")
     if not image_path:
@@ -461,6 +475,10 @@ def main():
 
             if request_type == "recognize":
                 write_message(handle_recognize(request_id, payload))
+                continue
+
+            if request_type == "prewarm":
+                write_message(handle_prewarm(request_id))
                 continue
 
             if request_type == "terminate":
