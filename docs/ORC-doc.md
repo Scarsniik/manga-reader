@@ -306,6 +306,7 @@ Le pré-rendu doit rester possible, mais comme option :
 - préparer tout le volume
 - préparer le chapitre courant
 - préparer les N pages suivantes
+- préparer aussi les N pages precedentes pour fluidifier les retours immediats
 
 Ce mode est utile :
 
@@ -317,14 +318,15 @@ Ce mode est utile :
 
 - ouverture page : OCR si cache absent
 - navigation : lecture du cache si présent
-- arrière-plan : pré-analyse des 1 à 3 pages suivantes
+- arrière-plan : pré-analyse prioritaire des 1 à 3 pages suivantes, puis des pages précédentes
 - action utilisateur optionnelle : "Préparer l'OCR du manga" ou "Préparer l'OCR du chapitre"
 
 Dans le premier jet actuellement branché dans le repo :
 
 - quand le panneau OCR est actif, la page courante est traitée en priorité
 - puis le reader pré-rend l'OCR vers l'avant, page par page, dans l'ordre
-- le nombre de pages anticipées suit `readerPreloadPageCount`
+- puis il pré-rend aussi les pages précédentes
+- le nombre de pages anticipées de chaque cote suit `readerPreloadPageCount`
 - un filtrage conservateur retire déjà certains faux positifs évidents sur les pages décoratives ou de titre
 
 ## Contrat de données

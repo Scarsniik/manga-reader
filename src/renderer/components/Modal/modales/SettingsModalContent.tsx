@@ -49,7 +49,7 @@ export default function SettingsModalContent() {
     },
     {
       name: 'readerPreloadPageCount',
-      label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant',
+      label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant puis l\'arrière',
       type: 'number',
       min: 0,
       max: MAX_READER_PRELOAD_PAGE_COUNT,

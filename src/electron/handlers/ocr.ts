@@ -61,6 +61,12 @@ type NormalizedOcrResult = {
   height: number;
   boxes: NormalizedBox[];
   fromCache?: boolean;
+  debug?: {
+    cacheKey: string;
+    computedAt: string;
+    forceRefreshUsed: boolean;
+    fromCache: boolean;
+  };
   page?: {
     version: string;
     engine: "mokuro";
@@ -98,7 +104,7 @@ type OcrWorkerState = {
 
 const OCR_CACHE_DIR = path.join(dataDir, "ocr-cache");
 const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
-const CACHE_SCHEMA_VERSION = "mokuro-page-v2";
+const CACHE_SCHEMA_VERSION = "mokuro-page-v4";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
 const WORKER_REQUEST_TIMEOUT_MS = 5 * 60_000;
 
@@ -139,6 +145,16 @@ const getSuspiciousRepeatedSegment = (text: string): string | null => {
 
 const hasSuspiciousRepeatedCharRun = (text: string) => /(.)\1{5,}/u.test(text);
 
+const countPunctuationOnlyLines = (block: NormalizedPageBlock) => (
+  block.lines.reduce((count, line) => {
+    const compactText = line.text.replace(/\s+/g, "");
+    if (!compactText) {
+      return count;
+    }
+    return count + (countMeaningfulOcrChars(compactText) === 0 ? 1 : 0);
+  }, 0)
+);
+
 const isTextDensitySuspicious = (block: NormalizedPageBlock, meaningfulChars: number) => {
   if (!block.fontSize || block.fontSize <= 0 || meaningfulChars < 10) {
     return false;
@@ -164,6 +180,23 @@ const isMaskCoverageSuspicious = (block: NormalizedPageBlock, meaningfulChars: n
   return block.maskScore < 0.12 && blockAreaRatio < 0.08;
 };
 
+const isUnknownShortFragmentWithPunctuation = (
+  block: NormalizedPageBlock,
+  meaningfulChars: number
+) => {
+  if (block.language !== "unknown") {
+    return false;
+  }
+
+  const punctuationOnlyLineCount = countPunctuationOnlyLines(block);
+  if (punctuationOnlyLineCount === 0 || block.lines.length > 2) {
+    return false;
+  }
+
+  const blockAreaRatio = block.bbox.w * block.bbox.h;
+  return meaningfulChars <= 5 && blockAreaRatio < 0.01;
+};
+
 const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | null => {
   const compactText = block.text.replace(/\s+/g, "");
   if (!compactText) {
@@ -172,11 +205,11 @@ const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | null => {
 
   const totalChars = Array.from(compactText).length;
   const meaningfulChars = countMeaningfulOcrChars(compactText);
-  if (meaningfulChars === 0 && totalChars >= 6) {
+  if (meaningfulChars === 0 && totalChars >= 2) {
     return "punctuation-only";
   }
 
-  if (totalChars >= 8 && meaningfulChars / totalChars < 0.25) {
+  if (totalChars >= 6 && meaningfulChars / totalChars < 0.25) {
     return "mostly-punctuation";
   }
 
@@ -195,6 +228,10 @@ const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | null => {
 
   if (isMaskCoverageSuspicious(block, meaningfulChars)) {
     return "low-mask-coverage";
+  }
+
+  if (isUnknownShortFragmentWithPunctuation(block, meaningfulChars)) {
+    return "short-fragment-with-punctuation";
   }
 
   return null;
@@ -296,7 +333,16 @@ async function readCache(cacheKey: string): Promise<NormalizedOcrResult | null> 
   try {
     const raw = await fs.readFile(cachePath, "utf-8");
     const parsed = JSON.parse(raw) as NormalizedOcrResult;
-    return { ...parsed, fromCache: true };
+    return {
+      ...parsed,
+      fromCache: true,
+      debug: {
+        cacheKey,
+        computedAt: parsed.debug?.computedAt || new Date(0).toISOString(),
+        forceRefreshUsed: !!parsed.debug?.forceRefreshUsed,
+        fromCache: true,
+      },
+    };
   } catch {
     return null;
   }
@@ -522,7 +568,12 @@ async function callWorkerRecognize(imagePath: string, settings: any): Promise<Ra
   return (response.result || {}) as RawOcrResult;
 }
 
-async function normalizeRawResult(raw: RawOcrResult, sourceImagePath: string, fromCache: boolean): Promise<NormalizedOcrResult> {
+async function normalizeRawResult(
+  raw: RawOcrResult,
+  sourceImagePath: string,
+  fromCache: boolean,
+  debugMeta?: { cacheKey?: string; forceRefreshUsed?: boolean; computedAt?: string }
+): Promise<NormalizedOcrResult> {
   const fallbackDimensions = await getImageSize(sourceImagePath);
   const width = Number(raw?.img_width || fallbackDimensions.width || 0);
   const height = Number(raw?.img_height || fallbackDimensions.height || 0);
@@ -603,6 +654,12 @@ async function normalizeRawResult(raw: RawOcrResult, sourceImagePath: string, fr
     height,
     boxes,
     fromCache,
+    debug: {
+      cacheKey: debugMeta?.cacheKey || "",
+      computedAt: debugMeta?.computedAt || new Date().toISOString(),
+      forceRefreshUsed: !!debugMeta?.forceRefreshUsed,
+      fromCache,
+    },
     page: {
       version: String(raw?.version || "unknown"),
       engine: "mokuro",
@@ -642,7 +699,11 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
     }
 
     const raw = await callWorkerRecognize(imagePath, settings);
-    const normalized = await normalizeRawResult(raw, imagePath, false);
+    const normalized = await normalizeRawResult(raw, imagePath, false, {
+      cacheKey,
+      forceRefreshUsed: forceRefresh,
+      computedAt: new Date().toISOString(),
+    });
     await writeCache(cacheKey, normalized);
     return normalized;
   } finally {

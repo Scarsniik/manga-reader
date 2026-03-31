@@ -24,6 +24,13 @@ type ReaderOcrBox = {
     lines?: string[];
 };
 
+type ReaderOcrLoadResult = {
+    boxes: ReaderOcrBox[];
+    fromCache: boolean;
+    computedAt: string | null;
+    forceRefreshUsed: boolean;
+};
+
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -151,9 +158,17 @@ const getOrderedOcrPreRenderSources = (
 
     const additionalPages = Math.max(0, preloadPageCount ?? 0);
     const endIndex = Math.min(images.length - 1, currentIndex + additionalPages);
+    const startIndex = Math.max(0, currentIndex - additionalPages);
     const sources: string[] = [];
 
     for (let index = currentIndex; index <= endIndex; index += 1) {
+        const source = images[index];
+        if (source) {
+            sources.push(source);
+        }
+    }
+
+    for (let index = currentIndex - 1; index >= startIndex; index -= 1) {
         const source = images[index];
         if (source) {
             sources.push(source);
@@ -556,6 +571,7 @@ const Reader: React.FC = () => {
     const [coverData, setCoverData] = useState<string | null>(null);
     const [ocrLoading, setOcrLoading] = useState<boolean>(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
+    const [ocrStatusNote, setOcrStatusNote] = useState<string | null>(null);
     const totalPages = images.length;
     const currentPage = totalPages > 0 ? currentIndex + 1 : 0;
     const readingProgress = totalPages > 0
@@ -620,13 +636,18 @@ const Reader: React.FC = () => {
         src: string,
         useMemoryCache: boolean = true,
         options?: { forceRefresh?: boolean }
-    ): Promise<ReaderOcrBox[]> => {
+    ): Promise<ReaderOcrLoadResult> => {
         const forceRefresh = !!options?.forceRefresh;
 
         if (!forceRefresh && useMemoryCache) {
             const cachedBoxes = ocrPageCacheRef.current.get(src);
             if (cachedBoxes) {
-                return cachedBoxes;
+                return {
+                    boxes: cachedBoxes,
+                    fromCache: false,
+                    computedAt: null,
+                    forceRefreshUsed: false,
+                };
             }
         }
 
@@ -649,7 +670,12 @@ const Reader: React.FC = () => {
 
             const nextBoxes = filterVisibleOcrBoxes(Array.isArray(boxes) ? boxes as ReaderOcrBox[] : []);
             rememberOcrBoxesForPage(src, nextBoxes);
-            return nextBoxes;
+            return {
+                boxes: nextBoxes,
+                fromCache: !!ocrResult?.fromCache,
+                computedAt: typeof ocrResult?.debug?.computedAt === 'string' ? ocrResult.debug.computedAt : null,
+                forceRefreshUsed: !!ocrResult?.debug?.forceRefreshUsed,
+            };
         })();
 
         ocrInFlightRef.current.set(inFlightKey, requestPromise);
@@ -669,6 +695,7 @@ const Reader: React.FC = () => {
             setSelectedBoxes([]);
             setOcrError(null);
             setOcrLoading(false);
+            setOcrStatusNote(null);
             return;
         }
 
@@ -678,6 +705,7 @@ const Reader: React.FC = () => {
             setSelectedBoxes([]);
             setOcrError(null);
             setOcrLoading(false);
+            setOcrStatusNote(null);
             return;
         }
 
@@ -688,6 +716,7 @@ const Reader: React.FC = () => {
             setDetectedBoxes(cachedBoxes);
             setOcrError(null);
             setOcrLoading(false);
+            setOcrStatusNote("Source: cache memoire du reader");
             return;
         }
 
@@ -702,17 +731,22 @@ const Reader: React.FC = () => {
 
         (async () => {
             try {
-                const boxes = await loadOcrBoxesForPage(src, false);
+                const result = await loadOcrBoxesForPage(src, false);
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
                 }
-                setDetectedBoxes(boxes);
+                setDetectedBoxes(result.boxes);
+                setOcrStatusNote(result.fromCache
+                    ? `Source: cache disque, calcul initial ${result.computedAt ?? 'inconnu'}`
+                    : `Source: calcul backend${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
+                );
             } catch (err: any) {
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
                 }
                 setDetectedBoxes([]);
                 setOcrError(String(err && err.message ? err.message : err));
+                setOcrStatusNote(null);
             } finally {
                 if (cancelled || requestToken !== ocrRequestTokenRef.current) {
                     return;
@@ -882,12 +916,17 @@ const Reader: React.FC = () => {
                                 if (!images || images.length === 0) throw new Error('No image to OCR');
                                 const src = images[currentIndex];
                                 clearOcrBoxesForPage(src);
-                                const boxes = await loadOcrBoxesForPage(src, false, { forceRefresh: true });
-                                setDetectedBoxes(boxes);
+                                const result = await loadOcrBoxesForPage(src, false, { forceRefresh: true });
+                                setDetectedBoxes(result.boxes);
                                 setSelectedBoxes([]);
+                                setOcrStatusNote(result.fromCache
+                                    ? `Source: cache disque, calcul initial ${result.computedAt ?? 'inconnu'}`
+                                    : `Source: calcul backend${result.forceRefreshUsed ? ' force' : ''}, termine ${result.computedAt ?? 'a l\'instant'}`
+                                );
                             } catch (err: any) {
                                 setDetectedBoxes([]);
                                 setOcrError(String(err && err.message ? err.message : err));
+                                setOcrStatusNote(null);
                             } finally {
                                 setOcrLoading(false);
                             }
@@ -897,6 +936,7 @@ const Reader: React.FC = () => {
                             setDetectedBoxes([]);
                             setSelectedBoxes([]);
                             setOcrError(null);
+                            setOcrStatusNote(null);
                         }}
                         onSelectBox={(id, additive) => {
                             if (!id) { setSelectedBoxes([]); return; }
@@ -913,6 +953,7 @@ const Reader: React.FC = () => {
                         vocabItems={vocabItems}
                         loading={ocrLoading}
                         error={ocrError}
+                        statusNote={ocrStatusNote}
                         showBoxes={showBoxes}
                         onToggleShowBoxes={(next: boolean) => setShowBoxes(next)}
                     />

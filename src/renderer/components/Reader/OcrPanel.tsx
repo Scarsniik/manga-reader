@@ -15,11 +15,12 @@ type Props = {
     vocabItems: string[];
     loading?: boolean;
     error?: string | null;
+    statusNote?: string | null;
     showBoxes?: boolean;
     onToggleShowBoxes?: (next: boolean) => void;
 };
 
-const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, onSimulate, onClear, onSelectBox, selectedBoxData, vocabItems, loading, error, showBoxes = true, onToggleShowBoxes }) => {
+const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, onSimulate, onClear, onSelectBox, selectedBoxData, vocabItems, loading, error, statusNote, showBoxes = true, onToggleShowBoxes }) => {
     const [boxes, setBoxes] = useState<Box[]>(detectedBoxes || []);
 
     // sync incoming detectedBoxes
@@ -52,6 +53,7 @@ const OcrPanel: React.FC<Props> = ({ ocrEnabled, detectedBoxes, selectedBoxes, o
                 <div className="ocr-status">
                     {loading ? <div>Chargement OCR…</div> : null}
                     {error ? <div style={{ color: 'crimson' }}>{error}</div> : null}
+                    {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
                 </div>
 
                 <div className="ocr-box-list">
