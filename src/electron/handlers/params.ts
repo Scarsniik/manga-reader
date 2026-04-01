@@ -22,6 +22,8 @@ const defaultSettings = {
     showHiddens: false,
     titleLineCount: 2,
     readerPreloadPageCount: DEFAULT_READER_PRELOAD_PAGE_COUNT,
+    readerOcrDetectedSectionOpen: true,
+    readerOcrManualSectionOpen: true,
     jpdbApiKey: "",
     ocrPythonPath: "",
     ocrRepoPath: "",

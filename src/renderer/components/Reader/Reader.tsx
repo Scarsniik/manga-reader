@@ -40,6 +40,14 @@ type ManualSelection = {
     h: number;
 };
 
+type OcrNavigationDirection = 'up' | 'left' | 'down' | 'right';
+
+type OcrDirectionalCandidateMetrics = {
+    primaryDistance: number;
+    secondaryDistance: number;
+    secondaryOverlap: number;
+};
+
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -147,6 +155,10 @@ const normalizeReaderPreloadPageCount = (value: unknown): number => {
 
     return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
 };
+
+const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => (
+    typeof value === 'boolean' ? value : fallback
+);
 
 const filterVisibleOcrBoxes = (boxes: ReaderOcrBox[]): ReaderOcrBox[] => (
     boxes.filter((box) => typeof box.text === 'string' && box.text.trim().length > 0)
@@ -367,6 +379,165 @@ const getOcrSourceLabel = (source?: string | null) => (
                 : 'calcul backend'
 );
 
+const getOcrBoxCenter = (box: ReaderOcrBox) => ({
+    x: box.bbox.x + (box.bbox.w / 2),
+    y: box.bbox.y + (box.bbox.h / 2),
+});
+
+const getAxisOverlap = (startA: number, endA: number, startB: number, endB: number): number => (
+    Math.max(0, Math.min(endA, endB) - Math.max(startA, startB))
+);
+
+const getDirectionalOcrCandidateMetrics = (
+    currentBox: ReaderOcrBox,
+    candidateBox: ReaderOcrBox,
+    direction: OcrNavigationDirection
+): OcrDirectionalCandidateMetrics | null => {
+    const currentCenter = getOcrBoxCenter(currentBox);
+    const candidateCenter = getOcrBoxCenter(candidateBox);
+    const epsilon = 0.0001;
+
+    let primaryDistance = 0;
+    let secondaryDistance = 0;
+    let secondaryOverlap = 0;
+
+    if (direction === 'left') {
+        if (candidateCenter.x >= currentCenter.x - epsilon) {
+            return null;
+        }
+        primaryDistance = currentCenter.x - candidateCenter.x;
+        secondaryDistance = Math.abs(candidateCenter.y - currentCenter.y);
+        secondaryOverlap = getAxisOverlap(
+            currentBox.bbox.y,
+            currentBox.bbox.y + currentBox.bbox.h,
+            candidateBox.bbox.y,
+            candidateBox.bbox.y + candidateBox.bbox.h
+        );
+    } else if (direction === 'right') {
+        if (candidateCenter.x <= currentCenter.x + epsilon) {
+            return null;
+        }
+        primaryDistance = candidateCenter.x - currentCenter.x;
+        secondaryDistance = Math.abs(candidateCenter.y - currentCenter.y);
+        secondaryOverlap = getAxisOverlap(
+            currentBox.bbox.y,
+            currentBox.bbox.y + currentBox.bbox.h,
+            candidateBox.bbox.y,
+            candidateBox.bbox.y + candidateBox.bbox.h
+        );
+    } else if (direction === 'up') {
+        if (candidateCenter.y >= currentCenter.y - epsilon) {
+            return null;
+        }
+        primaryDistance = currentCenter.y - candidateCenter.y;
+        secondaryDistance = Math.abs(candidateCenter.x - currentCenter.x);
+        secondaryOverlap = getAxisOverlap(
+            currentBox.bbox.x,
+            currentBox.bbox.x + currentBox.bbox.w,
+            candidateBox.bbox.x,
+            candidateBox.bbox.x + candidateBox.bbox.w
+        );
+    } else {
+        if (candidateCenter.y <= currentCenter.y + epsilon) {
+            return null;
+        }
+        primaryDistance = candidateCenter.y - currentCenter.y;
+        secondaryDistance = Math.abs(candidateCenter.x - currentCenter.x);
+        secondaryOverlap = getAxisOverlap(
+            currentBox.bbox.x,
+            currentBox.bbox.x + currentBox.bbox.w,
+            candidateBox.bbox.x,
+            candidateBox.bbox.x + candidateBox.bbox.w
+        );
+    }
+
+    return {
+        primaryDistance,
+        secondaryDistance,
+        secondaryOverlap,
+    };
+};
+
+const findDirectionalOcrBox = (
+    boxes: ReaderOcrBox[],
+    currentBox: ReaderOcrBox,
+    direction: OcrNavigationDirection
+): ReaderOcrBox | null => {
+    let bestCandidate: ReaderOcrBox | null = null;
+    let bestMetrics: OcrDirectionalCandidateMetrics | null = null;
+    const epsilon = 0.0001;
+
+    boxes.forEach((candidateBox) => {
+        if (candidateBox.id === currentBox.id) {
+            return;
+        }
+
+        const metrics = getDirectionalOcrCandidateMetrics(currentBox, candidateBox, direction);
+        if (metrics === null) {
+            return;
+        }
+
+        if (!bestMetrics) {
+            bestMetrics = metrics;
+            bestCandidate = candidateBox;
+            return;
+        }
+
+        const candidateHasOverlap = metrics.secondaryOverlap > epsilon;
+        const bestHasOverlap = bestMetrics.secondaryOverlap > epsilon;
+
+        if (candidateHasOverlap !== bestHasOverlap) {
+            if (candidateHasOverlap) {
+                bestMetrics = metrics;
+                bestCandidate = candidateBox;
+            }
+            return;
+        }
+
+        if (candidateHasOverlap) {
+            if (metrics.primaryDistance < bestMetrics.primaryDistance - epsilon) {
+                bestMetrics = metrics;
+                bestCandidate = candidateBox;
+                return;
+            }
+            if (metrics.primaryDistance > bestMetrics.primaryDistance + epsilon) {
+                return;
+            }
+
+            if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
+                bestMetrics = metrics;
+                bestCandidate = candidateBox;
+                return;
+            }
+            if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
+                return;
+            }
+
+            if (metrics.secondaryOverlap > bestMetrics.secondaryOverlap + epsilon) {
+                bestMetrics = metrics;
+                bestCandidate = candidateBox;
+            }
+            return;
+        }
+
+        if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
+            bestMetrics = metrics;
+            bestCandidate = candidateBox;
+            return;
+        }
+        if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
+            return;
+        }
+
+        if (metrics.primaryDistance < bestMetrics.primaryDistance - epsilon) {
+            bestMetrics = metrics;
+            bestCandidate = candidateBox;
+        }
+    });
+
+    return bestCandidate;
+};
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -390,12 +561,15 @@ const Reader: React.FC = () => {
     const ocrRequestTokenRef = useRef<number>(0);
     const location = useLocation();
     const navigate = useNavigate();
-    const { params, loading: settingsLoading } = useParams();
+    const { params, loading: settingsLoading, setParams } = useParams();
     const query = new URLSearchParams(location.search);
     const locationState = location.state as ReaderLocationState;
     const preloadPageCount = settingsLoading
         ? null
         : normalizeReaderPreloadPageCount(params?.readerPreloadPageCount);
+    const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
+    const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
+    const allOcrBoxes = [...detectedBoxes, ...manualBoxes];
 
     const handleBack = useCallback(() => {
         const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
@@ -516,6 +690,57 @@ const Reader: React.FC = () => {
     const showCopyFeedback = useCallback((type: 'success' | 'error', message: string) => {
         setCopyFeedback({ type, message });
     }, []);
+
+    const focusOcrBox = useCallback((boxId: string) => {
+        const imageElement = imgRef.current;
+        if (!imageElement) {
+            return;
+        }
+
+        const targetBox = [...detectedBoxes, ...manualBoxes].find((box) => box.id === boxId);
+        if (!targetBox) {
+            return;
+        }
+
+        const imageRect = imageElement.getBoundingClientRect();
+        if (!imageRect.width || !imageRect.height) {
+            imageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        const bubbleCenterY = imageRect.top + ((targetBox.bbox.y + (targetBox.bbox.h / 2)) * imageRect.height);
+        const absoluteBubbleCenterY = window.scrollY + bubbleCenterY;
+        const targetScrollTop = Math.max(0, absoluteBubbleCenterY - (window.innerHeight * 0.45));
+
+        window.scrollTo({
+            top: targetScrollTop,
+            behavior: 'smooth',
+        });
+    }, [detectedBoxes, manualBoxes]);
+
+    const navigateOcrBox = useCallback((direction: OcrNavigationDirection): boolean => {
+        if (!ocrEnabled || allOcrBoxes.length === 0) {
+            return false;
+        }
+
+        const currentSelectedId = selectedBoxes.length > 0
+            ? selectedBoxes[selectedBoxes.length - 1]
+            : null;
+        const currentBox = currentSelectedId
+            ? allOcrBoxes.find((box) => box.id === currentSelectedId) ?? null
+            : null;
+        const nextBox = currentBox
+            ? findDirectionalOcrBox(allOcrBoxes, currentBox, direction)
+            : allOcrBoxes[0];
+
+        if (!nextBox) {
+            return false;
+        }
+
+        setSelectedBoxes((prev) => (prev.length === 1 && prev[0] === nextBox.id ? prev : [nextBox.id]));
+        focusOcrBox(nextBox.id);
+        return true;
+    }, [allOcrBoxes, focusOcrBox, ocrEnabled, selectedBoxes]);
 
     const copyCurrentImage = useCallback(async () => {
         const currentImage = images[currentIndex];
@@ -717,6 +942,22 @@ const Reader: React.FC = () => {
                 void copyCurrentImage();
                 return;
             }
+            if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+                const ocrDirection = key === 'o'
+                    ? 'up'
+                    : key === 'k'
+                        ? 'left'
+                        : key === 'l'
+                            ? 'down'
+                            : key === 'm'
+                                ? 'right'
+                                : null;
+
+                if (ocrDirection && navigateOcrBox(ocrDirection)) {
+                    try { e.preventDefault(); } catch {}
+                    return;
+                }
+            }
             // Page navigation
             if (key === 'arrowright' || key === 'd') {
                 next();
@@ -737,7 +978,7 @@ const Reader: React.FC = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [copyCurrentImage, currentIndex, images]);
+    }, [copyCurrentImage, currentIndex, images, navigateOcrBox]);
 
     // Mouse click on image: left -> next, right -> prev
     useEffect(() => {
@@ -1201,10 +1442,6 @@ const Reader: React.FC = () => {
         };
     }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
 
-    const allOcrBoxes = [...detectedBoxes, ...manualBoxes];
-    const selectedBoxData = selectedBoxes.length > 0 ? allOcrBoxes.find(b => b.id === selectedBoxes[0]) || null : null;
-    const vocabItems = selectedBoxData ? selectedBoxData.text.split(/\s+/).filter(Boolean).slice(0, 3) : [];
-
     return (
         <div className="reader">
             <ReaderHeader
@@ -1299,7 +1536,6 @@ const Reader: React.FC = () => {
 
                 {ocrEnabled && (
                     <OcrPanel
-                        ocrEnabled={ocrEnabled}
                         detectedBoxes={detectedBoxes}
                         manualBoxes={manualBoxes}
                         selectedBoxes={selectedBoxes}
@@ -1346,8 +1582,23 @@ const Reader: React.FC = () => {
                             setManualSelectionEnabled(false);
                         }}
                         onSelectBox={updateSelectedBoxes}
+                        onFocusBox={focusOcrBox}
                         manualSelectionEnabled={manualSelectionEnabled}
                         manualSelectionLoading={manualSelectionLoading}
+                        detectedSectionOpen={detectedSectionOpen}
+                        manualSectionOpen={manualSectionOpen}
+                        onToggleDetectedSection={() => {
+                            setParams(
+                                { readerOcrDetectedSectionOpen: !detectedSectionOpen },
+                                { broadcast: false }
+                            );
+                        }}
+                        onToggleManualSection={() => {
+                            setParams(
+                                { readerOcrManualSectionOpen: !manualSectionOpen },
+                                { broadcast: false }
+                            );
+                        }}
                         onToggleManualSelection={() => {
                             if (manualSelectionLoading) {
                                 return;
@@ -1357,8 +1608,6 @@ const Reader: React.FC = () => {
                         onRemoveManualBox={(boxId) => {
                             void handleRemoveManualBox(boxId);
                         }}
-                        selectedBoxData={selectedBoxData}
-                        vocabItems={vocabItems}
                         loading={ocrLoading}
                         error={ocrError}
                         statusNote={ocrStatusNote}

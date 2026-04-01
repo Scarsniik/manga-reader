@@ -1,43 +1,56 @@
 import React from 'react';
+import { JpdbSentenceSegment } from '@/renderer/services/jpdb';
+import RubyText from './RubyText';
 import './TokensList.scss';
 
 type Props = {
-  tokens: string[];
-  parseResult: any | null;
   text: string;
+  sentenceSegments: JpdbSentenceSegment[];
   selectedTokenIndex: number | null;
-  selectedWord: string | null;
-  onTokenClick: (word: string, idx?: number | null) => void;
+  onTokenClick: (idx: number) => void;
 };
 
-export default function TokensList({ tokens, parseResult, text, selectedTokenIndex, selectedWord, onTokenClick }: Props) {
+export default function TokensList({
+  text,
+  sentenceSegments,
+  selectedTokenIndex,
+  onTokenClick,
+}: Props) {
+  const tokenCount = sentenceSegments.filter((segment) => segment.kind === 'token').length;
+
   return (
     <div className="tokens">
-      <div className="label">Tokens :</div>
-      <div className="tokens-list">
-        {(!parseResult || (parseResult && parseResult.tokens.length === 0)) && tokens.length === 0 && <i>— aucun —</i>}
+      <div className="tokens-header">
+        <div className="label">Phrase tokenisée</div>
+        <span className="tokens-meta">
+          {tokenCount > 0 ? `${tokenCount} token${tokenCount > 1 ? 's' : ''}` : 'Aucun token'}
+        </span>
+      </div>
 
-        {parseResult && parseResult.tokens && parseResult.tokens.length > 0 ? (
-          parseResult.tokens.map((tok: any, idx: number) => {
-            const pos = tok[1] as number;
-            const len = tok[2] as number;
-            const surface = text && typeof pos === 'number' && typeof len === 'number' ? text.slice(pos, pos + len) : `tok${idx}`;
-            const isActive = selectedTokenIndex === idx;
+      <div className="tokens-list" lang="ja">
+        {text.length === 0 ? <i>— aucun texte —</i> : null}
+
+        {sentenceSegments.map((segment, index) => {
+          if (segment.kind === 'text') {
             return (
-              <React.Fragment key={idx}>
-                <button className={"token-btn" + (isActive ? ' active' : '')} onClick={() => onTokenClick(surface, idx)}>{surface}</button>
-                {idx < parseResult.tokens.length - 1 && <span className="token-spacer" />}
-              </React.Fragment>
+              <span key={`text-${index}`} className="token-static">
+                {segment.text}
+              </span>
             );
-          })
-        ) : (
-          tokens.map((t, idx) => (
-            <React.Fragment key={idx}>
-              <button className={"token-btn" + (selectedWord === t ? ' active' : '')} onClick={() => onTokenClick(t, null)}>{t}</button>
-              {idx < tokens.length - 1 && <span className="token-spacer" />}
-            </React.Fragment>
-          ))
-        )}
+          }
+
+          const isActive = selectedTokenIndex === segment.index;
+          return (
+            <button
+              key={`token-${segment.index}-${segment.surface}-${index}`}
+              className={`token-btn${isActive ? ' active' : ''}`}
+              onClick={() => onTokenClick(segment.index)}
+              type="button"
+            >
+              <RubyText parts={segment.rubyParts} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,6 +1,23 @@
 @import './_theme.scss';
 
-.jp-analyse-header { display:flex; align-items:center; justify-content:space-between; gap:12px }
+.jp-analyse-header {
+	display:flex;
+	align-items:flex-start;
+	justify-content:space-between;
+	gap:12px;
+}
+
+.jp-analyse-header__titles {
+	display: grid;
+	gap: 4px;
+}
+
+.jp-analyse-header__eyebrow {
+	font-size: $jp-font-size-sm;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: $jp-muted;
+}
 
 .close-btn {
 	background: transparent;

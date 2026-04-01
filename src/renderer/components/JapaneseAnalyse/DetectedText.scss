@@ -3,27 +3,46 @@
 .detected-text {
 	margin-bottom: 12px;
 	background: $jp-surface;
-	padding: 10px;
-	border-radius: $jp-radius;
+	padding: 14px;
+	border-radius: $jp-radius-lg;
 	color: $jp-text;
 	border: 1px solid $jp-border;
+	box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.detected-text__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+
+.detected-text__status {
+	font-size: $jp-font-size-sm;
+	color: $jp-muted;
+	background: rgba(255,255,255,0.04);
+	border: 1px solid rgba(255,255,255,0.05);
+	border-radius: 999px;
+	padding: 4px 10px;
 }
 
 .manual-input {
     display:flex;
     flex-wrap: wrap;
-    align-items:center;
-    gap:8px;
+    align-items:flex-end;
+    gap:10px;
 }
 
 .manual-input__input {
 	flex: 1 1 100%;
-	margin-right: 8px;
-	padding: 8px 10px;
-	border-radius: 6px;
+	min-height: 52px;
+	padding: 10px 12px;
+	border-radius: 10px;
 	border: 1px solid $jp-border;
-	background: transparent;
+	background: rgba(255,255,255,0.02);
 	color: $jp-text;
+	line-height: 1.6;
 }
 
 /* When .manual-input__input is a textarea, prevent manual resize and hide scrollbars.
@@ -34,8 +53,22 @@
 }
 
 .manual-input__input::placeholder { color: $jp-muted; font-size: $jp-font-size-sm }
-.validate-btn, .clear-btn { padding: 6px 10px; border-radius: 6px; border: 1px solid $jp-border; background: transparent; color: $jp-text; cursor: pointer }
-.validate-btn:hover, .clear-btn:hover { background: rgba(255,255,255,0.02) }
+.validate-btn, .clear-btn {
+	padding: 9px 12px;
+	border-radius: 999px;
+	border: 1px solid $jp-border;
+	background: rgba(255,255,255,0.03);
+	color: $jp-text;
+	cursor: pointer;
+	font-weight: $jp-font-weight-medium;
+}
+
+.validate-btn {
+	background: rgba(111,163,200,0.16);
+	border-color: rgba(111,163,200,0.32);
+}
+
+.validate-btn:hover, .clear-btn:hover { background: rgba(255,255,255,0.06) }
 .validate-btn:focus, .clear-btn:focus { box-shadow: $jp-focus-shadow }
 
-.auto-text { margin-top: 8px; color: $jp-muted; font-size: 12px }
+.auto-text { margin-top: 10px; color: $jp-muted; font-size: 12px; line-height: 1.5 }

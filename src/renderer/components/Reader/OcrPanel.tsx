@@ -1,25 +1,28 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import JapaneseAnalyse, { Box as JBox } from '../JapaneseAnalyse/JapaneseAnalyse';
 import './ocr-panel.scss';
 
 type Box = JBox & {
     manual?: boolean;
+    vertical?: boolean;
 };
 
 type Props = {
-    ocrEnabled: boolean;
     detectedBoxes: Box[];
     manualBoxes: Box[];
     selectedBoxes: string[];
     onSimulate: () => void | Promise<void>;
     onClear: () => void;
     onSelectBox: (id: string | null, additive?: boolean) => void;
+    onFocusBox?: (id: string) => void;
     onToggleManualSelection?: () => void;
     onRemoveManualBox?: (id: string) => void | Promise<void>;
     manualSelectionEnabled?: boolean;
     manualSelectionLoading?: boolean;
-    selectedBoxData?: Box | null;
-    vocabItems: string[];
+    detectedSectionOpen?: boolean;
+    manualSectionOpen?: boolean;
+    onToggleDetectedSection?: () => void;
+    onToggleManualSection?: () => void;
     loading?: boolean;
     error?: string | null;
     statusNote?: string | null;
@@ -34,28 +37,72 @@ const OcrPanel: React.FC<Props> = ({
     onSimulate,
     onClear,
     onSelectBox,
+    onFocusBox,
     onToggleManualSelection,
     onRemoveManualBox,
     manualSelectionEnabled = false,
     manualSelectionLoading = false,
-    vocabItems,
+    detectedSectionOpen = true,
+    manualSectionOpen = true,
+    onToggleDetectedSection,
+    onToggleManualSection,
     loading,
     error,
     statusNote,
     showBoxes = true,
     onToggleShowBoxes,
 }) => {
+    const allBoxes = [...detectedBoxes, ...manualBoxes];
+    const boxMap = new Map(allBoxes.map((box) => [box.id, box] as const));
     const selectedBoxSet = new Set(selectedBoxes);
-    const selectedForAnalyse = [...detectedBoxes, ...manualBoxes].filter((box) => selectedBoxSet.has(box.id));
+    const selectedForAnalyse = selectedBoxes
+        .map((id) => boxMap.get(id) || null)
+        .filter((box): box is Box => !!box);
+
+    const selectionSummary = selectedForAnalyse.length === 0
+        ? 'Sélectionne une bulle pour lancer l’analyse.'
+        : selectedForAnalyse.length === 1
+            ? '1 bulle sélectionnée'
+            : `${selectedForAnalyse.length} bulles sélectionnées`;
+    const selectionScrollKey = useMemo(() => selectedBoxes.join('|'), [selectedBoxes]);
+
+    const renderBoxButton = (box: Box, typeLabel: string) => (
+        <button
+            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
+            onClick={(event) => {
+                onSelectBox(box.id, event.ctrlKey || event.metaKey);
+                if (typeof onFocusBox === 'function') {
+                    onFocusBox(box.id);
+                }
+            }}
+            type="button"
+        >
+            <span className="ocr-box-select__meta">
+                <span className="ocr-box-select__badge">{typeLabel}</span>
+                {box.vertical ? <span className="ocr-box-select__tag">Vertical</span> : null}
+            </span>
+            <span className="ocr-box-select__text">{box.text || '(vide)'}</span>
+        </button>
+    );
+
+    const hasDetectedBoxes = detectedBoxes.length > 0;
+    const hasManualBoxes = manualBoxes.length > 0;
+    const hasStatus = !!loading || !!manualSelectionLoading || !!manualSelectionEnabled || !!error || !!statusNote;
 
     return (
         <aside className="reader-ocr-panel" aria-label="OCR panel">
             <div className="ocr-panel-inner">
                 <div className="ocr-panel-header">
-                    <strong>OCR</strong>
+                    <div>
+                        <span className="ocr-panel-kicker">Reader OCR</span>
+                        <strong>Lecture et vocabulaire</strong>
+                        <p className="ocr-panel-subtitle">
+                            {selectionSummary}
+                        </p>
+                    </div>
                     <div className="ocr-panel-controls">
-                        <button onClick={() => onSimulate()} disabled={manualSelectionLoading}>Relancer</button>
-                        <button onClick={() => onClear()} disabled={manualSelectionLoading}>Clear</button>
+                        <button onClick={() => onSimulate()} disabled={manualSelectionLoading} type="button">Relancer</button>
+                        <button onClick={() => onClear()} disabled={manualSelectionLoading} type="button">Vider</button>
                         <button
                             onClick={() => {
                                 if (typeof onToggleManualSelection === 'function') {
@@ -64,13 +111,14 @@ const OcrPanel: React.FC<Props> = ({
                             }}
                             disabled={manualSelectionLoading}
                             className={manualSelectionEnabled ? 'is-active' : ''}
+                            type="button"
                         >
                             {manualSelectionEnabled ? 'Annuler zone' : 'Zone manuelle'}
                         </button>
                     </div>
                 </div>
 
-                <div className="ocr-panel-row ocr-checkbox-row">
+                <div className="ocr-panel-toolbar">
                     <label className="ocr-checkbox-label">
                         <input
                             type="checkbox"
@@ -81,76 +129,113 @@ const OcrPanel: React.FC<Props> = ({
                                 }
                             }}
                         />
-                        Afficher les carrés
+                        <span>
+                            <strong>Afficher les zones OCR</strong>
+                            <small>Superpose les cadres sur l’image</small>
+                        </span>
                     </label>
                 </div>
 
-                <div className="ocr-status">
-                    {loading ? <div>Chargement OCR…</div> : null}
-                    {manualSelectionLoading ? <div>Analyse de la selection manuelle…</div> : null}
-                    {manualSelectionEnabled ? (
-                        <div className="ocr-status-note">Dessine une zone sur l&apos;image pour ajouter une selection manuelle.</div>
-                    ) : null}
-                    {error ? <div className="ocr-status-error">{error}</div> : null}
-                    {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
-                </div>
-
-                <div className="ocr-box-list">
-                    <div className="ocr-box-section">
-                        <div className="ocr-box-section-title"><strong>Bulles détectées</strong></div>
-                        {detectedBoxes.length === 0 ? <div><em>Aucune bulle détectée</em></div> : (
-                            <ul>
-                                {detectedBoxes.map((box) => (
-                                    <li key={box.id}>
-                                        <button
-                                            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
-                                            onClick={(event) => onSelectBox(box.id, event.ctrlKey || event.metaKey)}
-                                        >
-                                            {box.text || '(vide)'}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                {hasStatus ? (
+                    <div className="ocr-status">
+                        {loading ? <div className="ocr-status-pill">Chargement OCR…</div> : null}
+                        {manualSelectionLoading ? <div className="ocr-status-pill">Analyse de la sélection manuelle…</div> : null}
+                        {manualSelectionEnabled ? (
+                            <div className="ocr-status-note">Dessine une zone sur l&apos;image pour ajouter une sélection manuelle.</div>
+                        ) : null}
+                        {error ? <div className="ocr-status-error">{error}</div> : null}
+                        {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
                     </div>
+                ) : null}
 
-                    <div className="ocr-box-section">
-                        <div className="ocr-box-section-title"><strong>Sélections manuelles</strong></div>
-                        {manualBoxes.length === 0 ? <div><em>Aucune sélection manuelle</em></div> : (
-                            <ul className="ocr-manual-list">
-                                {manualBoxes.map((box) => (
-                                    <li key={box.id} className="ocr-manual-item">
-                                        <button
-                                            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
-                                            onClick={(event) => onSelectBox(box.id, event.ctrlKey || event.metaKey)}
-                                        >
-                                            {box.text || '(vide)'}
-                                        </button>
-                                        <button
-                                            className="ocr-manual-remove"
-                                            onClick={() => {
-                                                if (typeof onRemoveManualBox === 'function') {
-                                                    void onRemoveManualBox(box.id);
-                                                }
-                                            }}
-                                            disabled={manualSelectionLoading}
-                                        >
-                                            Retirer
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                {hasDetectedBoxes || hasManualBoxes ? (
+                    <div className="ocr-box-list">
+                        {hasDetectedBoxes ? (
+                            <div className="ocr-box-section">
+                                <div className="ocr-box-section-title">
+                                    <button
+                                        type="button"
+                                        className="ocr-section-toggle"
+                                        onClick={() => {
+                                            if (typeof onToggleDetectedSection === 'function') {
+                                                onToggleDetectedSection();
+                                            }
+                                        }}
+                                        aria-expanded={detectedSectionOpen}
+                                    >
+                                        <strong>Bulles détectées</strong>
+                                        <span>{detectedBoxes.length}</span>
+                                    </button>
+                                </div>
+                                {detectedSectionOpen ? (
+                                    <ul>
+                                        {detectedBoxes.map((box) => (
+                                            <li key={box.id}>{renderBoxButton(box, 'Auto')}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        {hasManualBoxes ? (
+                            <div className="ocr-box-section">
+                                <div className="ocr-box-section-title">
+                                    <button
+                                        type="button"
+                                        className="ocr-section-toggle"
+                                        onClick={() => {
+                                            if (typeof onToggleManualSection === 'function') {
+                                                onToggleManualSection();
+                                            }
+                                        }}
+                                        aria-expanded={manualSectionOpen}
+                                    >
+                                        <strong>Sélections manuelles</strong>
+                                        <span>{manualBoxes.length}</span>
+                                    </button>
+                                </div>
+                                {manualSectionOpen ? (
+                                    <ul className="ocr-manual-list">
+                                        {manualBoxes.map((box) => (
+                                            <li key={box.id} className="ocr-manual-item">
+                                                {renderBoxButton(box, 'Manuel')}
+                                                <button
+                                                    className="ocr-manual-remove"
+                                                    onClick={() => {
+                                                        if (typeof onRemoveManualBox === 'function') {
+                                                            void onRemoveManualBox(box.id);
+                                                        }
+                                                    }}
+                                                    disabled={manualSelectionLoading}
+                                                    type="button"
+                                                >
+                                                    Retirer
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </div>
-                </div>
+                ) : (
+                    <div className="ocr-boxes-empty">
+                        Aucune bulle OCR disponible sur cette page pour le moment.
+                    </div>
+                )}
 
                 <div className="ocr-analysis">
                     {selectedForAnalyse.length > 0 ? (
                         <JapaneseAnalyse
                             selectedBoxes={selectedForAnalyse}
+                            analysisScrollKey={selectionScrollKey}
                             onClose={() => onSelectBox(null)}
                         />
-                    ) : null}
+                    ) : (
+                        <div className="ocr-analysis-empty">
+                            Sélectionne une bulle auto ou manuelle pour afficher la phrase, les furigana et le détail du token.
+                        </div>
+                    )}
                 </div>
             </div>
         </aside>

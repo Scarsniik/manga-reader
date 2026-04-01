@@ -1,24 +1,28 @@
-$jp-bg: #0f1113; // app background (very dark)
-$jp-surface: #141619; // surface cards/panels
-$jp-surface-2: #1a1c1f; // slightly lighter surface
-$jp-border: #23272a; // subtle border
-$jp-text: #e7eef6; // main text (soft white)
-$jp-muted: #98a0a6; // muted text
-$jp-accent: #6fa3c8; // accent hue (used lightly)
-$jp-accent-alpha: rgba(111,163,200,0.1);
-$jp-active-border: rgba(111,163,200,0.22);
+$jp-bg: #0f1113;
+$jp-surface: #171a1f;
+$jp-surface-2: #1d2127;
+$jp-border: rgba(255,255,255,0.08);
+$jp-text: #edf1f7;
+$jp-text-soft: #d7dfeb;
+$jp-muted: #99a5b3;
+$jp-accent: #6fa3c8;
+$jp-accent-strong: #9bc0e1;
+$jp-accent-alpha: rgba(111,163,200,0.12);
+$jp-active-border: rgba(111,163,200,0.24);
 $jp-token-bg: rgba(255,255,255,0.03);
-$jp-token-active-bg: rgba(111,163,200,0.12);
+$jp-token-active-bg: rgba(111,163,200,0.14);
 $jp-token-border: rgba(255,255,255,0.04);
 
-// Typography scale
-$jp-font-size-base: 20px; // increased base font size for better readability
-$jp-font-size-sm: 13px;
-$jp-font-size-lg: 35px;
+// Typography
+$jp-font-size-base: 15px;
+$jp-font-size-sm: 12px;
+$jp-font-size-lg: 24px;
+$jp-font-size-japanese: clamp(1.15rem, 1.2vw, 1.35rem);
 $jp-font-weight-regular: 400;
 $jp-font-weight-medium: 600;
 $jp-font-weight-bold: 700;
 $jp-radius: 8px;
+$jp-radius-lg: 14px;
+$jp-japanese-font: 'Yu Gothic UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
 
-// Utility
-$jp-focus-shadow: 0 0 0 3px rgba(111,163,200,0.07);
+$jp-focus-shadow: 0 0 0 3px rgba(111,163,200,0.16);

@@ -2,27 +2,51 @@
 @import './_theme.scss';
 
 .tokens { margin-bottom: 10px }
+
+.tokens-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+
+.tokens-meta {
+	font-size: $jp-font-size-sm;
+	color: $jp-muted;
+}
+
 .tokens-list {
-	display:inline; /* keep flow like text */
-	line-height: 1.6;
+	display:block;
+	line-height: 2.3;
+	white-space: pre-wrap;
+	padding: 16px 18px;
+	background: $jp-surface;
+	border-radius: $jp-radius-lg;
+	border: 1px solid $jp-border;
+	box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+	font-family: $jp-japanese-font;
+	font-size: $jp-font-size-japanese;
 }
 
 .token-btn {
-	display: inline;
-	margin: 0 2px 0 0; /* small spacing like natural word gap */
-	padding: 0; /* remove button padding so it reads as inline text */
-	border: none;
+	display: inline-flex;
+	align-items: baseline;
+	margin: 0;
+	padding: 2px 4px;
+	border: 0;
+	border-radius: 8px;
 	background: transparent;
 	color: $jp-text;
-	font-size: $jp-font-size-base;
+	font-size: inherit;
 	cursor: pointer;
 	text-decoration: none;
-	transition: color 120ms ease, background 120ms ease;
+	transition: color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
 
-/* Hover only changes text color to indicate clickability — not a button */
 .token-btn:hover {
-	color: $jp-accent; /* accent color on hover */
+	color: $jp-accent-strong;
+	background: rgba(111,163,200,0.08);
 }
 
 .token-btn:focus {
@@ -30,6 +54,12 @@
 	box-shadow: $jp-focus-shadow;
 }
 
-.token-btn.active { color: $jp-accent }
+.token-btn.active {
+	color: $jp-accent-strong;
+	background: $jp-token-active-bg;
+	box-shadow: inset 0 0 0 1px rgba(111,163,200,0.22);
+}
 
-.token-spacer { display:inline-block; padding-right: 4px }
+.token-static {
+	color: $jp-text-soft;
+}

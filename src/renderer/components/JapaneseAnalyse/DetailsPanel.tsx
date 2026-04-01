@@ -1,69 +1,155 @@
 import React from 'react';
+import {
+  JpdbKanjiDetail,
+  JpdbRubyPart,
+  JpdbVocabularyEntry,
+  isKanjiText,
+} from '@/renderer/services/jpdb';
+import RubyText from './RubyText';
 import './DetailsPanel.scss';
 
-type Details = any | null;
+type DisplayKanjiDetail = JpdbKanjiDetail & {
+  meanings?: string[];
+  dictionaryKunReadings?: string[];
+  dictionaryOnReadings?: string[];
+};
 
 type Props = {
   jpdbError: string | null;
-  parseResult: any | null;
-  selectedWord: string | null;
-  selectedTokenIndex: number | null;
+  selectedSurface: string | null;
+  selectedRubyParts: JpdbRubyPart[];
+  selectedVocabulary: JpdbVocabularyEntry[];
+  kanjiDetails: DisplayKanjiDetail[];
+  kanjiMeaningsLoading?: boolean;
 };
 
-export default function DetailsPanel({ jpdbError, parseResult, selectedWord, selectedTokenIndex }: Props) {
-  const details: Details = null; // placeholder for potential mock lookup
+const formatFrequencyRank = (rank: number): string => {
+  if (!Number.isFinite(rank) || rank <= 0) {
+    return 'Fréquence inconnue';
+  }
+
+  return `Fréquence JPDB #${rank}`;
+};
+
+export default function DetailsPanel({
+  jpdbError,
+  selectedSurface,
+  selectedRubyParts,
+  selectedVocabulary,
+  kanjiDetails,
+  kanjiMeaningsLoading = false,
+}: Props) {
+  const hasVocabulary = selectedVocabulary.length > 0;
+  const hasSingleVocabulary = selectedVocabulary.length === 1;
+  const hasKanji = kanjiDetails.length > 0;
+  const primaryVocabulary = selectedVocabulary[0] ?? null;
+  const primaryMeanings = (primaryVocabulary?.meanings || []).slice(0, 4);
+
   return (
     <div className="details">
-      <div className="label">Détails :</div>
+      <div className="label">Détails du token</div>
       <div className="details-box">
         {jpdbError ? (
           <div className="details-error">{jpdbError}</div>
-        ) : parseResult && selectedWord ? (
-          <div>
-            <div className="details-vocab-list">
-              {parseResult.vocabulary.length === 0 && <>
-              <div className="details-word">{selectedWord}</div>
-              <i>— aucun vocabulaire —</i>
-              </>}
-              {(() => {
-                if (selectedTokenIndex !== null && parseResult.tokens[selectedTokenIndex]) {
-                  const token = parseResult.tokens[selectedTokenIndex];
-                  const vocabIndex = token[0] as number | number[] | null;
-                  const indexes: number[] = Array.isArray(vocabIndex) ? vocabIndex as number[] : (vocabIndex != null ? [vocabIndex as number] : []);
-                  const matches = indexes.length > 0 ? indexes.map((i: number) => parseResult.vocabulary[i]).filter(Boolean) : null;
-                  if (matches && matches.length > 0) {
-                    return matches.map((v: any, i: number) => (
-                      <div key={i} className="details-vocab-item">
-                        <div className="spelling">{v[3]} <span className="reading">({v[4]})</span></div>
-                        <div className="meanings">{(v[6] || []).slice(0,3).join('; ')}</div>
-                      </div>
-                    ));
-                  }
-                }
+        ) : selectedSurface ? (
+          <div className="details-content">
+            <div className="details-token-hero" lang="ja">
+              <RubyText
+                parts={selectedRubyParts.length > 0 ? selectedRubyParts : [{ text: selectedSurface, reading: null, hasKanji: isKanjiText(selectedSurface) }]}
+                className="details-token-hero__surface"
+              />
+              <div className="details-token-hero__meta">
+                {primaryVocabulary?.reading ? (
+                  <span>Lecture principale : {primaryVocabulary.reading}</span>
+                ) : null}
+                {primaryVocabulary ? (
+                  <span>{formatFrequencyRank(primaryVocabulary.frequencyRank)}</span>
+                ) : null}
+              </div>
+              {hasSingleVocabulary && primaryMeanings.length > 0 ? (
+                <ol className="details-token-hero__meanings">
+                  {primaryMeanings.map((meaning, index) => (
+                    <li key={`primary-meaning-${index}`} className="details-token-hero__meaning">
+                      {meaning}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </div>
 
-                return parseResult.vocabulary.map((v: any, i: number) => (
-                  <div key={i} className="details-vocab-item">
-                    <div className="spelling">{v[3]} <span className="reading">({v[4]})</span></div>
-                    <div className="meanings">{(v[6] || []).slice(0,3).join('; ')}</div>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-        ) : details ? (
-          <div>
-            <div className="details-word">{(details as any).word}</div>
-            <div className="details-sub">Readings: {(details as any).readings?.join(', ') || '—'}</div>
-            <div className="details-senses">
-              {((details as any).senses || []).map((s: any, i: number) => (
-                <div key={i} className="details-sense">
-                  • {s.gloss} {s.pos ? <em className="details-sense-pos">({s.pos})</em> : null}
+            {hasVocabulary && !hasSingleVocabulary ? (
+              <div className="details-section">
+                <div className="details-section__title">Vocabulaire JPDB</div>
+                <div className="details-vocab-list">
+                  {selectedVocabulary.map((entry) => (
+                    <div key={`${entry.vid}-${entry.spelling}-${entry.reading}`} className="details-vocab-item">
+                      <div className="details-vocab-item__top" lang="ja">
+                        <RubyText
+                          parts={[{
+                            text: entry.spelling,
+                            reading: entry.reading && entry.reading !== entry.spelling ? entry.reading : null,
+                            hasKanji: isKanjiText(entry.spelling),
+                          }]}
+                          className="details-vocab-item__spelling"
+                        />
+                        <span className="details-vocab-item__badge">{formatFrequencyRank(entry.frequencyRank)}</span>
+                      </div>
+                      <ol className="details-vocab-item__meanings">
+                        {(entry.meanings || []).slice(0, 4).map((meaning, index) => (
+                          <li key={`${entry.vid}-${index}`} className="details-meaning-line">{meaning}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : null}
+
+            {hasKanji ? (
+              <div className="details-section">
+                <div className="details-section__title">Kanji du mot</div>
+                <div className="details-kanji-grid">
+                  {kanjiDetails.map((detail, index) => (
+                    <div
+                      key={`${detail.kanji}-${detail.segmentText}-${index}`}
+                      className="details-kanji-card"
+                    >
+                      <div className="details-kanji-card__char" lang="ja">{detail.kanji}</div>
+                      <div className="details-kanji-card__meaning">
+                        {detail.meanings && detail.meanings.length > 0
+                          ? detail.meanings.slice(0, 3).join(', ')
+                          : kanjiMeaningsLoading
+                            ? 'Chargement du sens...'
+                            : 'Sens indisponible'}
+                      </div>
+                      <div className="details-kanji-card__reading">
+                        {detail.reading
+                          ? `Lecture : ${detail.reading}`
+                          : detail.segmentReading
+                            ? `Lecture du groupe : ${detail.segmentReading}`
+                            : 'Lecture indisponible'}
+                      </div>
+                      {detail.dictionaryKunReadings && detail.dictionaryKunReadings.length > 0 ? (
+                        <div className="details-kanji-card__dictionary-reading">
+                          Kun : {detail.dictionaryKunReadings.slice(0, 3).join(', ')}
+                        </div>
+                      ) : null}
+                      {detail.dictionaryOnReadings && detail.dictionaryOnReadings.length > 0 ? (
+                        <div className="details-kanji-card__dictionary-reading">
+                          On : {detail.dictionaryOnReadings.slice(0, 3).join(', ')}
+                        </div>
+                      ) : null}
+                      <div className="details-kanji-card__context" lang="ja">
+                        Segment : {detail.segmentText}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
-          <i>Sélectionner un token pour voir les détails</i>
+          <i>Sélectionne un token dans la phrase pour afficher son détail.</i>
         )}
       </div>
     </div>

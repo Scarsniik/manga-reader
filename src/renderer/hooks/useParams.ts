@@ -7,6 +7,8 @@ export type AppParams = {
     showHiddens?: boolean;
     titleLineCount?: number;
     readerPreloadPageCount?: number;
+    readerOcrDetectedSectionOpen?: boolean;
+    readerOcrManualSectionOpen?: boolean;
     ocrAutoRunOnImport?: boolean;
     ocrAutoAssignJapaneseLanguage?: boolean;
     persistMangaFilters?: boolean;

@@ -2,31 +2,182 @@
 
 .details { margin-top: 14px }
 
-.details .label { font-weight: $jp-font-weight-bold; margin-bottom: 8px; color: $jp-text; font-size: $jp-font-size-lg }
+.details .label {
+  font-weight: $jp-font-weight-bold;
+  margin-bottom: 10px;
+  color: $jp-text;
+  font-size: 1rem;
+}
 
 .details-box {
   border: 1px solid $jp-border;
   background: $jp-surface;
-  padding: 14px;
-  border-radius: $jp-radius;
-  min-height: 64px;
+  padding: 16px;
+  border-radius: $jp-radius-lg;
+  min-height: 96px;
   color: $jp-text;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .details-box i { color: $jp-muted }
 
-.details-vocab-item { margin-bottom: 12px }
-.details-vocab-item .spelling { font-weight: $jp-font-weight-bold; color: $jp-text; font-size:$jp-font-weight-bold }
-.details-vocab-item .reading { color: $jp-muted; font-weight: $jp-font-weight-regular; margin-left: 8px; font-size: $jp-font-size-sm }
-.details-vocab-item .meanings { font-size: $jp-font-size-sm; color: $jp-muted; margin-top: 6px }
+.details-content {
+  display: grid;
+  gap: 16px;
+}
+
+.details-token-hero {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: $jp-radius;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(111,163,200,0.14);
+}
+
+.details-token-hero__surface {
+  font-size: clamp(1.5rem, 1.8vw, 1.85rem);
+  line-height: 1.9;
+  font-family: $jp-japanese-font;
+}
+
+.details-token-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: $jp-muted;
+  font-size: $jp-font-size-sm;
+}
+
+.details-token-hero__meanings {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+
+.details-token-hero__meaning {
+  color: $jp-text;
+  font-size: 1.02rem;
+  line-height: 1.65;
+  font-weight: $jp-font-weight-medium;
+  padding-top: 2px;
+}
+
+.details-section {
+  display: grid;
+  gap: 10px;
+}
+
+.details-section__title {
+  font-size: 0.95rem;
+  font-weight: $jp-font-weight-medium;
+  color: $jp-text-soft;
+}
+
+.details-vocab-list {
+  display: grid;
+  gap: 10px;
+}
+
+.details-vocab-item {
+  padding: 12px;
+  border-radius: $jp-radius;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.details-vocab-item__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.details-vocab-item__spelling {
+  font-weight: $jp-font-weight-bold;
+  color: $jp-text;
+  font-size: 1.15rem;
+  line-height: 1.8;
+  font-family: $jp-japanese-font;
+}
+
+.details-vocab-item__badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: $jp-muted;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 999px;
+  padding: 5px 8px;
+}
+
+.details-vocab-item__meanings {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 1.35rem;
+}
+
+.details-meaning-line {
+  font-size: 0.95rem;
+  color: $jp-text-soft;
+  line-height: 1.55;
+}
+
+.details-kanji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.details-kanji-card {
+  padding: 12px;
+  border-radius: $jp-radius;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+  display: grid;
+  gap: 6px;
+}
+
+.details-kanji-card__char {
+  font-size: 2rem;
+  line-height: 1;
+  font-family: $jp-japanese-font;
+}
+
+.details-kanji-card__reading {
+  color: $jp-text-soft;
+  font-size: $jp-font-size-sm;
+}
+
+.details-kanji-card__meaning {
+  color: $jp-text;
+  font-size: $jp-font-size-sm;
+  line-height: 1.45;
+}
+
+.details-kanji-card__dictionary-reading {
+  color: $jp-muted;
+  font-size: 11px;
+}
+
+.details-kanji-card__context {
+  color: $jp-muted;
+  font-size: 11px;
+}
+
+.details-empty {
+  color: $jp-muted;
+  font-size: $jp-font-size-sm;
+}
 
 .details-error { color: #ff6b6b }
-.details-word { font-weight: 700 }
-.details-sub { color: $jp-muted; font-size: 12px; margin-top: 8px }
-.details-senses { margin-top: 8px }
-.details-sense { margin-bottom: 6px }
-.details-sense-pos { color: $jp-muted; font-size: 12px }
 
 @media (max-width: 600px) {
   .details-box { padding: 10px }
+
+  .details-vocab-item__top {
+    flex-direction: column;
+  }
 }
