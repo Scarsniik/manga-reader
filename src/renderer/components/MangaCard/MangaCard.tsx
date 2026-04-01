@@ -256,7 +256,7 @@ const MangaCard: React.FC<Props> = ({
             onClick: onEditClick
         },
         {
-            label: 'OCR',
+            label: 'OCR / Vocabulaire',
             onClick: onOcrClick
         },
         {

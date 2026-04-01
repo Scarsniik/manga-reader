@@ -48,3 +48,16 @@ export async function copyImageToClipboard(event: any, imagePathOrUrl: string) {
         };
     }
 }
+
+export async function copyTextToClipboard(_event: any, text: string) {
+    try {
+        clipboard.writeText(String(text || ""));
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error copying text to clipboard", error);
+        return {
+            ok: false,
+            error: String(error && error.message ? error.message : error),
+        };
+    }
+}

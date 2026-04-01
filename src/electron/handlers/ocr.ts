@@ -1,4 +1,4 @@
-import { IpcMainInvokeEvent, app } from "electron";
+import { IpcMainInvokeEvent, app, net } from "electron";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
@@ -147,6 +147,15 @@ type MangaOcrFile = {
 
 type OcrQueueJobStatus = "queued" | "detecting_language" | "running" | "paused" | "completed" | "error" | "cancelled";
 type OcrQueueJobMode = "on_demand" | "full_manga";
+type OcrQueueJobPriority = "background" | "user_requested" | "user_waiting";
+type MangaVocabularyMode = "unique" | "all";
+
+type JpdbParseToken = [number | number[] | null, number, number, unknown];
+
+type JpdbParseResult = {
+  tokens?: JpdbParseToken[];
+  vocabulary?: unknown[];
+};
 
 type OcrQueueJob = {
   id: string;
@@ -169,6 +178,41 @@ type OcrQueueJob = {
   pauseRequested?: boolean;
   cancelRequested?: boolean;
   languageDetection?: OcrLanguageDetection | null;
+  priority: OcrQueueJobPriority;
+};
+
+type MangaVocabularyFile = {
+  version: string;
+  manga: {
+    id: string;
+    title: string;
+    rootPath: string;
+  };
+  source: {
+    mode: MangaVocabularyMode;
+    extractedAt: string;
+    ocrFilePath: string;
+    ocrUpdatedAt?: string;
+    phraseCount: number;
+    processedPages: number;
+    failedPages: number;
+  };
+  counts: {
+    allTokens: number;
+    uniqueTokens: number;
+    outputTokens: number;
+  };
+  tokens: string[];
+};
+
+type MangaVocabularyStatus = {
+  exists: boolean;
+  filePath: string;
+  mode: MangaVocabularyMode | null;
+  extractedAt?: string;
+  allTokens: number;
+  uniqueTokens: number;
+  outputTokens: number;
 };
 
 type OcrMangaStatus = {
@@ -179,6 +223,7 @@ type OcrMangaStatus = {
   activeJob: OcrQueueJobSnapshot | null;
   completedPages: number;
   totalPages: number;
+  vocabulary: MangaVocabularyStatus;
 };
 
 type OcrQueueJobSnapshot = Omit<OcrQueueJob, "pauseRequested" | "cancelRequested">;
@@ -224,17 +269,33 @@ const CACHE_SCHEMA_VERSION = "mokuro-page-v7";
 const MANGA_OCR_FILE_NAME = ".manga-helper.ocr.json";
 const MANGA_OCR_SCHEMA_VERSION = "manga-ocr-file-v1";
 const MANGA_OCR_PAGE_SCHEMA_VERSION = "manga-ocr-page-v4";
+const MANGA_VOCABULARY_FILE_NAME = ".manga-helper.vocabulary.json";
+const MANGA_VOCABULARY_SCHEMA_VERSION = "manga-vocabulary-v1";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
 const WORKER_REQUEST_TIMEOUT_MS = 5 * 60_000;
 const WORKER_PREWARM_TIMEOUT_MS = 10 * 60_000;
+const OCR_QUEUE_PRIORITY_WEIGHT: Record<OcrQueueJobPriority, number> = {
+  background: 0,
+  user_requested: 1,
+  user_waiting: 2,
+};
+const OCR_STATUS_POLL_MS = 1_000;
+const OCR_STATUS_WAIT_TIMEOUT_MS = 60 * 60_000;
+const JPDB_PARSE_CONCURRENCY = 1;
+const JPDB_PARSE_THROTTLE_MS = 350;
+const JPDB_PARSE_MAX_ATTEMPTS = 5;
+const WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS = [80, 160, 320, 640, 1_000, 1_600];
+const WINDOWS_TRANSIENT_FS_ERROR_CODES = new Set(["EPERM", "EACCES", "EBUSY", "ENOTEMPTY", "EEXIST"]);
 
 let workerState: OcrWorkerState | null = null;
 let workerPrewarmPromise: Promise<boolean> | null = null;
 const ocrQueueJobs = new Map<string, OcrQueueJob>();
 let ocrQueueOrder: string[] = [];
 let ocrQueueRunnerPromise: Promise<void> | null = null;
+let jpdbParseQueue: Promise<void> = Promise.resolve();
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const OCR_TEXT_SEGMENT_SPLIT_RE = /[\s\u3000、。．，,・･…‥！？!?：:；;「」『』（）()［］\[\]【】〈〉《》]+/u;
 const OCR_WORD_LIKE_CHAR_RE = /[0-9A-Za-z\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff々〆ヵヶ]/u;
 
@@ -499,6 +560,7 @@ async function invalidateCacheForImagePath(imagePath: string) {
 }
 
 const getMangaOcrFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_OCR_FILE_NAME);
+const getMangaVocabularyFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_VOCABULARY_FILE_NAME);
 
 const toLocalFileUrl = (filePath: string) => pathToFileURL(filePath).href.replace(/^file:\/\//, "local://");
 
@@ -586,11 +648,152 @@ async function writeMangaOcrFile(mangaPath: string, file: MangaOcrFile) {
       updatedAt: new Date().toISOString(),
     },
   };
+  const serialized = JSON.stringify(nextFile, null, 2);
 
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.writeFile(tempPath, JSON.stringify(nextFile, null, 2), "utf-8");
-  await fs.rename(tempPath, targetPath);
+  await writeJsonFileAtomically(targetPath, tempPath, serialized);
   return nextFile;
+}
+
+function buildEmptyMangaVocabularyStatus(mangaPath: string): MangaVocabularyStatus {
+  return {
+    exists: false,
+    filePath: getMangaVocabularyFilePath(mangaPath),
+    mode: null,
+    extractedAt: undefined,
+    allTokens: 0,
+    uniqueTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+function getMangaVocabularyStatusSnapshot(mangaPath: string, file?: MangaVocabularyFile | null): MangaVocabularyStatus {
+  if (!file) {
+    return buildEmptyMangaVocabularyStatus(mangaPath);
+  }
+
+  return {
+    exists: true,
+    filePath: getMangaVocabularyFilePath(mangaPath),
+    mode: file.source?.mode === "all" ? "all" : "unique",
+    extractedAt: file.source?.extractedAt,
+    allTokens: Number(file.counts?.allTokens || 0),
+    uniqueTokens: Number(file.counts?.uniqueTokens || 0),
+    outputTokens: Number(file.counts?.outputTokens || 0),
+  };
+}
+
+async function readMangaVocabularyFile(mangaPath: string): Promise<MangaVocabularyFile | null> {
+  const targetPath = getMangaVocabularyFilePath(mangaPath);
+
+  try {
+    const raw = await fs.readFile(targetPath, "utf-8");
+    const parsed = JSON.parse(raw) as MangaVocabularyFile;
+    const normalizedTokens = Array.isArray(parsed?.tokens)
+      ? parsed.tokens.filter((token): token is string => typeof token === "string" && token.length > 0)
+      : [];
+
+    return {
+      version: parsed?.version || MANGA_VOCABULARY_SCHEMA_VERSION,
+      manga: {
+        id: String(parsed?.manga?.id || path.basename(mangaPath)),
+        title: String(parsed?.manga?.title || path.basename(mangaPath)),
+        rootPath: mangaPath,
+      },
+      source: {
+        mode: parsed?.source?.mode === "all" ? "all" : "unique",
+        extractedAt: String(parsed?.source?.extractedAt || new Date(0).toISOString()),
+        ocrFilePath: String(parsed?.source?.ocrFilePath || getMangaOcrFilePath(mangaPath)),
+        ocrUpdatedAt: parsed?.source?.ocrUpdatedAt,
+        phraseCount: Number(parsed?.source?.phraseCount || 0),
+        processedPages: Number(parsed?.source?.processedPages || 0),
+        failedPages: Number(parsed?.source?.failedPages || 0),
+      },
+      counts: {
+        allTokens: Number(parsed?.counts?.allTokens || normalizedTokens.length),
+        uniqueTokens: Number(parsed?.counts?.uniqueTokens || new Set(normalizedTokens).size),
+        outputTokens: Number(parsed?.counts?.outputTokens || normalizedTokens.length),
+      },
+      tokens: normalizedTokens,
+    };
+  } catch (error: any) {
+    if (error?.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function writeMangaVocabularyFile(mangaPath: string, file: MangaVocabularyFile) {
+  const targetPath = getMangaVocabularyFilePath(mangaPath);
+  const tempPath = `${targetPath}.${randomUUID()}.tmp`;
+  const nextFile: MangaVocabularyFile = {
+    ...file,
+    version: MANGA_VOCABULARY_SCHEMA_VERSION,
+    manga: {
+      ...(file?.manga || {}),
+      rootPath: mangaPath,
+    },
+    tokens: Array.isArray(file?.tokens)
+      ? file.tokens.filter((token): token is string => typeof token === "string" && token.length > 0)
+      : [],
+  };
+  const serialized = JSON.stringify(nextFile, null, 2);
+
+  await writeJsonFileAtomically(targetPath, tempPath, serialized);
+  return nextFile;
+}
+
+async function writeJsonFileAtomically(targetPath: string, tempPath: string, content: string) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(tempPath, content, "utf-8");
+
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      await fs.rename(tempPath, targetPath);
+      return;
+    } catch (error: any) {
+      lastError = error;
+      const code = String(error?.code || "");
+      if (!WINDOWS_TRANSIENT_FS_ERROR_CODES.has(code)) {
+        break;
+      }
+
+      // On Windows, replacing an existing file can temporarily fail if the target
+      // is still touched by AV/indexing or another reader. Try a best-effort remove
+      // before retrying the rename.
+      try {
+        await fs.unlink(targetPath);
+      } catch {
+        // ignore: file may not exist yet, or may still be locked
+      }
+
+      if (attempt < WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS.length) {
+        await delay(WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS[attempt]);
+      }
+    }
+  }
+
+  try {
+    await fs.writeFile(targetPath, content, "utf-8");
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      // ignore temp cleanup failures
+    }
+    return;
+  } catch (fallbackError: any) {
+    lastError = fallbackError;
+  }
+
+  try {
+    await fs.unlink(tempPath);
+  } catch {
+    // ignore temp cleanup failures
+  }
+
+  throw lastError;
 }
 
 function normalizeManualBoxes(boxes: unknown): NormalizedBox[] {
@@ -736,6 +939,147 @@ function countJapaneseChars(text: string) {
 
 function countLatinChars(text: string) {
   return Array.from(text).reduce((count, char) => count + (/[A-Za-z]/.test(char) ? 1 : 0), 0);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }));
+
+  return results;
+}
+
+function normalizeVocabularyMode(value: unknown): MangaVocabularyMode {
+  return value === "all" ? "all" : "unique";
+}
+
+function getJpdbTokenSurfaceFromText(text: string, token: JpdbParseToken): string {
+  const position = token?.[1];
+  const length = token?.[2];
+
+  if (typeof position !== "number" || typeof length !== "number" || length <= 0) {
+    return "";
+  }
+
+  return text.slice(position, position + length);
+}
+
+async function parseTextWithJpdbInMain(text: string, apiKey: string): Promise<JpdbParseResult> {
+  await app.whenReady();
+
+  const body = JSON.stringify({
+    text,
+    token_fields: ["vocabulary_index", "position", "length", "furigana"],
+    position_length_encoding: "utf16",
+    vocabulary_fields: ["vid", "sid", "rid", "spelling", "reading", "frequency_rank", "meanings"],
+  });
+
+  let releaseQueue = () => {};
+  const previousQueue = jpdbParseQueue;
+  jpdbParseQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+
+  await previousQueue;
+
+  try {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= JPDB_PARSE_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await net.fetch("https://jpdb.io/api/v1/parse", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body,
+        });
+
+        if (!response.ok) {
+          const details = await response.text();
+          throw new Error(`JPDB API error ${response.status}: ${details}`);
+        }
+
+        return await response.json() as JpdbParseResult;
+      } catch (error: any) {
+        lastError = error;
+        const message = String(error?.message || error || "");
+        const isApiResponseError = message.includes("JPDB API error");
+        const isLastAttempt = attempt >= JPDB_PARSE_MAX_ATTEMPTS;
+
+        if (isApiResponseError || isLastAttempt) {
+          break;
+        }
+
+        await delay(700 * attempt);
+      }
+    }
+
+    throw new Error(String(lastError && (lastError as any).message ? (lastError as any).message : lastError || "JPDB network error"));
+  } finally {
+    await delay(JPDB_PARSE_THROTTLE_MS);
+    releaseQueue();
+  }
+}
+
+function extractTokenLabelsFromParse(text: string, parseResult: JpdbParseResult): string[] {
+  if (!Array.isArray(parseResult?.tokens)) {
+    return [];
+  }
+
+  return parseResult.tokens
+    .map((token) => getJpdbTokenSurfaceFromText(text, token))
+    .filter((surface) => surface.length > 0);
+}
+
+function collectTextsFromMangaOcrFile(file: MangaOcrFile): { phrases: string[]; processedPages: number } {
+  const pageEntries = Object.values(file.pages || {})
+    .filter((entry) => entry.status === "done")
+    .sort((left, right) => {
+      const pageNumberDelta = Number(left.pageIndex || 0) - Number(right.pageIndex || 0);
+      if (pageNumberDelta !== 0) {
+        return pageNumberDelta;
+      }
+      return String(left.fileName || "").localeCompare(String(right.fileName || ""));
+    });
+
+  const phrases = pageEntries.flatMap((entry) => {
+    const boxes = [
+      ...(Array.isArray(entry.boxes) ? entry.boxes : []),
+      ...(Array.isArray(entry.manualBoxes) ? entry.manualBoxes : []),
+    ];
+
+    return boxes
+      .map((box) => (typeof box?.text === "string" ? box.text.trim() : ""))
+      .filter((text) => text.length > 0);
+  });
+
+  return {
+    phrases,
+    processedPages: pageEntries.length,
+  };
 }
 
 function buildLanguageDetectionFromTexts(
@@ -1583,6 +1927,7 @@ function cloneQueueJob(job: OcrQueueJob): OcrQueueJobSnapshot {
     currentPagePath: job.currentPagePath,
     message: job.message,
     languageDetection: job.languageDetection || null,
+    priority: job.priority,
   };
 }
 
@@ -1601,16 +1946,41 @@ function getQueueJobByMangaId(mangaId: string) {
 }
 
 function getNextRunnableQueueJob() {
-  for (const jobId of ocrQueueOrder) {
-    const job = ocrQueueJobs.get(jobId);
-    if (!job) {
-      continue;
-    }
-    if (job.status === "queued") {
-      return job;
-    }
+  return ocrQueueOrder
+    .map((jobId) => ocrQueueJobs.get(jobId))
+    .filter((job): job is OcrQueueJob => !!job && job.status === "queued")
+    .sort((a, b) => {
+      const priorityDelta = OCR_QUEUE_PRIORITY_WEIGHT[b.priority] - OCR_QUEUE_PRIORITY_WEIGHT[a.priority];
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+      if (a.updatedAt !== b.updatedAt) {
+        return a.updatedAt < b.updatedAt ? -1 : 1;
+      }
+      return a.createdAt < b.createdAt ? -1 : 1;
+    })[0] || null;
+}
+
+function getHigherQueuePriority(
+  left: OcrQueueJobPriority = "background",
+  right: OcrQueueJobPriority = "background"
+): OcrQueueJobPriority {
+  return OCR_QUEUE_PRIORITY_WEIGHT[left] >= OCR_QUEUE_PRIORITY_WEIGHT[right] ? left : right;
+}
+
+function isQueueJobRunning(status?: OcrQueueJobStatus | null) {
+  return status === "queued" || status === "detecting_language" || status === "running";
+}
+
+function isMangaOcrFullyProcessed(status: OcrMangaStatus) {
+  const totalPages = Math.max(Number(status.totalPages || 0), Number(status.progress?.totalPages || 0));
+  if (totalPages <= 0) {
+    return false;
   }
-  return null;
+
+  const completedPages = Number(status.completedPages || 0);
+  const failedPages = Number(status.progress?.failedPages || 0);
+  return completedPages + failedPages >= totalPages;
 }
 
 async function recognizePageInternal(
@@ -1851,13 +2221,27 @@ function scheduleQueueRun() {
   void runOcrQueue();
 }
 
-function enqueueMangaQueueJob(manga: any, options?: { overwrite?: boolean; mode?: OcrQueueJobMode; detection?: OcrLanguageDetection | null }) {
+function enqueueMangaQueueJob(
+  manga: any,
+  options?: {
+    overwrite?: boolean;
+    mode?: OcrQueueJobMode;
+    detection?: OcrLanguageDetection | null;
+    priority?: OcrQueueJobPriority;
+  }
+) {
   const existing = getQueueJobByMangaId(manga.id);
   if (existing && ["queued", "running", "paused", "detecting_language"].includes(existing.status)) {
-    if (options?.overwrite && existing.status === "paused") {
-      touchQueueJob(existing, { overwrite: true, status: "queued", pauseRequested: false, message: null });
-      scheduleQueueRun();
-    }
+    const nextPriority = getHigherQueuePriority(existing.priority, options?.priority || existing.priority);
+    touchQueueJob(existing, {
+      overwrite: existing.overwrite || !!options?.overwrite,
+      priority: nextPriority,
+      languageDetection: options?.detection || existing.languageDetection || null,
+      ...(existing.status === "paused" && options?.overwrite
+        ? { status: "queued" as const, pauseRequested: false, message: null }
+        : {}),
+    });
+    scheduleQueueRun();
     return cloneQueueJob(existing);
   }
 
@@ -1876,6 +2260,7 @@ function enqueueMangaQueueJob(manga: any, options?: { overwrite?: boolean; mode?
     failedPages: 0,
     message: null,
     languageDetection: options?.detection || null,
+    priority: options?.priority || "background",
   };
 
   ocrQueueJobs.set(job.id, job);
@@ -1885,9 +2270,26 @@ function enqueueMangaQueueJob(manga: any, options?: { overwrite?: boolean; mode?
   return cloneQueueJob(job);
 }
 
+async function readMangaVocabularyForUi(mangaPath: string) {
+  const file = await readMangaVocabularyFile(mangaPath);
+  const status = getMangaVocabularyStatusSnapshot(mangaPath, file);
+  const tokens = Array.isArray(file?.tokens) ? file.tokens : [];
+  return {
+    ...status,
+    tokens,
+    csv: tokens.join(","),
+    phraseCount: Number(file?.source?.phraseCount || 0),
+    processedPages: Number(file?.source?.processedPages || 0),
+    failedPages: Number(file?.source?.failedPages || 0),
+    ocrFilePath: file?.source?.ocrFilePath || getMangaOcrFilePath(mangaPath),
+    ocrUpdatedAt: file?.source?.ocrUpdatedAt,
+  };
+}
+
 async function getMangaOcrStatusInternal(manga: any): Promise<OcrMangaStatus> {
   const pageFiles = await listImageFiles(manga.path);
   const file = await readMangaOcrFile(manga.path);
+  const vocabulary = await readMangaVocabularyFile(manga.path);
   const progress = file?.progress || {
     totalPages: pageFiles.length,
     completedPages: 0,
@@ -1911,7 +2313,188 @@ async function getMangaOcrStatusInternal(manga: any): Promise<OcrMangaStatus> {
     activeJob: getQueueJobByMangaId(manga.id) ? cloneQueueJob(getQueueJobByMangaId(manga.id) as OcrQueueJob) : null,
     completedPages: Number(progress.completedPages || 0),
     totalPages: Math.max(pageFiles.length, Number(progress.totalPages || 0)),
+    vocabulary: getMangaVocabularyStatusSnapshot(manga.path, vocabulary),
   };
+}
+
+async function startMangaOcrInternal(manga: any, options?: Record<string, any>) {
+  const settings = await getSettings();
+  const pageFiles = await listImageFiles(manga.path);
+  const detection = await detectLanguageForManga(manga, pageFiles, settings, !!options?.forceResample);
+
+  if ((detection.status === "uncertain" || detection.status === "likely_non_japanese")
+    && !options?.confirmLanguage) {
+    return {
+      queued: false,
+      requiresConfirmation: true,
+      reason: detection.status === "uncertain" ? "uncertain-language" : "likely-non-japanese",
+      detection,
+      status: await getMangaOcrStatusInternal(manga),
+    };
+  }
+
+  const job = enqueueMangaQueueJob(manga, {
+    overwrite: !!options?.overwrite,
+    mode: "full_manga",
+    detection,
+    priority: options?.priority || "user_requested",
+  });
+
+  return {
+    queued: true,
+    job,
+    detection,
+    status: await getMangaOcrStatusInternal(manga),
+  };
+}
+
+async function waitForMangaOcrCompletion(manga: any): Promise<OcrMangaStatus> {
+  const deadline = Date.now() + OCR_STATUS_WAIT_TIMEOUT_MS;
+
+  while (Date.now() <= deadline) {
+    const status = await getMangaOcrStatusInternal(manga);
+    const jobStatus = status.activeJob?.status;
+
+    if (jobStatus === "error") {
+      throw new Error(status.activeJob?.message || "Le job OCR a echoue.");
+    }
+
+    if (jobStatus === "cancelled") {
+      throw new Error("Le job OCR a ete annule.");
+    }
+
+    if (jobStatus === "paused") {
+      throw new Error("Le job OCR est en pause. Reprends-le avant de lancer l'extraction.");
+    }
+
+    if (isMangaOcrFullyProcessed(status)) {
+      return status;
+    }
+
+    if (!isQueueJobRunning(jobStatus)) {
+      throw new Error("L'OCR n'a pas produit un fichier complet exploitable pour l'extraction.");
+    }
+
+    await delay(OCR_STATUS_POLL_MS);
+  }
+
+  throw new Error("Timeout OCR: l'extraction a attendu trop longtemps la fin du job.");
+}
+
+async function ensureMangaOcrReadyForVocabularyExtraction(manga: any, options?: Record<string, any>) {
+  const currentStatus = await getMangaOcrStatusInternal(manga);
+  const jobStatus = currentStatus.activeJob?.status;
+
+  if (isMangaOcrFullyProcessed(currentStatus)) {
+    return {
+      ready: true,
+      status: currentStatus,
+    };
+  }
+
+  if (jobStatus === "paused") {
+    throw new Error("Le job OCR est en pause. Reprends-le avant de lancer l'extraction.");
+  }
+
+  if (isQueueJobRunning(jobStatus)) {
+    const waitedStatus = await waitForMangaOcrCompletion(manga);
+    return {
+      ready: true,
+      status: waitedStatus,
+    };
+  }
+
+  const startResult = await startMangaOcrInternal(manga, {
+    overwrite: false,
+    confirmLanguage: !!options?.confirmLanguage,
+    priority: "user_waiting",
+  });
+
+  if (startResult?.requiresConfirmation) {
+    return startResult;
+  }
+
+  const waitedStatus = await waitForMangaOcrCompletion(manga);
+  return {
+    ready: true,
+    status: waitedStatus,
+  };
+}
+
+async function buildVocabularyFileFromOcr(
+  manga: any,
+  ocrFile: MangaOcrFile,
+  mode: MangaVocabularyMode,
+  apiKey: string
+) {
+  const { phrases, processedPages } = collectTextsFromMangaOcrFile(ocrFile);
+
+  if (phrases.length === 0) {
+    throw new Error("Aucune phrase OCR exploitable n'a ete trouvee pour ce manga.");
+  }
+
+  const parseCache = new Map<string, Promise<string[]>>();
+  const skippedPhraseErrors: string[] = [];
+  const tokenLists = await mapWithConcurrency(phrases, JPDB_PARSE_CONCURRENCY, async (phrase) => {
+    const cached = parseCache.get(phrase);
+    if (cached) {
+      return cached;
+    }
+
+    const request = parseTextWithJpdbInMain(phrase, apiKey)
+      .then((parseResult) => extractTokenLabelsFromParse(phrase, parseResult))
+      .catch((error: any) => {
+        const message = String(error?.message || error);
+        if (message.includes("JPDB API error")) {
+          throw new Error(`JPDB parse impossible pour "${phrase.slice(0, 40)}": ${message}`);
+        }
+
+        console.warn("[jpdb] Parse skipped after retries", {
+          phrasePreview: phrase.slice(0, 80),
+          error: message,
+        });
+        skippedPhraseErrors.push(`${phrase.slice(0, 40)} -> ${message}`);
+        return [];
+      });
+
+    parseCache.set(phrase, request);
+    return request;
+  });
+
+  const allTokens = tokenLists.flat();
+  const uniqueTokens = Array.from(new Set(allTokens));
+  const outputTokens = mode === "all" ? allTokens : uniqueTokens;
+
+  if (outputTokens.length === 0) {
+    if (skippedPhraseErrors.length > 0) {
+      throw new Error(`JPDB indisponible pendant l'extraction. Exemple: ${skippedPhraseErrors[0]}`);
+    }
+    throw new Error("JPDB n'a retourne aucun token exploitable pour ce manga.");
+  }
+
+  return {
+    version: MANGA_VOCABULARY_SCHEMA_VERSION,
+    manga: {
+      id: String(manga.id),
+      title: String(manga.title || path.basename(manga.path)),
+      rootPath: manga.path,
+    },
+    source: {
+      mode,
+      extractedAt: new Date().toISOString(),
+      ocrFilePath: getMangaOcrFilePath(manga.path),
+      ocrUpdatedAt: ocrFile.progress?.updatedAt,
+      phraseCount: phrases.length,
+      processedPages,
+      failedPages: Number(ocrFile.progress?.failedPages || 0),
+    },
+    counts: {
+      allTokens: allTokens.length,
+      uniqueTokens: uniqueTokens.length,
+      outputTokens: outputTokens.length,
+    },
+    tokens: outputTokens,
+  } as MangaVocabularyFile;
 }
 
 export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) {
@@ -2038,39 +2621,33 @@ export async function ocrGetMangaStatus(_event: IpcMainInvokeEvent, mangaId: str
   return getMangaOcrStatusInternal(manga);
 }
 
+export async function ocrGetMangaCompletionMap(_event: IpcMainInvokeEvent, mangaIds?: string[]) {
+  const requestedIds = Array.isArray(mangaIds) && mangaIds.length > 0
+    ? new Set(mangaIds.map((id) => String(id)))
+    : null;
+  const mangas = (await getMangas())
+    .filter((manga: any) => !requestedIds || requestedIds.has(String(manga.id)));
+
+  const entries = await Promise.all(mangas.map(async (manga: any) => {
+    const status = await getMangaOcrStatusInternal(manga);
+    const totalPages = Math.max(Number(status.totalPages || 0), Number(status.progress?.totalPages || 0));
+    const processedPages = Number(status.completedPages || 0) + Number(status.progress?.failedPages || 0);
+    const hasCompleteOcr = !!status.exists && totalPages > 0 && processedPages >= totalPages;
+    return [String(manga.id), hasCompleteOcr] as const;
+  }));
+
+  return Object.fromEntries(entries);
+}
+
 export async function ocrStartManga(_event: IpcMainInvokeEvent, mangaId: string, options?: Record<string, any>) {
   const manga = await getMangaById(mangaId);
   if (!manga) {
     throw new Error("Manga not found");
   }
-
-  const settings = await getSettings();
-  const pageFiles = await listImageFiles(manga.path);
-  const detection = await detectLanguageForManga(manga, pageFiles, settings, !!options?.forceResample);
-
-  if ((detection.status === "uncertain" || detection.status === "likely_non_japanese")
-    && !options?.confirmLanguage) {
-    return {
-      queued: false,
-      requiresConfirmation: true,
-      reason: detection.status === "uncertain" ? "uncertain-language" : "likely-non-japanese",
-      detection,
-      status: await getMangaOcrStatusInternal(manga),
-    };
-  }
-
-  const job = enqueueMangaQueueJob(manga, {
-    overwrite: !!options?.overwrite,
-    mode: "full_manga",
-    detection,
+  return startMangaOcrInternal(manga, {
+    ...(options || {}),
+    priority: "user_requested",
   });
-
-  return {
-    queued: true,
-    job,
-    detection,
-    status: await getMangaOcrStatusInternal(manga),
-  };
 }
 
 export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Record<string, any>) {
@@ -2110,6 +2687,7 @@ export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Reco
       overwrite: mode === "overwrite_all",
       mode: "full_manga",
       detection,
+      priority: "background",
     }));
   }
 
@@ -2148,7 +2726,58 @@ export async function ocrQueueImportManga(manga: any) {
       overwrite: false,
       mode: "full_manga",
       detection,
+      priority: "background",
     }),
+  };
+}
+
+export async function ocrReadMangaVocabulary(_event: IpcMainInvokeEvent, mangaId: string) {
+  const manga = await getMangaById(mangaId);
+  if (!manga) {
+    throw new Error("Manga not found");
+  }
+
+  return readMangaVocabularyForUi(manga.path);
+}
+
+export async function ocrExtractMangaVocabulary(
+  _event: IpcMainInvokeEvent,
+  mangaId: string,
+  options?: Record<string, any>
+) {
+  const manga = await getMangaById(mangaId);
+  if (!manga) {
+    throw new Error("Manga not found");
+  }
+
+  const ensureResult = await ensureMangaOcrReadyForVocabularyExtraction(manga, options);
+  if ((ensureResult as any)?.requiresConfirmation) {
+    return ensureResult;
+  }
+
+  const settings = await getSettings();
+  const apiKey = String(settings?.jpdbApiKey || "").trim();
+  if (!apiKey) {
+    throw new Error("JPDB API key not configured.");
+  }
+
+  const ocrFile = await readMangaOcrFile(manga.path);
+  if (!ocrFile) {
+    throw new Error("Le fichier OCR du manga est introuvable apres la fin du job.");
+  }
+
+  const mode = normalizeVocabularyMode(options?.mode);
+  const vocabularyFile = await buildVocabularyFileFromOcr(manga, ocrFile, mode, apiKey);
+  const savedVocabulary = await writeMangaVocabularyFile(manga.path, vocabularyFile);
+
+  return {
+    ok: true,
+    status: await getMangaOcrStatusInternal(manga),
+    vocabulary: {
+      ...(await readMangaVocabularyForUi(manga.path)),
+      tokens: savedVocabulary.tokens,
+      csv: savedVocabulary.tokens.join(","),
+    },
   };
 }
 

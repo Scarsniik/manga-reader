@@ -23,6 +23,7 @@ type MangaListFilterState = {
     expanded: boolean;
     statusFilter: string[];
     unfinishedFirst: boolean;
+    withCompleteOcr: boolean;
     selectedSeriesId: string | null;
 };
 
@@ -37,6 +38,7 @@ function buildDefaultFilters(defaultSort: string, defaultSearch: string): MangaL
         expanded: false,
         statusFilter: [],
         unfinishedFirst: false,
+        withCompleteOcr: false,
         selectedSeriesId: null,
     };
 }
@@ -112,6 +114,7 @@ function normalizePersistedFilters(
         expanded: data.expanded === true,
         statusFilter: sanitizeStringArray(data.statusFilter),
         unfinishedFirst: data.unfinishedFirst === true,
+        withCompleteOcr: data.withCompleteOcr === true,
         selectedSeriesId: typeof data.selectedSeriesId === 'string' && data.selectedSeriesId.trim().length > 0
             ? data.selectedSeriesId
             : null,
@@ -123,7 +126,7 @@ function parseFiltersFromQuery(defaultSort: string, defaultSearch: string) {
 
     try {
         const qs = new URLSearchParams(window.location.search);
-        const hasUrlFilters = ['q', 'tags', 'sort', 'expanded', 'language', 'status', 'unfinished', 'series']
+        const hasUrlFilters = ['q', 'tags', 'sort', 'expanded', 'language', 'status', 'unfinished', 'ocrComplete', 'series']
             .some(key => qs.has(key));
 
         return {
@@ -136,6 +139,7 @@ function parseFiltersFromQuery(defaultSort: string, defaultSearch: string) {
                 expanded: qs.get('expanded') === '1',
                 statusFilter: decodeArrayParam(qs.get('status')),
                 unfinishedFirst: qs.get('unfinished') === '1',
+                withCompleteOcr: qs.get('ocrComplete') === '1',
                 selectedSeriesId: qs.get('series') || null,
             } as MangaListFilterState,
         };
@@ -152,7 +156,9 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
     // Cache for page counts that are computed asynchronously by backend (like MangaCard)
     const pagesCacheRef = React.useRef<Record<string, number | null | undefined>>({});
+    const ocrCompletionCacheRef = React.useRef<Record<string, boolean | undefined>>({});
     const [pagesVersion, setPagesVersion] = useState<number>(0);
+    const [ocrCompletionVersion, setOcrCompletionVersion] = useState<number>(0);
     const initialUrlStateRef = React.useRef(parseFiltersFromQuery(defaultSort, defaultSearch));
     const hydratedFiltersRef = React.useRef(false);
     const previousPersistSettingRef = React.useRef(persistMangaFilters);
@@ -165,6 +171,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     const [expanded, setExpanded] = useState<boolean>(initialUrlStateRef.current.filters.expanded);
     const [statusFilter, setStatusFilter] = useState<string[]>(initialUrlStateRef.current.filters.statusFilter);
     const [unfinishedFirst, setUnfinishedFirst] = useState<boolean>(initialUrlStateRef.current.filters.unfinishedFirst);
+    const [withCompleteOcr, setWithCompleteOcr] = useState<boolean>(initialUrlStateRef.current.filters.withCompleteOcr);
     const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(initialUrlStateRef.current.filters.selectedSeriesId);
 
     const availableTags = useMemo(
@@ -190,6 +197,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         setExpanded(state.expanded);
         setStatusFilter(state.statusFilter);
         setUnfinishedFirst(state.unfinishedFirst);
+        setWithCompleteOcr(state.withCompleteOcr);
         setSelectedSeriesId(state.selectedSeriesId);
     }, []);
 
@@ -201,6 +209,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         expanded,
         statusFilter,
         unfinishedFirst,
+        withCompleteOcr,
         selectedSeriesId,
     }), [
         expanded,
@@ -211,6 +220,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         sortBy,
         statusFilter,
         unfinishedFirst,
+        withCompleteOcr,
     ]);
 
     useEffect(() => {
@@ -241,6 +251,37 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 });
             }
         });
+    }, [mangaList]);
+
+    useEffect(() => {
+        if (!window || !(window as any).api || typeof (window as any).api.ocrGetMangaCompletionMap !== 'function') return;
+
+        const mangaIds = (mangaList || [])
+            .map(m => m?.id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+        if (mangaIds.length === 0) return;
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const completionMap = await (window as any).api.ocrGetMangaCompletionMap(mangaIds);
+                if (cancelled || !completionMap || typeof completionMap !== 'object') return;
+
+                ocrCompletionCacheRef.current = {
+                    ...ocrCompletionCacheRef.current,
+                    ...completionMap,
+                };
+                setOcrCompletionVersion(v => v + 1);
+            } catch (err) {
+                console.warn('ocrGetMangaCompletionMap failed', err);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [mangaList]);
 
     useEffect(() => {
@@ -330,6 +371,10 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 if (!hasAll) return false;
             }
 
+            if (withCompleteOcr) {
+                if (ocrCompletionCacheRef.current[m.id] !== true) return false;
+            }
+
             // status filter: keep statuses mutually exclusive.
             // page 1 is considered "Non lu" unless it is also the last page.
             if (statusFilter && statusFilter.length > 0) {
@@ -383,6 +428,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     }, [
         mangaList,
         onSearch,
+        ocrCompletionVersion,
         pagesVersion,
         params,
         query,
@@ -393,6 +439,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         tags,
         effectiveSelectedTags,
         unfinishedFirst,
+        withCompleteOcr,
     ]);
 
     // trigger search whenever input state changes
@@ -415,6 +462,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                 qs.delete('language');
             }
             if (unfinishedFirst) qs.set('unfinished', '1'); else qs.delete('unfinished');
+            if (withCompleteOcr) qs.set('ocrComplete', '1'); else qs.delete('ocrComplete');
             if (selectedSeriesId) qs.set('series', selectedSeriesId); else qs.delete('series');
             const newQs = qs.toString();
             const newUrl = `${window.location.pathname}${newQs ? '?' + newQs : ''}${window.location.hash || ''}`;
@@ -422,7 +470,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         } catch (e) {
             console.warn('Failed to sync search params to URL', e);
         }
-    }, [effectiveSelectedTags, expanded, query, selectedLanguageIds, selectedSeriesId, sortBy, statusFilter, unfinishedFirst]);
+    }, [effectiveSelectedTags, expanded, query, selectedLanguageIds, selectedSeriesId, sortBy, statusFilter, unfinishedFirst, withCompleteOcr]);
 
     // Persist filters in settings when the option is enabled.
     useEffect(() => {
@@ -496,10 +544,18 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                         </div>
 
                         <div className="filter-item checkbox-group">
-                            <div className="filter-line">
-                                <div className="filter-control">
-                                    <input type="checkbox" checked={unfinishedFirst} onChange={e => setUnfinishedFirst(e.target.checked)} />
-                                    <label className="checkbox-label">Montrer les mangas en cours en premier</label>
+                            <div className="checkbox-stack">
+                                <div className="filter-line">
+                                    <div className="filter-control">
+                                        <input type="checkbox" checked={unfinishedFirst} onChange={e => setUnfinishedFirst(e.target.checked)} />
+                                        <label className="checkbox-label">Montrer les mangas en cours en premier</label>
+                                    </div>
+                                </div>
+                                <div className="filter-line">
+                                    <div className="filter-control">
+                                        <input type="checkbox" checked={withCompleteOcr} onChange={e => setWithCompleteOcr(e.target.checked)} />
+                                        <label className="checkbox-label">Avec OCR complet</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>

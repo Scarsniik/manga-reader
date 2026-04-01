@@ -67,6 +67,7 @@ ipcMain.handle("get-cover", async (event: IpcMainInvokeEvent, folderPath: string
 ipcMain.handle("get-cover-data", async (event: IpcMainInvokeEvent, folderPath: string) => pages.getCoverData(event, folderPath));
 ipcMain.handle("list-pages", async (event: IpcMainInvokeEvent, folderPath: string) => pages.listPages(event, folderPath));
 ipcMain.handle("copy-image-to-clipboard", async (event: IpcMainInvokeEvent, imagePathOrUrl: string) => clipboardHandlers.copyImageToClipboard(event, imagePathOrUrl));
+ipcMain.handle("copy-text-to-clipboard", async (event: IpcMainInvokeEvent, text: string) => clipboardHandlers.copyTextToClipboard(event, text));
 
 // Open a folder picker and return the selected directory path (fallback for renderer)
 ipcMain.handle("open-directory", async (event: IpcMainInvokeEvent) => {
@@ -92,7 +93,10 @@ ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDat
 ipcMain.handle("ocr-add-manual-selections", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrAddManualSelections(event, payload));
 ipcMain.handle("ocr-delete-manual-selection", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrDeleteManualSelection(event, payload));
 ipcMain.handle("ocr-get-manga-status", async (event: IpcMainInvokeEvent, mangaId: string) => ocr.ocrGetMangaStatus(event, mangaId));
+ipcMain.handle("ocr-get-manga-completion-map", async (event: IpcMainInvokeEvent, mangaIds?: string[]) => ocr.ocrGetMangaCompletionMap(event, mangaIds));
 ipcMain.handle("ocr-start-manga", async (event: IpcMainInvokeEvent, mangaId: string, opts?: Record<string, any>) => ocr.ocrStartManga(event, mangaId, opts));
+ipcMain.handle("ocr-read-manga-vocabulary", async (event: IpcMainInvokeEvent, mangaId: string) => ocr.ocrReadMangaVocabulary(event, mangaId));
+ipcMain.handle("ocr-extract-manga-vocabulary", async (event: IpcMainInvokeEvent, mangaId: string, opts?: Record<string, any>) => ocr.ocrExtractMangaVocabulary(event, mangaId, opts));
 ipcMain.handle("ocr-start-library", async (event: IpcMainInvokeEvent, opts?: Record<string, any>) => ocr.ocrStartLibrary(event, opts));
 ipcMain.handle("ocr-queue-status", async () => ocr.ocrGetQueueStatus());
 ipcMain.handle("ocr-pause-job", async (event: IpcMainInvokeEvent, jobId: string) => ocr.ocrPauseJob(event, jobId));

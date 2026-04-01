@@ -20,6 +20,7 @@ export type AppParams = {
         expanded: boolean;
         statusFilter: string[];
         unfinishedFirst: boolean;
+        withCompleteOcr: boolean;
         selectedSeriesId: string | null;
     } | null;
     [key: string]: any;

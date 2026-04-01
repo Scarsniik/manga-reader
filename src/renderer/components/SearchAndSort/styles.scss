@@ -76,6 +76,11 @@
     width: unset;
   }
 }
+
+.searchAndSort .checkbox-stack {
+  display: grid;
+  gap: 8px;
+}
 .searchAndSort .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 0; }
 .searchAndSort .tag-item { display: inline-flex; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.03); }
 
