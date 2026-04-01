@@ -1,7 +1,6 @@
-
-import "./SeriesField.scss";
+import "./AuthorField.scss";
 import React, { useMemo, useState } from "react";
-import useSeries from "@/renderer/hooks/useSeries";
+import useAuthors from "@/renderer/hooks/useAuthors";
 import { Field as FieldType } from "../types";
 import EntityPickerField from "./EntityPickerField";
 
@@ -12,31 +11,30 @@ interface Props {
   disableCreate?: boolean;
 }
 
-export default function SeriesField({ field, value, onChange, disableCreate = false }: Props) {
-  const { series, addSeries, removeSeries, refresh } = useSeries();
-  const [newTitle, setNewTitle] = useState("");
+export default function AuthorField({ field, value, onChange, disableCreate = false }: Props) {
+  const { authors, addAuthor, removeAuthor, refresh } = useAuthors();
+  const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const sortedSeries = useMemo(
-    () => [...series]
-      .sort((a, b) => a.title.localeCompare(b.title))
-      .map((item) => ({
-        id: item.id,
-        name: item.title,
+  const sortedAuthors = useMemo(
+    () => [...authors]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((author) => ({
+        id: author.id,
+        name: author.name,
       })),
-    [series],
+    [authors],
   );
 
   async function handleCreate(e: React.FormEvent | React.MouseEvent | React.KeyboardEvent) {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newName.trim()) return;
     setCreating(true);
     setError(null);
     try {
-      const res = await addSeries({ title: newTitle.trim() });
-      setNewTitle("");
+      const res = await addAuthor({ name: newName.trim() });
+      setNewName("");
       await refresh();
-      // Sélectionne la dernière série ajoutée (supposée être la nouvelle)
       if (res && res.length > 0) {
         const last = res[res.length - 1];
         onChange({
@@ -44,7 +42,7 @@ export default function SeriesField({ field, value, onChange, disableCreate = fa
         } as any);
       }
     } catch (err: any) {
-      setError("Erreur lors de la création de la série.");
+      setError("Erreur lors de la création de l'auteur.");
     } finally {
       setCreating(false);
     }
@@ -53,8 +51,8 @@ export default function SeriesField({ field, value, onChange, disableCreate = fa
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
-    if (!window.confirm("Supprimer cette série ?")) return;
-    await removeSeries(value!);
+    if (!window.confirm("Supprimer cet auteur ?")) return;
+    await removeAuthor(value!);
     await refresh();
     onChange({ target: { value: "", name: field.name } } as any);
   }
@@ -67,32 +65,32 @@ export default function SeriesField({ field, value, onChange, disableCreate = fa
   }
 
   return (
-    <div className="mh-series-field">
+    <div className="mh-author-field">
       <EntityPickerField
         field={field}
-        options={sortedSeries}
+        options={sortedAuthors}
         value={value ? [value] : []}
         onChange={onChange}
-        placeholder={field.placeholder || "Rechercher une série..."}
+        placeholder={field.placeholder || "Rechercher un auteur..."}
         singleSelect
       />
 
       {!disableCreate && (
-        <div className="mh-series-field__actions">
-          <div className="mh-series-field__create">
+        <div className="mh-author-field__actions">
+          <div className="mh-author-field__create">
             <input
               type="text"
-              placeholder="Nouvelle série"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              className="mh-series-field__input"
+              placeholder="Nouvel auteur"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="mh-author-field__input"
               disabled={creating}
               onKeyDown={handleInputKeyDown}
             />
             <button
               type="button"
-              className="mh-series-field__add"
-              disabled={creating || !newTitle.trim()}
+              className="mh-author-field__add"
+              disabled={creating || !newName.trim()}
               onClick={handleCreate}
             >
               +
@@ -101,17 +99,17 @@ export default function SeriesField({ field, value, onChange, disableCreate = fa
           {value ? (
             <button
               type="button"
-              title="Supprimer la série"
-              className="mh-series-field__danger"
+              title="Supprimer l'auteur"
+              className="mh-author-field__danger"
               onClick={handleDelete}
             >
-              Supprimer la série
+              Supprimer l'auteur
             </button>
           ) : null}
         </div>
       )}
 
-      {error && <div className="mh-series-field__error">{error}</div>}
+      {error && <div className="mh-author-field__error">{error}</div>}
     </div>
   );
 }

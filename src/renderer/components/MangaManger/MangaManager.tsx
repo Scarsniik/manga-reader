@@ -26,6 +26,7 @@ const MangaManager: React.FC = () => {
     const [hasLoadedMangas, setHasLoadedMangas] = useState<boolean>(false);
     const [mangas, setMangas] = useState<Manga[]>([]);
     const [filtered, setFiltered] = useState<Manga[] | null>(null);
+    const [hasResolvedInitialFilters, setHasResolvedInitialFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
     const { tags } = useTags();
@@ -249,18 +250,51 @@ const MangaManager: React.FC = () => {
     };
 
     const displayedMangas = useMemo(() => {
+        if (!hasResolvedInitialFilters) return [];
+
+        const hiddenTagIds = new Set(
+            tags.filter(tag => tag.hidden).map(tag => tag.id),
+        );
         const source = filtered !== null ? filtered : mangas;
-    return source.filter(m => {
+        return source.filter(m => {
             if (!params) return true;
             const { showHiddens } = params;
 
             // Si contient un tag hidden, ne l'affiche que si showHiddens est true
             if (!showHiddens && Array.isArray(m.tagIds) && m.tagIds.length > 0) {
-                return !m.tagIds?.some(tid => tags.find(t => t.id === tid && t.hidden));
+                return !m.tagIds.some(tid => hiddenTagIds.has(tid));
             }
             return true;
-    });
-    }, [mangas, params, tags, filtered]);
+        });
+    }, [filtered, hasResolvedInitialFilters, mangas, params, tags]);
+
+    const handleSearchResults = useCallback((result: Manga[]) => {
+        setFiltered(result);
+        setHasResolvedInitialFilters(true);
+    }, []);
+
+    const handleCardUpdated = useCallback((_id: string) => {
+        const pos = getCurrentScrollTop();
+        void (async () => {
+            await loadMangas();
+            restoreScrollPosition(pos);
+        })();
+    }, [getCurrentScrollTop, loadMangas, restoreScrollPosition]);
+
+    const handleToggleSelect = useCallback((id: string, additive: boolean) => {
+        setSelectedIds(prev => {
+            const exists = prev.includes(id);
+            if (additive) {
+                if (exists) return prev.filter(x => x !== id);
+                return [...prev, id];
+            }
+            if (selectionMode) {
+                if (exists) return prev.filter(x => x !== id);
+                return [...prev, id];
+            }
+            return prev;
+        });
+    }, [selectionMode]);
 
     const handleRemove = async (id: string) => {
         try {
@@ -361,40 +395,24 @@ const MangaManager: React.FC = () => {
                     ) : null}
                 </div>
             </div>
-            <SearchAndSort mangaList={mangas} onSearch={setFiltered} />
+            <SearchAndSort mangaList={mangas} onSearch={handleSearchResults} />
                 <div className="mangaManager-content" ref={contentRef}>
-                {mangas.length === 0 ? (
+                {!hasLoadedMangas ? (
+                    <div className="empty">Chargement de la bibliothèque...</div>
+                ) : !hasResolvedInitialFilters ? (
+                    <div className="empty">Application des filtres enregistrés...</div>
+                ) : mangas.length === 0 ? (
                     <div className="empty">Aucun manga. Glissez-déposez un dossier n'importe où pour ajouter.</div>
                 ) : (
                     <CardList
                         mangas={displayedMangas}
                         onRemove={handleRemove}
-                        onCardUpdated={(id: string) => {
-                            // reload mangas and clear filtered so SearchAndSort recomputes
-                            // preserve scroll position to avoid jumping
-                            const pos = getCurrentScrollTop();
-                            (async () => {
-                                await loadMangas();
-                                restoreScrollPosition(pos);
-                            })();
-                        }}
+                        onCardUpdated={handleCardUpdated}
                         selectedIds={selectedIds}
-                        onToggleSelect={(id: string, additive: boolean) => {
-                            setSelectedIds(prev => {
-                                const exists = prev.includes(id);
-                                if (additive) {
-                                    if (exists) return prev.filter(x => x !== id);
-                                    return [...prev, id];
-                                }
-                                // non-additive click (normal click) should replace selection when in selectionMode
-                                if (selectionMode) {
-                                    if (exists) return prev.filter(x => x !== id);
-                                    return [...prev, id];
-                                }
-                                return prev;
-                            });
-                        }}
+                        onToggleSelect={handleToggleSelect}
                         selectionMode={selectionMode}
+                        titleLineCount={params?.titleLineCount ?? 2}
+                        showPageNumbers={params?.showPageNumbers ?? true}
                     />
                 )}
             </div>

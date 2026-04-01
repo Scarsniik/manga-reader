@@ -26,6 +26,14 @@ if (-not (Test-Path $electronPath)) {
 
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 
+Push-Location $repoRoot
+try {
+    & npm.cmd run build:electron
+}
+finally {
+    Pop-Location
+}
+
 if (Test-Path $viteStdout) { Remove-Item $viteStdout -Force -ErrorAction SilentlyContinue }
 if (Test-Path $viteStderr) { Remove-Item $viteStderr -Force -ErrorAction SilentlyContinue }
 

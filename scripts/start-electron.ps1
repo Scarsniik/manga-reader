@@ -11,6 +11,7 @@ Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 
 Push-Location $repoRoot
 try {
+    & npm.cmd run build:electron
     & $electronPath .
 }
 finally {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { Manga } from '@/renderer/types';
 import MangaCard from '@/renderer/components/MangaCard/MangaCard';
 import './styles.scss';
@@ -11,9 +11,26 @@ interface CardListProps {
     selectedIds?: string[];
     onToggleSelect?: (id: string, additive: boolean) => void;
     selectionMode?: boolean;
+    titleLineCount?: number;
+    showPageNumbers?: boolean;
 }
 
-const CardList: React.FC<CardListProps> = ({ mangas, className = '', onRemove, onCardUpdated, selectedIds, onToggleSelect, selectionMode }) => {
+const CardList: React.FC<CardListProps> = ({
+    mangas,
+    className = '',
+    onRemove,
+    onCardUpdated,
+    selectedIds,
+    onToggleSelect,
+    selectionMode,
+    titleLineCount = 2,
+    showPageNumbers = true,
+}) => {
+    const selectedIdSet = useMemo(
+        () => new Set(selectedIds || []),
+        [selectedIds],
+    );
+
     return (
         <div className={`cardList ${className}`.trim()}>
             {mangas.map(m => (
@@ -22,9 +39,11 @@ const CardList: React.FC<CardListProps> = ({ mangas, className = '', onRemove, o
                         manga={m}
                         onRemove={onRemove}
                         onCardUpdated={onCardUpdated}
-                        selected={selectedIds ? selectedIds.includes(m.id) : false}
+                        selected={selectedIdSet.has(m.id)}
                         onToggleSelect={onToggleSelect}
                         selectionMode={selectionMode}
+                        titleLineCount={titleLineCount}
+                        showPageNumbers={showPageNumbers}
                     />
                 </div>
             ))}
@@ -32,4 +51,7 @@ const CardList: React.FC<CardListProps> = ({ mangas, className = '', onRemove, o
     );
 };
 
-export default CardList;
+const MemoizedCardList = memo(CardList);
+MemoizedCardList.displayName = 'CardList';
+
+export default MemoizedCardList;

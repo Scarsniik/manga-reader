@@ -112,11 +112,13 @@
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.6);
   color: white;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  align-items: stretch;
   transition: opacity 0.3s ease;
+  gap: 8px;
+  padding: 12px;
 
   button {
     background: #1976d2;
@@ -125,11 +127,21 @@
     padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
-    margin: 4px 0;
-    width: 90%;
+    width: 100%;
+    grid-column: 1 / -1;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background: #135ba1;
+    }
+
+    &:disabled {
+      background: #334155;
+      color: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    &.compact {
+      grid-column: span 1;
     }
   }
 }

@@ -10,6 +10,7 @@ import RadioField from "./fields/RadioField";
 import CheckboxField from "./fields/CheckboxField";
 import FileField from "./fields/FileField";
 import SeriesField from "./fields/SeriesField";
+import AuthorField from "./fields/AuthorField";
 import './style.scss'
 
 type Props = {
@@ -50,12 +51,26 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
 
     const initialState = useMemo(() => buildInitialState(initialValues), [buildInitialState, initialValues])
     const [values, setValues] = useState<Record<string, any>>(initialState)
+    const isBatchDebugForm = useMemo(() => {
+        if (!formId?.startsWith('batch-edit-form-')) return false
+        return fields.some(f => ['authorId', 'seriesId', 'clearAuthor', 'clearSeries'].includes(f.name))
+    }, [fields, formId])
 
     // Keep internal values in sync when initialValues or fields change
     const fieldsKey = useMemo(() => fields.map(f => f.name).join('|'), [fields])
     useEffect(() => {
-        setValues(buildInitialState(initialValues))
-    }, [buildInitialState, initialValues, fieldsKey])
+        const nextValues = buildInitialState(initialValues)
+        setValues(nextValues)
+
+        if (isBatchDebugForm) {
+            console.log('[BatchEditForm] initial values synced', {
+                formId,
+                initialValues,
+                nextValues,
+                fields: fields.map(f => ({ name: f.name, type: f.type })),
+            })
+        }
+    }, [buildInitialState, fields, fieldsKey, formId, initialValues, isBatchDebugForm])
     const [localFieldErrors, setLocalFieldErrors] = useState<Record<string, string>>({})
     const [submitting, setSubmitting] = useState(false)
 
@@ -65,6 +80,14 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         // File input
         if (f.type === 'file') {
             const target = e.target as HTMLInputElement
+            if (isBatchDebugForm) {
+                console.log('[BatchEditForm] field change', {
+                    formId,
+                    name: f.name,
+                    type: f.type,
+                    nextValue: target.files,
+                })
+            }
             setValues(prev => ({ ...prev, [f.name]: target.files }))
             return
         }
@@ -72,6 +95,14 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         // Checkbox
         if (f.type === 'checkbox') {
             const target = e.target as HTMLInputElement
+            if (isBatchDebugForm) {
+                console.log('[BatchEditForm] field change', {
+                    formId,
+                    name: f.name,
+                    type: f.type,
+                    nextValue: target.checked,
+                })
+            }
             setValues(prev => ({ ...prev, [f.name]: target.checked }))
             return
         }
@@ -80,18 +111,42 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         if (f.type === 'selectMulti' || f.type === 'tagsPicker') {
             const target = e.target as any
             if (Array.isArray(target.value)) {
+                if (isBatchDebugForm) {
+                    console.log('[BatchEditForm] field change', {
+                        formId,
+                        name: f.name,
+                        type: f.type,
+                        nextValue: target.value,
+                    })
+                }
                 setValues(prev => ({ ...prev, [f.name]: target.value }))
                 return
             }
             const select = e.target as HTMLSelectElement
             const selected: string[] = Array.from(select.selectedOptions).map(o => o.value)
+            if (isBatchDebugForm) {
+                console.log('[BatchEditForm] field change', {
+                    formId,
+                    name: f.name,
+                    type: f.type,
+                    nextValue: selected,
+                })
+            }
             setValues(prev => ({ ...prev, [f.name]: selected }))
             return
         }
 
         const val = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
+        if (isBatchDebugForm) {
+            console.log('[BatchEditForm] field change', {
+                formId,
+                name: f.name,
+                type: f.type,
+                nextValue: val,
+            })
+        }
         setValues(prev => ({ ...prev, [f.name]: val }))
-    }, [])
+    }, [formId, isBatchDebugForm])
 
 
     const validate = useCallback((): boolean => {
@@ -150,6 +205,12 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                             continue
                         }
 
+                        if (f.type === 'author' || f.type === 'series') {
+                            const input = fEl.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${f.name}"]`)
+                            s[f.name] = input ? input.value : (values[f.name] ?? '')
+                            continue
+                        }
+
                         const v = fd.get(f.name)
                         s[f.name] = v === null ? '' : String(v)
                     }
@@ -159,6 +220,14 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                     // intentionally silent
                 }
             }
+        }
+
+        if (isBatchDebugForm) {
+            console.log('[BatchEditForm] submit snapshot ready', {
+                formId,
+                stateValues: values,
+                snapshot,
+            })
         }
 
         // Validate snapshot
@@ -236,6 +305,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
             {f.type === "checkbox" ? <CheckboxField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
             {f.type === "file" ? <FileField field={f} onChange={handleChange(f) as any} /> : null}
             {f.type === "series" ? <SeriesField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "author" ? <AuthorField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
 
             {mergedFieldError(f.name) ? <div className="mh-form__field-error">{mergedFieldError(f.name)}</div> : null}
             </div>

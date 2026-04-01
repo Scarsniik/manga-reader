@@ -13,9 +13,10 @@ export type EditMangaInput = {
   title: string;
   path?: string;
   tagIds?: string[];
+  authorIds?: string[];
   language?: string;
   chapters?: string; // chapter number or range as string, e.g. "1" or "1-5"
-  seriesId?: string;
+  seriesId?: string | null;
 };
 
 // Build a ModalOptions object to edit a manga"s title and path using the reusable Form component
@@ -52,6 +53,11 @@ export default function buildEditMangaModal(manga: Manga | EditMangaInput): Moda
           value: t.id,
         })),
       }, {
+        name: "authorId",
+        label: "Auteur",
+        type: "author",
+        placeholder: "Rechercher un auteur",
+      }, {
         name: "seriesId",
         label: "Série",
         type: "series",
@@ -71,6 +77,7 @@ export default function buildEditMangaModal(manga: Manga | EditMangaInput): Moda
       title: manga.title,
       path: manga.path,
       tags: manga.tagIds || [],
+      authorId: Array.isArray(manga.authorIds) ? (manga.authorIds[0] ?? "") : "",
       language: manga.language,
       chapters: manga.chapters,
       seriesId: manga.seriesId,
@@ -87,6 +94,7 @@ export default function buildEditMangaModal(manga: Manga | EditMangaInput): Moda
         language: values.language ?? "",
         chapters: values.chapters,
         seriesId: values.seriesId ?? null,
+        authorIds: values.authorId ? [values.authorId] : [],
       };
       // include tagIds from selection (tags field comes from the Form)
       current.tagIds = values.tags || [];

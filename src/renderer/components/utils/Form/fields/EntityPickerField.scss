@@ -26,7 +26,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 35px;
+  top: calc(100% + 8px);
   max-height: 220px;
   overflow: auto;
   border-radius: 6px;
@@ -35,6 +35,18 @@
   z-index: 1000;
   box-shadow: 0 10px 30px rgba(2,6,23,0.6);
   padding: 6px 6px;
+}
+
+.mh-entity-picker__empty {
+  padding: 10px 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.mh-entity-picker__hint {
+  padding: 8px 12px 4px;
+  color: #6b7a90;
+  font-size: 12px;
 }
 
 .mh-entity-picker__result {

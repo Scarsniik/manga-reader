@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import useParams from '@/renderer/hooks/useParams';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import './style.scss';
 
 export interface CardOverlayItem {
     label: string;
     onClick: (e: React.MouseEvent) => void;
+    disabled?: boolean;
+    compact?: boolean;
 }
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
     onClick?: (e: React.MouseEvent) => void;
     onKeyDown?: (e: React.KeyboardEvent) => void;
     selected?: boolean;
+    titleLineCount?: number;
+    showPageNumbers?: boolean;
 }
 
 function Card(props: Props): JSX.Element {
@@ -37,11 +40,12 @@ function Card(props: Props): JSX.Element {
         countLabel,
         overlayContent,
         selected = false,
+        titleLineCount = 2,
+        showPageNumbers = true,
     } = props;
 
     const [coverPath, setCoverPath] = useState<string | null>(defaultCoverPath ?? null);
     const [isOverlayVisible, setIsOverlayVisible] = useState<boolean>(false);
-    const { params } = useParams();
 
     // Keep local coverPath in sync when parent provides a new cover (async fetch)
     useEffect(() => {
@@ -51,6 +55,13 @@ function Card(props: Props): JSX.Element {
     const handleToggleOverlay = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         setIsOverlayVisible((v) => !v);
+    }, []);
+
+    const handleOverlayItemClick = useCallback((item: CardOverlayItem) => (e: React.MouseEvent) => {
+        item.onClick(e);
+        if (!item.disabled) {
+            setIsOverlayVisible(false);
+        }
     }, []);
 
     const handleMouseLeave = useCallback(() => setIsOverlayVisible(false), []);
@@ -98,8 +109,10 @@ function Card(props: Props): JSX.Element {
                         { overlayContent?.map((item, idx) => (
                             <button
                                 key={idx}
-                                onClick={item.onClick}
+                                onClick={handleOverlayItemClick(item)}
                                 type="button"
+                                className={item.compact ? 'compact' : ''}
+                                disabled={item.disabled}
                             >
                                 {item.label}
                             </button>
@@ -132,14 +145,17 @@ function Card(props: Props): JSX.Element {
                     </div>
                 </div>
             ) : null}
-            <div className={`manga-card-title title-lines-${params?.titleLineCount ?? 2}`}>
+            <div className={`manga-card-title title-lines-${titleLineCount}`}>
                 {title}
             </div>
-        {(params?.showPageNumbers ?? true) ? (
+        {showPageNumbers ? (
             <div className="manga-card-pages">{total === undefined ? '...' : total === null ? 'N/A' : `${total} ${countLabel}`}</div>
         ) : null}
         </div>
     );
 }
 
-export default Card;
+const MemoizedCard = memo(Card);
+MemoizedCard.displayName = 'Card';
+
+export default MemoizedCard;

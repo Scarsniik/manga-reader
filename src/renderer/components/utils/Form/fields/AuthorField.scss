@@ -1,15 +1,15 @@
-.mh-series-field {
+.mh-author-field {
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 100%;
 }
 
-.mh-series-field .mh-entity-picker {
+.mh-author-field .mh-entity-picker {
   width: 100%;
 }
 
-.mh-series-field .mh-entity-picker input[type="text"] {
+.mh-author-field .mh-entity-picker input[type="text"] {
   background: #0b1220;
   color: #e6eef8;
   border: 1px solid #263244;
@@ -28,24 +28,24 @@
   }
 }
 
-.mh-series-field .mh-entity-picker__results {
+.mh-author-field .mh-entity-picker__results {
   border-radius: 12px;
   border: 1px solid #344153;
   background: #151b24;
 }
 
-.mh-series-field .mh-entity-picker__selected {
+.mh-author-field .mh-entity-picker__selected {
   gap: 8px;
 }
 
-.mh-series-field__actions {
+.mh-author-field__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
 
-.mh-series-field__danger {
+.mh-author-field__danger {
   border: 1px solid rgba(255, 92, 92, 0.32);
   background: rgba(255, 92, 92, 0.08);
   color: #ff8f8f;
@@ -74,7 +74,7 @@
   }
 }
 
-.mh-series-field__create {
+.mh-author-field__create {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -82,7 +82,7 @@
   min-width: 0;
 }
 
-.mh-series-field__input {
+.mh-author-field__input {
   background: #23242a;
   color: #f2f2f2;
   border: 1px solid #444;
@@ -104,7 +104,7 @@
   }
 }
 
-.mh-series-field__add {
+.mh-author-field__add {
   background: none;
   color: #3a8dde;
   border: 1.5px solid #3a8dde;
@@ -145,7 +145,7 @@
   }
 }
 
-.mh-series-field__error {
+.mh-author-field__error {
   color: #ff5c5c;
   font-size: 0.95em;
 }

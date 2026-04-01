@@ -123,11 +123,24 @@ export async function updateManga(event: IpcMainInvokeEvent, updatedManga: any) 
 export async function batchUpdateTags(event: IpcMainInvokeEvent, payload: {
     mangaIds: string[];
     language?: string | null;
+    authorId?: string;
+    seriesId?: string;
+    clearAuthor?: boolean;
+    clearSeries?: boolean;
     addTagIds?: string[];
     removeTagIds?: string[]
 }) {
     try {
-        const { mangaIds = [], language = null, addTagIds = [], removeTagIds = [] } = payload || {};
+        const {
+            mangaIds = [],
+            language = null,
+            authorId,
+            seriesId,
+            clearAuthor = false,
+            clearSeries = false,
+            addTagIds = [],
+            removeTagIds = [],
+        } = payload || {};
         let mangas: any[] = await readMangasFile();
 
         const failed: { id: string; reason: string }[] = [];
@@ -153,6 +166,18 @@ export async function batchUpdateTags(event: IpcMainInvokeEvent, payload: {
             // Update language if provided
             if (language !== null) {
                 m.language = language || undefined;
+            }
+
+            if (clearAuthor) {
+                m.authorIds = [];
+            } else if (typeof authorId === 'string' && authorId.length > 0) {
+                m.authorIds = [authorId];
+            }
+
+            if (clearSeries) {
+                m.seriesId = null;
+            } else if (typeof seriesId === 'string' && seriesId.length > 0) {
+                m.seriesId = seriesId;
             }
 
             mangas[idx] = { ...m, tagIds: nextTags };

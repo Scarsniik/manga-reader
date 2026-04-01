@@ -21,6 +21,7 @@ export type AppParams = {
         statusFilter: string[];
         unfinishedFirst: boolean;
         withCompleteOcr: boolean;
+        selectedAuthorId: string | null;
         selectedSeriesId: string | null;
     } | null;
     [key: string]: any;
