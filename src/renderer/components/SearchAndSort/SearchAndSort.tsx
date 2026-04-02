@@ -162,6 +162,7 @@ function serializeUrlManagedFilters(state: {
     selectedTags: string[];
     selectedLanguageIds: string[];
     sortBy: string;
+    expanded: boolean;
     statusFilter: string[];
     unfinishedFirst: boolean;
     withCompleteOcr: boolean;
@@ -173,6 +174,7 @@ function serializeUrlManagedFilters(state: {
         selectedTags: state.selectedTags,
         selectedLanguageIds: state.selectedLanguageIds,
         sortBy: state.sortBy,
+        expanded: state.expanded,
         statusFilter: state.statusFilter,
         unfinishedFirst: state.unfinishedFirst,
         withCompleteOcr: state.withCompleteOcr,
@@ -289,6 +291,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             selectedTags: effectiveSelectedTags,
             selectedLanguageIds,
             sortBy,
+            expanded,
             statusFilter,
             unfinishedFirst,
             withCompleteOcr,
@@ -296,6 +299,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             selectedSeriesId,
         }),
         [
+            expanded,
             effectiveSelectedTags,
             query,
             selectedLanguageIds,
@@ -314,6 +318,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             selectedTags: normalizedLocationFilterState.selectedTags,
             selectedLanguageIds: normalizedLocationFilterState.selectedLanguageIds,
             sortBy: normalizedLocationFilterState.sortBy,
+            expanded: normalizedLocationFilterState.expanded,
             statusFilter: normalizedLocationFilterState.statusFilter,
             unfinishedFirst: normalizedLocationFilterState.unfinishedFirst,
             withCompleteOcr: normalizedLocationFilterState.withCompleteOcr,
@@ -668,6 +673,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             if (query) qs.set('q', query); else qs.delete('q');
             if (effectiveSelectedTags.length > 0) qs.set('tags', encodeArrayParam(effectiveSelectedTags)); else qs.delete('tags');
             if (sortBy) qs.set('sort', sortBy); else qs.delete('sort');
+            if (expanded) qs.set('expanded', '1'); else qs.delete('expanded');
             if (statusFilter.length > 0) qs.set('status', encodeArrayParam(statusFilter)); else qs.delete('status');
             if (selectedLanguageIds.length > 0) {
                 qs.set('language', encodeArrayParam(selectedLanguageIds, EMPTY_LANGUAGE_TOKEN));
@@ -696,6 +702,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             console.warn('Failed to sync search params to URL', e);
         }
     }, [
+        expanded,
         effectiveSelectedTags,
         filtersHydrated,
         location.pathname,
