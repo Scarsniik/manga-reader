@@ -2,7 +2,19 @@ export type JpdbTokenVocabularyIndex = number | number[] | null;
 export type JpdbFuriganaSegment = string | [string, string];
 export type JpdbFurigana = JpdbFuriganaSegment[] | null;
 export type JpdbToken = [JpdbTokenVocabularyIndex, number, number, JpdbFurigana];
-export type JpdbVocab = [number, number, number, string, string, number, string[]];
+export type JpdbCardState =
+  | 'new'
+  | 'learning'
+  | 'known'
+  | 'due'
+  | 'failed'
+  | 'locked'
+  | 'never-forget'
+  | 'suspended'
+  | 'blacklisted'
+  | 'redundant';
+export type JpdbCardStates = JpdbCardState[] | null;
+export type JpdbVocab = [number, number, number, string, string, number, string[], number | null, JpdbCardStates];
 
 export type JpdbParseResult = {
   tokens: JpdbToken[];
@@ -17,6 +29,8 @@ export type JpdbVocabularyEntry = {
   reading: string;
   frequencyRank: number;
   meanings: string[];
+  cardLevel: number | null;
+  cardStates: JpdbCardState[];
 };
 
 export type JpdbRubyPart = {
@@ -66,6 +80,10 @@ export const getJpdbVocabularyEntry = (entry: JpdbVocab): JpdbVocabularyEntry =>
   reading: entry[4],
   frequencyRank: entry[5],
   meanings: Array.isArray(entry[6]) ? entry[6] : [],
+  cardLevel: typeof entry[7] === 'number' && Number.isFinite(entry[7]) ? entry[7] : null,
+  cardStates: Array.isArray(entry[8])
+    ? entry[8].filter((value): value is JpdbCardState => typeof value === 'string' && value.length > 0)
+    : [],
 });
 
 export const getJpdbTokenSurface = (text: string, token: JpdbToken): string => {
@@ -349,7 +367,7 @@ export async function parseTextWithJpdb(text: string): Promise<JpdbParseResult> 
     text,
     token_fields: ["vocabulary_index", "position", "length", "furigana"],
     position_length_encoding: "utf16",
-    vocabulary_fields: ["vid", "sid", "rid", "spelling", "reading", "frequency_rank", "meanings"],
+    vocabulary_fields: ["vid", "sid", "rid", "spelling", "reading", "frequency_rank", "meanings", "card_level", "card_state"],
   };
 
   const resp = await fetch('https://jpdb.io/api/v1/parse', {

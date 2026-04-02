@@ -31,6 +31,44 @@ const formatFrequencyRank = (rank: number): string => {
   return `Fréquence JPDB #${rank}`;
 };
 
+const CARD_STATE_LABELS: Record<string, string> = {
+  new: 'Nouveau',
+  learning: 'Apprentissage',
+  known: 'Connu',
+  due: 'À revoir',
+  failed: 'Raté',
+  locked: 'Verrouillé',
+  'never-forget': 'Jamais oublier',
+  suspended: 'Suspendu',
+  blacklisted: 'Blacklisté',
+  redundant: 'Redondant',
+};
+
+const formatCardStatus = (entry: JpdbVocabularyEntry | null): string | null => {
+  if (!entry) {
+    return null;
+  }
+
+  const stateLabel = entry.cardStates
+    .map((state) => CARD_STATE_LABELS[state] || state)
+    .filter((value) => value.length > 0)
+    .join(' / ');
+
+  if (stateLabel && typeof entry.cardLevel === 'number' && Number.isFinite(entry.cardLevel)) {
+    return `JPDB : ${stateLabel} · niv. ${entry.cardLevel}`;
+  }
+
+  if (stateLabel) {
+    return `JPDB : ${stateLabel}`;
+  }
+
+  if (typeof entry.cardLevel === 'number' && Number.isFinite(entry.cardLevel)) {
+    return `JPDB : niv. ${entry.cardLevel}`;
+  }
+
+  return null;
+};
+
 export default function DetailsPanel({
   jpdbError,
   selectedSurface,
@@ -44,6 +82,7 @@ export default function DetailsPanel({
   const hasKanji = kanjiDetails.length > 0;
   const primaryVocabulary = selectedVocabulary[0] ?? null;
   const primaryMeanings = (primaryVocabulary?.meanings || []).slice(0, 4);
+  const primaryCardStatus = formatCardStatus(primaryVocabulary);
 
   return (
     <div className="details">
@@ -54,16 +93,21 @@ export default function DetailsPanel({
         ) : selectedSurface ? (
           <div className="details-content">
             <div className="details-token-hero" lang="ja">
-              <RubyText
-                parts={selectedRubyParts.length > 0 ? selectedRubyParts : [{ text: selectedSurface, reading: null, hasKanji: isKanjiText(selectedSurface) }]}
-                className="details-token-hero__surface"
-              />
+              <div className="details-token-hero__header">
+                <RubyText
+                  parts={selectedRubyParts.length > 0 ? selectedRubyParts : [{ text: selectedSurface, reading: null, hasKanji: isKanjiText(selectedSurface) }]}
+                  className="details-token-hero__surface"
+                />
+                {primaryCardStatus ? (
+                  <span className="details-meta-pill details-meta-pill--status">{primaryCardStatus}</span>
+                ) : null}
+              </div>
               <div className="details-token-hero__meta">
                 {primaryVocabulary?.reading ? (
                   <span>Lecture principale : {primaryVocabulary.reading}</span>
                 ) : null}
                 {primaryVocabulary ? (
-                  <span>{formatFrequencyRank(primaryVocabulary.frequencyRank)}</span>
+                  <span className="details-meta-pill">{formatFrequencyRank(primaryVocabulary.frequencyRank)}</span>
                 ) : null}
               </div>
               {hasSingleVocabulary && primaryMeanings.length > 0 ? (
@@ -81,26 +125,37 @@ export default function DetailsPanel({
               <div className="details-section">
                 <div className="details-section__title">Vocabulaire JPDB</div>
                 <div className="details-vocab-list">
-                  {selectedVocabulary.map((entry) => (
-                    <div key={`${entry.vid}-${entry.spelling}-${entry.reading}`} className="details-vocab-item">
-                      <div className="details-vocab-item__top" lang="ja">
-                        <RubyText
-                          parts={[{
-                            text: entry.spelling,
-                            reading: entry.reading && entry.reading !== entry.spelling ? entry.reading : null,
-                            hasKanji: isKanjiText(entry.spelling),
-                          }]}
-                          className="details-vocab-item__spelling"
-                        />
-                        <span className="details-vocab-item__badge">{formatFrequencyRank(entry.frequencyRank)}</span>
+                  {selectedVocabulary.map((entry) => {
+                    const cardStatus = formatCardStatus(entry);
+
+                    return (
+                      <div key={`${entry.vid}-${entry.spelling}-${entry.reading}`} className="details-vocab-item">
+                        <div className="details-vocab-item__top" lang="ja">
+                          <RubyText
+                            parts={[{
+                              text: entry.spelling,
+                              reading: entry.reading && entry.reading !== entry.spelling ? entry.reading : null,
+                              hasKanji: isKanjiText(entry.spelling),
+                            }]}
+                            className="details-vocab-item__spelling"
+                          />
+                          <div className="details-vocab-item__badges">
+                            <span className="details-vocab-item__badge">{formatFrequencyRank(entry.frequencyRank)}</span>
+                            {cardStatus ? (
+                              <span className="details-vocab-item__badge details-vocab-item__badge--status">
+                                {cardStatus}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <ol className="details-vocab-item__meanings">
+                          {(entry.meanings || []).slice(0, 4).map((meaning, index) => (
+                            <li key={`${entry.vid}-${index}`} className="details-meaning-line">{meaning}</li>
+                          ))}
+                        </ol>
                       </div>
-                      <ol className="details-vocab-item__meanings">
-                        {(entry.meanings || []).slice(0, 4).map((meaning, index) => (
-                          <li key={`${entry.vid}-${index}`} className="details-meaning-line">{meaning}</li>
-                        ))}
-                      </ol>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}

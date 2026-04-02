@@ -35,7 +35,15 @@
   border: 1px solid rgba(111,163,200,0.14);
 }
 
+.details-token-hero__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .details-token-hero__surface {
+  flex: 1 1 auto;
   font-size: clamp(1.5rem, 1.8vw, 1.85rem);
   line-height: 1.9;
   font-family: $jp-japanese-font;
@@ -47,6 +55,20 @@
   gap: 8px 12px;
   color: $jp-muted;
   font-size: $jp-font-size-sm;
+}
+
+.details-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.details-meta-pill--status {
+  color: $jp-text-soft;
 }
 
 .details-token-hero__meanings {
@@ -94,6 +116,14 @@
   gap: 12px;
 }
 
+.details-vocab-item__badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .details-vocab-item__spelling {
   font-weight: $jp-font-weight-bold;
   color: $jp-text;
@@ -103,13 +133,16 @@
 }
 
 .details-vocab-item__badge {
-  flex: 0 0 auto;
   font-size: 11px;
   color: $jp-muted;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 999px;
   padding: 5px 8px;
+}
+
+.details-vocab-item__badge--status {
+  color: $jp-text-soft;
 }
 
 .details-vocab-item__meanings {
@@ -177,7 +210,15 @@
 @media (max-width: 600px) {
   .details-box { padding: 10px }
 
+  .details-token-hero__header {
+    flex-direction: column;
+  }
+
   .details-vocab-item__top {
     flex-direction: column;
+  }
+
+  .details-vocab-item__badges {
+    justify-content: flex-start;
   }
 }

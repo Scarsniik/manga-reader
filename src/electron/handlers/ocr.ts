@@ -1535,7 +1535,7 @@ async function parseTextWithJpdbInMain(text: string, apiKey: string): Promise<Jp
     text,
     token_fields: ["vocabulary_index", "position", "length", "furigana"],
     position_length_encoding: "utf16",
-    vocabulary_fields: ["vid", "sid", "rid", "spelling", "reading", "frequency_rank", "meanings"],
+    vocabulary_fields: ["vid", "sid", "rid", "spelling", "reading", "frequency_rank", "meanings", "card_level", "card_state"],
   });
 
   let releaseQueue = () => {};
