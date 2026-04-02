@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+ipcRenderer.on('mangas-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('mangas-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch mangas-updated event', error);
+    }
+});
+
 contextBridge.exposeInMainWorld('api', {
     getLinks: () => ipcRenderer.invoke('get-links'),
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),

@@ -25,15 +25,28 @@ ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => 
 ipcMain.handle("get-mangas", async () => mangas.getMangas());
 ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => {
     const updated = await mangas.addManga(event, manga);
-    try {
-        const insertedManga = Array.isArray(updated)
-            ? updated.find((item: any) => String(item.id) === String(manga?.id)) || manga
-            : manga;
-        await ocr.ocrQueueImportManga(insertedManga);
-    } catch (error) {
-        console.warn("Failed to auto-queue OCR after manga import", error);
-    }
-    return mangas.getMangas();
+    const insertedManga = Array.isArray(updated)
+        ? updated.find((item: any) => String(item.id) === String(manga?.id)) || manga
+        : manga;
+    const hydratedMangas = await mangas.getMangas();
+
+    // Let the import finish and the library refresh first, then queue OCR in the background.
+    setTimeout(() => {
+        void (async () => {
+            try {
+                const queueResult = await ocr.ocrQueueImportManga(insertedManga);
+                if (queueResult?.queued) {
+                    for (const win of BrowserWindow.getAllWindows()) {
+                        win.webContents.send("mangas-updated");
+                    }
+                }
+            } catch (error) {
+                console.warn("Failed to auto-queue OCR after manga import", error);
+            }
+        })();
+    }, 0);
+
+    return hydratedMangas;
 });
 ipcMain.handle("remove-manga", async (event: IpcMainInvokeEvent, mangaId: string) => mangas.removeManga(event, mangaId));
 ipcMain.handle("update-manga", async (event: IpcMainInvokeEvent, updatedManga: any) => mangas.updateManga(event, updatedManga));
