@@ -550,6 +550,13 @@ const Reader: React.FC = () => {
     const [detectedBoxes, setDetectedBoxes] = useState<ReaderOcrBox[]>([]);
     const [manualBoxes, setManualBoxes] = useState<ReaderOcrBox[]>([]);
     const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
+    const [tokenCycleRequest, setTokenCycleRequest] = useState<{
+        selectionKey: string | null;
+        nonce: number;
+    }>({
+        selectionKey: null,
+        nonce: 0,
+    });
     const [manualSelectionEnabled, setManualSelectionEnabled] = useState<boolean>(false);
     const [manualSelectionLoading, setManualSelectionLoading] = useState<boolean>(false);
     const imgRef = useRef<HTMLImageElement | null>(null);
@@ -942,6 +949,15 @@ const Reader: React.FC = () => {
                 void copyCurrentImage();
                 return;
             }
+            if (!e.ctrlKey && !e.metaKey && !e.altKey && key === ':' && selectedBoxes.length > 0) {
+                try { e.preventDefault(); } catch {}
+                const selectionKey = selectedBoxes.join('|');
+                setTokenCycleRequest((current) => ({
+                    selectionKey,
+                    nonce: current.selectionKey === selectionKey ? current.nonce + 1 : 1,
+                }));
+                return;
+            }
             if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
                 const ocrDirection = key === 'o'
                     ? 'up'
@@ -959,9 +975,9 @@ const Reader: React.FC = () => {
                 }
             }
             // Page navigation
-            if (key === 'arrowright' || key === 'd') {
+            if (key === 'arrowright' || key === 'd' || key === 'p') {
                 next();
-            } else if (key === 'arrowleft' || key === 'a' || key === 'q') {
+            } else if (key === 'arrowleft' || key === 'a' || key === 'q' || key === 'i') {
                 prev();
             }
             // Vertical scroll: z -> up, s -> down
@@ -1539,6 +1555,8 @@ const Reader: React.FC = () => {
                         detectedBoxes={detectedBoxes}
                         manualBoxes={manualBoxes}
                         selectedBoxes={selectedBoxes}
+                        tokenCycleRequestNonce={tokenCycleRequest.nonce}
+                        tokenCycleSelectionKey={tokenCycleRequest.selectionKey}
                         onSimulate={async () => {
                             setOcrError(null);
                             setOcrLoading(true);

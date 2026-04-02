@@ -11,6 +11,8 @@ type Props = {
     detectedBoxes: Box[];
     manualBoxes: Box[];
     selectedBoxes: string[];
+    tokenCycleRequestNonce?: number;
+    tokenCycleSelectionKey?: string | null;
     onSimulate: () => void | Promise<void>;
     onClear: () => void;
     onSelectBox: (id: string | null, additive?: boolean) => void;
@@ -34,6 +36,8 @@ const OcrPanel: React.FC<Props> = ({
     detectedBoxes,
     manualBoxes,
     selectedBoxes,
+    tokenCycleRequestNonce = 0,
+    tokenCycleSelectionKey = null,
     onSimulate,
     onClear,
     onSelectBox,
@@ -227,8 +231,11 @@ const OcrPanel: React.FC<Props> = ({
                 <div className="ocr-analysis">
                     {selectedForAnalyse.length > 0 ? (
                         <JapaneseAnalyse
+                            key={selectionScrollKey}
                             selectedBoxes={selectedForAnalyse}
                             analysisScrollKey={selectionScrollKey}
+                            tokenCycleRequestNonce={tokenCycleRequestNonce}
+                            tokenCycleSelectionKey={tokenCycleSelectionKey}
                             onClose={() => onSelectBox(null)}
                         />
                     ) : (

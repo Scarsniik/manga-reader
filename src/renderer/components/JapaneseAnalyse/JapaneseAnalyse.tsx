@@ -18,6 +18,8 @@ import DetectedText from './DetectedText';
 import TokensList from './TokensList';
 import DetailsPanel from './DetailsPanel';
 
+const TOKEN_CYCLE_DEBOUNCE_MS = 500;
+
 export type Box = {
   id: string;
   text: string;
@@ -27,6 +29,8 @@ export type Box = {
 type Props = {
   selectedBoxes: Box[];
   analysisScrollKey?: string;
+  tokenCycleRequestNonce?: number;
+  tokenCycleSelectionKey?: string | null;
   onWordClick?: (word: string) => void;
   onClose?: () => void;
 };
@@ -34,6 +38,8 @@ type Props = {
 export default function JapaneseAnalyse({
   selectedBoxes,
   analysisScrollKey,
+  tokenCycleRequestNonce = 0,
+  tokenCycleSelectionKey = null,
   onWordClick,
   onClose,
 }: Props) {
@@ -43,6 +49,7 @@ export default function JapaneseAnalyse({
   const [jpdbError, setJpdbError] = useState<string | null>(null);
   const [translation, setTranslation] = useState<string | null>(null);
   const [translationTruncated, setTranslationTruncated] = useState<boolean>(false);
+  const [activeTokenIndex, setActiveTokenIndex] = useState<number | null>(null);
   const [selectedTokenIndex, setSelectedTokenIndex] = useState<number | null>(null);
   const [analysisNonce, setAnalysisNonce] = useState<number>(0);
   const [kanjiEntriesByChar, setKanjiEntriesByChar] = useState<Record<string, KanjiApiEntry | null>>({});
@@ -54,6 +61,10 @@ export default function JapaneseAnalyse({
   const analysisRootRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const lastAnalysisScrollKeyRef = useRef<string | null>(null);
+  const activeTokenIndexRef = useRef<number | null>(null);
+  const previewedTokenCycleNonceRef = useRef<number>(0);
+  const handledTokenCycleNonceRef = useRef<number>(0);
+  const tokenCycleDebounceTimerRef = useRef<number | null>(null);
 
   const autoText = useMemo(() => selectedBoxes.map((box) => box.text).join('\n'), [selectedBoxes]);
   const text = manualText ?? autoText;
@@ -63,6 +74,7 @@ export default function JapaneseAnalyse({
   useEffect(() => {
     setInputText(autoText);
     setManualText(null);
+    setActiveTokenIndex(null);
     setSelectedTokenIndex(null);
     setParseResult(null);
     setJpdbError(null);
@@ -81,6 +93,7 @@ export default function JapaneseAnalyse({
       setJpdbError(null);
       setTranslation(null);
       setTranslationTruncated(false);
+      setActiveTokenIndex(null);
       setSelectedTokenIndex(null);
       setKanjiEntriesByChar({});
       setAnalysisLoading(false);
@@ -97,6 +110,7 @@ export default function JapaneseAnalyse({
     setJpdbError(null);
     setTranslation(null);
     setTranslationTruncated(false);
+    setActiveTokenIndex(null);
     setSelectedTokenIndex(null);
     setKanjiEntriesByChar({});
     setAnalysisLoading(true);
@@ -118,6 +132,7 @@ export default function JapaneseAnalyse({
         const parsed = parseRes.value;
         setParseResult(parsed);
         if (parsed.tokens.length > 0) {
+          setActiveTokenIndex(0);
           setSelectedTokenIndex(0);
         }
       } else {
@@ -217,6 +232,10 @@ export default function JapaneseAnalyse({
   const kanjiMeaningsLoading = kanjiFetchLoading;
 
   useEffect(() => {
+    activeTokenIndexRef.current = activeTokenIndex;
+  }, [activeTokenIndex]);
+
+  useEffect(() => {
     lastAnalysisScrollKeyRef.current = null;
   }, [analysisScrollKey]);
 
@@ -270,6 +289,57 @@ export default function JapaneseAnalyse({
       onWordClick?.(selectedSurface);
     }
   }, [onWordClick, selectedSurface]);
+
+  useEffect(() => {
+    const pendingCycleCount = tokenCycleRequestNonce - previewedTokenCycleNonceRef.current;
+    if (
+      !tokenCycleSelectionKey
+      || tokenCycleSelectionKey !== currentAnalysisKey
+      || pendingCycleCount <= 0
+      || !parseResult
+      || !Array.isArray(parseResult.tokens)
+      || parseResult.tokens.length === 0
+    ) {
+      return;
+    }
+
+    previewedTokenCycleNonceRef.current = tokenCycleRequestNonce;
+    setActiveTokenIndex((currentIndex) => {
+      const activeIndex = (
+        currentIndex !== null
+        && currentIndex >= 0
+        && currentIndex < parseResult.tokens.length
+      )
+        ? currentIndex
+        : -1;
+      return (activeIndex + pendingCycleCount) % parseResult.tokens.length;
+    });
+
+    if (tokenCycleDebounceTimerRef.current !== null) {
+      window.clearTimeout(tokenCycleDebounceTimerRef.current);
+    }
+
+    tokenCycleDebounceTimerRef.current = window.setTimeout(() => {
+      handledTokenCycleNonceRef.current = tokenCycleRequestNonce;
+      setSelectedTokenIndex(activeTokenIndexRef.current);
+      setShouldScrollToDetails(true);
+      tokenCycleDebounceTimerRef.current = null;
+    }, TOKEN_CYCLE_DEBOUNCE_MS);
+
+    return () => {
+      if (tokenCycleDebounceTimerRef.current !== null) {
+        window.clearTimeout(tokenCycleDebounceTimerRef.current);
+        tokenCycleDebounceTimerRef.current = null;
+      }
+    };
+  }, [currentAnalysisKey, parseResult, tokenCycleRequestNonce, tokenCycleSelectionKey]);
+
+  useEffect(() => () => {
+    if (tokenCycleDebounceTimerRef.current !== null) {
+      window.clearTimeout(tokenCycleDebounceTimerRef.current);
+      tokenCycleDebounceTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!shouldScrollToDetails || selectedTokenIndex === null) {
@@ -339,8 +409,9 @@ export default function JapaneseAnalyse({
       <TokensList
         text={text}
         sentenceSegments={sentenceSegments}
-        selectedTokenIndex={selectedTokenIndex}
+        selectedTokenIndex={activeTokenIndex}
         onTokenClick={(index) => {
+          setActiveTokenIndex(index);
           setSelectedTokenIndex(index);
           setShouldScrollToDetails(true);
         }}
