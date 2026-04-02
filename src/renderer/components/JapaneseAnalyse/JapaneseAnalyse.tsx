@@ -1,16 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './JapaneseAnalyse.scss';
 import {
+  addVocabularyToJpdbDeck,
   buildJpdbSentenceSegments,
   fetchKanjiApiEntries,
   getJpdbKanjiDetails,
   getJpdbTokenRubyParts,
   getJpdbTokenSurface,
+  JpdbCardState,
   getJpdbTokenVocabulary,
   KanjiApiEntry,
+  listUserDecksFromJpdb,
+  lookupVocabularyFromJpdb,
   JpdbParseResult,
   JpdbSentenceSegment,
+  JpdbVocabularyEntry,
   parseTextWithJpdb,
+  removeVocabularyFromJpdbDeck,
+  submitVocabularyReviewToJpdb,
   translateJaToEn,
 } from '@/renderer/services/jpdb';
 import Header from './Header';
@@ -19,6 +26,17 @@ import TokensList from './TokensList';
 import DetailsPanel from './DetailsPanel';
 
 const TOKEN_CYCLE_DEBOUNCE_MS = 500;
+
+type JpdbReviewOverride = {
+  spelling?: string;
+  reading?: string;
+  frequencyRank?: number;
+  meanings?: string[];
+  cardLevel: number | null;
+  cardStates: JpdbCardState[];
+};
+
+type JpdbActionType = 'fail' | 'add' | 'remove';
 
 export type Box = {
   id: string;
@@ -58,6 +76,11 @@ export default function JapaneseAnalyse({
   const [analysisCompletedKey, setAnalysisCompletedKey] = useState<string | null>(null);
   const [kanjiCompletedKey, setKanjiCompletedKey] = useState<string | null>(null);
   const [shouldScrollToDetails, setShouldScrollToDetails] = useState<boolean>(false);
+  const [reviewOverridesByKey, setReviewOverridesByKey] = useState<Record<string, JpdbReviewOverride>>({});
+  const [justAddedDeckIdsByKey, setJustAddedDeckIdsByKey] = useState<Record<string, number>>({});
+  const [actionSubmittingKey, setActionSubmittingKey] = useState<string | null>(null);
+  const [actionSubmittingType, setActionSubmittingType] = useState<JpdbActionType | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const analysisRootRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const lastAnalysisScrollKeyRef = useRef<string | null>(null);
@@ -70,6 +93,7 @@ export default function JapaneseAnalyse({
   const text = manualText ?? autoText;
   const isUsingManualText = manualText !== null;
   const currentAnalysisKey = analysisScrollKey || text || autoText;
+  const getVocabularyReviewKey = (entry: Pick<JpdbVocabularyEntry, 'vid' | 'sid'>) => `${entry.vid}:${entry.sid}`;
 
   useEffect(() => {
     setInputText(autoText);
@@ -85,6 +109,11 @@ export default function JapaneseAnalyse({
     setKanjiFetchLoading(false);
     setAnalysisCompletedKey(null);
     setKanjiCompletedKey(null);
+    setReviewOverridesByKey({});
+    setJustAddedDeckIdsByKey({});
+    setActionSubmittingKey(null);
+    setActionSubmittingType(null);
+    setActionError(null);
   }, [autoText]);
 
   useEffect(() => {
@@ -100,6 +129,11 @@ export default function JapaneseAnalyse({
       setKanjiFetchLoading(false);
       setAnalysisCompletedKey(null);
       setKanjiCompletedKey(null);
+      setReviewOverridesByKey({});
+      setJustAddedDeckIdsByKey({});
+      setActionSubmittingKey(null);
+      setActionSubmittingType(null);
+      setActionError(null);
       return;
     }
 
@@ -117,6 +151,11 @@ export default function JapaneseAnalyse({
     setKanjiFetchLoading(false);
     setAnalysisCompletedKey(null);
     setKanjiCompletedKey(null);
+    setReviewOverridesByKey({});
+    setJustAddedDeckIdsByKey({});
+    setActionSubmittingKey(null);
+    setActionSubmittingType(null);
+    setActionError(null);
 
     (async () => {
       const [parseRes, translationRes] = await Promise.allSettled([
@@ -174,17 +213,45 @@ export default function JapaneseAnalyse({
     }
 
     const token = parseResult.tokens[selectedTokenIndex];
-    const vocabulary = getJpdbTokenVocabulary(parseResult, token);
+    const baseVocabulary = getJpdbTokenVocabulary(parseResult, token);
+    const vocabulary = baseVocabulary.map((entry) => {
+      const override = reviewOverridesByKey[getVocabularyReviewKey(entry)];
+      return override
+        ? {
+          ...entry,
+          ...override,
+        }
+        : entry;
+    });
     return {
       surface: getJpdbTokenSurface(text, token),
+      baseVocabulary,
       vocabulary,
       rubyParts: getJpdbTokenRubyParts(text, token, vocabulary),
     };
-  }, [parseResult, selectedTokenIndex, text]);
+  }, [parseResult, reviewOverridesByKey, selectedTokenIndex, text]);
 
   const selectedSurface = selectedToken?.surface ?? null;
   const selectedRubyParts = selectedToken?.rubyParts ?? [];
   const selectedVocabulary = selectedToken?.vocabulary ?? [];
+  const selectedBaseVocabulary = selectedToken?.baseVocabulary ?? [];
+  const primaryBaseVocabulary = selectedBaseVocabulary[0] ?? null;
+  const primaryVocabulary = selectedVocabulary[0] ?? null;
+  const primaryReviewKey = primaryVocabulary ? getVocabularyReviewKey(primaryVocabulary) : null;
+  const primaryVocabularyWasJustAdded = !!primaryReviewKey && Number.isFinite(justAddedDeckIdsByKey[primaryReviewKey]);
+  const primaryVocabularyHasDeckState = !!primaryVocabulary
+    && (primaryVocabulary.cardStates.length > 0 || primaryVocabulary.cardLevel !== null);
+  const canShowAddVocabularyButton = !!primaryVocabulary && !primaryVocabularyHasDeckState && !primaryVocabularyWasJustAdded;
+  const canShowRemoveVocabularyButton = !!primaryVocabulary && primaryVocabularyWasJustAdded;
+  const canShowFailReviewButton = !!primaryBaseVocabulary?.cardStates.includes('known');
+  const isPrimaryVocabularyFailed = !!primaryVocabulary?.cardStates.includes('failed');
+  const isPrimaryActionSubmitting = primaryReviewKey !== null && actionSubmittingKey === primaryReviewKey;
+  const isPrimaryFailReviewSubmitting = isPrimaryActionSubmitting && actionSubmittingType === 'fail';
+  const isPrimaryFailReviewDisabled = isPrimaryActionSubmitting || isPrimaryVocabularyFailed;
+  const isPrimaryAddSubmitting = isPrimaryActionSubmitting && actionSubmittingType === 'add';
+  const isPrimaryAddDisabled = isPrimaryActionSubmitting || primaryVocabularyHasDeckState || primaryVocabularyWasJustAdded;
+  const isPrimaryRemoveSubmitting = isPrimaryActionSubmitting && actionSubmittingType === 'remove';
+  const isPrimaryRemoveDisabled = isPrimaryActionSubmitting || !primaryVocabularyWasJustAdded;
 
   const kanjiDetails = useMemo(
     () => selectedSurface ? getJpdbKanjiDetails(selectedSurface, selectedRubyParts) : [],
@@ -420,11 +487,135 @@ export default function JapaneseAnalyse({
       <div ref={detailsRef}>
         <DetailsPanel
           jpdbError={jpdbError}
+          reviewError={actionError}
           selectedSurface={selectedSurface}
           selectedRubyParts={selectedRubyParts}
           selectedVocabulary={selectedVocabulary}
           kanjiDetails={enrichedKanjiDetails}
           kanjiMeaningsLoading={kanjiMeaningsLoading}
+          showFailReviewButton={canShowFailReviewButton}
+          showAddVocabularyButton={canShowAddVocabularyButton}
+          showRemoveVocabularyButton={canShowRemoveVocabularyButton}
+          addVocabularyButtonDisabled={isPrimaryAddDisabled}
+          addVocabularyButtonLoading={isPrimaryAddSubmitting}
+          removeVocabularyButtonDisabled={isPrimaryRemoveDisabled}
+          removeVocabularyButtonLoading={isPrimaryRemoveSubmitting}
+          onAddVocabulary={async () => {
+            if (!primaryBaseVocabulary || isPrimaryAddDisabled) {
+              return;
+            }
+
+            const requestKey = getVocabularyReviewKey(primaryBaseVocabulary);
+            setActionSubmittingKey(requestKey);
+            setActionSubmittingType('add');
+            setActionError(null);
+
+            try {
+              const decks = await listUserDecksFromJpdb();
+              const firstDeck = decks[0] ?? null;
+
+              if (!firstDeck) {
+                throw new Error('Aucun deck utilisateur JPDB n’a été trouvé.');
+              }
+
+              await addVocabularyToJpdbDeck(firstDeck.id, primaryBaseVocabulary.vid, primaryBaseVocabulary.sid);
+              let refreshedVocabulary: JpdbVocabularyEntry | null = null;
+
+              try {
+                refreshedVocabulary = await lookupVocabularyFromJpdb(primaryBaseVocabulary.vid, primaryBaseVocabulary.sid);
+              } catch (lookupError) {
+                console.debug('lookupVocabularyFromJpdb failed after add:', lookupError);
+              }
+
+              setReviewOverridesByKey((current) => ({
+                ...current,
+                [requestKey]: {
+                  spelling: refreshedVocabulary?.spelling,
+                  reading: refreshedVocabulary?.reading,
+                  frequencyRank: refreshedVocabulary?.frequencyRank,
+                  meanings: refreshedVocabulary?.meanings,
+                  cardLevel: refreshedVocabulary?.cardLevel ?? null,
+                  cardStates: refreshedVocabulary?.cardStates ?? ['new'],
+                },
+              }));
+              setJustAddedDeckIdsByKey((current) => ({
+                ...current,
+                [requestKey]: firstDeck.id,
+              }));
+            } catch (error: any) {
+              setActionError(error?.message || String(error));
+            } finally {
+              setActionSubmittingKey(null);
+              setActionSubmittingType(null);
+            }
+          }}
+          onRemoveVocabulary={async () => {
+            if (!primaryBaseVocabulary || !primaryReviewKey || isPrimaryRemoveDisabled) {
+              return;
+            }
+
+            const requestKey = getVocabularyReviewKey(primaryBaseVocabulary);
+            const deckId = justAddedDeckIdsByKey[requestKey];
+            if (!Number.isFinite(deckId) || deckId <= 0) {
+              setActionError('Impossible de retrouver le deck JPDB utilisé pour cet ajout.');
+              return;
+            }
+
+            setActionSubmittingKey(requestKey);
+            setActionSubmittingType('remove');
+            setActionError(null);
+
+            try {
+              await removeVocabularyFromJpdbDeck(deckId, primaryBaseVocabulary.vid, primaryBaseVocabulary.sid);
+              setJustAddedDeckIdsByKey((current) => {
+                const next = { ...current };
+                delete next[requestKey];
+                return next;
+              });
+              setReviewOverridesByKey((current) => {
+                if (!(requestKey in current)) {
+                  return current;
+                }
+
+                const next = { ...current };
+                delete next[requestKey];
+                return next;
+              });
+            } catch (error: any) {
+              setActionError(error?.message || String(error));
+            } finally {
+              setActionSubmittingKey(null);
+              setActionSubmittingType(null);
+            }
+          }}
+          failReviewButtonDisabled={isPrimaryFailReviewDisabled}
+          failReviewButtonLoading={isPrimaryFailReviewSubmitting}
+          onFailReview={async () => {
+            if (!primaryBaseVocabulary || isPrimaryFailReviewDisabled) {
+              return;
+            }
+
+            const requestKey = getVocabularyReviewKey(primaryBaseVocabulary);
+            setActionSubmittingKey(requestKey);
+            setActionSubmittingType('fail');
+            setActionError(null);
+
+            try {
+              await submitVocabularyReviewToJpdb(primaryBaseVocabulary.vid, primaryBaseVocabulary.sid, 'fail');
+              setReviewOverridesByKey((current) => ({
+                ...current,
+                [requestKey]: {
+                  cardLevel: null,
+                  cardStates: ['failed'],
+                },
+              }));
+            } catch (error: any) {
+              setActionError(error?.message || String(error));
+            } finally {
+              setActionSubmittingKey(null);
+              setActionSubmittingType(null);
+            }
+          }}
         />
       </div>
     </div>

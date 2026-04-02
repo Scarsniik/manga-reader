@@ -42,6 +42,12 @@
   gap: 12px;
 }
 
+.details-token-hero__actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .details-token-hero__surface {
   flex: 1 1 auto;
   font-size: clamp(1.5rem, 1.8vw, 1.85rem);
@@ -69,6 +75,112 @@
 
 .details-meta-pill--status {
   color: $jp-text-soft;
+}
+
+.details-meta-pill--danger {
+  color: #efb7bf;
+  background: rgba(138, 67, 78, 0.22);
+  border-color: rgba(175, 93, 105, 0.38);
+}
+
+.details-review-fail-btn {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid rgba(175, 93, 105, 0.38);
+  background: rgba(138, 67, 78, 0.22);
+  color: #efb7bf;
+  font-size: 0.95rem;
+  font-weight: $jp-font-weight-bold;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.details-review-fail-btn:hover:not(:disabled) {
+  background: rgba(138, 67, 78, 0.3);
+  border-color: rgba(175, 93, 105, 0.46);
+}
+
+.details-review-fail-btn:focus-visible {
+  outline: none;
+  box-shadow: $jp-focus-shadow;
+}
+
+.details-review-fail-btn.is-disabled,
+.details-review-fail-btn:disabled {
+  cursor: default;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.3);
+}
+
+.details-review-fail-btn.is-loading {
+  opacity: 0.8;
+}
+
+.details-review-add-btn,
+.details-review-remove-btn {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 999px;
+  font-weight: $jp-font-weight-bold;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.details-review-add-btn {
+  border: 1px solid rgba(111,163,200,0.2);
+  background: rgba(255,255,255,0.04);
+  color: $jp-text-soft;
+  font-size: 1rem;
+}
+
+.details-review-add-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(111,163,200,0.3);
+  color: $jp-text;
+}
+
+.details-review-remove-btn {
+  border: 1px solid rgba(170, 123, 131, 0.26);
+  background: rgba(138, 67, 78, 0.12);
+  color: #d9aab2;
+  font-size: 1.08rem;
+}
+
+.details-review-remove-btn:hover:not(:disabled) {
+  background: rgba(138, 67, 78, 0.18);
+  border-color: rgba(175, 93, 105, 0.36);
+  color: #efb7bf;
+}
+
+.details-review-add-btn.is-disabled,
+.details-review-add-btn:disabled,
+.details-review-remove-btn.is-disabled,
+.details-review-remove-btn:disabled {
+  cursor: default;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.3);
+}
+
+.details-review-add-btn.is-loading,
+.details-review-remove-btn.is-loading {
+  opacity: 0.8;
+}
+
+.details-review-add-btn:focus-visible,
+.details-review-remove-btn:focus-visible {
+  outline: none;
+  box-shadow: $jp-focus-shadow;
 }
 
 .details-token-hero__meanings {
@@ -145,6 +257,12 @@
   color: $jp-text-soft;
 }
 
+.details-vocab-item__badge--danger {
+  color: #efb7bf;
+  background: rgba(138, 67, 78, 0.18);
+  border-color: rgba(175, 93, 105, 0.34);
+}
+
 .details-vocab-item__meanings {
   display: grid;
   gap: 6px;
@@ -207,11 +325,20 @@
 
 .details-error { color: #ff6b6b }
 
+.details-error--inline {
+  margin-top: -4px;
+}
+
 @media (max-width: 600px) {
   .details-box { padding: 10px }
 
   .details-token-hero__header {
     flex-direction: column;
+  }
+
+  .details-token-hero__actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .details-vocab-item__top {

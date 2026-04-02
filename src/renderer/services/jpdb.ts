@@ -15,6 +15,7 @@ export type JpdbCardState =
   | 'redundant';
 export type JpdbCardStates = JpdbCardState[] | null;
 export type JpdbVocab = [number, number, number, string, string, number, string[], number | null, JpdbCardStates];
+export type JpdbReviewGrade = 'nothing' | 'something' | 'hard' | 'okay' | 'easy' | 'pass' | 'fail';
 
 export type JpdbParseResult = {
   tokens: JpdbToken[];
@@ -31,6 +32,11 @@ export type JpdbVocabularyEntry = {
   meanings: string[];
   cardLevel: number | null;
   cardStates: JpdbCardState[];
+};
+
+export type JpdbDeckEntry = {
+  id: number;
+  name: string;
 };
 
 export type JpdbRubyPart = {
@@ -434,5 +440,218 @@ export async function translateJaToEn(text: string): Promise<JpdbJa2EnResult> {
     console.debug('jpdb.translateJaToEn error building/sending request:', e);
     throw e;
   }
+}
+
+export async function submitVocabularyReviewToJpdb(
+  vid: number,
+  sid: number,
+  grade: JpdbReviewGrade
+): Promise<void> {
+  if (!Number.isFinite(vid) || vid <= 0) {
+    throw new Error('vid is required');
+  }
+
+  if (!Number.isFinite(sid) || sid <= 0) {
+    throw new Error('sid is required');
+  }
+
+  if (!grade) {
+    throw new Error('grade is required');
+  }
+
+  const settings: any = typeof window !== 'undefined' && (window as any).api && typeof (window as any).api.getSettings === 'function'
+    ? await (window as any).api.getSettings()
+    : {};
+
+  const key = settings?.jpdbApiKey;
+  if (!key) throw new Error('JPDB API key not configured.');
+
+  const resp = await fetch('https://jpdb.io/api/v1/review', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      vid,
+      sid,
+      grade,
+    }),
+  });
+
+  if (!resp.ok) {
+    const textResp = await resp.text();
+    throw new Error(`JPDB review API error ${resp.status}: ${textResp}`);
+  }
+}
+
+export async function listUserDecksFromJpdb(): Promise<JpdbDeckEntry[]> {
+  const settings: any = typeof window !== 'undefined' && (window as any).api && typeof (window as any).api.getSettings === 'function'
+    ? await (window as any).api.getSettings()
+    : {};
+
+  const key = settings?.jpdbApiKey;
+  if (!key) throw new Error('JPDB API key not configured.');
+
+  const resp = await fetch('https://jpdb.io/api/v1/list-user-decks', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      fields: ['id', 'name'],
+    }),
+  });
+
+  if (!resp.ok) {
+    const textResp = await resp.text();
+    throw new Error(`JPDB list-user-decks API error ${resp.status}: ${textResp}`);
+  }
+
+  const json = await resp.json() as {
+    decks?: unknown[];
+  };
+
+  if (!Array.isArray(json.decks)) {
+    return [];
+  }
+
+  return json.decks
+    .filter((entry): entry is [number, string] => (
+      Array.isArray(entry)
+      && typeof entry[0] === 'number'
+      && typeof entry[1] === 'string'
+    ))
+    .map((entry) => ({
+      id: entry[0],
+      name: entry[1],
+    }));
+}
+
+export async function addVocabularyToJpdbDeck(deckId: number, vid: number, sid: number): Promise<void> {
+  if (!Number.isFinite(deckId) || deckId <= 0) {
+    throw new Error('deckId is required');
+  }
+
+  if (!Number.isFinite(vid) || vid <= 0) {
+    throw new Error('vid is required');
+  }
+
+  if (!Number.isFinite(sid) || sid <= 0) {
+    throw new Error('sid is required');
+  }
+
+  const settings: any = typeof window !== 'undefined' && (window as any).api && typeof (window as any).api.getSettings === 'function'
+    ? await (window as any).api.getSettings()
+    : {};
+
+  const key = settings?.jpdbApiKey;
+  if (!key) throw new Error('JPDB API key not configured.');
+
+  const resp = await fetch('https://jpdb.io/api/v1/deck/add-vocabulary', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      id: deckId,
+      vocabulary: [[vid, sid]],
+    }),
+  });
+
+  if (!resp.ok) {
+    const textResp = await resp.text();
+    throw new Error(`JPDB add-vocabulary API error ${resp.status}: ${textResp}`);
+  }
+}
+
+export async function removeVocabularyFromJpdbDeck(deckId: number, vid: number, sid: number): Promise<void> {
+  if (!Number.isFinite(deckId) || deckId <= 0) {
+    throw new Error('deckId is required');
+  }
+
+  if (!Number.isFinite(vid) || vid <= 0) {
+    throw new Error('vid is required');
+  }
+
+  if (!Number.isFinite(sid) || sid <= 0) {
+    throw new Error('sid is required');
+  }
+
+  const settings: any = typeof window !== 'undefined' && (window as any).api && typeof (window as any).api.getSettings === 'function'
+    ? await (window as any).api.getSettings()
+    : {};
+
+  const key = settings?.jpdbApiKey;
+  if (!key) throw new Error('JPDB API key not configured.');
+
+  const resp = await fetch('https://jpdb.io/api/v1/deck/remove-vocabulary', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      id: deckId,
+      vocabulary: [[vid, sid]],
+    }),
+  });
+
+  if (!resp.ok) {
+    const textResp = await resp.text();
+    throw new Error(`JPDB remove-vocabulary API error ${resp.status}: ${textResp}`);
+  }
+}
+
+export async function lookupVocabularyFromJpdb(vid: number, sid: number): Promise<JpdbVocabularyEntry | null> {
+  if (!Number.isFinite(vid) || vid <= 0) {
+    throw new Error('vid is required');
+  }
+
+  if (!Number.isFinite(sid) || sid <= 0) {
+    throw new Error('sid is required');
+  }
+
+  const settings: any = typeof window !== 'undefined' && (window as any).api && typeof (window as any).api.getSettings === 'function'
+    ? await (window as any).api.getSettings()
+    : {};
+
+  const key = settings?.jpdbApiKey;
+  if (!key) throw new Error('JPDB API key not configured.');
+
+  const resp = await fetch('https://jpdb.io/api/v1/lookup-vocabulary', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      list: [[vid, sid]],
+      fields: ['vid', 'sid', 'rid', 'spelling', 'reading', 'frequency_rank', 'meanings', 'card_level', 'card_state'],
+    }),
+  });
+
+  if (!resp.ok) {
+    const textResp = await resp.text();
+    throw new Error(`JPDB lookup-vocabulary API error ${resp.status}: ${textResp}`);
+  }
+
+  const json = await resp.json() as {
+    vocabulary_info?: unknown[];
+  };
+
+  const firstEntry = Array.isArray(json.vocabulary_info) ? json.vocabulary_info[0] : null;
+  if (!Array.isArray(firstEntry)) {
+    return null;
+  }
+
+  return getJpdbVocabularyEntry(firstEntry as JpdbVocab);
 }
 

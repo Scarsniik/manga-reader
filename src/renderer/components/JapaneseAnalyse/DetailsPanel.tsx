@@ -16,11 +16,24 @@ type DisplayKanjiDetail = JpdbKanjiDetail & {
 
 type Props = {
   jpdbError: string | null;
+  reviewError?: string | null;
   selectedSurface: string | null;
   selectedRubyParts: JpdbRubyPart[];
   selectedVocabulary: JpdbVocabularyEntry[];
   kanjiDetails: DisplayKanjiDetail[];
   kanjiMeaningsLoading?: boolean;
+  showFailReviewButton?: boolean;
+  showAddVocabularyButton?: boolean;
+  showRemoveVocabularyButton?: boolean;
+  failReviewButtonDisabled?: boolean;
+  failReviewButtonLoading?: boolean;
+  addVocabularyButtonDisabled?: boolean;
+  addVocabularyButtonLoading?: boolean;
+  removeVocabularyButtonDisabled?: boolean;
+  removeVocabularyButtonLoading?: boolean;
+  onFailReview?: (() => void | Promise<void>) | null;
+  onAddVocabulary?: (() => void | Promise<void>) | null;
+  onRemoveVocabulary?: (() => void | Promise<void>) | null;
 };
 
 const formatFrequencyRank = (rank: number): string => {
@@ -69,13 +82,28 @@ const formatCardStatus = (entry: JpdbVocabularyEntry | null): string | null => {
   return null;
 };
 
+const hasFailedState = (entry: JpdbVocabularyEntry | null): boolean => !!entry?.cardStates.includes('failed');
+
 export default function DetailsPanel({
   jpdbError,
+  reviewError = null,
   selectedSurface,
   selectedRubyParts,
   selectedVocabulary,
   kanjiDetails,
   kanjiMeaningsLoading = false,
+  showFailReviewButton = false,
+  showAddVocabularyButton = false,
+  showRemoveVocabularyButton = false,
+  failReviewButtonDisabled = false,
+  failReviewButtonLoading = false,
+  addVocabularyButtonDisabled = false,
+  addVocabularyButtonLoading = false,
+  removeVocabularyButtonDisabled = false,
+  removeVocabularyButtonLoading = false,
+  onFailReview = null,
+  onAddVocabulary = null,
+  onRemoveVocabulary = null,
 }: Props) {
   const hasVocabulary = selectedVocabulary.length > 0;
   const hasSingleVocabulary = selectedVocabulary.length === 1;
@@ -83,6 +111,7 @@ export default function DetailsPanel({
   const primaryVocabulary = selectedVocabulary[0] ?? null;
   const primaryMeanings = (primaryVocabulary?.meanings || []).slice(0, 4);
   const primaryCardStatus = formatCardStatus(primaryVocabulary);
+  const primaryCardStatusIsFailed = hasFailedState(primaryVocabulary);
 
   return (
     <div className="details">
@@ -98,9 +127,67 @@ export default function DetailsPanel({
                   parts={selectedRubyParts.length > 0 ? selectedRubyParts : [{ text: selectedSurface, reading: null, hasKanji: isKanjiText(selectedSurface) }]}
                   className="details-token-hero__surface"
                 />
-                {primaryCardStatus ? (
-                  <span className="details-meta-pill details-meta-pill--status">{primaryCardStatus}</span>
-                ) : null}
+                <div className="details-token-hero__actions">
+                  {primaryCardStatus ? (
+                    <span className={`details-meta-pill details-meta-pill--status${primaryCardStatusIsFailed ? ' details-meta-pill--danger' : ''}`}>
+                      {primaryCardStatus}
+                    </span>
+                  ) : null}
+                  {showFailReviewButton ? (
+                    <button
+                      type="button"
+                      className={`details-review-fail-btn${failReviewButtonDisabled ? ' is-disabled' : ''}${failReviewButtonLoading ? ' is-loading' : ''}`}
+                      aria-label="Envoyer un fail JPDB"
+                      title={
+                        failReviewButtonLoading
+                          ? 'Envoi du fail JPDB...'
+                          : failReviewButtonDisabled
+                            ? 'Fail JPDB déjà envoyé'
+                            : 'Envoyer un fail JPDB'
+                      }
+                      onClick={() => { void onFailReview?.(); }}
+                      disabled={failReviewButtonDisabled}
+                    >
+                      !
+                    </button>
+                  ) : null}
+                  {showAddVocabularyButton ? (
+                    <button
+                      type="button"
+                      className={`details-review-add-btn${addVocabularyButtonDisabled ? ' is-disabled' : ''}${addVocabularyButtonLoading ? ' is-loading' : ''}`}
+                      aria-label="Ajouter au vocabulaire JPDB"
+                      title={
+                        addVocabularyButtonLoading
+                          ? 'Ajout au vocabulaire JPDB...'
+                          : addVocabularyButtonDisabled
+                            ? 'Ajout JPDB indisponible'
+                            : 'Ajouter au vocabulaire JPDB'
+                      }
+                      onClick={() => { void onAddVocabulary?.(); }}
+                      disabled={addVocabularyButtonDisabled}
+                    >
+                      +
+                    </button>
+                  ) : null}
+                  {showRemoveVocabularyButton ? (
+                    <button
+                      type="button"
+                      className={`details-review-remove-btn${removeVocabularyButtonDisabled ? ' is-disabled' : ''}${removeVocabularyButtonLoading ? ' is-loading' : ''}`}
+                      aria-label="Retirer du vocabulaire JPDB"
+                      title={
+                        removeVocabularyButtonLoading
+                          ? 'Retrait du vocabulaire JPDB...'
+                          : removeVocabularyButtonDisabled
+                            ? 'Retrait JPDB indisponible'
+                            : 'Retirer du vocabulaire JPDB'
+                      }
+                      onClick={() => { void onRemoveVocabulary?.(); }}
+                      disabled={removeVocabularyButtonDisabled}
+                    >
+                      -
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="details-token-hero__meta">
                 {primaryVocabulary?.reading ? (
@@ -127,6 +214,7 @@ export default function DetailsPanel({
                 <div className="details-vocab-list">
                   {selectedVocabulary.map((entry) => {
                     const cardStatus = formatCardStatus(entry);
+                    const cardStatusIsFailed = hasFailedState(entry);
 
                     return (
                       <div key={`${entry.vid}-${entry.spelling}-${entry.reading}`} className="details-vocab-item">
@@ -142,7 +230,7 @@ export default function DetailsPanel({
                           <div className="details-vocab-item__badges">
                             <span className="details-vocab-item__badge">{formatFrequencyRank(entry.frequencyRank)}</span>
                             {cardStatus ? (
-                              <span className="details-vocab-item__badge details-vocab-item__badge--status">
+                              <span className={`details-vocab-item__badge details-vocab-item__badge--status${cardStatusIsFailed ? ' details-vocab-item__badge--danger' : ''}`}>
                                 {cardStatus}
                               </span>
                             ) : null}
@@ -158,6 +246,10 @@ export default function DetailsPanel({
                   })}
                 </div>
               </div>
+            ) : null}
+
+            {reviewError ? (
+              <div className="details-error details-error--inline">{reviewError}</div>
             ) : null}
 
             {hasKanji ? (
