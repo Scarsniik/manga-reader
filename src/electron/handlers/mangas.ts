@@ -1,7 +1,163 @@
 import { IpcMainInvokeEvent } from "electron";
 import { promises as fs } from "fs";
 import path from "path";
-import { ensureDataDir, mangasFilePath } from "../utils";
+import sharp from "sharp";
+import { listImageFiles } from "./pages";
+import { ensureDataDir, ensureThumbnailsDir, mangasFilePath, thumbnailsDir } from "../utils";
+
+const THUMBNAIL_EXTENSION = ".webp";
+const THUMBNAIL_WIDTH = 320;
+
+function sanitizeFileSegment(value: string) {
+    const sanitized = value.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim();
+    return sanitized || "manga";
+}
+
+function getThumbnailPathForMangaId(mangaId: string) {
+    return path.join(
+        thumbnailsDir,
+        `${sanitizeFileSegment(String(mangaId))}${THUMBNAIL_EXTENSION}`,
+    );
+}
+
+async function pathExists(targetPath?: string | null) {
+    if (!targetPath) {
+        return false;
+    }
+
+    try {
+        await fs.access(targetPath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function removeFileIfExists(targetPath?: string | null) {
+    if (!targetPath) {
+        return;
+    }
+
+    try {
+        await fs.rm(targetPath, { force: true });
+    } catch (error) {
+        console.warn("Failed to remove thumbnail file", targetPath, error);
+    }
+}
+
+async function getFirstMangaImagePath(manga: any) {
+    if (!manga?.path || typeof manga.path !== "string") {
+        return null;
+    }
+
+    try {
+        const imageFiles = await listImageFiles(manga.path);
+        return imageFiles[0] || null;
+    } catch (error) {
+        console.warn("Failed to list image files for thumbnail generation", manga.path, error);
+        return null;
+    }
+}
+
+export async function createStoredThumbnailForManga(manga: any) {
+    if (!manga?.id) {
+        return null;
+    }
+
+    const sourceImagePath = await getFirstMangaImagePath(manga);
+    if (!sourceImagePath) {
+        return null;
+    }
+
+    const thumbnailPath = getThumbnailPathForMangaId(String(manga.id));
+    await ensureThumbnailsDir();
+    await removeFileIfExists(thumbnailPath);
+
+    await sharp(sourceImagePath)
+        .rotate()
+        .resize({
+            width: THUMBNAIL_WIDTH,
+            fit: "inside",
+            withoutEnlargement: true,
+        })
+        .webp({ quality: 82 })
+        .toFile(thumbnailPath);
+
+    return thumbnailPath;
+}
+
+export async function ensureStoredThumbnailForManga(
+    manga: any,
+    options?: { forceRegenerate?: boolean },
+) {
+    if (!manga || typeof manga !== "object") {
+        return { manga, changed: false };
+    }
+
+    const storedThumbnailPath = typeof manga.thumbnailPath === "string" && manga.thumbnailPath.trim().length > 0
+        ? manga.thumbnailPath
+        : null;
+
+    if (!manga.id) {
+        const nextThumbnailPath = null;
+        const changed = storedThumbnailPath !== nextThumbnailPath;
+        return {
+            manga: changed ? { ...manga, thumbnailPath: nextThumbnailPath } : manga,
+            changed,
+        };
+    }
+
+    const expectedThumbnailPath = getThumbnailPathForMangaId(String(manga.id));
+    let nextThumbnailPath: string | null = null;
+
+    if (options?.forceRegenerate) {
+        await removeFileIfExists(expectedThumbnailPath);
+        if (storedThumbnailPath && storedThumbnailPath !== expectedThumbnailPath) {
+            await removeFileIfExists(storedThumbnailPath);
+        }
+    }
+
+    const hasExpectedThumbnail = await pathExists(expectedThumbnailPath);
+    if (hasExpectedThumbnail && !options?.forceRegenerate) {
+        nextThumbnailPath = expectedThumbnailPath;
+    } else {
+        try {
+            nextThumbnailPath = await createStoredThumbnailForManga(manga);
+        } catch (error) {
+            console.warn("Failed to generate manga thumbnail", manga?.id, error);
+            nextThumbnailPath = null;
+        }
+    }
+
+    if (
+        storedThumbnailPath
+        && storedThumbnailPath !== nextThumbnailPath
+        && storedThumbnailPath !== expectedThumbnailPath
+    ) {
+        await removeFileIfExists(storedThumbnailPath);
+    }
+
+    const changed = storedThumbnailPath !== nextThumbnailPath;
+    return {
+        manga: changed ? { ...manga, thumbnailPath: nextThumbnailPath } : manga,
+        changed,
+    };
+}
+
+async function hydrateMangasWithStoredThumbnails(mangas: any[]) {
+    let hasChanges = false;
+    const hydratedMangas: any[] = [];
+
+    for (const manga of mangas) {
+        const { manga: hydratedManga, changed } = await ensureStoredThumbnailForManga(manga);
+        hydratedMangas.push(hydratedManga);
+        if (changed) {
+            hasChanges = true;
+        }
+    }
+
+    return { mangas: hydratedMangas, changed: hasChanges };
+}
 
 export async function readMangasFile() {
     try {
@@ -22,7 +178,7 @@ export async function writeMangasFile(mangas: any[]) {
 }
 
 export async function getMangaById(mangaId: string) {
-    const mangas = await readMangasFile();
+    const mangas = await getMangas();
     return mangas.find((m: any) => String(m.id) === String(mangaId)) || null;
 }
 
@@ -40,7 +196,14 @@ export async function patchMangaById(mangaId: string, patch: Record<string, any>
 
 export async function getMangas() {
     try {
-        return await readMangasFile();
+        const mangas = await readMangasFile();
+        const { mangas: hydratedMangas, changed } = await hydrateMangasWithStoredThumbnails(mangas);
+
+        if (changed) {
+            await writeMangasFile(hydratedMangas);
+        }
+
+        return hydratedMangas;
     } catch (error: any) {
         if (error && error.code === "ENOENT") {
             await ensureDataDir();
@@ -67,7 +230,10 @@ export async function addManga(event: IpcMainInvokeEvent, manga: any) {
                 console.warn("add-manga: provided path does not exist:", resolvedPath);
             }
         }
-        mangas.push(manga);
+        const { manga: mangaWithThumbnail } = await ensureStoredThumbnailForManga(manga, {
+            forceRegenerate: true,
+        });
+        mangas.push(mangaWithThumbnail);
         await writeMangasFile(mangas);
         return mangas;
     } catch (error) {
@@ -79,7 +245,13 @@ export async function addManga(event: IpcMainInvokeEvent, manga: any) {
 export async function removeManga(event: IpcMainInvokeEvent, mangaId: string) {
     try {
         const mangas: any[] = await readMangasFile();
-        const updated = mangas.filter(m => m.id !== mangaId);
+        const mangaToRemove = mangas.find(m => String(m.id) === String(mangaId)) || null;
+        const updated = mangas.filter(m => String(m.id) !== String(mangaId));
+        const expectedThumbnailPath = getThumbnailPathForMangaId(String(mangaId));
+        await removeFileIfExists(expectedThumbnailPath);
+        if (mangaToRemove?.thumbnailPath && mangaToRemove.thumbnailPath !== expectedThumbnailPath) {
+            await removeFileIfExists(mangaToRemove.thumbnailPath);
+        }
         await writeMangasFile(updated);
         return updated;
     } catch (error) {
@@ -110,7 +282,15 @@ export async function updateManga(event: IpcMainInvokeEvent, updatedManga: any) 
             }
         }
 
-        mangas[idx] = { ...mangas[idx], ...updatedManga };
+        const previousManga = mangas[idx];
+        const mergedManga = { ...previousManga, ...updatedManga };
+        const shouldRegenerateThumbnail = typeof updatedManga?.path === "string"
+            && updatedManga.path !== previousManga?.path;
+        const { manga: mangaWithThumbnail } = await ensureStoredThumbnailForManga(mergedManga, {
+            forceRegenerate: shouldRegenerateThumbnail,
+        });
+
+        mangas[idx] = mangaWithThumbnail;
 
         await writeMangasFile(mangas);
         return mangas;

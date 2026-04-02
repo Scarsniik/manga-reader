@@ -30,7 +30,6 @@ const MangaCard: React.FC<Props> = ({
 }) => {
     const [pages, setPages] = useState<number | null | undefined>(manga.pages);
     const [currentPage, setCurrentPage] = useState<number | null | undefined>(manga.currentPage);
-    const [coverPath, setCoverPath] = useState<string | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const { openModal } = useModal();
@@ -109,21 +108,7 @@ const MangaCard: React.FC<Props> = ({
                 }
             }
         };
-        const fetchCover = async () => {
-            if (manga.path && window.api) {
-                try {
-                    if (typeof window.api.getCover === 'function') {
-                        const cover = await window.api.getCover(manga.path);
-                        setCoverPath(cover);
-                    }
-                } catch (err) {
-                    console.error('Failed to get cover', err);
-                    setCoverPath(null);
-                }
-            }
-        };
         fetchPages();
-        fetchCover();
     }, [manga.path]);
 
     // Keep local currentPage in sync with incoming prop
@@ -133,8 +118,8 @@ const MangaCard: React.FC<Props> = ({
 
     // Normalize local file path to a proper local:// URL
     const coverSrc = useMemo(() => {
-        if (!coverPath) return null;
-        let src = coverPath as string;
+        if (!manga.thumbnailPath) return null;
+        let src = manga.thumbnailPath as string;
             if (src) {
                 // If already a local:// URL, return as-is
                 if (src.startsWith('local://')) {
@@ -154,7 +139,7 @@ const MangaCard: React.FC<Props> = ({
         }
 
         return src;
-    }, [coverPath]);
+    }, [manga.thumbnailPath]);
 
     const onCardClick = useCallback((e: React.MouseEvent) => {
         // If ctrlKey or selectionMode, toggle selection instead of navigation

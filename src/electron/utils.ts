@@ -5,6 +5,7 @@ import { app } from "electron";
 
 export const userDataDir = app.getPath("userData");
 export const dataDir = path.join(userDataDir, "data");
+export const thumbnailsDir = path.join(dataDir, "thumbnails");
 export const mangasFilePath = path.join(dataDir, "mangas.json");
 export const paramsFilePath = path.join(dataDir, "params.json");
 export const linksFilePath = path.join(app.getAppPath(), "data", "links.json");
@@ -17,6 +18,15 @@ export async function ensureDataDir() {
         await fs.mkdir(dataDir, { recursive: true });
     } catch (err) {
         console.warn("Failed to ensure data directory exists", err);
+    }
+}
+
+export async function ensureThumbnailsDir() {
+    try {
+        await ensureDataDir();
+        await fs.mkdir(thumbnailsDir, { recursive: true });
+    } catch (err) {
+        console.warn("Failed to ensure thumbnails directory exists", err);
     }
 }
 

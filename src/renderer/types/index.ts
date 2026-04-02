@@ -37,6 +37,7 @@ export interface Manga {
     id: string;
     title: string;
     path: string; // local filesystem path to the folder containing chapters
+    thumbnailPath?: string | null;
     createdAt: string; // ISO date
     /** optional current open page (1-based). kept in sync from Reader */
     currentPage?: number | null;
