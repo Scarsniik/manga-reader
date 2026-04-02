@@ -81,6 +81,10 @@ const createWindow = () => {
 // This allows the renderer to use URLs like `local://D:/path/to/file.jpg` safely
 // without disabling webSecurity. We register it when the app is ready.
 app.whenReady().then(() => {
+    if (process.platform === 'win32') {
+        app.setAppUserModelId('com.example.mangahelper');
+    }
+
     protocol.registerFileProtocol('local', (request, callback) => {
         try {
             // request.url will be like 'local://D:/path/to/file.jpg' or

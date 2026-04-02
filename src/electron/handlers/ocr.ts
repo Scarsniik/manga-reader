@@ -1,4 +1,4 @@
-import { IpcMainInvokeEvent, app, net } from "electron";
+import { IpcMainInvokeEvent, Notification, app, net } from "electron";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
@@ -29,6 +29,7 @@ type RawOcrResult = {
   img_width?: number;
   img_height?: number;
   blocks?: RawOcrBlock[];
+  profile?: OcrWorkerPageProfile | null;
 };
 
 type NormalizedBox = {
@@ -123,6 +124,7 @@ type MangaOcrPageEntry = {
   manualBoxes?: NormalizedBox[];
   computedAt?: string;
   errorMessage?: string;
+  passProfile?: OcrPassProfile;
 };
 
 type MangaOcrFile = {
@@ -179,6 +181,124 @@ type OcrQueueJob = {
   cancelRequested?: boolean;
   languageDetection?: OcrLanguageDetection | null;
   priority: OcrQueueJobPriority;
+  heavyPass?: boolean;
+};
+
+type OcrPassProfile = "standard" | "heavy";
+
+type OcrNumericRecord = Record<string, number>;
+
+type OcrWorkerPageProfilePass = {
+  name?: string;
+  kind?: string;
+  duration_ms?: number;
+  blocks_detected?: number;
+  candidate_count?: number;
+  accepted_candidates?: number;
+  added_candidates?: number;
+  replaced_candidates?: number;
+  replaced_blocks?: number;
+  skipped_candidates?: number;
+  final_blocks?: number;
+};
+
+type OcrWorkerPageProfile = {
+  version?: string;
+  duration_ms?: number;
+  text_detector?: {
+    calls?: number;
+    total_ms?: number;
+  };
+  mocr?: {
+    calls?: number;
+    total_ms?: number;
+  };
+  line_variants?: {
+    chunks_total?: number;
+    variant_triggered_chunks?: number;
+    variant_skipped_chunks?: number;
+    selected_total?: OcrNumericRecord;
+    selected_when_triggered?: OcrNumericRecord;
+    candidate_evaluations?: OcrNumericRecord;
+    improved_selections?: number;
+    score_gain_total?: number;
+  };
+  truncated_refine?: {
+    calls?: number;
+    accepted?: number;
+  };
+  passes?: OcrWorkerPageProfilePass[];
+  final_blocks?: {
+    count?: number;
+    by_origin?: OcrNumericRecord;
+  };
+};
+
+type MangaOcrProfilePageEntry = {
+  pageIndex: number;
+  pageNumber: number;
+  imagePath: string;
+  source: "backend" | "app-cache" | "manga-file";
+  computedAt: string;
+  status?: "done" | "error";
+  errorMessage?: string;
+  profile?: OcrWorkerPageProfile | null;
+};
+
+type MangaOcrProfileSummaryPass = {
+  kind: string;
+  name: string;
+  runs: number;
+  durationMs: number;
+  blocksDetected: number;
+  candidateCount: number;
+  acceptedCandidates: number;
+  addedCandidates: number;
+  replacedCandidates: number;
+  replacedBlocks: number;
+  skippedCandidates: number;
+  finalBlocks: number;
+};
+
+type MangaOcrProfileSummary = {
+  backendPages: number;
+  appCachePages: number;
+  mangaFilePages: number;
+  profiledPages: number;
+  totalDurationMs: number;
+  totalMocrCalls: number;
+  totalMocrMs: number;
+  totalTextDetectorCalls: number;
+  totalTextDetectorMs: number;
+  lineSelectedTotal: OcrNumericRecord;
+  lineSelectedWhenTriggered: OcrNumericRecord;
+  lineCandidateEvaluations: OcrNumericRecord;
+  finalBlockOrigins: OcrNumericRecord;
+  truncatedRefineCalls: number;
+  truncatedRefineAccepted: number;
+  passes: Record<string, MangaOcrProfileSummaryPass>;
+};
+
+type MangaOcrProfileFile = {
+  version: string;
+  manga: {
+    id: string;
+    title: string;
+    rootPath: string;
+  };
+  session: {
+    id: string;
+    mode: OcrQueueJobMode;
+    overwrite: boolean;
+    heavyPass: boolean;
+    status: OcrQueueJobStatus;
+    startedAt: string;
+    updatedAt: string;
+    completedAt?: string;
+    totalPages: number;
+    pages: Record<string, MangaOcrProfilePageEntry>;
+    summary: MangaOcrProfileSummary;
+  };
 };
 
 type MangaVocabularyFile = {
@@ -269,6 +389,8 @@ const CACHE_SCHEMA_VERSION = "mokuro-page-v7";
 const MANGA_OCR_FILE_NAME = ".manga-helper.ocr.json";
 const MANGA_OCR_SCHEMA_VERSION = "manga-ocr-file-v1";
 const MANGA_OCR_PAGE_SCHEMA_VERSION = "manga-ocr-page-v4";
+const MANGA_OCR_PROFILE_FILE_NAME = ".manga-helper.ocr.profile.json";
+const MANGA_OCR_PROFILE_SCHEMA_VERSION = "manga-ocr-profile-v1";
 const MANGA_VOCABULARY_FILE_NAME = ".manga-helper.vocabulary.json";
 const MANGA_VOCABULARY_SCHEMA_VERSION = "manga-vocabulary-v1";
 const WORKER_BOOT_TIMEOUT_MS = 20_000;
@@ -284,6 +406,8 @@ const OCR_STATUS_WAIT_TIMEOUT_MS = 60 * 60_000;
 const JPDB_PARSE_CONCURRENCY = 1;
 const JPDB_PARSE_THROTTLE_MS = 350;
 const JPDB_PARSE_MAX_ATTEMPTS = 5;
+const MANGA_OCR_CHECKPOINT_PAGE_INTERVAL = 8;
+const MANGA_OCR_CHECKPOINT_INTERVAL_MS = 10_000;
 const WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS = [80, 160, 320, 640, 1_000, 1_600];
 const WINDOWS_TRANSIENT_FS_ERROR_CODES = new Set(["EPERM", "EACCES", "EBUSY", "ENOTEMPTY", "EEXIST"]);
 
@@ -496,7 +620,27 @@ async function getImageFingerprint(imagePath: string) {
   };
 }
 
-function buildCacheKey(fingerprint: { imagePath: string; size: number; mtimeMs: number }) {
+function normalizeOcrPassProfile(value: unknown): OcrPassProfile {
+  return value === "heavy" ? "heavy" : "standard";
+}
+
+function getStoredEntryPassProfile(entry?: MangaOcrPageEntry | null): OcrPassProfile {
+  return normalizeOcrPassProfile(entry?.passProfile ?? "heavy");
+}
+
+function doesStoredPassProfileSatisfy(requested: OcrPassProfile, stored?: OcrPassProfile | null) {
+  const normalizedRequested = normalizeOcrPassProfile(requested);
+  const normalizedStored = normalizeOcrPassProfile(stored ?? "heavy");
+  if (normalizedRequested === "standard") {
+    return normalizedStored === "standard" || normalizedStored === "heavy";
+  }
+  return normalizedStored === "heavy";
+}
+
+function buildCacheKey(
+  fingerprint: { imagePath: string; size: number; mtimeMs: number },
+  passProfile: OcrPassProfile = "standard"
+) {
   return createHash("sha1")
     .update(CACHE_SCHEMA_VERSION)
     .update("\0")
@@ -505,6 +649,8 @@ function buildCacheKey(fingerprint: { imagePath: string; size: number; mtimeMs: 
     .update(String(fingerprint.size))
     .update("\0")
     .update(String(fingerprint.mtimeMs))
+    .update("\0")
+    .update(normalizeOcrPassProfile(passProfile))
     .digest("hex");
 }
 
@@ -552,14 +698,17 @@ async function deleteCache(cacheKey: string) {
 async function invalidateCacheForImagePath(imagePath: string) {
   try {
     const fingerprint = await getImageFingerprint(imagePath);
-    const cacheKey = buildCacheKey(fingerprint);
-    await deleteCache(cacheKey);
+    await Promise.all([
+      deleteCache(buildCacheKey(fingerprint, "standard")),
+      deleteCache(buildCacheKey(fingerprint, "heavy")),
+    ]);
   } catch {
     // ignore cache invalidation failures
   }
 }
 
 const getMangaOcrFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_OCR_FILE_NAME);
+const getMangaOcrProfileFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_OCR_PROFILE_FILE_NAME);
 const getMangaVocabularyFilePath = (mangaPath: string) => path.join(mangaPath, MANGA_VOCABULARY_FILE_NAME);
 
 const toLocalFileUrl = (filePath: string) => pathToFileURL(filePath).href.replace(/^file:\/\//, "local://");
@@ -598,7 +747,7 @@ async function readMangaOcrFile(mangaPath: string): Promise<MangaOcrFile | null>
   try {
     const raw = await fs.readFile(targetPath, "utf-8");
     const parsed = JSON.parse(raw) as MangaOcrFile;
-    return {
+    const normalizedFile: MangaOcrFile = {
       ...createEmptyMangaOcrFile({
         id: parsed?.manga?.id || path.basename(mangaPath),
         title: parsed?.manga?.title || path.basename(mangaPath),
@@ -624,6 +773,12 @@ async function readMangaOcrFile(mangaPath: string): Promise<MangaOcrFile | null>
       },
       pages: parsed?.pages || {},
     };
+    ensureMangaFileProgress(
+      normalizedFile,
+      Number(normalizedFile.progress?.totalPages || 0),
+      normalizedFile.progress?.mode || "on_demand",
+    );
+    return normalizedFile;
   } catch (error: any) {
     if (error && error.code === "ENOENT") {
       return null;
@@ -648,10 +803,225 @@ async function writeMangaOcrFile(mangaPath: string, file: MangaOcrFile) {
       updatedAt: new Date().toISOString(),
     },
   };
+  ensureMangaFileProgress(
+    nextFile,
+    Number(nextFile.progress?.totalPages || 0),
+    nextFile.progress?.mode || "on_demand",
+  );
   const serialized = JSON.stringify(nextFile, null, 2);
 
   await writeJsonFileAtomically(targetPath, tempPath, serialized);
   return nextFile;
+}
+
+function createEmptyMangaOcrProfileSummary(): MangaOcrProfileSummary {
+  return {
+    backendPages: 0,
+    appCachePages: 0,
+    mangaFilePages: 0,
+    profiledPages: 0,
+    totalDurationMs: 0,
+    totalMocrCalls: 0,
+    totalMocrMs: 0,
+    totalTextDetectorCalls: 0,
+    totalTextDetectorMs: 0,
+    lineSelectedTotal: {},
+    lineSelectedWhenTriggered: {},
+    lineCandidateEvaluations: {},
+    finalBlockOrigins: {},
+    truncatedRefineCalls: 0,
+    truncatedRefineAccepted: 0,
+    passes: {},
+  };
+}
+
+function addProfileCounters(target: OcrNumericRecord, source?: OcrNumericRecord | null) {
+  for (const [key, rawValue] of Object.entries(source || {})) {
+    const value = Number(rawValue || 0);
+    if (!Number.isFinite(value) || value === 0) {
+      continue;
+    }
+    target[key] = Number(target[key] || 0) + value;
+  }
+}
+
+function buildMangaOcrProfileSummary(session: MangaOcrProfileFile["session"]): MangaOcrProfileSummary {
+  const summary = createEmptyMangaOcrProfileSummary();
+
+  for (const page of Object.values(session.pages || {})) {
+    if (page.source === "backend") {
+      summary.backendPages += 1;
+    } else if (page.source === "app-cache") {
+      summary.appCachePages += 1;
+    } else if (page.source === "manga-file") {
+      summary.mangaFilePages += 1;
+    }
+
+    const profile = page.profile;
+    if (!profile) {
+      continue;
+    }
+
+    summary.profiledPages += 1;
+    summary.totalDurationMs += Number(profile.duration_ms || 0);
+    summary.totalMocrCalls += Number(profile.mocr?.calls || 0);
+    summary.totalMocrMs += Number(profile.mocr?.total_ms || 0);
+    summary.totalTextDetectorCalls += Number(profile.text_detector?.calls || 0);
+    summary.totalTextDetectorMs += Number(profile.text_detector?.total_ms || 0);
+    summary.truncatedRefineCalls += Number(profile.truncated_refine?.calls || 0);
+    summary.truncatedRefineAccepted += Number(profile.truncated_refine?.accepted || 0);
+
+    addProfileCounters(summary.lineSelectedTotal, profile.line_variants?.selected_total);
+    addProfileCounters(summary.lineSelectedWhenTriggered, profile.line_variants?.selected_when_triggered);
+    addProfileCounters(summary.lineCandidateEvaluations, profile.line_variants?.candidate_evaluations);
+    addProfileCounters(summary.finalBlockOrigins, profile.final_blocks?.by_origin);
+
+    for (const pass of profile.passes || []) {
+      const kind = String(pass.kind || "unknown");
+      const name = String(pass.name || "unknown");
+      const summaryKey = `${kind}:${name}`;
+      const current = summary.passes[summaryKey] || {
+        kind,
+        name,
+        runs: 0,
+        durationMs: 0,
+        blocksDetected: 0,
+        candidateCount: 0,
+        acceptedCandidates: 0,
+        addedCandidates: 0,
+        replacedCandidates: 0,
+        replacedBlocks: 0,
+        skippedCandidates: 0,
+        finalBlocks: 0,
+      };
+
+      current.runs += 1;
+      current.durationMs += Number(pass.duration_ms || 0);
+      current.blocksDetected += Number(pass.blocks_detected || 0);
+      current.candidateCount += Number(pass.candidate_count || 0);
+      current.acceptedCandidates += Number(pass.accepted_candidates || 0);
+      current.addedCandidates += Number(pass.added_candidates || 0);
+      current.replacedCandidates += Number(pass.replaced_candidates || 0);
+      current.replacedBlocks += Number(pass.replaced_blocks || 0);
+      current.skippedCandidates += Number(pass.skipped_candidates || 0);
+      current.finalBlocks += Number(pass.final_blocks || 0);
+      summary.passes[summaryKey] = current;
+    }
+  }
+
+  return summary;
+}
+
+function createEmptyMangaOcrProfileFile(job: OcrQueueJob, manga: any, totalPages: number): MangaOcrProfileFile {
+  const startedAt = job.startedAt || new Date().toISOString();
+  return {
+    version: MANGA_OCR_PROFILE_SCHEMA_VERSION,
+    manga: {
+      id: String(manga.id),
+      title: String(manga.title || path.basename(manga.path)),
+      rootPath: manga.path,
+    },
+    session: {
+      id: job.id,
+      mode: job.mode,
+      overwrite: !!job.overwrite,
+      heavyPass: !!job.heavyPass,
+      status: job.status,
+      startedAt,
+      updatedAt: startedAt,
+      totalPages,
+      pages: {},
+      summary: createEmptyMangaOcrProfileSummary(),
+    },
+  };
+}
+
+function syncMangaOcrProfileSession(file: MangaOcrProfileFile, job: OcrQueueJob, totalPages: number) {
+  const nextSession: MangaOcrProfileFile["session"] = {
+    ...file.session,
+    status: job.status,
+    heavyPass: !!job.heavyPass,
+    totalPages: Math.max(0, Number(totalPages || file.session.totalPages || 0)),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (job.completedAt) {
+    nextSession.completedAt = job.completedAt;
+  } else {
+    delete nextSession.completedAt;
+  }
+
+  file.session = nextSession;
+  return file.session;
+}
+
+async function writeMangaOcrProfileFile(mangaPath: string, file: MangaOcrProfileFile) {
+  const targetPath = getMangaOcrProfileFilePath(mangaPath);
+  const tempPath = `${targetPath}.${randomUUID()}.tmp`;
+  const nextFile: MangaOcrProfileFile = {
+    ...file,
+    version: MANGA_OCR_PROFILE_SCHEMA_VERSION,
+    manga: {
+      ...(file?.manga || {}),
+      rootPath: mangaPath,
+    },
+    session: {
+      ...(file?.session || {}),
+      heavyPass: !!file?.session?.heavyPass,
+      totalPages: Math.max(0, Number(file?.session?.totalPages || 0)),
+      updatedAt: new Date().toISOString(),
+      pages: file?.session?.pages || {},
+      summary: buildMangaOcrProfileSummary(file.session),
+    },
+  };
+  const serialized = JSON.stringify(nextFile, null, 2);
+
+  await writeJsonFileAtomically(targetPath, tempPath, serialized);
+  return nextFile;
+}
+
+function showQueueJobCompletionNotification(job: OcrQueueJob) {
+  if (job.mode !== "full_manga" || !Notification.isSupported()) {
+    return;
+  }
+
+  let title = "OCR termine";
+  if (job.status === "error") {
+    title = "OCR en erreur";
+  } else if (job.status === "completed" && Number(job.failedPages || 0) > 0) {
+    title = "OCR termine avec erreurs";
+  } else if (job.status !== "completed") {
+    return;
+  }
+
+  const processedPages = Number(job.completedPages || 0) + Number(job.failedPages || 0);
+  const totalPages = Number(job.totalPages || 0);
+  const progressText = totalPages > 0
+    ? `${processedPages}/${totalPages} page(s)`
+    : `${processedPages} page(s)`;
+  const bodyParts = [
+    String(job.mangaTitle || "Manga inconnu"),
+    progressText,
+  ];
+
+  if (job.status === "completed" && Number(job.failedPages || 0) > 0) {
+    bodyParts.push(`${Number(job.failedPages || 0)} page(s) en erreur`);
+  } else if (job.status === "error" && job.message) {
+    bodyParts.push(String(job.message).slice(0, 180));
+  }
+
+  try {
+    new Notification({
+      title,
+      body: bodyParts.join("\n"),
+      silent: false,
+    }).show();
+  } catch (error) {
+    console.warn("[ocr] Unable to show completion notification", {
+      mangaId: job.mangaId,
+      error,
+    });
+  }
 }
 
 function buildEmptyMangaVocabularyStatus(mangaPath: string): MangaVocabularyStatus {
@@ -852,26 +1222,195 @@ function buildMangaPageKey(pageIndex?: number | null, imagePath?: string | null)
   return randomUUID();
 }
 
-function recomputeMangaFileProgress(file: MangaOcrFile, totalPages: number, mode: OcrQueueJobMode | "on_demand") {
-  const entries = Object.values(file.pages || {});
-  const completedPages = entries.filter((entry) => entry.status === "done").length;
-  const failedPages = entries.filter((entry) => entry.status === "error").length;
-  const lastProcessedPage = entries
-    .filter((entry) => typeof entry.pageNumber === "number")
-    .map((entry) => Number(entry.pageNumber))
-    .sort((a, b) => b - a)[0];
+function normalizeMangaOcrProgressMode(value: unknown): OcrQueueJobMode {
+  return value === "full_manga" ? "full_manga" : "on_demand";
+}
 
+function getTrackedMangaOcrStatus(entry?: MangaOcrPageEntry | null): "done" | "error" | null {
+  if (entry?.status === "done" || entry?.status === "error") {
+    return entry.status;
+  }
+  return null;
+}
+
+function getHighestStoredMangaPageNumber(file: MangaOcrFile): number | undefined {
+  let highestPageNumber = 0;
+
+  for (const entry of Object.values(file.pages || {})) {
+    const pageNumber = Number(entry?.pageNumber || 0);
+    if (Number.isFinite(pageNumber) && pageNumber > highestPageNumber) {
+      highestPageNumber = Math.floor(pageNumber);
+    }
+  }
+
+  return highestPageNumber > 0 ? highestPageNumber : undefined;
+}
+
+function rebuildMangaFileProgress(file: MangaOcrFile, totalPages: number, mode: OcrQueueJobMode | "on_demand") {
+  let completedPages = 0;
+  let failedPages = 0;
+  let lastProcessedPage = 0;
+
+  for (const entry of Object.values(file.pages || {})) {
+    if (entry?.status === "done") {
+      completedPages += 1;
+    } else if (entry?.status === "error") {
+      failedPages += 1;
+    }
+
+    const pageNumber = Number(entry?.pageNumber || 0);
+    if (Number.isFinite(pageNumber) && pageNumber > lastProcessedPage) {
+      lastProcessedPage = Math.floor(pageNumber);
+    }
+  }
+
+  const computedTotalPages = Math.max(totalPages, completedPages + failedPages, lastProcessedPage);
   file.progress = {
     ...file.progress,
-    totalPages,
+    totalPages: computedTotalPages,
     completedPages,
     failedPages,
-    lastProcessedPage,
-    mode,
+    lastProcessedPage: lastProcessedPage > 0 ? lastProcessedPage : undefined,
+    mode: normalizeMangaOcrProgressMode(mode),
     updatedAt: new Date().toISOString(),
   };
 
   return file.progress;
+}
+
+function ensureMangaFileProgress(file: MangaOcrFile, totalPages: number, mode: OcrQueueJobMode | "on_demand") {
+  const progress = file.progress || {
+    totalPages,
+    completedPages: 0,
+    failedPages: 0,
+    lastProcessedPage: undefined,
+    mode: normalizeMangaOcrProgressMode(mode),
+    updatedAt: new Date().toISOString(),
+  };
+  const normalizedMode = normalizeMangaOcrProgressMode(progress.mode || mode);
+  const completedPages = Number(progress.completedPages);
+  const failedPages = Number(progress.failedPages);
+  const lastProcessedPage = Number(progress.lastProcessedPage || 0);
+  const computedTotalPages = Math.max(
+    totalPages,
+    Number(progress.totalPages || 0),
+    Number.isFinite(completedPages) ? Math.floor(completedPages) : 0,
+    Number.isFinite(failedPages) ? Math.floor(failedPages) : 0,
+    Number.isFinite(lastProcessedPage) ? Math.floor(lastProcessedPage) : 0,
+  );
+  const hasValidCounts = Number.isFinite(completedPages)
+    && completedPages >= 0
+    && Number.isFinite(failedPages)
+    && failedPages >= 0
+    && (completedPages + failedPages) <= computedTotalPages;
+
+  if (!hasValidCounts) {
+    return rebuildMangaFileProgress(file, totalPages, normalizedMode);
+  }
+
+  let normalizedLastProcessedPage = Number.isFinite(lastProcessedPage) && lastProcessedPage > 0
+    ? Math.floor(lastProcessedPage)
+    : undefined;
+
+  if (normalizedLastProcessedPage === undefined && Object.keys(file.pages || {}).length > 0) {
+    normalizedLastProcessedPage = getHighestStoredMangaPageNumber(file);
+  }
+
+  file.progress = {
+    ...progress,
+    totalPages: computedTotalPages,
+    completedPages: Math.floor(completedPages),
+    failedPages: Math.floor(failedPages),
+    lastProcessedPage: normalizedLastProcessedPage,
+    mode: normalizedMode,
+    updatedAt: progress.updatedAt || new Date().toISOString(),
+  };
+
+  return file.progress;
+}
+
+function touchMangaFileProgress(file: MangaOcrFile, totalPages: number, mode: OcrQueueJobMode | "on_demand") {
+  const progress = ensureMangaFileProgress(file, totalPages, mode);
+  const normalizedMode = normalizeMangaOcrProgressMode(mode);
+  const computedTotalPages = Math.max(
+    totalPages,
+    Number(progress.totalPages || 0),
+    Number(progress.completedPages || 0) + Number(progress.failedPages || 0),
+    Number(progress.lastProcessedPage || 0),
+  );
+
+  file.progress = {
+    ...progress,
+    totalPages: computedTotalPages,
+    mode: normalizedMode,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return file.progress;
+}
+
+function updateMangaFileProgressForPageChange(
+  file: MangaOcrFile,
+  totalPages: number,
+  mode: OcrQueueJobMode | "on_demand",
+  previousEntry?: MangaOcrPageEntry,
+  nextEntry?: MangaOcrPageEntry,
+) {
+  const progress = ensureMangaFileProgress(file, totalPages, mode);
+  let completedPages = Number(progress.completedPages || 0);
+  let failedPages = Number(progress.failedPages || 0);
+
+  const previousStatus = getTrackedMangaOcrStatus(previousEntry);
+  const nextStatus = getTrackedMangaOcrStatus(nextEntry);
+
+  if (previousStatus === "done") {
+    completedPages = Math.max(0, completedPages - 1);
+  } else if (previousStatus === "error") {
+    failedPages = Math.max(0, failedPages - 1);
+  }
+
+  if (nextStatus === "done") {
+    completedPages += 1;
+  } else if (nextStatus === "error") {
+    failedPages += 1;
+  }
+
+  const previousLastProcessedPage = Number(progress.lastProcessedPage || 0);
+  const nextPageNumber = Number(nextEntry?.pageNumber || 0);
+  const previousPageNumber = Number(previousEntry?.pageNumber || 0);
+  let lastProcessedPage = previousLastProcessedPage > 0 ? previousLastProcessedPage : 0;
+
+  if (Number.isFinite(nextPageNumber) && nextPageNumber > 0) {
+    lastProcessedPage = Math.max(lastProcessedPage, Math.floor(nextPageNumber));
+  } else if (!nextEntry && previousPageNumber === previousLastProcessedPage) {
+    lastProcessedPage = getHighestStoredMangaPageNumber(file) || 0;
+  }
+
+  const computedTotalPages = Math.max(totalPages, completedPages + failedPages, lastProcessedPage);
+  file.progress = {
+    ...progress,
+    totalPages: computedTotalPages,
+    completedPages,
+    failedPages,
+    lastProcessedPage: lastProcessedPage > 0 ? lastProcessedPage : undefined,
+    mode: normalizeMangaOcrProgressMode(mode),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return file.progress;
+}
+
+function setMangaOcrPageEntry(
+  file: MangaOcrFile,
+  pageKey: string,
+  entry: MangaOcrPageEntry,
+  totalPages: number,
+  mode: OcrQueueJobMode | "on_demand",
+) {
+  const previousEntry = file.pages?.[pageKey];
+  file.pages[pageKey] = entry;
+  updateMangaFileProgressForPageChange(file, totalPages, mode, previousEntry, entry);
+  return file.pages[pageKey];
 }
 
 function pageEntryToNormalized(entry: MangaOcrPageEntry, imagePath: string, source: "manga-file" | "app-cache" | "backend"): NormalizedOcrResult | null {
@@ -913,7 +1452,11 @@ function pageEntryToNormalized(entry: MangaOcrPageEntry, imagePath: string, sour
   };
 }
 
-function isStoredPageUpToDate(entry: MangaOcrPageEntry | undefined, fingerprint: { imagePath: string; size: number; mtimeMs: number }) {
+function isStoredPageUpToDate(
+  entry: MangaOcrPageEntry | undefined,
+  fingerprint: { imagePath: string; size: number; mtimeMs: number },
+  passProfile: OcrPassProfile = "standard"
+) {
   if (!entry || entry.status !== "done") {
     return false;
   }
@@ -924,7 +1467,8 @@ function isStoredPageUpToDate(entry: MangaOcrPageEntry | undefined, fingerprint:
 
   return entry.imagePath === fingerprint.imagePath
     && Number(entry.sourceSize || 0) === Number(fingerprint.size)
-    && Number(entry.sourceMtimeMs || 0) === Number(fingerprint.mtimeMs);
+    && Number(entry.sourceMtimeMs || 0) === Number(fingerprint.mtimeMs)
+    && doesStoredPassProfileSatisfy(passProfile, getStoredEntryPassProfile(entry));
 }
 
 function countJapaneseChars(text: string) {
@@ -1204,11 +1748,13 @@ async function ensureMangaOcrFile(manga: any, totalPages: number) {
       title: String(manga.title || path.basename(manga.path)),
       rootPath: manga.path,
     };
-    existing.progress.totalPages = Math.max(Number(existing.progress.totalPages || 0), totalPages);
+    touchMangaFileProgress(existing, totalPages, existing.progress.mode || "on_demand");
     return existing;
   }
 
-  return createEmptyMangaOcrFile(manga, totalPages);
+  const file = createEmptyMangaOcrFile(manga, totalPages);
+  touchMangaFileProgress(file, totalPages, file.progress.mode || "on_demand");
+  return file;
 }
 
 async function detectLanguageForManga(manga: any, pageFiles: string[], settings: any, forceResample: boolean = false): Promise<OcrLanguageDetection> {
@@ -1319,7 +1865,8 @@ async function persistPageResultForManga(
   fingerprint: { imagePath: string; size: number; mtimeMs: number },
   result: NormalizedOcrResult,
   mode: OcrQueueJobMode | "on_demand",
-  settings: any
+  settings: any,
+  passProfile: OcrPassProfile = "standard"
 ) {
   const pageFiles = await listImageFiles(manga.path);
   const file = await ensureMangaOcrFile(manga, pageFiles.length);
@@ -1328,7 +1875,7 @@ async function persistPageResultForManga(
   const blocks = Array.isArray(result.page?.blocks) ? result.page?.blocks : [];
   const boxes = Array.isArray(result.boxes) ? result.boxes : [];
 
-  file.pages[pageKey] = {
+  const nextEntry: MangaOcrPageEntry = {
     schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     status: "done",
     pageIndex,
@@ -1343,15 +1890,21 @@ async function persistPageResultForManga(
     blocks,
     manualBoxes: Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [],
     computedAt: result.debug?.computedAt || new Date().toISOString(),
+    passProfile: normalizeOcrPassProfile(passProfile),
   };
 
   await updateLanguageDetectionFromRecognizedPage(manga, file, pageIndex, imagePath, result, settings);
-  recomputeMangaFileProgress(file, pageFiles.length, mode);
+  setMangaOcrPageEntry(file, pageKey, nextEntry, pageFiles.length, mode);
   await writeMangaOcrFile(manga.path, file);
   return file;
 }
 
-async function readStoredPageFromMangaFile(mangaPath: string, imagePath: string, pageIndex: number) {
+async function readStoredPageFromMangaFile(
+  mangaPath: string,
+  imagePath: string,
+  pageIndex: number,
+  passProfile: OcrPassProfile = "standard"
+) {
   const file = await readMangaOcrFile(mangaPath);
   if (!file) {
     return null;
@@ -1364,7 +1917,7 @@ async function readStoredPageFromMangaFile(mangaPath: string, imagePath: string,
   }
 
   const fingerprint = await getImageFingerprint(imagePath);
-  if (!isStoredPageUpToDate(entry, fingerprint)) {
+  if (!isStoredPageUpToDate(entry, fingerprint, passProfile)) {
     return null;
   }
 
@@ -1390,7 +1943,7 @@ async function addManualBoxesToMangaPage(
   const existingEntry = file.pages[pageKey];
   const existingManualBoxes = Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [];
 
-  file.pages[pageKey] = {
+  const nextEntry: MangaOcrPageEntry = {
     schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     status: existingEntry?.status === "error" ? "done" : (existingEntry?.status || "done"),
     pageIndex,
@@ -1406,9 +1959,10 @@ async function addManualBoxesToMangaPage(
     manualBoxes: [...existingManualBoxes, ...normalizedBoxes],
     computedAt: existingEntry?.computedAt || new Date().toISOString(),
     errorMessage: undefined,
+    passProfile: existingEntry?.passProfile,
   };
 
-  recomputeMangaFileProgress(file, pageFiles.length, file.progress.mode || "on_demand");
+  setMangaOcrPageEntry(file, pageKey, nextEntry, pageFiles.length, file.progress.mode || "on_demand");
   await writeMangaOcrFile(manga.path, file);
   await invalidateCacheForImagePath(imagePath);
   return pageEntryToNormalized(file.pages[pageKey], imagePath, "manga-file");
@@ -1434,13 +1988,15 @@ async function removeManualBoxFromMangaPage(
     throw new Error("Manual OCR selection not found");
   }
 
-  entry.schemaVersion = MANGA_OCR_PAGE_SCHEMA_VERSION;
-  entry.manualBoxes = nextManualBoxes;
-  file.pages[pageKey] = entry;
-  recomputeMangaFileProgress(file, pageFiles.length, file.progress.mode || "on_demand");
+  const nextEntry: MangaOcrPageEntry = {
+    ...entry,
+    schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
+    manualBoxes: nextManualBoxes,
+  };
+  setMangaOcrPageEntry(file, pageKey, nextEntry, pageFiles.length, file.progress.mode || "on_demand");
   await writeMangaOcrFile(manga.path, file);
   await invalidateCacheForImagePath(imagePath);
-  return pageEntryToNormalized(entry, imagePath, "manga-file");
+  return pageEntryToNormalized(nextEntry, imagePath, "manga-file");
 }
 
 async function findExistingPath(candidates: string[]) {
@@ -1565,9 +2121,9 @@ async function resolveBundledOcrAssets(): Promise<BundledOcrAssets | null> {
 
 async function resolveWorkerScriptPath(bundledAssets?: BundledOcrAssets | null) {
   return findExistingPath([
-    bundledAssets?.workerScriptPath || "",
     path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
     path.join(process.cwd(), "scripts", "ocr_worker.py"),
+    bundledAssets?.workerScriptPath || "",
   ]);
 }
 
@@ -1768,13 +2324,15 @@ async function ensureWorker(settings: any): Promise<OcrWorkerState> {
 async function callWorkerRecognize(
   imagePath: string,
   settings: any,
-  options?: { mode?: "manual_crop" }
+  options?: { mode?: "manual_crop"; profile?: boolean; passProfile?: OcrPassProfile }
 ): Promise<RawOcrResult> {
   const state = await ensureWorker(settings);
   const response = await sendWorkerRequest(state, {
     type: "recognize",
     imagePath,
     ...(options?.mode ? { mode: options.mode } : {}),
+    ...(options?.profile ? { profile: true } : {}),
+    ...(options?.passProfile ? { passProfile: normalizeOcrPassProfile(options.passProfile) } : {}),
   });
 
   if (!response.ok) {
@@ -1928,6 +2486,7 @@ function cloneQueueJob(job: OcrQueueJob): OcrQueueJobSnapshot {
     message: job.message,
     languageDetection: job.languageDetection || null,
     priority: job.priority,
+    heavyPass: !!job.heavyPass,
   };
 }
 
@@ -1986,14 +2545,21 @@ function isMangaOcrFullyProcessed(status: OcrMangaStatus) {
 async function recognizePageInternal(
   imagePath: string,
   settings: any,
-  options?: { forceRefresh?: boolean; manga?: any; pageIndex?: number; mode?: OcrQueueJobMode | "on_demand" }
+  options?: {
+    forceRefresh?: boolean;
+    manga?: any;
+    pageIndex?: number;
+    mode?: OcrQueueJobMode | "on_demand";
+    passProfile?: OcrPassProfile;
+  }
 ) {
   const fingerprint = await getImageFingerprint(imagePath);
-  const cacheKey = buildCacheKey(fingerprint);
+  const passProfile = normalizeOcrPassProfile(options?.passProfile || "standard");
+  const cacheKey = buildCacheKey(fingerprint, passProfile);
   const forceRefresh = !!options?.forceRefresh;
 
   if (options?.manga && typeof options.pageIndex === "number" && !forceRefresh) {
-    const stored = await readStoredPageFromMangaFile(options.manga.path, imagePath, options.pageIndex);
+    const stored = await readStoredPageFromMangaFile(options.manga.path, imagePath, options.pageIndex, passProfile);
     if (stored) {
       return {
         result: {
@@ -2010,6 +2576,7 @@ async function recognizePageInternal(
           },
         },
         fingerprint,
+        workerProfile: null,
       };
     }
   }
@@ -2034,11 +2601,15 @@ async function recognizePageInternal(
           },
         },
         fingerprint,
+        workerProfile: null,
       };
     }
   }
 
-  const raw = await callWorkerRecognize(imagePath, settings);
+  const raw = await callWorkerRecognize(imagePath, settings, {
+    profile: options?.mode === "full_manga",
+    passProfile,
+  });
   const normalized = await normalizeRawResult(raw, imagePath, false, {
     cacheKey,
     forceRefreshUsed: forceRefresh,
@@ -2064,11 +2635,16 @@ async function recognizePageInternal(
       fingerprint,
       normalized,
       options.mode || "on_demand",
-      settings
+      settings,
+      passProfile,
     );
   }
 
-  return { result: normalized, fingerprint };
+  return {
+    result: normalized,
+    fingerprint,
+    workerProfile: raw.profile || null,
+  };
 }
 
 async function processQueueJob(job: OcrQueueJob) {
@@ -2089,11 +2665,50 @@ async function processQueueJob(job: OcrQueueJob) {
     totalPages: pageFiles.length,
     status: "running",
     message: null,
+    completedPages: 0,
+    failedPages: 0,
   });
 
-  const file = await ensureMangaOcrFile(manga, pageFiles.length);
-  recomputeMangaFileProgress(file, pageFiles.length, job.mode);
-  await writeMangaOcrFile(manga.path, file);
+  let workingFile = await ensureMangaOcrFile(manga, pageFiles.length);
+  touchMangaFileProgress(workingFile, pageFiles.length, job.mode);
+  let workingProfile = createEmptyMangaOcrProfileFile(job, manga, pageFiles.length);
+  syncMangaOcrProfileSession(workingProfile, job, pageFiles.length);
+
+  let ocrFileDirty = true;
+  let profileFileDirty = true;
+  let dirtyPageCount = 0;
+  let lastCheckpointAt = Date.now();
+
+  const flushWorkingState = async (force: boolean = false) => {
+    if (!ocrFileDirty && !profileFileDirty) {
+      return false;
+    }
+
+    const dueByPages = dirtyPageCount >= MANGA_OCR_CHECKPOINT_PAGE_INTERVAL;
+    const dueByTime = (Date.now() - lastCheckpointAt) >= MANGA_OCR_CHECKPOINT_INTERVAL_MS;
+    if (!force && !dueByPages && !dueByTime) {
+      return false;
+    }
+
+    if (ocrFileDirty) {
+      workingFile = await writeMangaOcrFile(manga.path, workingFile);
+    }
+    if (profileFileDirty) {
+      syncMangaOcrProfileSession(workingProfile, job, pageFiles.length);
+      workingProfile = await writeMangaOcrProfileFile(manga.path, workingProfile);
+    }
+    ocrFileDirty = false;
+    profileFileDirty = false;
+    dirtyPageCount = 0;
+    lastCheckpointAt = Date.now();
+    return true;
+  };
+
+  await flushWorkingState(true);
+  touchQueueJob(job, {
+    completedPages: Number(workingFile.progress.completedPages || 0),
+    failedPages: Number(workingFile.progress.failedPages || 0),
+  });
 
   for (let index = 0; index < pageFiles.length; index += 1) {
     if (job.cancelRequested) {
@@ -2102,6 +2717,8 @@ async function processQueueJob(job: OcrQueueJob) {
         completedAt: new Date().toISOString(),
         message: "Annule",
       });
+      profileFileDirty = true;
+      await flushWorkingState(true);
       return;
     }
 
@@ -2110,6 +2727,8 @@ async function processQueueJob(job: OcrQueueJob) {
         status: "paused",
         message: "En pause",
       });
+      profileFileDirty = true;
+      await flushWorkingState(true);
       return;
     }
 
@@ -2118,18 +2737,30 @@ async function processQueueJob(job: OcrQueueJob) {
       continue;
     }
 
-    const existingFile = await readMangaOcrFile(manga.path);
     const pageKey = buildMangaPageKey(index, imagePath);
-    const existingEntry = existingFile?.pages?.[pageKey];
+    const existingEntry = workingFile.pages?.[pageKey];
+    const passProfile: OcrPassProfile = job.heavyPass ? "heavy" : "standard";
 
     if (!job.overwrite && existingEntry) {
       const fingerprint = await getImageFingerprint(imagePath);
-      if (isStoredPageUpToDate(existingEntry, fingerprint)) {
+      if (isStoredPageUpToDate(existingEntry, fingerprint, passProfile)) {
+        workingProfile.session.pages[pageKey] = {
+          pageIndex: index,
+          pageNumber: index + 1,
+          imagePath,
+          source: "manga-file",
+          computedAt: String(existingEntry.computedAt || new Date().toISOString()),
+          status: "done",
+          profile: null,
+        };
+        profileFileDirty = true;
+        dirtyPageCount += 1;
+        await flushWorkingState(false);
         touchQueueJob(job, {
           currentPage: index + 1,
           currentPagePath: imagePath,
-          completedPages: Math.max(job.completedPages, Number(existingFile?.progress?.completedPages || 0)),
-          failedPages: Number(existingFile?.progress?.failedPages || 0),
+          completedPages: Number(workingFile.progress?.completedPages || 0),
+          failedPages: Number(workingFile.progress?.failedPages || 0),
         });
         continue;
       }
@@ -2143,21 +2774,53 @@ async function processQueueJob(job: OcrQueueJob) {
     });
 
     try {
-      await recognizePageInternal(imagePath, settings, {
+      const { result, fingerprint, workerProfile } = await recognizePageInternal(imagePath, settings, {
         forceRefresh: job.overwrite,
-        manga,
-        pageIndex: index,
         mode: job.mode,
+        passProfile,
       });
-      const refreshedFile = await readMangaOcrFile(manga.path);
+
+      const blocks = Array.isArray(result.page?.blocks) ? result.page?.blocks : [];
+      const boxes = Array.isArray(result.boxes) ? result.boxes : [];
+      const nextEntry: MangaOcrPageEntry = {
+        schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
+        status: "done",
+        pageIndex: index,
+        pageNumber: index + 1,
+        fileName: path.basename(imagePath),
+        imagePath,
+        sourceSize: fingerprint.size,
+        sourceMtimeMs: fingerprint.mtimeMs,
+        width: result.width,
+        height: result.height,
+        boxes,
+        blocks,
+        manualBoxes: Array.isArray(existingEntry?.manualBoxes) ? existingEntry.manualBoxes : [],
+        computedAt: result.debug?.computedAt || new Date().toISOString(),
+        passProfile,
+      };
+
+      await updateLanguageDetectionFromRecognizedPage(manga, workingFile, index, imagePath, result, settings);
+      setMangaOcrPageEntry(workingFile, pageKey, nextEntry, pageFiles.length, job.mode);
+      workingProfile.session.pages[pageKey] = {
+        pageIndex: index,
+        pageNumber: index + 1,
+        imagePath,
+        source: result.debug?.source === "app-cache" || result.debug?.source === "manga-file" ? result.debug.source : "backend",
+        computedAt: String(result.debug?.computedAt || new Date().toISOString()),
+        status: "done",
+        profile: workerProfile,
+      };
+      ocrFileDirty = true;
+      profileFileDirty = true;
+      dirtyPageCount += 1;
+      await flushWorkingState(false);
       touchQueueJob(job, {
-        completedPages: Number(refreshedFile?.progress?.completedPages || 0),
-        failedPages: Number(refreshedFile?.progress?.failedPages || 0),
+        completedPages: Number(workingFile.progress?.completedPages || 0),
+        failedPages: Number(workingFile.progress?.failedPages || 0),
       });
     } catch (error: any) {
-      const refreshedFile = await ensureMangaOcrFile(manga, pageFiles.length);
-      const pageKeyForError = buildMangaPageKey(index, imagePath);
-      refreshedFile.pages[pageKeyForError] = {
+      const nextEntry: MangaOcrPageEntry = {
         status: "error",
         pageIndex: index,
         pageNumber: index + 1,
@@ -2165,25 +2828,40 @@ async function processQueueJob(job: OcrQueueJob) {
         imagePath,
         errorMessage: String(error?.message || error || "OCR error"),
       };
-      recomputeMangaFileProgress(refreshedFile, pageFiles.length, job.mode);
-      await writeMangaOcrFile(manga.path, refreshedFile);
+      setMangaOcrPageEntry(workingFile, pageKey, nextEntry, pageFiles.length, job.mode);
+      workingProfile.session.pages[pageKey] = {
+        pageIndex: index,
+        pageNumber: index + 1,
+        imagePath,
+        source: "backend",
+        computedAt: new Date().toISOString(),
+        status: "error",
+        errorMessage: String(error?.message || error || "OCR error"),
+        profile: null,
+      };
+      ocrFileDirty = true;
+      profileFileDirty = true;
+      dirtyPageCount += 1;
+      await flushWorkingState(false);
       touchQueueJob(job, {
-        failedPages: Number(refreshedFile.progress.failedPages || 0),
+        completedPages: Number(workingFile.progress?.completedPages || 0),
+        failedPages: Number(workingFile.progress?.failedPages || 0),
         message: String(error?.message || error || "OCR error"),
       });
     }
   }
 
-  const finalFile = await readMangaOcrFile(manga.path);
   touchQueueJob(job, {
     status: "completed",
     completedAt: new Date().toISOString(),
-    completedPages: Number(finalFile?.progress?.completedPages || 0),
-    failedPages: Number(finalFile?.progress?.failedPages || 0),
+    completedPages: Number(workingFile.progress?.completedPages || 0),
+    failedPages: Number(workingFile.progress?.failedPages || 0),
     currentPage: undefined,
     currentPagePath: undefined,
-    message: finalFile?.progress?.failedPages ? "Termine avec erreurs" : "Termine",
+    message: workingFile?.progress?.failedPages ? "Termine avec erreurs" : "Termine",
   });
+  profileFileDirty = true;
+  await flushWorkingState(true);
 }
 
 async function runOcrQueue() {
@@ -2200,12 +2878,14 @@ async function runOcrQueue() {
 
       try {
         await processQueueJob(job);
+        showQueueJobCompletionNotification(job);
       } catch (error: any) {
         touchQueueJob(job, {
           status: "error",
           completedAt: new Date().toISOString(),
           message: String(error?.message || error || "Queue processing error"),
         });
+        showQueueJobCompletionNotification(job);
       }
     }
   })();
@@ -2228,6 +2908,7 @@ function enqueueMangaQueueJob(
     mode?: OcrQueueJobMode;
     detection?: OcrLanguageDetection | null;
     priority?: OcrQueueJobPriority;
+    heavyPass?: boolean;
   }
 ) {
   const existing = getQueueJobByMangaId(manga.id);
@@ -2237,6 +2918,7 @@ function enqueueMangaQueueJob(
       overwrite: existing.overwrite || !!options?.overwrite,
       priority: nextPriority,
       languageDetection: options?.detection || existing.languageDetection || null,
+      heavyPass: !!existing.heavyPass || !!options?.heavyPass,
       ...(existing.status === "paused" && options?.overwrite
         ? { status: "queued" as const, pauseRequested: false, message: null }
         : {}),
@@ -2261,6 +2943,7 @@ function enqueueMangaQueueJob(
     message: null,
     languageDetection: options?.detection || null,
     priority: options?.priority || "background",
+    heavyPass: !!options?.heavyPass,
   };
 
   ocrQueueJobs.set(job.id, job);
@@ -2338,6 +3021,7 @@ async function startMangaOcrInternal(manga: any, options?: Record<string, any>) 
     mode: "full_manga",
     detection,
     priority: options?.priority || "user_requested",
+    heavyPass: !!options?.heavyPass,
   });
 
   return {
@@ -2408,6 +3092,7 @@ async function ensureMangaOcrReadyForVocabularyExtraction(manga: any, options?: 
     overwrite: false,
     confirmLanguage: !!options?.confirmLanguage,
     priority: "user_waiting",
+    heavyPass: !!options?.heavyPass,
   });
 
   if (startResult?.requiresConfirmation) {
@@ -2530,6 +3215,7 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
       manga: mangaContext,
       pageIndex,
       mode: "on_demand",
+      passProfile: opts?.heavyPass ? "heavy" : "standard",
     });
     return result;
   } finally {
@@ -2688,6 +3374,7 @@ export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Reco
       mode: "full_manga",
       detection,
       priority: "background",
+      heavyPass: !!options?.heavyPass,
     }));
   }
 
@@ -2727,6 +3414,7 @@ export async function ocrQueueImportManga(manga: any) {
       mode: "full_manga",
       detection,
       priority: "background",
+      heavyPass: false,
     }),
   };
 }

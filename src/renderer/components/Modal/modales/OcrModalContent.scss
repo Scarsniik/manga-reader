@@ -183,6 +183,38 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
+.ocr-run-options-card {
+  background:
+    linear-gradient(180deg, rgba(25, 118, 210, 0.08), rgba(25, 118, 210, 0.03)),
+    #171a1f;
+}
+
+.ocr-run-option-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.ocr-run-option-toggle input[type='checkbox'] {
+  margin-top: 3px;
+  accent-color: #1976d2;
+}
+
+.ocr-run-option-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.ocr-run-option-toggle strong {
+  color: #f2f2f2;
+}
+
+.ocr-run-option-toggle small {
+  color: #a7b7ca;
+  line-height: 1.45;
+}
+
 .ocr-vocabulary-card {
   display: grid;
   gap: 16px;

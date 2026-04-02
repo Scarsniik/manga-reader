@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Iterable
@@ -119,6 +120,111 @@ def build_engine():
         force_cpu=force_cpu,
     )
     return ENGINE
+
+
+def normalize_pass_profile(value: Any) -> str:
+    return "heavy" if str(value or "").strip().lower() == "heavy" else "standard"
+
+
+def is_heavy_pass_profile(pass_profile: str) -> bool:
+    return normalize_pass_profile(pass_profile) == "heavy"
+
+
+def elapsed_ms(start_time: float) -> float:
+    return round((time.perf_counter() - start_time) * 1000.0, 3)
+
+
+def increment_counter(counter: dict[str, float], key: str, amount: float = 1.0) -> None:
+    if not key:
+        return
+    counter[key] = float(counter.get(key, 0.0) or 0.0) + float(amount)
+
+
+def create_empty_page_profile() -> dict[str, Any]:
+    return {
+        "version": "manga-ocr-profile-v1",
+        "duration_ms": 0.0,
+        "text_detector": {
+            "calls": 0,
+            "total_ms": 0.0,
+        },
+        "mocr": {
+            "calls": 0,
+            "total_ms": 0.0,
+        },
+        "line_variants": {
+            "chunks_total": 0,
+            "variant_triggered_chunks": 0,
+            "variant_skipped_chunks": 0,
+            "selected_total": {},
+            "selected_when_triggered": {},
+            "candidate_evaluations": {},
+            "improved_selections": 0,
+            "score_gain_total": 0.0,
+        },
+        "truncated_refine": {
+            "calls": 0,
+            "accepted": 0,
+        },
+        "passes": [],
+        "final_blocks": {
+            "count": 0,
+            "by_origin": {},
+        },
+    }
+
+
+def build_pass_profile_entry(kind: str, name: str, duration_ms: float, blocks_detected: int) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "name": name,
+        "duration_ms": duration_ms,
+        "blocks_detected": blocks_detected,
+        "candidate_count": 0,
+        "accepted_candidates": 0,
+        "added_candidates": 0,
+        "replaced_candidates": 0,
+        "replaced_blocks": 0,
+        "skipped_candidates": 0,
+        "final_blocks": 0,
+    }
+
+
+def build_merge_stats(candidate_count: int) -> dict[str, int]:
+    return {
+        "candidate_count": candidate_count,
+        "accepted_candidates": 0,
+        "added_candidates": 0,
+        "replaced_candidates": 0,
+        "replaced_blocks": 0,
+        "skipped_candidates": 0,
+        "final_blocks": 0,
+    }
+
+
+def merge_pass_profile_entry(pass_entry: dict[str, Any], stats: dict[str, int], final_blocks: int) -> None:
+    pass_entry["candidate_count"] = int(pass_entry.get("candidate_count", 0)) + int(stats.get("candidate_count", 0))
+    pass_entry["accepted_candidates"] = int(pass_entry.get("accepted_candidates", 0)) + int(stats.get("accepted_candidates", 0))
+    pass_entry["added_candidates"] = int(pass_entry.get("added_candidates", 0)) + int(stats.get("added_candidates", 0))
+    pass_entry["replaced_candidates"] = int(pass_entry.get("replaced_candidates", 0)) + int(stats.get("replaced_candidates", 0))
+    pass_entry["replaced_blocks"] = int(pass_entry.get("replaced_blocks", 0)) + int(stats.get("replaced_blocks", 0))
+    pass_entry["skipped_candidates"] = int(pass_entry.get("skipped_candidates", 0)) + int(stats.get("skipped_candidates", 0))
+    pass_entry["final_blocks"] = int(final_blocks)
+
+
+def collect_final_block_origins(blocks) -> dict[str, float]:
+    origins: dict[str, float] = {}
+
+    for block in blocks:
+        origin = str(block.get("_profile_origin") or "unknown")
+        increment_counter(origins, origin, 1.0)
+
+    return origins
+
+
+def strip_profile_metadata(blocks) -> None:
+    for block in blocks:
+        block.pop("_profile_origin", None)
 
 
 def safe_float(value: Any):
@@ -299,7 +405,7 @@ def estimate_page_colorfulness(img) -> float:
     return float(np.std(img.astype(np.float32), axis=2).mean() / 255.0)
 
 
-def build_line_crop_variants(line_crop):
+def build_line_crop_variants(line_crop, pass_profile: str = "standard"):
     import cv2
 
     if line_crop.ndim == 2:
@@ -308,7 +414,6 @@ def build_line_crop_variants(line_crop):
         gray = cv2.cvtColor(line_crop, cv2.COLOR_RGB2GRAY)
 
     normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     adaptive = cv2.adaptiveThreshold(
         normalized,
         255,
@@ -319,12 +424,16 @@ def build_line_crop_variants(line_crop):
     )
     adaptive_inv = cv2.bitwise_not(adaptive)
 
-    return [
+    variants = [
         ("orig", line_crop if line_crop.ndim == 3 else cv2.cvtColor(line_crop, cv2.COLOR_GRAY2RGB)),
-        ("norm", cv2.cvtColor(normalized, cv2.COLOR_GRAY2RGB)),
-        ("clahe", cv2.cvtColor(clahe, cv2.COLOR_GRAY2RGB)),
         ("adaptive_inv", cv2.cvtColor(adaptive_inv, cv2.COLOR_GRAY2RGB)),
     ]
+
+    if is_heavy_pass_profile(pass_profile):
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
+        variants.insert(1, ("clahe", cv2.cvtColor(clahe, cv2.COLOR_GRAY2RGB)))
+
+    return variants
 
 
 def should_try_line_variants(blk, line_crop, baseline_text: str) -> bool:
@@ -342,22 +451,46 @@ def should_try_line_variants(blk, line_crop, baseline_text: str) -> bool:
     return False
 
 
-def recognize_line_crop_best(engine, blk, line_crop):
+def recognize_line_crop_best(engine, blk, line_crop, profile=None, pass_profile: str = "standard"):
     from PIL import Image
 
+    line_profile = profile.get("line_variants") if isinstance(profile, dict) else None
     baseline_text = engine.mocr(Image.fromarray(line_crop))
+    baseline_score = score_text_quality(baseline_text)
+
+    if line_profile is not None:
+        line_profile["chunks_total"] = int(line_profile.get("chunks_total", 0)) + 1
+        increment_counter(line_profile["candidate_evaluations"], "orig", 1.0)
+
     if not should_try_line_variants(blk, line_crop, baseline_text):
+        if line_profile is not None:
+            line_profile["variant_skipped_chunks"] = int(line_profile.get("variant_skipped_chunks", 0)) + 1
+            increment_counter(line_profile["selected_total"], "orig", 1.0)
         return baseline_text
 
-    best_text = baseline_text
-    best_score = score_text_quality(baseline_text)
+    if line_profile is not None:
+        line_profile["variant_triggered_chunks"] = int(line_profile.get("variant_triggered_chunks", 0)) + 1
 
-    for variant_name, variant_img in build_line_crop_variants(line_crop)[1:]:
+    best_name = "orig"
+    best_text = baseline_text
+    best_score = baseline_score
+
+    for variant_name, variant_img in build_line_crop_variants(line_crop, pass_profile=pass_profile)[1:]:
         candidate_text = engine.mocr(Image.fromarray(variant_img))
         candidate_score = score_text_quality(candidate_text)
+        if line_profile is not None:
+            increment_counter(line_profile["candidate_evaluations"], variant_name, 1.0)
         if candidate_score > best_score + 0.75:
+            best_name = variant_name
             best_text = candidate_text
             best_score = candidate_score
+
+    if line_profile is not None:
+        increment_counter(line_profile["selected_total"], best_name, 1.0)
+        increment_counter(line_profile["selected_when_triggered"], best_name, 1.0)
+        if best_name != "orig" and best_score > baseline_score:
+            line_profile["improved_selections"] = int(line_profile.get("improved_selections", 0)) + 1
+            line_profile["score_gain_total"] = float(line_profile.get("score_gain_total", 0.0)) + float(best_score - baseline_score)
 
     return best_text
 
@@ -476,7 +609,7 @@ def extend_line_with_mask(mask_refined, line_poly, font_size: float, vertical: b
     return extended.astype(np.int32).tolist()
 
 
-def recognize_block_lines(engine, img, mask_refined, blk):
+def recognize_block_lines(engine, img, mask_refined, blk, profile=None, pass_profile: str = "standard"):
     import cv2
 
     lines_coords = []
@@ -498,7 +631,7 @@ def recognize_block_lines(engine, img, mask_refined, blk):
         for line_crop in line_crops:
             if blk.vertical:
                 line_crop = cv2.rotate(line_crop, cv2.ROTATE_90_CLOCKWISE)
-            line_text += recognize_line_crop_best(engine, blk, line_crop)
+            line_text += recognize_line_crop_best(engine, blk, line_crop, profile=profile, pass_profile=pass_profile)
 
         lines_coords.append(line.tolist())
         lines_text.append(line_text)
@@ -506,7 +639,7 @@ def recognize_block_lines(engine, img, mask_refined, blk):
     return lines_coords, lines_text
 
 
-def maybe_refine_truncated_large_block(engine, img, mask_refined, blk, original_lines):
+def maybe_refine_truncated_large_block(engine, img, mask_refined, blk, original_lines, profile=None, pass_profile: str = "standard"):
     if len(getattr(blk, "lines", [])) != 1:
         return None
 
@@ -536,7 +669,19 @@ def maybe_refine_truncated_large_block(engine, img, mask_refined, blk, original_
     except Exception:
         return None
 
-    refined_lines_coords, refined_lines = recognize_block_lines(engine, img, mask_refined, refined_blk)
+    if isinstance(profile, dict):
+        truncated_profile = profile.get("truncated_refine") or {}
+        truncated_profile["calls"] = int(truncated_profile.get("calls", 0)) + 1
+        profile["truncated_refine"] = truncated_profile
+
+    refined_lines_coords, refined_lines = recognize_block_lines(
+        engine,
+        img,
+        mask_refined,
+        refined_blk,
+        profile=profile,
+        pass_profile=pass_profile,
+    )
     refined_text = "".join(refined_lines)
     refined_norm = normalize_compare_text(refined_text)
 
@@ -550,6 +695,11 @@ def maybe_refine_truncated_large_block(engine, img, mask_refined, blk, original_
         return None
     if count_meaningful_chars(refined_text) <= count_meaningful_chars(original_text):
         return None
+
+    if isinstance(profile, dict):
+        truncated_profile = profile.get("truncated_refine") or {}
+        truncated_profile["accepted"] = int(truncated_profile.get("accepted", 0)) + 1
+        profile["truncated_refine"] = truncated_profile
 
     return refined_blk, refined_lines_coords, refined_lines
 
@@ -672,12 +822,12 @@ def recognize_manual_crop(image_path: str):
     return detected_result
 
 
-def build_page_detection_variants(img, base_block_count: int):
+def build_page_detection_variants(img, base_block_count: int, pass_profile: str = "standard"):
     import cv2
 
+    normalized_profile = normalize_pass_profile(pass_profile)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     adaptive = cv2.adaptiveThreshold(
         normalized,
         255,
@@ -691,7 +841,8 @@ def build_page_detection_variants(img, base_block_count: int):
     colorfulness = estimate_page_colorfulness(img)
     variants = []
 
-    if base_block_count <= 14:
+    if normalized_profile == "heavy" and base_block_count <= 14:
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
         variants.append(("clahe", cv2.cvtColor(clahe, cv2.COLOR_GRAY2RGB)))
 
     if base_block_count <= 14 or colorfulness < 0.015:
@@ -700,12 +851,24 @@ def build_page_detection_variants(img, base_block_count: int):
     return variants
 
 
-def recognize_blocks_for_variant(engine, detect_img, recognition_img=None):
+def recognize_blocks_for_variant(
+    engine,
+    detect_img,
+    recognition_img=None,
+    *,
+    profile=None,
+    pass_kind: str = "base",
+    pass_name: str = "base",
+    origin_name: str | None = None,
+    pass_profile: str = "standard",
+):
     if recognition_img is None:
         recognition_img = detect_img
 
+    pass_start = time.perf_counter()
     _mask, mask_refined, blk_list = engine.text_detector(detect_img, refine_mode=1, keep_undetected_mask=True)
     result_blocks = []
+    profile_origin = origin_name or pass_name
 
     for blk in blk_list:
         result_blk = {
@@ -719,11 +882,27 @@ def recognize_blocks_for_variant(engine, detect_img, recognition_img=None):
             "mask_score": safe_bbox_mask_score(mask_refined, blk.xyxy),
             "lines_coords": [],
             "lines": [],
+            "_profile_origin": profile_origin,
         }
 
-        result_blk["lines_coords"], result_blk["lines"] = recognize_block_lines(engine, recognition_img, mask_refined, blk)
+        result_blk["lines_coords"], result_blk["lines"] = recognize_block_lines(
+            engine,
+            recognition_img,
+            mask_refined,
+            blk,
+            profile=profile,
+            pass_profile=pass_profile,
+        )
 
-        refined_block = maybe_refine_truncated_large_block(engine, recognition_img, mask_refined, blk, result_blk["lines"])
+        refined_block = maybe_refine_truncated_large_block(
+            engine,
+            recognition_img,
+            mask_refined,
+            blk,
+            result_blk["lines"],
+            profile=profile,
+            pass_profile=pass_profile,
+        )
         if refined_block is not None:
             refined_blk, refined_lines_coords, refined_lines = refined_block
             result_blk["box"] = list(refined_blk.xyxy)
@@ -734,16 +913,22 @@ def recognize_blocks_for_variant(engine, detect_img, recognition_img=None):
 
         result_blocks.append(result_blk)
 
-    return result_blocks
+    pass_entry = build_pass_profile_entry(pass_kind, pass_name, elapsed_ms(pass_start), len(result_blocks))
+    if isinstance(profile, dict):
+        profile["passes"].append(pass_entry)
+
+    return result_blocks, pass_entry
 
 
 def merge_variant_blocks(base_blocks, variant_blocks):
     merged_blocks = [copy.deepcopy(block) for block in base_blocks]
+    stats = build_merge_stats(len(variant_blocks))
 
     for candidate in variant_blocks:
         candidate_text = "".join(str(line or "") for line in (candidate.get("lines") or [])).strip()
         candidate_score = score_block_candidate(candidate)
         if not candidate_text or candidate_score < 6.0:
+            stats["skipped_candidates"] += 1
             continue
 
         candidate_box = block_box_tuple(candidate)
@@ -764,17 +949,29 @@ def merge_variant_blocks(base_blocks, variant_blocks):
             break
 
         if skip_candidate:
+            stats["skipped_candidates"] += 1
             continue
 
         for idx in reversed(replace_indexes):
             merged_blocks.pop(idx)
 
+        stats["accepted_candidates"] += 1
+        if replace_indexes:
+            stats["replaced_candidates"] += 1
+            stats["replaced_blocks"] += len(replace_indexes)
+        else:
+            stats["added_candidates"] += 1
+
         merged_blocks.append(candidate)
 
-    return merged_blocks
+    stats["final_blocks"] = len(merged_blocks)
+    return merged_blocks, stats
 
 
-def build_focus_regions(width: int, height: int, base_block_count: int, colorfulness: float):
+def build_focus_regions(width: int, height: int, base_block_count: int, colorfulness: float, pass_profile: str = "standard"):
+    if not is_heavy_pass_profile(pass_profile):
+        return []
+
     if base_block_count > 14 or colorfulness >= 0.02:
         return []
 
@@ -813,7 +1010,7 @@ def offset_block_coordinates(blocks, offset_x: int, offset_y: int):
     return shifted_blocks
 
 
-def recognize_with_metadata(image_path: str):
+def recognize_with_metadata(image_path: str, profile=None, pass_profile: str = "standard"):
     from mokuro import __version__
     from mokuro.utils import imread
 
@@ -824,28 +1021,98 @@ def recognize_with_metadata(image_path: str):
 
     height, width, *_ = img.shape
     result = {"version": __version__, "img_width": width, "img_height": height, "blocks": []}
+    profile_start = time.perf_counter()
+    pass_profile = normalize_pass_profile(pass_profile)
+    original_mocr = None
+    original_text_detector = None
 
-    if getattr(engine, "disable_ocr", False):
+    if isinstance(profile, dict):
+        original_mocr = engine.mocr
+        original_text_detector = engine.text_detector
+
+        def profiled_mocr(*args, **kwargs):
+            call_start = time.perf_counter()
+            value = original_mocr(*args, **kwargs)
+            profile["mocr"]["calls"] = int(profile["mocr"].get("calls", 0)) + 1
+            profile["mocr"]["total_ms"] = float(profile["mocr"].get("total_ms", 0.0)) + elapsed_ms(call_start)
+            return value
+
+        def profiled_text_detector(*args, **kwargs):
+            call_start = time.perf_counter()
+            value = original_text_detector(*args, **kwargs)
+            profile["text_detector"]["calls"] = int(profile["text_detector"].get("calls", 0)) + 1
+            profile["text_detector"]["total_ms"] = float(profile["text_detector"].get("total_ms", 0.0)) + elapsed_ms(call_start)
+            return value
+
+        engine.mocr = profiled_mocr
+        engine.text_detector = profiled_text_detector
+
+    try:
+        if getattr(engine, "disable_ocr", False):
+            return result
+
+        colorfulness = estimate_page_colorfulness(img)
+        merged_blocks, base_pass = recognize_blocks_for_variant(
+            engine,
+            img,
+            img,
+            profile=profile,
+            pass_kind="base",
+            pass_name="base",
+            origin_name="base",
+            pass_profile=pass_profile,
+        )
+        base_pass["final_blocks"] = len(merged_blocks)
+
+        for variant_name, variant_img in build_page_detection_variants(img, len(merged_blocks), pass_profile=pass_profile):
+            variant_blocks, pass_entry = recognize_blocks_for_variant(
+                engine,
+                variant_img,
+                img,
+                profile=profile,
+                pass_kind="page_variant",
+                pass_name=variant_name,
+                origin_name=variant_name,
+                pass_profile=pass_profile,
+            )
+            merged_blocks, merge_stats = merge_variant_blocks(merged_blocks, variant_blocks)
+            merge_pass_profile_entry(pass_entry, merge_stats, len(merged_blocks))
+
+        focus_regions = build_focus_regions(width, height, len(merged_blocks), colorfulness, pass_profile=pass_profile)
+        for region_index, (x1, y1, x2, y2) in enumerate(focus_regions):
+            region_img = img[y1:y2, x1:x2]
+            if region_img is None or getattr(region_img, "size", 0) == 0:
+                continue
+
+            region_name = "focus_left" if region_index == 0 else "focus_right" if region_index == 1 else f"focus_{region_index + 1}"
+            region_blocks, pass_entry = recognize_blocks_for_variant(
+                engine,
+                region_img,
+                region_img,
+                profile=profile,
+                pass_kind="focus_region",
+                pass_name=region_name,
+                origin_name=region_name,
+                pass_profile=pass_profile,
+            )
+            shifted_blocks = offset_block_coordinates(region_blocks, x1, y1)
+            merged_blocks, merge_stats = merge_variant_blocks(merged_blocks, shifted_blocks)
+            merge_pass_profile_entry(pass_entry, merge_stats, len(merged_blocks))
+
+        if isinstance(profile, dict):
+            profile["final_blocks"]["count"] = len(merged_blocks)
+            profile["final_blocks"]["by_origin"] = collect_final_block_origins(merged_blocks)
+        strip_profile_metadata(merged_blocks)
+        result["blocks"] = merged_blocks
+
         return result
-
-    colorfulness = estimate_page_colorfulness(img)
-    merged_blocks = recognize_blocks_for_variant(engine, img, img)
-
-    for _variant_name, variant_img in build_page_detection_variants(img, len(merged_blocks)):
-        variant_blocks = recognize_blocks_for_variant(engine, variant_img, img)
-        merged_blocks = merge_variant_blocks(merged_blocks, variant_blocks)
-
-    for x1, y1, x2, y2 in build_focus_regions(width, height, len(merged_blocks), colorfulness):
-        region_img = img[y1:y2, x1:x2]
-        if region_img is None or getattr(region_img, "size", 0) == 0:
-            continue
-        region_blocks = recognize_blocks_for_variant(engine, region_img, region_img)
-        shifted_blocks = offset_block_coordinates(region_blocks, x1, y1)
-        merged_blocks = merge_variant_blocks(merged_blocks, shifted_blocks)
-
-    result["blocks"] = merged_blocks
-
-    return result
+    finally:
+        if original_mocr is not None:
+            engine.mocr = original_mocr
+        if original_text_detector is not None:
+            engine.text_detector = original_text_detector
+        if isinstance(profile, dict):
+            profile["duration_ms"] = elapsed_ms(profile_start)
 
 
 def write_message(payload):
@@ -925,10 +1192,15 @@ def handle_recognize(request_id, payload):
     if not image_path:
         raise ValueError("Missing imagePath")
 
+    enable_profile = bool(payload.get("profile"))
+    pass_profile = normalize_pass_profile(payload.get("passProfile"))
     if payload.get("mode") == "manual_crop":
         result = recognize_manual_crop(image_path)
     else:
-        result = recognize_with_metadata(image_path)
+        profile = create_empty_page_profile() if enable_profile else None
+        result = recognize_with_metadata(image_path, profile=profile, pass_profile=pass_profile)
+        if profile is not None:
+            result["profile"] = profile
 
     return {
         "id": request_id,

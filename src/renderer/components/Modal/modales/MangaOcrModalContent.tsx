@@ -59,6 +59,10 @@ const formatVocabularyMode = (mode?: VocabularyMode | null) => {
   return mode === 'all' ? 'Tous les tokens' : 'Tokens uniques';
 };
 
+const formatOcrPassLabel = (heavyPass?: boolean | null) => (
+  heavyPass ? 'Passe lourde' : 'Standard rapide'
+);
+
 const formatDateTime = (value?: string) => {
   if (!value) {
     return 'Jamais';
@@ -142,7 +146,9 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
   const [confirmation, setConfirmation] = useState<any>(null);
   const [confirmationContext, setConfirmationContext] = useState<ConfirmationContext>(null);
   const [confirmationOverwrite, setConfirmationOverwrite] = useState(false);
+  const [confirmationHeavyPass, setConfirmationHeavyPass] = useState(false);
   const [extractMode, setExtractMode] = useState<VocabularyMode>('unique');
+  const [heavyPass, setHeavyPass] = useState(false);
   const [vocabularyData, setVocabularyData] = useState<any>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [hasJpdbKey, setHasJpdbKey] = useState<boolean | null>(null);
@@ -218,7 +224,11 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
     return () => window.clearTimeout(timer);
   }, [chunkCharacterLimit]);
 
-  const startMangaOcr = useCallback(async (overwrite: boolean, confirmLanguage: boolean = false) => {
+  const startMangaOcr = useCallback(async (
+    overwrite: boolean,
+    confirmLanguage: boolean = false,
+    nextHeavyPass: boolean = heavyPass,
+  ) => {
     if (!window.api || typeof window.api.ocrStartManga !== 'function') {
       setActionError('API OCR indisponible');
       return;
@@ -231,15 +241,18 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
       const result = await window.api.ocrStartManga(manga.id, {
         overwrite,
         confirmLanguage,
+        heavyPass: !!nextHeavyPass,
       });
       if (result?.requiresConfirmation) {
         setConfirmation(result);
         setConfirmationContext('ocr');
         setConfirmationOverwrite(overwrite);
+        setConfirmationHeavyPass(!!nextHeavyPass);
       } else {
         setConfirmation(null);
         setConfirmationContext(null);
         setConfirmationOverwrite(false);
+        setConfirmationHeavyPass(false);
         await loadStatus();
         try {
           window.dispatchEvent(new CustomEvent('mangas-updated'));
@@ -252,7 +265,7 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
     } finally {
       setStarting(false);
     }
-  }, [loadStatus, manga.id]);
+  }, [heavyPass, loadStatus, manga.id]);
 
   const extractVocabulary = useCallback(async (confirmLanguage: boolean = false) => {
     if (!window.api || typeof window.api.ocrExtractMangaVocabulary !== 'function') {
@@ -273,12 +286,14 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
         setConfirmation(result);
         setConfirmationContext('extract');
         setConfirmationOverwrite(false);
+        setConfirmationHeavyPass(false);
         return;
       }
 
       setConfirmation(null);
       setConfirmationContext(null);
       setConfirmationOverwrite(false);
+      setConfirmationHeavyPass(false);
       if (result?.vocabulary) {
         setVocabularyData(result.vocabulary);
       }
@@ -444,6 +459,10 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
                 <span>{activeJob ? formatJobStatus(activeJob.status) : 'Aucun job'}</span>
               </div>
               <div className="ocr-status-item">
+                <strong>Profil OCR</strong>
+                <span>{formatOcrPassLabel(activeJob?.heavyPass)}</span>
+              </div>
+              <div className="ocr-status-item">
                 <strong>Fichier vocabulaire</strong>
                 <span>{status.vocabulary?.exists ? 'Present' : 'Absent'}</span>
               </div>
@@ -477,7 +496,7 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
                     if (confirmationContext === 'extract') {
                       void extractVocabulary(true);
                     } else {
-                      void startMangaOcr(confirmationOverwrite, true);
+                      void startMangaOcr(confirmationOverwrite, true, confirmationHeavyPass);
                     }
                   }}
                   disabled={starting || extracting}
@@ -491,6 +510,7 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
                     setConfirmation(null);
                     setConfirmationContext(null);
                     setConfirmationOverwrite(false);
+                    setConfirmationHeavyPass(false);
                   }}
                   disabled={starting || extracting}
                 >
@@ -499,6 +519,23 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
               </div>
             </div>
           ) : null}
+
+          <div className="ocr-status-card ocr-run-options-card">
+            <label className="ocr-run-option-toggle">
+              <input
+                type="checkbox"
+                checked={heavyPass}
+                onChange={(event) => setHeavyPass(event.target.checked)}
+                disabled={starting || extracting}
+              />
+              <span>
+                <strong>Passe lourde</strong>
+                <small>
+                  Désactivée par défaut. Le mode standard utilise seulement base + adaptive pour aller plus vite.
+                </small>
+              </span>
+            </label>
+          </div>
 
           <div className="ocr-modal-actions-row">
             <button
@@ -772,6 +809,7 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
           {activeJob ? (
             <div className="ocr-result-summary">
               Job file OCR: {formatJobStatus(activeJob.status)}
+              {typeof activeJob.heavyPass === 'boolean' ? `, ${formatOcrPassLabel(activeJob.heavyPass)}` : ''}
               {typeof activeJob.currentPage === 'number' ? `, page ${activeJob.currentPage}` : ''}
               {activeJob.message ? `, ${activeJob.message}` : ''}
             </div>
