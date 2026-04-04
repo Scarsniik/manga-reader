@@ -1,5 +1,7 @@
 import {
+  buildScraperContextTemplateUrl,
   buildScraperTemplateUrl,
+  FetchScraperDocumentResult,
   resolveScraperUrl,
   ScraperDetailsDerivedValueConfig,
   ScraperDetailsFeatureConfig,
@@ -25,6 +27,11 @@ export type ScraperRuntimeDetailsResult = {
   mangaStatus?: string;
   derivedValues: Record<string, string>;
 };
+
+export type ScraperDocumentFetcher = (request: {
+  baseUrl: string;
+  targetUrl: string;
+}) => Promise<FetchScraperDocumentResult>;
 
 const DETAILS_FIELD_KEYS: DetailsFieldKey[] = [
   'title',
@@ -206,6 +213,45 @@ const uniqueValues = (values: string[]): string[] => {
   });
 };
 
+const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
+
+const hasPagePlaceholder = (template: string | undefined): boolean => (
+  typeof template === 'string' && /{{\s*page(?:Index)?\d*\s*}}/.test(template)
+);
+
+const isImageLikeContentType = (contentType: string | undefined): boolean => (
+  typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')
+);
+
+const buildDetailsTemplateContext = (
+  details: ScraperRuntimeDetailsResult,
+): Record<string, string | undefined> => ({
+  requestedUrl: details.requestedUrl,
+  finalUrl: details.finalUrl || details.requestedUrl,
+  title: details.title,
+  cover: details.cover,
+  description: details.description,
+  authors: details.authors.length ? details.authors.join(', ') : undefined,
+  tags: details.tags.length ? details.tags.join(', ') : undefined,
+  status: details.mangaStatus,
+  ...details.derivedValues,
+});
+
+const buildTemplateContextForPage = (
+  context: Record<string, string | undefined>,
+  pageIndex: number,
+): Record<string, string | undefined> => ({
+  ...context,
+  page: String(pageIndex + 1),
+  page2: padPageNumber(pageIndex + 1, 2),
+  page3: padPageNumber(pageIndex + 1, 3),
+  page4: padPageNumber(pageIndex + 1, 4),
+  pageIndex: String(pageIndex),
+  pageIndex2: padPageNumber(pageIndex, 2),
+  pageIndex3: padPageNumber(pageIndex, 3),
+  pageIndex4: padPageNumber(pageIndex, 4),
+});
+
 export const extractScraperDetailsFromDocument = (
   doc: Document,
   config: ScraperDetailsFeatureConfig,
@@ -310,3 +356,141 @@ export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): bool
     || details.mangaStatus
   )
 );
+
+export async function resolveScraperPageUrls(
+  scraper: ScraperRecord,
+  details: ScraperRuntimeDetailsResult,
+  pagesConfig: ScraperPagesFeatureConfig,
+  fetchDocument: ScraperDocumentFetcher,
+  options?: { maxTemplatePages?: number },
+): Promise<string[]> {
+  const maxTemplatePages = Math.max(1, options?.maxTemplatePages ?? 2000);
+  const detailsUrl = details.finalUrl || details.requestedUrl;
+
+  if (pagesConfig.urlStrategy === 'details_page') {
+    if (!pagesConfig.pageImageSelector) {
+      throw new Error('Le composant Pages doit avoir un selecteur pour lire les pages depuis la fiche.');
+    }
+
+    const result = await fetchDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl: detailsUrl,
+    });
+
+    if (!result.ok || !result.html) {
+      throw new Error(
+        result.error
+        || (typeof result.status === 'number'
+          ? `La fiche a repondu avec le code HTTP ${result.status}.`
+          : 'Impossible de recuperer la fiche pour extraire les pages.'),
+      );
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(result.html, 'text/html');
+    const documentUrl = result.finalUrl || result.requestedUrl;
+    const pageUrls = extractSelectorValues(doc, pagesConfig.pageImageSelector)
+      .map((value) => toAbsoluteScraperUrl(value, documentUrl));
+    const uniquePageUrls = uniqueValues(pageUrls);
+
+    if (!uniquePageUrls.length) {
+      throw new Error('Aucune page n\'a ete trouvee avec la configuration actuelle.');
+    }
+
+    return uniquePageUrls;
+  }
+
+  if (!pagesConfig.urlTemplate) {
+    throw new Error('Le template des pages est requis pour ce mode.');
+  }
+
+  const templateContext = buildDetailsTemplateContext(details);
+
+  if (pagesConfig.pageImageSelector) {
+    const targetUrl = buildScraperContextTemplateUrl(
+      scraper.baseUrl,
+      pagesConfig.urlTemplate,
+      buildTemplateContextForPage(templateContext, 0),
+    );
+    const result = await fetchDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+    });
+
+    if (!result.ok || !result.html) {
+      throw new Error(
+        result.error
+        || (typeof result.status === 'number'
+          ? `La source des pages a repondu avec le code HTTP ${result.status}.`
+          : 'Impossible de recuperer la source des pages.'),
+      );
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(result.html, 'text/html');
+    const documentUrl = result.finalUrl || result.requestedUrl;
+    const pageUrls = extractSelectorValues(doc, pagesConfig.pageImageSelector)
+      .map((value) => toAbsoluteScraperUrl(value, documentUrl));
+    const uniquePageUrls = uniqueValues(pageUrls);
+
+    if (!uniquePageUrls.length) {
+      throw new Error('Aucune page n\'a ete trouvee avec le selecteur fourni.');
+    }
+
+    return uniquePageUrls;
+  }
+
+  if (!hasPagePlaceholder(pagesConfig.urlTemplate)) {
+    const targetUrl = buildScraperContextTemplateUrl(
+      scraper.baseUrl,
+      pagesConfig.urlTemplate,
+      buildTemplateContextForPage(templateContext, 0),
+    );
+    const result = await fetchDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+    });
+
+    if (!result.ok || !isImageLikeContentType(result.contentType)) {
+      throw new Error(
+        result.error
+        || 'Le template des pages ne renvoie pas une image exploitable.',
+      );
+    }
+
+    return [result.finalUrl || result.requestedUrl];
+  }
+
+  const pageUrls: string[] = [];
+
+  for (let pageIndex = 0; pageIndex < maxTemplatePages; pageIndex += 1) {
+    const targetUrl = buildScraperContextTemplateUrl(
+      scraper.baseUrl,
+      pagesConfig.urlTemplate,
+      buildTemplateContextForPage(templateContext, pageIndex),
+    );
+    const result = await fetchDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+    });
+
+    if (!result.ok || !isImageLikeContentType(result.contentType)) {
+      if (pageIndex === 0) {
+        throw new Error(
+          result.error
+          || 'Le template des pages ne renvoie pas une premiere page valide.',
+        );
+      }
+      break;
+    }
+
+    pageUrls.push(result.finalUrl || result.requestedUrl);
+  }
+
+  const uniquePageUrls = uniqueValues(pageUrls);
+  if (!uniquePageUrls.length) {
+    throw new Error('Aucune page n\'a pu etre resolue depuis le template.');
+  }
+
+  return uniquePageUrls;
+}

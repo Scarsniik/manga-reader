@@ -4,9 +4,11 @@ import {
   extractScraperDetailsFromDocument,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
+  getScraperPagesFeatureConfig,
   hasRenderableDetails,
   isScraperFeatureConfigured,
   resolveScraperDetailsTargetUrl,
+  resolveScraperPageUrls,
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 import './style.scss';
@@ -48,6 +50,7 @@ export default function ScraperBrowser({ scraper }: Props) {
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
   const detailsConfig = useMemo(() => getScraperDetailsFeatureConfig(detailsFeature), [detailsFeature]);
+  const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
 
   const hasSearch = isScraperFeatureConfigured(searchFeature);
   const hasDetails = isScraperFeatureConfigured(detailsFeature);
@@ -77,6 +80,9 @@ export default function ScraperBrowser({ scraper }: Props) {
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setMode((previous) => (availableModes.includes(previous) ? previous : defaultMode));
@@ -87,7 +93,10 @@ export default function ScraperBrowser({ scraper }: Props) {
     setDetailsResult(null);
     setRuntimeMessage(null);
     setRuntimeError(null);
+    setDownloadError(null);
+    setDownloadMessage(null);
     setLoading(false);
+    setDownloading(false);
   }, [scraper.id]);
 
   const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -96,6 +105,8 @@ export default function ScraperBrowser({ scraper }: Props) {
     const trimmedQuery = query.trim();
     setRuntimeMessage(null);
     setRuntimeError(null);
+    setDownloadError(null);
+    setDownloadMessage(null);
     setDetailsResult(null);
 
     if (!trimmedQuery) {
@@ -158,6 +169,52 @@ export default function ScraperBrowser({ scraper }: Props) {
       setLoading(false);
     }
   }, [detailsConfig, mode, query, scraper.baseUrl]);
+
+  const handleDownload = useCallback(async () => {
+    if (!detailsResult) {
+      setDownloadError('Charge d\'abord une fiche avant de lancer le telechargement.');
+      return;
+    }
+
+    if (!pagesConfig) {
+      setDownloadError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
+      return;
+    }
+
+    if (!(window as any).api
+      || typeof (window as any).api.fetchScraperDocument !== 'function'
+      || typeof (window as any).api.downloadScraperManga !== 'function') {
+      setDownloadError('Le telechargement du scrapper n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadError(null);
+    setDownloadMessage(null);
+
+    try {
+      const pageUrls = await resolveScraperPageUrls(
+        scraper,
+        detailsResult,
+        pagesConfig,
+        async (request) => (window as any).api.fetchScraperDocument(request),
+      );
+
+      const downloadResult = await (window as any).api.downloadScraperManga({
+        title: detailsResult.title || query.trim() || 'manga',
+        pageUrls,
+        refererUrl: detailsResult.finalUrl || detailsResult.requestedUrl,
+      });
+
+      setDownloadMessage(
+        `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque.`,
+      );
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Le telechargement du manga a echoue.');
+    } finally {
+      setDownloading(false);
+    }
+  }, [detailsResult, pagesConfig, query, scraper]);
 
   const activePlaceholder = useMemo(
     () => buildQueryPlaceholder(mode, hasDetails, detailsConfig?.urlStrategy ?? null),
@@ -246,6 +303,14 @@ export default function ScraperBrowser({ scraper }: Props) {
         <div className="scraper-browser__message is-error">{runtimeError}</div>
       ) : null}
 
+      {downloadMessage ? (
+        <div className="scraper-browser__message is-success">{downloadMessage}</div>
+      ) : null}
+
+      {downloadError ? (
+        <div className="scraper-browser__message is-error">{downloadError}</div>
+      ) : null}
+
       {detailsResult ? (
         <article className="scraper-browser__details">
           <div className="scraper-browser__details-media">
@@ -259,9 +324,21 @@ export default function ScraperBrowser({ scraper }: Props) {
           <div className="scraper-browser__details-body">
             <div className="scraper-browser__details-head">
               <h3>{detailsResult.title || 'Titre non detecte'}</h3>
-              {detailsResult.mangaStatus ? (
-                <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
-              ) : null}
+              <div className="scraper-browser__details-actions">
+                {detailsResult.mangaStatus ? (
+                  <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
+                ) : null}
+                {hasPages ? (
+                  <button
+                    type="button"
+                    className="scraper-browser__download"
+                    onClick={() => void handleDownload()}
+                    disabled={downloading}
+                  >
+                    {downloading ? 'Telechargement...' : 'Telecharger'}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {detailsResult.authors.length ? (

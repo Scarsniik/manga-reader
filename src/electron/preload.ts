@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+    DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
     SaveScraperDraftRequest,
     SaveScraperFeatureRequest,
@@ -64,6 +65,7 @@ contextBridge.exposeInMainWorld('api', {
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),
     saveScraperFeatureConfig: (request: SaveScraperFeatureRequest) => ipcRenderer.invoke('save-scraper-feature-config', request),
+    downloadScraperManga: (request: DownloadScraperMangaRequest) => ipcRenderer.invoke('download-scraper-manga', request),
     // Authors API
     getAuthors: () => ipcRenderer.invoke('get-authors'),
     addAuthor: (author: any) => ipcRenderer.invoke('add-author', author),

@@ -158,6 +158,20 @@ export interface FetchScraperDocumentResult {
   error?: string;
 }
 
+export interface DownloadScraperMangaRequest {
+  title: string;
+  pageUrls: string[];
+  refererUrl?: string;
+}
+
+export interface DownloadScraperMangaResult {
+  ok: boolean;
+  mangaId: string;
+  folderPath: string;
+  libraryRoot: string;
+  downloadedCount: number;
+}
+
 export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
   kind: ScraperFeatureKind;
   label: string;

@@ -1,7 +1,10 @@
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
-import { IpcMainInvokeEvent } from 'electron';
+import path from 'path';
+import { app, IpcMainInvokeEvent } from 'electron';
 import {
+  DownloadScraperMangaRequest,
+  DownloadScraperMangaResult,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
   ScraperAccessValidationRequest,
@@ -18,8 +21,12 @@ import {
   resolveScraperUrl,
 } from '../scraper';
 import { ensureDataDir, scrapersFilePath } from '../utils';
+import { addManga } from './mangas';
+import { getSettings } from './params';
 
 const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
+const DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME = 'Manga Helper Library';
+const MAX_SCRAPER_DOWNLOAD_PAGES = 4000;
 
 const sanitizeAccessValidation = (
   validation: Partial<ScraperAccessValidationResult> | null | undefined,
@@ -201,6 +208,91 @@ async function writeScrapersFile(scrapers: ScraperRecord[]): Promise<void> {
   await fs.writeFile(scrapersFilePath, JSON.stringify(persisted, null, 2));
 }
 
+const sanitizePathSegment = (value: string): string => {
+  const sanitized = value
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '');
+
+  return sanitized || 'manga';
+};
+
+const pathExists = async (targetPath: string): Promise<boolean> => {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const getConfiguredLibraryRoot = async (): Promise<string> => {
+  const settings = await getSettings();
+  const configuredLibraryPath = String(settings?.libraryPath || '').trim();
+
+  if (configuredLibraryPath) {
+    return path.isAbsolute(configuredLibraryPath)
+      ? configuredLibraryPath
+      : path.resolve(configuredLibraryPath);
+  }
+
+  return path.join(app.getPath('documents'), DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME);
+};
+
+const getUniqueFolderPath = async (libraryRoot: string, title: string): Promise<string> => {
+  const baseName = sanitizePathSegment(title);
+  let candidatePath = path.join(libraryRoot, baseName);
+  let suffix = 2;
+
+  while (await pathExists(candidatePath)) {
+    candidatePath = path.join(libraryRoot, `${baseName} (${suffix})`);
+    suffix += 1;
+  }
+
+  return candidatePath;
+};
+
+const inferExtensionFromContentType = (contentType: string | null): string => {
+  const normalized = String(contentType || '').toLowerCase();
+
+  if (normalized.includes('image/webp')) return '.webp';
+  if (normalized.includes('image/png')) return '.png';
+  if (normalized.includes('image/avif')) return '.avif';
+  if (normalized.includes('image/gif')) return '.gif';
+  if (normalized.includes('image/jpeg')) return '.jpg';
+  if (normalized.includes('image/jpg')) return '.jpg';
+
+  return '.jpg';
+};
+
+const inferExtensionFromUrl = (targetUrl: string, contentType: string | null): string => {
+  try {
+    const parsed = new URL(targetUrl);
+    const extension = path.extname(parsed.pathname);
+    if (extension && extension.length <= 8) {
+      return extension;
+    }
+  } catch {
+    // Fall back to content-type when URL parsing fails.
+  }
+
+  return inferExtensionFromContentType(contentType);
+};
+
+const buildDownloadHeaders = (refererUrl?: string): HeadersInit => {
+  const headers: HeadersInit = {
+    'User-Agent': 'Manga Helper Scraper Downloader/1.0',
+    Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+  };
+
+  if (refererUrl) {
+    headers.Referer = refererUrl;
+  }
+
+  return headers;
+};
+
 const buildContentTypeWarning = (
   kind: ScraperAccessValidationRequest['kind'],
   contentType: string | undefined,
@@ -343,8 +435,18 @@ export async function fetchScraperDocument(
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
+    const contentType = response.headers.get('content-type') ?? undefined;
+    let html: string | undefined;
 
-    const html = await response.text();
+    if (response.ok && contentType && contentType.toLowerCase().startsWith('image/')) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // no-op
+      }
+    } else {
+      html = await response.text();
+    }
 
     return {
       ok: response.ok,
@@ -352,7 +454,7 @@ export async function fetchScraperDocument(
       requestedUrl,
       finalUrl: response.url || requestedUrl,
       status: response.status,
-      contentType: response.headers.get('content-type') ?? undefined,
+      contentType,
       html: response.ok ? html : undefined,
       error: response.ok ? undefined : `La page a repondu avec le code HTTP ${response.status}.`,
     };
@@ -366,6 +468,102 @@ export async function fetchScraperDocument(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function downloadScraperManga(
+  _event: IpcMainInvokeEvent,
+  request: DownloadScraperMangaRequest,
+): Promise<DownloadScraperMangaResult> {
+  const title = String(request.title || '').trim();
+  const pageUrls = Array.isArray(request.pageUrls)
+    ? request.pageUrls
+      .map((pageUrl) => String(pageUrl || '').trim())
+      .filter((pageUrl) => pageUrl.length > 0)
+    : [];
+  const refererUrl = typeof request.refererUrl === 'string' && request.refererUrl.trim().length > 0
+    ? request.refererUrl.trim()
+    : undefined;
+
+  if (!title) {
+    throw new Error('Le titre du manga est requis pour le telechargement.');
+  }
+
+  if (!pageUrls.length) {
+    throw new Error('Aucune page a telecharger.');
+  }
+
+  if (pageUrls.length > MAX_SCRAPER_DOWNLOAD_PAGES) {
+    throw new Error(`Le telechargement est limite a ${MAX_SCRAPER_DOWNLOAD_PAGES} pages pour cette version.`);
+  }
+
+  const uniquePageUrls = Array.from(new Set(pageUrls));
+  const libraryRoot = await getConfiguredLibraryRoot();
+  await fs.mkdir(libraryRoot, { recursive: true });
+
+  const folderPath = await getUniqueFolderPath(libraryRoot, title);
+  await fs.mkdir(folderPath, { recursive: true });
+
+  const fileNameWidth = Math.max(3, String(uniquePageUrls.length - 1).length);
+
+  try {
+    for (let index = 0; index < uniquePageUrls.length; index += 1) {
+      const pageUrl = uniquePageUrls[index];
+      const response = await fetch(pageUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: buildDownloadHeaders(refererUrl),
+      });
+
+      if (!response.ok) {
+        throw new Error(`La page ${index + 1} a repondu avec le code HTTP ${response.status}.`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!String(contentType || '').toLowerCase().startsWith('image/')) {
+        throw new Error(`La page ${index + 1} ne ressemble pas a une image telechargeable.`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const extension = inferExtensionFromUrl(response.url || pageUrl, contentType);
+      const fileName = `${String(index).padStart(fileNameWidth, '0')}${extension}`;
+      const targetFilePath = path.join(folderPath, fileName);
+
+      await fs.writeFile(targetFilePath, buffer);
+    }
+  } catch (error) {
+    try {
+      await fs.rm(folderPath, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup only.
+    }
+
+    throw error;
+  }
+
+  const createdManga = await addManga(undefined as any, {
+    id: randomUUID(),
+    title,
+    path: folderPath,
+    createdAt: new Date().toISOString(),
+    authorIds: [],
+    tagIds: [],
+  });
+
+  const inserted = Array.isArray(createdManga)
+    ? createdManga[createdManga.length - 1]
+    : null;
+
+  if (!inserted?.id) {
+    throw new Error('Le manga a ete telecharge, mais son ajout a la bibliotheque a echoue.');
+  }
+
+  return {
+    ok: true,
+    mangaId: String(inserted.id),
+    folderPath,
+    libraryRoot,
+    downloadedCount: uniquePageUrls.length,
+  };
 }
 
 export async function saveScraperDraft(

@@ -100,6 +100,13 @@ ipcMain.handle("save-scraper-feature-config", async (event: IpcMainInvokeEvent, 
     notifyScrapersUpdated();
     return updated;
 });
+ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => {
+    const result = await scrapers.downloadScraperManga(event, request);
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("mangas-updated");
+    }
+    return result;
+});
 
 // Pages / covers
 ipcMain.handle("count-pages", async (event: IpcMainInvokeEvent, folderPath: string) => pages.countPages(event, folderPath));

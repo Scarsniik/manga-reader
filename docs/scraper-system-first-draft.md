@@ -1008,6 +1008,28 @@ Le rendu temporaire affiche actuellement :
 Le mode `Recherche` est deja present dans la structure de l'interface, mais son execution
 reste volontairement un placeholder pour la suite.
 
+### Telechargement temporaire depuis une fiche
+
+La vue temporaire `Manga` expose maintenant aussi un bouton `Telecharger` quand le composant
+`Pages` est configure.
+
+Comportement retenu pour cette iteration :
+
+- le bouton n'apparait que si `Pages` est configure
+- au clic, l'application resolve toutes les pages du manga a partir de la config `Pages`
+- les fichiers sont telecharges dans la bibliotheque definie dans les parametres
+- si aucun chemin de bibliotheque n'est configure, une bibliotheque par defaut est creee
+- un dossier est cree avec le titre du manga
+- ce dossier est ensuite ajoute a la bibliotheque locale comme nouveau manga
+
+Regles volontairement simples pour la V1 :
+
+- pas d'import de tags
+- pas d'import d'auteur
+- pas d'import de serie
+- pas de mapping de metadonnees supplementaires
+- telechargement sequentiel de toutes les pages detectees
+
 ### Site de test de reference dans la V1
 
 Le site de reference pour verifier le parcours complet reste :
