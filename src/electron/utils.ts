@@ -12,6 +12,7 @@ export const linksFilePath = path.join(app.getAppPath(), "data", "links.json");
 export const authorsFilePath = path.join(dataDir, "authors.json");
 export const tagsFilePath = path.join(dataDir, "tags.json");
 export const seriesFilePath = path.join(dataDir, "series.json");
+export const scrapersFilePath = path.join(dataDir, "scrapers.json");
 
 export async function ensureDataDir() {
     try {

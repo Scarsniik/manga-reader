@@ -10,12 +10,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
-.mangaManager-header h1 {
-  margin: 0;
-  font-size: 20px;
+.mangaManager-header__view {
+  min-width: 240px;
+}
+
+.mangaManager-header__view select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #2f2f2f;
+  border-radius: 10px;
+  background: #141414;
+  color: #f1f1f1;
+}
+
+.mangaManager-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .mangaManager-header button {
@@ -31,6 +48,10 @@
   padding-top: 8px;
 }
 
+.mangaManager-content--scraper {
+  padding-top: 0;
+}
+
 .manga-list {
   display: flex;
   gap: 16px;
@@ -39,4 +60,15 @@
 
 .empty {
   color: #9a9a9a;
+}
+
+@media (max-width: 860px) {
+  .mangaManager-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mangaManager-header__view {
+    min-width: 0;
+  }
 }

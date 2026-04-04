@@ -58,6 +58,97 @@
   height: 18px;
 }
 
+.mh-form__radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mh-form__radio-group--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.mh-form__radio-group--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.mh-form__radio-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #dbe4ee;
+  margin: 0;
+}
+
+.mh-form__radio-option input[type="radio"] {
+  margin: 0;
+}
+
+.mh-form__radio-option--card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px 16px;
+  border: 1px solid #2b3a4e;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(12, 19, 32, 0.98), rgba(10, 15, 25, 0.98));
+  cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.mh-form__radio-option--card:hover {
+  border-color: #4b6b90;
+}
+
+.mh-form__radio-option--card.is-selected {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+}
+
+.mh-form__radio-option--card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  inset: 0;
+}
+
+.mh-form__radio-option-label {
+  font-weight: 700;
+  color: #f3f6fb;
+  margin: 0;
+}
+
+.mh-form__radio-option-description {
+  color: #91a1b3;
+  line-height: 1.45;
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.mh-form__radio-option--card::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05);
+  transition: background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.mh-form__radio-option--card.is-selected::after {
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
+}
+
 .mh-form__field .mh-form__field-error {
   color: #fecaca;
   font-size: 12px;
@@ -89,5 +180,9 @@
 @media (max-width: 520px) {
   .mh-form__field {
     margin-bottom: 10px;
+  }
+
+  .mh-form__radio-group--cards {
+    grid-template-columns: 1fr;
   }
 }

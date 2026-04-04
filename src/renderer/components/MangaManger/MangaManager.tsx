@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
+import { ScraperRecord } from '@/shared/scraper';
 import CardList from '@/renderer/components/utils/CardList/CardList';
 import './style.scss';
 import { useModal } from '@/renderer/hooks/useModal';
@@ -8,9 +9,11 @@ import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModa
 import buildTagsModal from '@/renderer/components/Modal/modales/TagsModal';
 import buildBatchEditModal from '@/renderer/components/Modal/modales/BatchEditModal';
 import buildOcrQueueModal from '@/renderer/components/Modal/modales/OcrQueueModal';
+import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
+import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
 import {
     readMangaManagerViewState,
     writeMangaManagerViewState,
@@ -25,10 +28,12 @@ declare global {
 const MangaManager: React.FC = () => {
     const [hasLoadedMangas, setHasLoadedMangas] = useState<boolean>(false);
     const [mangas, setMangas] = useState<Manga[]>([]);
+    const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
     const [filtered, setFiltered] = useState<Manga[] | null>(null);
     const [hasResolvedInitialFilters, setHasResolvedInitialFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
+    const [activeViewId, setActiveViewId] = useState<string>('library');
     const { tags } = useTags();
     const { params } = useParams();
     const { openModal } = useModal();
@@ -60,6 +65,20 @@ const MangaManager: React.FC = () => {
         }
     }, []);
 
+    const loadScrapers = useCallback(async () => {
+        try {
+            if (!window.api || typeof window.api.getScrapers !== 'function') {
+                console.error('window.api.getScrapers is not available');
+                return;
+            }
+
+            const data = await window.api.getScrapers();
+            setScrapers(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('Failed to load scrapers', err);
+        }
+    }, []);
+
     const restoreScrollPosition = useCallback((scrollTop: number) => {
         requestAnimationFrame(() => {
             const el = contentRef.current;
@@ -79,11 +98,16 @@ const MangaManager: React.FC = () => {
 
     useEffect(() => {
         loadMangas();
+        loadScrapers();
 
         const onUpdated = () => {
             reloadMangasPreservingScroll();
         };
+        const onScrapersUpdated = () => {
+            void loadScrapers();
+        };
         window.addEventListener('mangas-updated', onUpdated as EventListener);
+        window.addEventListener('scrapers-updated', onScrapersUpdated as EventListener);
 
         const handleDrop = async (e: DragEvent) => {
             e.preventDefault();
@@ -206,8 +230,9 @@ const MangaManager: React.FC = () => {
             window.removeEventListener('drop', handleDrop);
             window.removeEventListener('dragover', handleDragOver);
             window.removeEventListener('mangas-updated', onUpdated as EventListener);
+            window.removeEventListener('scrapers-updated', onScrapersUpdated as EventListener);
         };
-    }, [loadMangas, reloadMangasPreservingScroll]);
+    }, [loadMangas, loadScrapers, reloadMangasPreservingScroll]);
 
     useEffect(() => {
         const el = contentRef.current;
@@ -267,6 +292,28 @@ const MangaManager: React.FC = () => {
             return true;
         });
     }, [filtered, hasResolvedInitialFilters, mangas, params, tags]);
+
+    const sortedScrapers = useMemo(
+        () => [...scrapers].sort((a, b) => a.name.localeCompare(b.name)),
+        [scrapers],
+    );
+
+    const activeScraper = useMemo(
+        () => sortedScrapers.find((scraper) => scraper.id === activeViewId) ?? null,
+        [activeViewId, sortedScrapers],
+    );
+
+    const isLibraryView = activeViewId === 'library';
+
+    useEffect(() => {
+        if (activeViewId === 'library') {
+            return;
+        }
+
+        if (!scrapers.some((scraper) => scraper.id === activeViewId)) {
+            setActiveViewId('library');
+        }
+    }, [activeViewId, scrapers]);
 
     const handleSearchResults = useCallback((result: Manga[]) => {
         setFiltered(result);
@@ -370,52 +417,88 @@ const MangaManager: React.FC = () => {
     return (
         <div className="mangaManager">
             <div className="mangaManager-header">
-                <h1>Gestion des mangas</h1>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button onClick={() => openModal(buildTagsModal())}>Tags</button>
-                    <button
-                        onClick={() => openModal(buildOcrQueueModal({
-                            selectedMangaIds: selectedIds,
-                            filteredMangaIds: displayedMangas.map((m) => m.id),
-                        }))}
+                <div className="mangaManager-header__view">
+                    <select
+                        value={activeViewId}
+                        onChange={(event) => setActiveViewId(event.target.value)}
+                        aria-label="Choisir la vue active"
                     >
-                        Avancement OCR
-                    </button>
+                        <option value="library">Bibliotheque</option>
+                        {sortedScrapers.map((scraper) => (
+                            <option key={scraper.id} value={scraper.id}>
+                                {scraper.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="mangaManager-header__actions">
+                    {isLibraryView ? (
+                        <>
+                            <button onClick={() => openModal(buildTagsModal())}>Tags</button>
+                            <button
+                                onClick={() => openModal(buildOcrQueueModal({
+                                    selectedMangaIds: selectedIds,
+                                    filteredMangaIds: displayedMangas.map((m) => m.id),
+                                }))}
+                            >
+                                Avancement OCR
+                            </button>
+                        </>
+                    ) : null}
                     <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
-                    <button onClick={onAddClick}>Ajouter</button>
-                    <button
-                        onClick={() => setSelectionMode(s => !s)}
-                        title="Mode sélection"
-                        aria-pressed={selectionMode}
-                    >
-                        {selectionMode ? 'Quitter sélection' : 'Sélection'}
-                    </button>
-                    {selectedIds.length > 0 ? (
-                        <button onClick={() => openModal(buildBatchEditModal(selectedIds, () => { loadMangas(); setSelectedIds([]); }))}>Modification multiple ({selectedIds.length})</button>
+                    <button onClick={() => openModal(buildScraperConfigModal())}>Scrappers</button>
+                    {isLibraryView ? (
+                        <>
+                            <button onClick={onAddClick}>Ajouter</button>
+                            <button
+                                onClick={() => setSelectionMode(s => !s)}
+                                title="Mode sélection"
+                                aria-pressed={selectionMode}
+                            >
+                                {selectionMode ? 'Quitter sélection' : 'Sélection'}
+                            </button>
+                            {selectedIds.length > 0 ? (
+                                <button onClick={() => openModal(buildBatchEditModal(selectedIds, () => { loadMangas(); setSelectedIds([]); }))}>Modification multiple ({selectedIds.length})</button>
+                            ) : null}
+                        </>
                     ) : null}
                 </div>
             </div>
-            <SearchAndSort mangaList={mangas} onSearch={handleSearchResults} />
-                <div className="mangaManager-content" ref={contentRef}>
-                {!hasLoadedMangas ? (
-                    <div className="empty">Chargement de la bibliothèque...</div>
-                ) : !hasResolvedInitialFilters ? (
-                    <div className="empty">Application des filtres enregistrés...</div>
-                ) : mangas.length === 0 ? (
-                    <div className="empty">Aucun manga. Glissez-déposez un dossier n'importe où pour ajouter.</div>
-                ) : (
-                    <CardList
-                        mangas={displayedMangas}
-                        onRemove={handleRemove}
-                        onCardUpdated={handleCardUpdated}
-                        selectedIds={selectedIds}
-                        onToggleSelect={handleToggleSelect}
-                        selectionMode={selectionMode}
-                        titleLineCount={params?.titleLineCount ?? 2}
-                        showPageNumbers={params?.showPageNumbers ?? true}
-                    />
-                )}
-            </div>
+
+            {isLibraryView ? (
+                <>
+                    <SearchAndSort mangaList={mangas} onSearch={handleSearchResults} />
+                    <div className="mangaManager-content" ref={contentRef}>
+                        {!hasLoadedMangas ? (
+                            <div className="empty">Chargement de la bibliothèque...</div>
+                        ) : !hasResolvedInitialFilters ? (
+                            <div className="empty">Application des filtres enregistrés...</div>
+                        ) : mangas.length === 0 ? (
+                            <div className="empty">Aucun manga. Glissez-déposez un dossier n'importe où pour ajouter.</div>
+                        ) : (
+                            <CardList
+                                mangas={displayedMangas}
+                                onRemove={handleRemove}
+                                onCardUpdated={handleCardUpdated}
+                                selectedIds={selectedIds}
+                                onToggleSelect={handleToggleSelect}
+                                selectionMode={selectionMode}
+                                titleLineCount={params?.titleLineCount ?? 2}
+                                showPageNumbers={params?.showPageNumbers ?? true}
+                            />
+                        )}
+                    </div>
+                </>
+            ) : (
+                <div className="mangaManager-content mangaManager-content--scraper">
+                    {activeScraper ? (
+                        <ScraperBrowser scraper={activeScraper} />
+                    ) : (
+                        <div className="empty">Le scrapper selectionne est introuvable.</div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

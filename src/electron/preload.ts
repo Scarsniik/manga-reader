@@ -1,10 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type {
+    FetchScraperDocumentRequest,
+    SaveScraperDraftRequest,
+    SaveScraperFeatureRequest,
+    ScraperAccessValidationRequest,
+} from './scraper';
 
 ipcRenderer.on('mangas-updated', () => {
     try {
         window.dispatchEvent(new CustomEvent('mangas-updated'));
     } catch (error) {
         console.warn('preload: failed to dispatch mangas-updated event', error);
+    }
+});
+
+ipcRenderer.on('scrapers-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scrapers-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scrapers-updated event', error);
     }
 });
 
@@ -43,6 +57,13 @@ contextBridge.exposeInMainWorld('api', {
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+    // Scrapers API
+    validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
+    getScrapers: () => ipcRenderer.invoke('get-scrapers'),
+    deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
+    saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
+    fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),
+    saveScraperFeatureConfig: (request: SaveScraperFeatureRequest) => ipcRenderer.invoke('save-scraper-feature-config', request),
     // Authors API
     getAuthors: () => ipcRenderer.invoke('get-authors'),
     addAuthor: (author: any) => ipcRenderer.invoke('add-author', author),

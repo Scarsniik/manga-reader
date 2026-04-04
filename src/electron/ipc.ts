@@ -11,10 +11,17 @@ import * as ocr from "./handlers/ocr";
 import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
 import * as series from "./handlers/series";
+import * as scrapers from "./handlers/scrapers";
 import { migrateExistingFiles } from "./utils";
 
 // Run migration at module load
 migrateExistingFiles().catch(() => { /* swallow */ });
+
+const notifyScrapersUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scrapers-updated");
+    }
+};
 
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
@@ -73,6 +80,26 @@ ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries:
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
 ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => params.saveSettings(event, settings));
+
+// Scrapers
+ipcMain.handle("validate-scraper-access", async (event: IpcMainInvokeEvent, request: any) => scrapers.validateScraperAccess(event, request));
+ipcMain.handle("get-scrapers", async () => scrapers.getScrapers());
+ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
+    const updated = await scrapers.deleteScraper(event, scraperId);
+    notifyScrapersUpdated();
+    return updated;
+});
+ipcMain.handle("save-scraper-draft", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperDraft(event, request);
+    notifyScrapersUpdated();
+    return updated;
+});
+ipcMain.handle("fetch-scraper-document", async (event: IpcMainInvokeEvent, request: any) => scrapers.fetchScraperDocument(event, request));
+ipcMain.handle("save-scraper-feature-config", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperFeatureConfig(event, request);
+    notifyScrapersUpdated();
+    return updated;
+});
 
 // Pages / covers
 ipcMain.handle("count-pages", async (event: IpcMainInvokeEvent, folderPath: string) => pages.countPages(event, folderPath));

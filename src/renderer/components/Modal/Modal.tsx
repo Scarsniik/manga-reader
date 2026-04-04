@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import '@/renderer/components/Modal/style.scss';
 
 type Action = {
@@ -14,8 +14,44 @@ const Modal: React.FC<{
   actions?: Action[];
   onClose?: () => void;
 }> = ({ title, content, actions = [], onClose }) => {
+  const backdropPressStarted = useRef(false);
+
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyTouchAction = document.body.style.touchAction;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.touchAction = previousBodyTouchAction;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  const handleOverlayMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    backdropPressStarted.current = event.target === event.currentTarget;
+  };
+
+  const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const isDirectOverlayClick = event.target === event.currentTarget;
+
+    if (backdropPressStarted.current && isDirectOverlayClick) {
+      onClose?.();
+    }
+
+    backdropPressStarted.current = false;
+  };
+
   return (
-    <div className="app-modal-overlay" onClick={onClose}>
+    <div
+      className="app-modal-overlay"
+      onMouseDown={handleOverlayMouseDown}
+      onClick={handleOverlayClick}
+    >
       <div className="app-modal" onClick={(e) => e.stopPropagation()}>
         {title ? <div className="app-modal-header">{title}</div> : null}
         <div className="app-modal-body">{content}</div>
