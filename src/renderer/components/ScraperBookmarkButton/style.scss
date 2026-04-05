@@ -1,0 +1,95 @@
+.scraper-bookmark-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f5f5;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+  flex: 0 0 auto;
+}
+
+.scraper-bookmark-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 214, 98, 0.54);
+  background: rgba(255, 214, 98, 0.12);
+  color: #ffe48d;
+}
+
+.scraper-bookmark-button:focus-visible {
+  outline: none;
+  border-color: #ffd662;
+  box-shadow: 0 0 0 3px rgba(255, 214, 98, 0.2);
+}
+
+.scraper-bookmark-button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.scraper-bookmark-button.is-sm {
+  width: 34px;
+  height: 34px;
+}
+
+.scraper-bookmark-button.is-bookmarked {
+  border-color: rgba(255, 214, 98, 0.54);
+  background: rgba(255, 214, 98, 0.16);
+  color: #ffd662;
+}
+
+.scraper-bookmark-button.is-pending {
+  transform: none;
+}
+
+.scraper-bookmark-button.is-pending svg {
+  opacity: 0.28;
+}
+
+.scraper-bookmark-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.scraper-bookmark-button.is-bookmarked svg {
+  fill: currentColor;
+}
+
+.scraper-bookmark-button__spinner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  animation: scraper-bookmark-button-spin 0.7s linear infinite;
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.scraper-bookmark-button__spinner-track {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+.scraper-bookmark-button__spinner-head {
+  stroke: currentColor;
+}
+
+@keyframes scraper-bookmark-button-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

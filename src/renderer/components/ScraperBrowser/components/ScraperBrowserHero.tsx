@@ -11,14 +11,18 @@ const FEATURE_STATUS_LABELS = {
 type Props = {
   scraper: ScraperRecord;
   capabilities: ScraperCapability[];
+  bookmarkCount: number;
   onHome: () => void;
+  onOpenBookmarks: () => void;
   onEdit: () => void;
 };
 
 export default function ScraperBrowserHero({
   scraper,
   capabilities,
+  bookmarkCount,
   onHome,
+  onOpenBookmarks,
   onEdit,
 }: Props) {
   return (
@@ -40,6 +44,13 @@ export default function ScraperBrowserHero({
 
       <div className="scraper-browser__meta">
         <div className="scraper-browser__meta-actions">
+          <button
+            type="button"
+            className="scraper-browser__edit"
+            onClick={onOpenBookmarks}
+          >
+            {bookmarkCount > 0 ? `Bookmarks (${bookmarkCount})` : 'Bookmarks'}
+          </button>
           <button
             type="button"
             className="scraper-browser__edit"

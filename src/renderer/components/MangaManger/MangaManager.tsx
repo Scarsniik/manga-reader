@@ -14,6 +14,7 @@ import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
+import ScraperBookmarksView from '@/renderer/components/ScraperBookmarks/ScraperBookmarksView';
 import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
 import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 import {
@@ -327,6 +328,7 @@ const MangaManager: React.FC = () => {
     );
 
     const isLibraryView = activeViewId === 'library';
+    const isBookmarksView = activeViewId === 'bookmarks';
 
     useEffect(() => {
         if (paramsLoading) {
@@ -415,7 +417,7 @@ const MangaManager: React.FC = () => {
     }, [location.key, location.state]);
 
     useEffect(() => {
-        if (activeViewId === 'library') {
+        if (activeViewId === 'library' || activeViewId === 'bookmarks') {
             return;
         }
 
@@ -491,6 +493,7 @@ const MangaManager: React.FC = () => {
                 searchQuery: '',
                 searchPage: 1,
                 mangaQuery: '',
+                bookmarksFilterScraperId: nextViewId === 'bookmarks' ? null : undefined,
             });
 
         navigate(
@@ -498,7 +501,17 @@ const MangaManager: React.FC = () => {
                 pathname: location.pathname,
                 search: nextSearch,
             },
-            { replace: true }
+            nextViewId === 'bookmarks'
+                ? {
+                    replace: true,
+                    state: {
+                        bookmarksReturn: {
+                            pathname: location.pathname,
+                            search: location.search,
+                        },
+                    },
+                }
+                : { replace: true }
         );
     }, [activeViewId, location.pathname, location.search, navigate]);
 
@@ -568,6 +581,7 @@ const MangaManager: React.FC = () => {
                         aria-label="Choisir la vue active"
                     >
                         <option value="library">Bibliotheque</option>
+                        <option value="bookmarks">Tous les bookmarks</option>
                         {sortedScrapers.map((scraper) => (
                             <option key={scraper.id} value={scraper.id}>
                                 {scraper.name}
@@ -637,7 +651,12 @@ const MangaManager: React.FC = () => {
             ) : (
                 <div className="mangaManager-content mangaManager-content--scraper">
                     {!hasLoadedScrapers ? (
-                        <div className="empty">Chargement du scrapper...</div>
+                        <div className="empty">{isBookmarksView ? 'Chargement des bookmarks...' : 'Chargement du scrapper...'}</div>
+                    ) : isBookmarksView ? (
+                        <ScraperBookmarksView
+                            scrapers={sortedScrapers}
+                            filterScraperId={routeScraperState.bookmarksFilterScraperId ?? null}
+                        />
                     ) : activeScraper ? (
                         <ScraperBrowser
                             scraper={activeScraper}

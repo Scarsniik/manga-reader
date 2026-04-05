@@ -16,6 +16,7 @@ type Props = {
   loading: boolean;
   usesSearchTemplatePaging: boolean;
   canOpenSearchResultsAsDetails: boolean;
+  renderBookmarkButton?: (result: ScraperSearchResultItem) => React.ReactNode;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onOpenResult: (result: ScraperSearchResultItem) => void;
@@ -42,6 +43,7 @@ export default function ScraperSearchResultsSection({
   loading,
   usesSearchTemplatePaging,
   canOpenSearchResultsAsDetails,
+  renderBookmarkButton,
   onPreviousPage,
   onNextPage,
   onOpenResult,
@@ -108,6 +110,7 @@ export default function ScraperSearchResultsSection({
               result={result}
               canOpenResult={canOpenResult}
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+              bookmarkButton={renderBookmarkButton ? renderBookmarkButton(result) : null}
               onOpenResult={onOpenResult}
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}

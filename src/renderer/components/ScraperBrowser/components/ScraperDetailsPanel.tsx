@@ -1,7 +1,9 @@
 import React from 'react';
+import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { formatScraperValueForDisplay, ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
+  scraperId: string;
   detailsResult: ScraperRuntimeDetailsResult | null;
   hasPages: boolean;
   canReturnToSearch: boolean;
@@ -13,6 +15,7 @@ type Props = {
 };
 
 export default function ScraperDetailsPanel({
+  scraperId,
   detailsResult,
   hasPages,
   canReturnToSearch,
@@ -56,6 +59,16 @@ export default function ScraperDetailsPanel({
               {detailsResult.mangaStatus ? (
                 <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
               ) : null}
+              <ScraperBookmarkButton
+                scraperId={scraperId}
+                sourceUrl={detailsResult.finalUrl || detailsResult.requestedUrl}
+                title={detailsResult.title || detailsResult.finalUrl || detailsResult.requestedUrl}
+                cover={detailsResult.cover}
+                description={detailsResult.description}
+                authors={detailsResult.authors}
+                tags={detailsResult.tags}
+                mangaStatus={detailsResult.mangaStatus}
+              />
               {hasPages ? (
                 <button
                   type="button"

@@ -8,6 +8,7 @@ export type ScraperRouteState = {
   searchPage: number;
   mangaQuery: string;
   mangaUrl?: string;
+  bookmarksFilterScraperId?: string | null;
 };
 
 const SCRAPER_PARAM = 'scraper';
@@ -17,6 +18,7 @@ const SCRAPER_SEARCH_QUERY_PARAM = 'scraperSearchQuery';
 const SCRAPER_SEARCH_PAGE_PARAM = 'scraperSearchPage';
 const SCRAPER_MANGA_QUERY_PARAM = 'scraperMangaQuery';
 const SCRAPER_MANGA_URL_PARAM = 'scraperMangaUrl';
+const SCRAPER_BOOKMARK_FILTER_PARAM = 'scraperBookmarkFilter';
 
 const normalizeSearch = (search: string): URLSearchParams => (
   new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
@@ -48,6 +50,7 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     searchPage: normalizePage(params.get(SCRAPER_SEARCH_PAGE_PARAM)),
     mangaQuery: params.get(SCRAPER_MANGA_QUERY_PARAM) ?? '',
     mangaUrl: params.get(SCRAPER_MANGA_URL_PARAM) || undefined,
+    bookmarksFilterScraperId: params.get(SCRAPER_BOOKMARK_FILTER_PARAM) || null,
   };
 };
 
@@ -64,6 +67,7 @@ export const writeScraperRouteState = (
   params.delete(SCRAPER_SEARCH_PAGE_PARAM);
   params.delete(SCRAPER_MANGA_QUERY_PARAM);
   params.delete(SCRAPER_MANGA_URL_PARAM);
+  params.delete(SCRAPER_BOOKMARK_FILTER_PARAM);
 
   if (!state.scraperId) {
     const nextSearch = params.toString();
@@ -92,6 +96,10 @@ export const writeScraperRouteState = (
     }
   }
 
+  if (state.scraperId === 'bookmarks' && state.bookmarksFilterScraperId) {
+    params.set(SCRAPER_BOOKMARK_FILTER_PARAM, state.bookmarksFilterScraperId);
+  }
+
   const nextSearch = params.toString();
   return nextSearch ? `?${nextSearch}` : '';
 };
@@ -104,5 +112,6 @@ export const clearScraperRouteState = (search: string): string => (
     searchQuery: '',
     searchPage: 1,
     mangaQuery: '',
+    bookmarksFilterScraperId: null,
   })
 );

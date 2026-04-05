@@ -5,6 +5,7 @@ type Props = {
   result: ScraperSearchResultItem;
   canOpenResult: boolean;
   canOpenSearchResultsAsDetails: boolean;
+  bookmarkButton?: React.ReactNode;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (
@@ -21,12 +22,13 @@ export default function ScraperSearchResultCard({
   result,
   canOpenResult,
   canOpenSearchResultsAsDetails,
+  bookmarkButton,
   onOpenResult,
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
 }: Props) {
-  const resultActions = canOpenResult ? (
+  const contentActions = canOpenResult ? (
     <>
       <button
         type="button"
@@ -133,9 +135,10 @@ export default function ScraperSearchResultCard({
         )}
       </div>
 
-      {resultActions ? (
+      {bookmarkButton || contentActions ? (
         <div className="scraper-browser__result-actions">
-          {resultActions}
+          {bookmarkButton}
+          {contentActions}
         </div>
       ) : null}
     </article>

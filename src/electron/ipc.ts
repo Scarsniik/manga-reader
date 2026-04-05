@@ -23,6 +23,12 @@ const notifyScrapersUpdated = () => {
     }
 };
 
+const notifyScraperBookmarksUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-bookmarks-updated");
+    }
+};
+
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
@@ -84,9 +90,23 @@ ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any)
 // Scrapers
 ipcMain.handle("validate-scraper-access", async (event: IpcMainInvokeEvent, request: any) => scrapers.validateScraperAccess(event, request));
 ipcMain.handle("get-scrapers", async () => scrapers.getScrapers());
+ipcMain.handle("get-scraper-bookmarks", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
+    scrapers.getScraperBookmarks(event, scraperId)
+));
+ipcMain.handle("save-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperBookmark(event, request);
+    notifyScraperBookmarksUpdated();
+    return updated;
+});
+ipcMain.handle("remove-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.removeScraperBookmark(event, request);
+    notifyScraperBookmarksUpdated();
+    return updated;
+});
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
     const updated = await scrapers.deleteScraper(event, scraperId);
     notifyScrapersUpdated();
+    notifyScraperBookmarksUpdated();
     return updated;
 });
 ipcMain.handle("save-scraper-draft", async (event: IpcMainInvokeEvent, request: any) => {

@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
+    RemoveScraperBookmarkRequest,
+    SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
     SaveScraperReaderProgressRequest,
     SaveScraperDraftRequest,
@@ -22,6 +24,14 @@ ipcRenderer.on('scrapers-updated', () => {
         window.dispatchEvent(new CustomEvent('scrapers-updated'));
     } catch (error) {
         console.warn('preload: failed to dispatch scrapers-updated event', error);
+    }
+});
+
+ipcRenderer.on('scraper-bookmarks-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-bookmarks-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-bookmarks-updated event', error);
     }
 });
 
@@ -63,6 +73,9 @@ contextBridge.exposeInMainWorld('api', {
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),
+    getScraperBookmarks: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-bookmarks', scraperId),
+    saveScraperBookmark: (request: SaveScraperBookmarkRequest) => ipcRenderer.invoke('save-scraper-bookmark', request),
+    removeScraperBookmark: (request: RemoveScraperBookmarkRequest) => ipcRenderer.invoke('remove-scraper-bookmark', request),
     deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),

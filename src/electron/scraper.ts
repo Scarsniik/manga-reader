@@ -212,6 +212,37 @@ export interface DownloadScraperMangaResult {
   downloadedCount: number;
 }
 
+export interface ScraperBookmarkRecord {
+  scraperId: string;
+  sourceUrl: string;
+  title: string;
+  cover?: string;
+  summary?: string;
+  description?: string;
+  authors: string[];
+  tags: string[];
+  mangaStatus?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveScraperBookmarkRequest {
+  scraperId: string;
+  sourceUrl: string;
+  title?: string;
+  cover?: string;
+  summary?: string;
+  description?: string;
+  authors?: string[];
+  tags?: string[];
+  mangaStatus?: string;
+}
+
+export interface RemoveScraperBookmarkRequest {
+  scraperId: string;
+  sourceUrl: string;
+}
+
 export interface ScraperReaderProgressRecord {
   id: string;
   scraperId: string;

@@ -1,0 +1,128 @@
+.scraper-bookmarks-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.scraper-bookmarks-view__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.scraper-bookmarks-view__header h2 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.scraper-bookmarks-view__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scraper-bookmarks-view__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #3b4a5c;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef4ff;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.scraper-bookmarks-view__back:hover {
+  border-color: #5d9cff;
+  background: rgba(93, 156, 255, 0.12);
+}
+
+.scraper-bookmarks-view__back:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-bookmarks-view__back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.scraper-bookmarks-view__header p {
+  margin: 10px 0 0;
+  color: #b7b7b7;
+  line-height: 1.5;
+}
+
+.scraper-bookmarks-view__clear {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #3b4a5c;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef4ff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-bookmarks-view__clear:hover {
+  border-color: #5d9cff;
+  background: rgba(93, 156, 255, 0.12);
+}
+
+.scraper-bookmarks-view__scraper-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #b7b7b7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scraper-bookmarks-view .scraper-browser__results-grid {
+  align-items: stretch;
+}
+
+.scraper-bookmarks-view__card {
+  display: flex;
+  flex-direction: column;
+}
+
+.scraper-bookmarks-view__card .scraper-browser__result-media {
+  flex: 0 0 auto;
+}
+
+.scraper-bookmarks-view__card .scraper-browser__result-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+.scraper-bookmarks-view__card .scraper-browser__result-actions {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .scraper-bookmarks-view__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

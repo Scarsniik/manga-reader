@@ -1,5 +1,6 @@
 import React from 'react';
 import { Manga } from '@/renderer/types';
+import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 
 type Props = {
     manga: Manga | null;
@@ -37,6 +38,15 @@ const ReaderHeader: React.FC<Props> = ({
             </div>
 
             <div className="reader-actions">
+                {manga?.scraperId && manga?.sourceUrl ? (
+                    <ScraperBookmarkButton
+                        scraperId={manga.scraperId}
+                        sourceUrl={manga.sourceUrl}
+                        title={manga.title}
+                        cover={manga.thumbnailPath || undefined}
+                        className="reader-bookmark-button"
+                    />
+                ) : null}
                 <button
                     type="button"
                     className={"reader-action-button" + (copyFeedback ? ` ${copyFeedback.type}` : '')}

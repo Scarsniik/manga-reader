@@ -77,6 +77,8 @@
 
 .scraper-browser__meta-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
 }
 
@@ -423,7 +425,7 @@
 .scraper-browser__result-actions {
   grid-column: 1 / -1;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   justify-content: center;

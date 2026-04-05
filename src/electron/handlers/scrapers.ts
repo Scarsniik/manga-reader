@@ -7,10 +7,13 @@ import {
   DownloadScraperMangaResult,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  RemoveScraperBookmarkRequest,
+  SaveScraperBookmarkRequest,
   SaveScraperGlobalConfigRequest,
   SaveScraperReaderProgressRequest,
   ScraperAccessValidationRequest,
   ScraperAccessValidationResult,
+  ScraperBookmarkRecord,
   ScraperDetailsDerivedValueResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
@@ -25,7 +28,12 @@ import {
   normalizeScraperBaseUrl,
   resolveScraperUrl,
 } from '../scraper';
-import { ensureDataDir, scraperReaderProgressFilePath, scrapersFilePath } from '../utils';
+import {
+  ensureDataDir,
+  scraperBookmarksFilePath,
+  scraperReaderProgressFilePath,
+  scrapersFilePath,
+} from '../utils';
 import { addManga } from './mangas';
 import { getSettings } from './params';
 import { getTags } from './tags';
@@ -305,6 +313,139 @@ async function writeScraperReaderProgressFile(records: ScraperReaderProgressReco
   await fs.writeFile(scraperReaderProgressFilePath, JSON.stringify(records, null, 2));
 }
 
+const normalizeScraperBookmarkUrl = (value: unknown): string => {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return trimmed;
+  }
+};
+
+const sanitizeScraperBookmarkRecord = (
+  record: Partial<ScraperBookmarkRecord>,
+): ScraperBookmarkRecord | null => {
+  const scraperId = String(record.scraperId ?? '').trim();
+  const sourceUrl = normalizeScraperBookmarkUrl(record.sourceUrl);
+  const title = String(record.title ?? '').trim() || sourceUrl;
+  const createdAt = String(record.createdAt ?? '').trim();
+  const updatedAt = String(record.updatedAt ?? '').trim();
+
+  if (!scraperId || !sourceUrl) {
+    return null;
+  }
+
+  const cover = String(record.cover ?? '').trim();
+  const summary = String(record.summary ?? '').trim();
+  const description = String(record.description ?? '').trim();
+  const mangaStatus = String(record.mangaStatus ?? '').trim();
+
+  return {
+    scraperId,
+    sourceUrl,
+    title,
+    cover: cover || undefined,
+    summary: summary || undefined,
+    description: description || undefined,
+    authors: sanitizeStringList(record.authors),
+    tags: sanitizeStringList(record.tags),
+    mangaStatus: mangaStatus || undefined,
+    createdAt: createdAt || new Date().toISOString(),
+    updatedAt: updatedAt || new Date().toISOString(),
+  };
+};
+
+const mergeScraperBookmarkRecord = (
+  existing: ScraperBookmarkRecord | null,
+  request: SaveScraperBookmarkRequest,
+): ScraperBookmarkRecord | null => {
+  const now = new Date().toISOString();
+  const normalizedRequest = sanitizeScraperBookmarkRecord({
+    ...existing,
+    ...request,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
+
+  if (!normalizedRequest) {
+    return null;
+  }
+
+  if (!existing) {
+    return normalizedRequest;
+  }
+
+  return sanitizeScraperBookmarkRecord({
+    scraperId: existing.scraperId,
+    sourceUrl: existing.sourceUrl,
+    title: normalizedRequest.title || existing.title,
+    cover: normalizedRequest.cover || existing.cover,
+    summary: normalizedRequest.summary || existing.summary,
+    description: normalizedRequest.description || existing.description,
+    authors: normalizedRequest.authors.length ? normalizedRequest.authors : existing.authors,
+    tags: normalizedRequest.tags.length ? normalizedRequest.tags : existing.tags,
+    mangaStatus: normalizedRequest.mangaStatus || existing.mangaStatus,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  });
+};
+
+const sortScraperBookmarks = (records: ScraperBookmarkRecord[]): ScraperBookmarkRecord[] => (
+  [...records].sort((left, right) => {
+    const updatedAtCompare = right.updatedAt.localeCompare(left.updatedAt);
+    if (updatedAtCompare !== 0) {
+      return updatedAtCompare;
+    }
+
+    const scraperCompare = left.scraperId.localeCompare(right.scraperId);
+    if (scraperCompare !== 0) {
+      return scraperCompare;
+    }
+
+    return left.title.localeCompare(right.title);
+  })
+);
+
+async function readScraperBookmarksFile(): Promise<ScraperBookmarkRecord[]> {
+  try {
+    const data = await fs.readFile(scraperBookmarksFilePath, 'utf-8');
+    const parsed = JSON.parse(data) as Partial<ScraperBookmarkRecord>[];
+    const sanitized = Array.isArray(parsed)
+      ? parsed
+        .map((record) => sanitizeScraperBookmarkRecord(record))
+        .filter((record): record is ScraperBookmarkRecord => Boolean(record))
+      : [];
+    const sorted = sortScraperBookmarks(sanitized);
+
+    const normalizedRaw = JSON.stringify(parsed, null, 2);
+    const normalizedSanitized = JSON.stringify(sorted, null, 2);
+    if (normalizedRaw !== normalizedSanitized) {
+      await ensureDataDir();
+      await fs.writeFile(scraperBookmarksFilePath, normalizedSanitized);
+    }
+
+    return sorted;
+  } catch (error: any) {
+    if (error && error.code === 'ENOENT') {
+      await ensureDataDir();
+      await fs.writeFile(scraperBookmarksFilePath, JSON.stringify([], null, 2));
+      return [];
+    }
+
+    console.error('Error reading scraper bookmarks file:', error);
+    throw new Error('Failed to read scraper bookmarks');
+  }
+}
+
+async function writeScraperBookmarksFile(records: ScraperBookmarkRecord[]): Promise<void> {
+  await ensureDataDir();
+  await fs.writeFile(scraperBookmarksFilePath, JSON.stringify(sortScraperBookmarks(records), null, 2));
+}
+
 const sanitizePathSegment = (value: string): string => {
   const sanitized = value
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
@@ -484,6 +625,71 @@ export async function getScrapers(): Promise<ScraperRecord[]> {
   return readScrapersFile();
 }
 
+export async function getScraperBookmarks(
+  _event?: IpcMainInvokeEvent,
+  scraperId?: string | null,
+): Promise<ScraperBookmarkRecord[]> {
+  const records = await readScraperBookmarksFile();
+  const normalizedScraperId = String(scraperId ?? '').trim();
+
+  if (!normalizedScraperId) {
+    return records;
+  }
+
+  return records.filter((record) => record.scraperId === normalizedScraperId);
+}
+
+export async function saveScraperBookmark(
+  _event: IpcMainInvokeEvent,
+  request: SaveScraperBookmarkRequest,
+): Promise<ScraperBookmarkRecord> {
+  const records = await readScraperBookmarksFile();
+  const normalizedScraperId = String(request.scraperId ?? '').trim();
+  const normalizedSourceUrl = normalizeScraperBookmarkUrl(request.sourceUrl);
+  const existingIndex = records.findIndex((record) => (
+    record.scraperId === normalizedScraperId && record.sourceUrl === normalizedSourceUrl
+  ));
+  const existing = existingIndex >= 0 ? records[existingIndex] : null;
+  const merged = mergeScraperBookmarkRecord(existing, request);
+
+  if (!merged) {
+    throw new Error('Le bookmark scraper est incomplet.');
+  }
+
+  if (existingIndex >= 0) {
+    records[existingIndex] = merged;
+  } else {
+    records.push(merged);
+  }
+
+  await writeScraperBookmarksFile(records);
+  return merged;
+}
+
+export async function removeScraperBookmark(
+  _event: IpcMainInvokeEvent,
+  request: RemoveScraperBookmarkRequest,
+): Promise<boolean> {
+  const normalizedScraperId = String(request.scraperId ?? '').trim();
+  const normalizedSourceUrl = normalizeScraperBookmarkUrl(request.sourceUrl);
+
+  if (!normalizedScraperId || !normalizedSourceUrl) {
+    return false;
+  }
+
+  const records = await readScraperBookmarksFile();
+  const filtered = records.filter((record) => !(
+    record.scraperId === normalizedScraperId && record.sourceUrl === normalizedSourceUrl
+  ));
+
+  if (filtered.length === records.length) {
+    return false;
+  }
+
+  await writeScraperBookmarksFile(filtered);
+  return true;
+}
+
 export async function deleteScraper(
   _event: IpcMainInvokeEvent,
   scraperId: string,
@@ -496,6 +702,19 @@ export async function deleteScraper(
   }
 
   await writeScrapersFile(filtered);
+
+  const bookmarkRecords = await readScraperBookmarksFile();
+  const filteredBookmarkRecords = bookmarkRecords.filter((record) => record.scraperId !== String(scraperId));
+  if (filteredBookmarkRecords.length !== bookmarkRecords.length) {
+    await writeScraperBookmarksFile(filteredBookmarkRecords);
+  }
+
+  const progressRecords = await readScraperReaderProgressFile();
+  const filteredProgressRecords = progressRecords.filter((record) => record.scraperId !== String(scraperId));
+  if (filteredProgressRecords.length !== progressRecords.length) {
+    await writeScraperReaderProgressFile(filteredProgressRecords);
+  }
+
   return filtered;
 }
 

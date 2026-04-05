@@ -9,6 +9,8 @@ import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/compone
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
 import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components/ScraperDetailsPanel';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
+import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import {
   parseScraperRouteState,
   type ScraperRouteState,
@@ -135,6 +137,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => scraper.globalConfig.homeSearch.query || '',
     [scraper.globalConfig.homeSearch.query],
   );
+  const { bookmarks: scraperBookmarks } = useScraperBookmarks({ scraperId: scraper.id });
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
   const [query, setQuery] = useState('');
@@ -1160,6 +1163,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => searchResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [searchResults],
   );
+  const scraperBookmarkCount = scraperBookmarks.length;
   const canReturnToSearch = Boolean(searchReturnState?.hasExecutedSearch);
   const shouldShowSearchPagination = Boolean(
     searchPage && (searchPageIndex > 0 || searchPage.nextPageUrl || usesSearchTemplatePaging),
@@ -1175,13 +1179,52 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => `Page ${searchPageIndex + 1}`,
     [searchPageIndex],
   );
+  const handleOpenScraperBookmarks = useCallback(() => {
+    navigate({
+      pathname: location.pathname,
+      search: writeScraperRouteState(location.search, {
+        scraperId: 'bookmarks',
+        mode: 'search',
+        searchActive: false,
+        searchQuery: '',
+        searchPage: 1,
+        mangaQuery: '',
+        bookmarksFilterScraperId: scraper.id,
+      }),
+    }, {
+      state: {
+        bookmarksReturn: {
+          pathname: location.pathname,
+          search: location.search,
+        },
+      },
+    });
+  }, [location.pathname, location.search, navigate, scraper.id]);
+  const renderSearchResultBookmarkButton = useCallback((result: ScraperSearchResultItem) => {
+    if (!result.detailUrl) {
+      return null;
+    }
+
+    return (
+      <ScraperBookmarkButton
+        scraperId={scraper.id}
+        sourceUrl={result.detailUrl}
+        title={result.title}
+        cover={result.thumbnailUrl}
+        summary={result.summary}
+        size="sm"
+      />
+    );
+  }, [scraper.id]);
 
   return (
     <section className="scraper-browser" ref={browserRootRef}>
       <ScraperBrowserHero
         scraper={scraper}
         capabilities={capabilities as ScraperCapability[]}
+        bookmarkCount={scraperBookmarkCount}
         onHome={() => void handleGoToHome()}
+        onOpenBookmarks={handleOpenScraperBookmarks}
         onEdit={() => openModal(buildScraperConfigModal({
           kind: 'edit',
           scraperId: scraper.id,
@@ -1226,6 +1269,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         loading={loading}
         usesSearchTemplatePaging={usesSearchTemplatePaging}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+        renderBookmarkButton={renderSearchResultBookmarkButton}
         onPreviousPage={() => void handleSearchPreviousPage()}
         onNextPage={() => void handleSearchNextPage()}
         onOpenResult={(result) => void handleOpenSearchResult(result)}
@@ -1235,6 +1279,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       />
 
       <ScraperDetailsPanel
+        scraperId={scraper.id}
         detailsResult={detailsResult}
         hasPages={hasPages}
         canReturnToSearch={canReturnToSearch}

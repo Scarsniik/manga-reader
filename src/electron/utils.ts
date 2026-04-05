@@ -13,6 +13,7 @@ export const authorsFilePath = path.join(dataDir, "authors.json");
 export const tagsFilePath = path.join(dataDir, "tags.json");
 export const seriesFilePath = path.join(dataDir, "series.json");
 export const scrapersFilePath = path.join(dataDir, "scrapers.json");
+export const scraperBookmarksFilePath = path.join(dataDir, "scraper-bookmarks.json");
 export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-progress.json");
 
 export async function ensureDataDir() {
