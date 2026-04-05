@@ -92,6 +92,10 @@ contextBridge.exposeInMainWorld('api', {
     getScraperReaderProgress: (scraperMangaId: string) => ipcRenderer.invoke('get-scraper-reader-progress', scraperMangaId),
     saveScraperReaderProgress: (request: SaveScraperReaderProgressRequest) => ipcRenderer.invoke('save-scraper-reader-progress', request),
     downloadScraperManga: (request: DownloadScraperMangaRequest) => ipcRenderer.invoke('download-scraper-manga', request),
+    queueScraperDownload: (request: DownloadScraperMangaRequest) => ipcRenderer.invoke('download-scraper-manga', request),
+    getScraperDownloadQueueStatus: () => ipcRenderer.invoke('scraper-download-queue-status'),
+    cancelScraperDownloadJob: (jobId: string) => ipcRenderer.invoke('scraper-download-cancel-job', jobId),
+    cancelAllScraperDownloadJobs: () => ipcRenderer.invoke('scraper-download-cancel-all-jobs'),
     // Authors API
     getAuthors: () => ipcRenderer.invoke('get-authors'),
     addAuthor: (author: any) => ipcRenderer.invoke('add-author', author),

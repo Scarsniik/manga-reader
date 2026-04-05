@@ -149,16 +149,14 @@ ipcMain.handle("get-scraper-reader-progress", async (event: IpcMainInvokeEvent, 
 ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => (
     scrapers.saveScraperReaderProgress(event, request)
 ));
-ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => {
-    const result = await scrapers.downloadScraperManga(event, request);
-    for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("mangas-updated");
-    }
-    if (request?.autoAssignSeriesOnChapterDownload) {
-        notifySeriesUpdated();
-    }
-    return result;
-});
+ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.queueScraperDownload(event, request)
+));
+ipcMain.handle("scraper-download-queue-status", async () => scrapers.getScraperDownloadQueueStatus());
+ipcMain.handle("scraper-download-cancel-job", async (event: IpcMainInvokeEvent, jobId: string) => (
+    scrapers.cancelScraperDownloadJob(event, jobId)
+));
+ipcMain.handle("scraper-download-cancel-all-jobs", async () => scrapers.cancelAllScraperDownloadJobs());
 
 // Pages / covers
 ipcMain.handle("count-pages", async (event: IpcMainInvokeEvent, folderPath: string) => pages.countPages(event, folderPath));

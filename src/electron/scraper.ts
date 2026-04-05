@@ -258,6 +258,7 @@ export interface DownloadScraperMangaRequest {
   pageUrls: string[];
   refererUrl?: string;
   scraperId?: string;
+  scraperName?: string;
   sourceUrl?: string;
   defaultTagIds?: string[];
   defaultLanguage?: string;
@@ -267,12 +268,62 @@ export interface DownloadScraperMangaRequest {
   thumbnailUrl?: string;
 }
 
+export type ScraperDownloadJobStatus = 'queued' | 'running' | 'completed' | 'error' | 'cancelled';
+export type ScraperDownloadJobMode = 'full_manga' | 'chapter';
+
 export interface DownloadScraperMangaResult {
   ok: boolean;
   mangaId: string;
   folderPath: string;
   libraryRoot: string;
   downloadedCount: number;
+}
+
+export interface ScraperDownloadJob {
+  id: string;
+  title: string;
+  status: ScraperDownloadJobStatus;
+  mode: ScraperDownloadJobMode;
+  scraperId?: string;
+  scraperName?: string;
+  sourceUrl?: string;
+  refererUrl?: string;
+  chapterLabel?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  totalPages: number;
+  downloadedPages: number;
+  currentPage?: number;
+  currentPageUrl?: string;
+  folderPath?: string;
+  libraryRoot?: string;
+  mangaId?: string;
+  downloadedCount?: number;
+  message?: string | null;
+  error?: string | null;
+}
+
+export interface ScraperDownloadQueueCounts {
+  total: number;
+  active: number;
+  queued: number;
+  running: number;
+  completed: number;
+  error: number;
+  cancelled: number;
+}
+
+export interface ScraperDownloadQueueStatus {
+  jobs: ScraperDownloadJob[];
+  counts: ScraperDownloadQueueCounts;
+}
+
+export interface QueueScraperDownloadResult {
+  ok: boolean;
+  job: ScraperDownloadJob;
+  status: ScraperDownloadQueueStatus;
 }
 
 export interface ScraperBookmarkRecord {

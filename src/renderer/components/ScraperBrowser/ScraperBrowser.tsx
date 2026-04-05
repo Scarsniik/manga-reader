@@ -1100,7 +1100,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [detailsResult, pagesConfig, scraper]);
 
   const handleDownload = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
-    if (!(window as any).api || typeof (window as any).api.downloadScraperManga !== 'function') {
+    const queueDownloadApi = (window as any).api?.queueScraperDownload
+      || (window as any).api?.downloadScraperManga;
+
+    if (typeof queueDownloadApi !== 'function') {
       setDownloadError('Le telechargement du scrapper n\'est pas disponible dans cette version.');
       return;
     }
@@ -1115,11 +1118,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         ? `${detailsResult?.title || query.trim() || 'manga'} - ${chapter.label}`
         : detailsResult?.title || query.trim() || 'manga';
 
-      const downloadResult = await (window as any).api.downloadScraperManga({
+      const queueResult = await queueDownloadApi({
         title: downloadTitle,
         pageUrls,
         refererUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
         scraperId: scraper.id,
+        scraperName: scraper.name,
         sourceUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
         defaultTagIds: scraper.globalConfig.defaultTagIds,
         defaultLanguage: scraper.globalConfig.defaultLanguage,
@@ -1128,21 +1132,23 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         chapterLabel: chapter?.label,
         thumbnailUrl: chapter?.image,
       });
-      const hasDefaultMetadata = Boolean(
-        scraper.globalConfig.defaultTagIds.length || scraper.globalConfig.defaultLanguage,
-      );
+      const activeJobs = Number(queueResult?.status?.counts?.active || 0);
+      const isChapterDownload = Boolean(chapter?.label);
+      const statusLabel = queueResult?.job?.status === 'running'
+        ? 'demarre'
+        : 'a ete ajoute a la file';
 
       setDownloadMessage(
-        hasDefaultMetadata
-          ? `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque avec les reglages par defaut du scrapper.`
-          : `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque.`,
+        `${isChapterDownload ? 'Le telechargement du chapitre' : 'Le telechargement du manga'} ${statusLabel}. `
+        + `${activeJobs > 0 ? `${activeJobs} job(s) actif(s). ` : ''}`
+        + 'Suis l\'avancement depuis "Telechargements" en haut de l\'accueil.',
       );
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : 'Le telechargement du manga a echoue.');
     } finally {
       setDownloading(false);
     }
-  }, [detailsResult, query, resolveCurrentPageUrls, scraper.globalConfig.defaultLanguage, scraper.globalConfig.defaultTagIds, scraper.id]);
+  }, [detailsResult, query, resolveCurrentPageUrls, scraper.globalConfig.chapterDownloads.autoAssignSeries, scraper.globalConfig.defaultLanguage, scraper.globalConfig.defaultTagIds, scraper.id, scraper.name]);
 
   const handleOpenReader = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
     if (!detailsResult) {

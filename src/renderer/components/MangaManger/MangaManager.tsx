@@ -9,6 +9,7 @@ import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModa
 import buildTagsModal from '@/renderer/components/Modal/modales/TagsModal';
 import buildBatchEditModal from '@/renderer/components/Modal/modales/BatchEditModal';
 import buildOcrQueueModal from '@/renderer/components/Modal/modales/OcrQueueModal';
+import buildScraperDownloadQueueModal from '@/renderer/components/Modal/modales/ScraperDownloadQueueModal';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
@@ -47,6 +48,7 @@ const MangaManager: React.FC = () => {
     const [hasResolvedInitialFilters, setHasResolvedInitialFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
+    const [activeDownloadJobCount, setActiveDownloadJobCount] = useState(0);
     const [scraperBrowserSeed, setScraperBrowserSeed] = useState<{
         scraperId: string;
         query: string;
@@ -99,6 +101,20 @@ const MangaManager: React.FC = () => {
             console.error('Failed to load scrapers', err);
         } finally {
             setHasLoadedScrapers(true);
+        }
+    }, []);
+
+    const loadDownloadQueueSummary = useCallback(async () => {
+        if (!window.api || typeof window.api.getScraperDownloadQueueStatus !== 'function') {
+            setActiveDownloadJobCount(0);
+            return;
+        }
+
+        try {
+            const queueStatus = await window.api.getScraperDownloadQueueStatus();
+            setActiveDownloadJobCount(Number(queueStatus?.counts?.active || 0));
+        } catch (err) {
+            console.warn('Failed to load scraper download queue status', err);
         }
     }, []);
 
@@ -276,6 +292,15 @@ const MangaManager: React.FC = () => {
         };
     }, [getCurrentScrollTop]);
 
+    useEffect(() => {
+        void loadDownloadQueueSummary();
+        const timer = window.setInterval(() => {
+            void loadDownloadQueueSummary();
+        }, 1200);
+
+        return () => window.clearInterval(timer);
+    }, [loadDownloadQueueSummary]);
+
     const onAddClick = async () => {
         // Use native folder picker to ensure we get an absolute path
         let pickedPath: string | null = null;
@@ -333,6 +358,9 @@ const MangaManager: React.FC = () => {
 
     const isLibraryView = activeViewId === 'library';
     const isBookmarksView = activeViewId === 'bookmarks';
+    const downloadQueueButtonLabel = activeDownloadJobCount > 0
+        ? `Telechargements (${activeDownloadJobCount})`
+        : 'Telechargements';
 
     useEffect(() => {
         if (paramsLoading) {
@@ -609,6 +637,9 @@ const MangaManager: React.FC = () => {
                             </button>
                         </>
                     ) : null}
+                    <button onClick={() => openModal(buildScraperDownloadQueueModal())}>
+                        {downloadQueueButtonLabel}
+                    </button>
                     <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
                     <button onClick={() => openModal(buildScraperConfigModal())}>Scrappers</button>
                     {isLibraryView ? (

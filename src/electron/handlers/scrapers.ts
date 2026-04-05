@@ -1,12 +1,13 @@
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { app, IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import {
   DownloadScraperMangaRequest,
   DownloadScraperMangaResult,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  QueueScraperDownloadResult,
   RemoveScraperBookmarkRequest,
   SaveScraperBookmarkRequest,
   SaveScraperGlobalConfigRequest,
@@ -16,6 +17,10 @@ import {
   ScraperBookmarkRecord,
   ScraperBookmarkMetadataField,
   ScraperChapterItem,
+  ScraperDownloadJob,
+  ScraperDownloadJobStatus,
+  ScraperDownloadQueueCounts,
+  ScraperDownloadQueueStatus,
   ScraperDetailsDerivedValueResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
@@ -46,6 +51,41 @@ import { getTags } from './tags';
 const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
 const DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME = 'Manga Helper Library';
 const MAX_SCRAPER_DOWNLOAD_PAGES = 4000;
+
+type InternalScraperDownloadJob = ScraperDownloadJob & {
+  pageUrls: string[];
+  defaultTagIds: string[];
+  defaultLanguage?: string;
+  autoAssignSeriesOnChapterDownload: boolean;
+  seriesTitle: string;
+  thumbnailUrl?: string;
+  cancelRequested?: boolean;
+  abortController?: AbortController | null;
+};
+
+type NormalizedScraperDownloadRequest = {
+  title: string;
+  pageUrls: string[];
+  refererUrl?: string;
+  scraperId?: string;
+  scraperName?: string;
+  sourceUrl?: string;
+  defaultTagIds: string[];
+  defaultLanguage?: string;
+  autoAssignSeriesOnChapterDownload: boolean;
+  seriesTitle: string;
+  chapterLabel: string;
+  thumbnailUrl?: string;
+};
+
+type CompletedScraperDownload = {
+  result: DownloadScraperMangaResult;
+  notifySeriesUpdated: boolean;
+};
+
+const scraperDownloadJobs = new Map<string, InternalScraperDownloadJob>();
+let scraperDownloadOrder: string[] = [];
+let scraperDownloadRunnerPromise: Promise<void> | null = null;
 
 const sanitizeAccessValidation = (
   validation: Partial<ScraperAccessValidationResult> | null | undefined,
@@ -743,6 +783,429 @@ const buildDownloadHeaders = (refererUrl?: string): HeadersInit => {
   return headers;
 };
 
+class ScraperDownloadCancelledError extends Error {
+  constructor() {
+    super('Le telechargement a ete annule.');
+    this.name = 'ScraperDownloadCancelledError';
+  }
+}
+
+const cloneScraperDownloadJob = (job: InternalScraperDownloadJob): ScraperDownloadJob => {
+  const {
+    pageUrls: _pageUrls,
+    defaultTagIds: _defaultTagIds,
+    defaultLanguage: _defaultLanguage,
+    autoAssignSeriesOnChapterDownload: _autoAssignSeriesOnChapterDownload,
+    seriesTitle: _seriesTitle,
+    thumbnailUrl: _thumbnailUrl,
+    cancelRequested: _cancelRequested,
+    abortController: _abortController,
+    ...snapshot
+  } = job;
+
+  return {
+    ...snapshot,
+    message: snapshot.message ?? null,
+    error: snapshot.error ?? null,
+  };
+};
+
+const touchScraperDownloadJob = (
+  job: InternalScraperDownloadJob,
+  patch: Partial<InternalScraperDownloadJob>,
+): InternalScraperDownloadJob => {
+  Object.assign(job, patch, { updatedAt: new Date().toISOString() });
+  scraperDownloadJobs.set(job.id, job);
+  return job;
+};
+
+const notifyScraperDownloadChannel = (channel: 'mangas-updated' | 'series-updated') => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel);
+  }
+};
+
+const isScraperDownloadTerminalStatus = (status: ScraperDownloadJobStatus): boolean => (
+  status === 'completed' || status === 'error' || status === 'cancelled'
+);
+
+const isScraperDownloadAbortError = (error: unknown): boolean => (
+  error instanceof ScraperDownloadCancelledError
+  || (error instanceof Error && error.name === 'AbortError')
+);
+
+const ensureScraperDownloadNotCancelled = (job: InternalScraperDownloadJob) => {
+  if (job.cancelRequested || job.status === 'cancelled') {
+    throw new ScraperDownloadCancelledError();
+  }
+};
+
+const cleanupScraperDownloadFolder = async (folderPath?: string) => {
+  if (!folderPath) {
+    return;
+  }
+
+  try {
+    await fs.rm(folderPath, { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup only.
+  }
+};
+
+const normalizeScraperDownloadRequest = (
+  request: DownloadScraperMangaRequest,
+): NormalizedScraperDownloadRequest => {
+  const title = String(request.title || '').trim();
+  const rawPageUrls = Array.isArray(request.pageUrls)
+    ? request.pageUrls
+      .map((pageUrl) => String(pageUrl || '').trim())
+      .filter((pageUrl) => pageUrl.length > 0)
+    : [];
+  const refererUrl = typeof request.refererUrl === 'string' && request.refererUrl.trim().length > 0
+    ? request.refererUrl.trim()
+    : undefined;
+  const scraperId = typeof request.scraperId === 'string' && request.scraperId.trim().length > 0
+    ? request.scraperId.trim()
+    : undefined;
+  const scraperName = typeof request.scraperName === 'string' && request.scraperName.trim().length > 0
+    ? request.scraperName.trim()
+    : undefined;
+  const sourceUrl = typeof request.sourceUrl === 'string' && request.sourceUrl.trim().length > 0
+    ? request.sourceUrl.trim()
+    : undefined;
+  const defaultTagIds = sanitizeStringList(request.defaultTagIds);
+  const defaultLanguage = String(request.defaultLanguage ?? '').trim().toLowerCase() || undefined;
+  const autoAssignSeriesOnChapterDownload = Boolean(request.autoAssignSeriesOnChapterDownload);
+  const seriesTitle = String(request.seriesTitle ?? '').trim();
+  const chapterLabel = String(request.chapterLabel ?? '').trim();
+  const thumbnailUrl = typeof request.thumbnailUrl === 'string' && request.thumbnailUrl.trim().length > 0
+    ? request.thumbnailUrl.trim()
+    : undefined;
+
+  if (!title) {
+    throw new Error('Le titre du manga est requis pour le telechargement.');
+  }
+
+  if (!rawPageUrls.length) {
+    throw new Error('Aucune page a telecharger.');
+  }
+
+  if (rawPageUrls.length > MAX_SCRAPER_DOWNLOAD_PAGES) {
+    throw new Error(`Le telechargement est limite a ${MAX_SCRAPER_DOWNLOAD_PAGES} pages pour cette version.`);
+  }
+
+  return {
+    title,
+    pageUrls: Array.from(new Set(rawPageUrls)),
+    refererUrl,
+    scraperId,
+    scraperName,
+    sourceUrl,
+    defaultTagIds,
+    defaultLanguage,
+    autoAssignSeriesOnChapterDownload,
+    seriesTitle,
+    chapterLabel,
+    thumbnailUrl,
+  };
+};
+
+const createScraperDownloadJob = (
+  request: NormalizedScraperDownloadRequest,
+): InternalScraperDownloadJob => {
+  const now = new Date().toISOString();
+
+  return {
+    id: randomUUID(),
+    title: request.title,
+    status: 'queued',
+    mode: request.chapterLabel ? 'chapter' : 'full_manga',
+    scraperId: request.scraperId,
+    scraperName: request.scraperName,
+    sourceUrl: request.sourceUrl,
+    refererUrl: request.refererUrl,
+    chapterLabel: request.chapterLabel || undefined,
+    createdAt: now,
+    updatedAt: now,
+    totalPages: request.pageUrls.length,
+    downloadedPages: 0,
+    downloadedCount: 0,
+    message: 'En attente',
+    error: null,
+    pageUrls: request.pageUrls,
+    defaultTagIds: request.defaultTagIds,
+    defaultLanguage: request.defaultLanguage,
+    autoAssignSeriesOnChapterDownload: request.autoAssignSeriesOnChapterDownload,
+    seriesTitle: request.seriesTitle,
+    thumbnailUrl: request.thumbnailUrl,
+    cancelRequested: false,
+    abortController: null,
+  };
+};
+
+const getNextQueuedScraperDownloadJob = (): InternalScraperDownloadJob | null => (
+  scraperDownloadOrder
+    .map((jobId) => scraperDownloadJobs.get(jobId))
+    .find((job): job is InternalScraperDownloadJob => job != null && job.status === 'queued')
+  ?? null
+);
+
+const buildScraperDownloadQueueCounts = (jobs: ScraperDownloadJob[]): ScraperDownloadQueueCounts => (
+  jobs.reduce((counts, job) => {
+    counts.total += 1;
+    counts[job.status] += 1;
+    if (!isScraperDownloadTerminalStatus(job.status)) {
+      counts.active += 1;
+    }
+    return counts;
+  }, {
+    total: 0,
+    active: 0,
+    queued: 0,
+    running: 0,
+    completed: 0,
+    error: 0,
+    cancelled: 0,
+  } satisfies ScraperDownloadQueueCounts)
+);
+
+const finalizeScraperDownloadJob = (
+  job: InternalScraperDownloadJob,
+  patch: Partial<InternalScraperDownloadJob>,
+) => {
+  touchScraperDownloadJob(job, {
+    ...patch,
+    abortController: null,
+    currentPage: undefined,
+    currentPageUrl: undefined,
+    completedAt: patch.completedAt ?? new Date().toISOString(),
+  });
+};
+
+const executeScraperDownloadJob = async (
+  job: InternalScraperDownloadJob,
+): Promise<CompletedScraperDownload> => {
+  const libraryRoot = await getConfiguredLibraryRoot();
+  await fs.mkdir(libraryRoot, { recursive: true });
+
+  ensureScraperDownloadNotCancelled(job);
+
+  const folderPath = await getUniqueFolderPath(libraryRoot, job.title);
+  await fs.mkdir(folderPath, { recursive: true });
+  touchScraperDownloadJob(job, {
+    folderPath,
+    libraryRoot,
+    message: 'Preparation du dossier local',
+  });
+
+  const fileNameWidth = Math.max(3, String(job.pageUrls.length - 1).length);
+
+  try {
+    for (let index = 0; index < job.pageUrls.length; index += 1) {
+      const pageUrl = job.pageUrls[index];
+      ensureScraperDownloadNotCancelled(job);
+
+      touchScraperDownloadJob(job, {
+        currentPage: index + 1,
+        currentPageUrl: pageUrl,
+        message: `Telechargement de la page ${index + 1}/${job.totalPages}`,
+      });
+
+      const response = await fetch(pageUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: buildDownloadHeaders(job.refererUrl),
+        signal: job.abortController?.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`La page ${index + 1} a repondu avec le code HTTP ${response.status}.`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!String(contentType || '').toLowerCase().startsWith('image/')) {
+        throw new Error(`La page ${index + 1} ne ressemble pas a une image telechargeable.`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const extension = inferExtensionFromUrl(response.url || pageUrl, contentType);
+      const fileName = `${String(index).padStart(fileNameWidth, '0')}${extension}`;
+      const targetFilePath = path.join(folderPath, fileName);
+
+      await fs.writeFile(targetFilePath, buffer);
+      touchScraperDownloadJob(job, {
+        downloadedPages: index + 1,
+        downloadedCount: index + 1,
+        message: `Page ${index + 1}/${job.totalPages} telechargee`,
+      });
+    }
+
+    ensureScraperDownloadNotCancelled(job);
+    touchScraperDownloadJob(job, {
+      message: 'Ajout du manga a la bibliotheque',
+    });
+    ensureScraperDownloadNotCancelled(job);
+  } catch (error) {
+    await cleanupScraperDownloadFolder(folderPath);
+    throw error;
+  }
+
+  const availableTags = await getTags();
+  const availableTagIds = new Set(
+    Array.isArray(availableTags)
+      ? availableTags.map((tag) => String(tag?.id ?? '').trim()).filter((tagId) => tagId.length > 0)
+      : [],
+  );
+  const defaultTagIds = job.defaultTagIds.filter((tagId) => availableTagIds.has(tagId));
+  const linkedSeries = job.autoAssignSeriesOnChapterDownload && job.seriesTitle && job.chapterLabel
+    ? await ensureSeriesByTitle(job.seriesTitle)
+    : null;
+  const chapterValue = job.chapterLabel
+    ? extractChapterValueFromLabel(job.chapterLabel)
+    : undefined;
+
+  const createdManga = await addManga(undefined as any, {
+    id: randomUUID(),
+    title: job.title,
+    path: folderPath,
+    createdAt: new Date().toISOString(),
+    authorIds: [],
+    tagIds: defaultTagIds,
+    language: job.defaultLanguage,
+    seriesId: linkedSeries?.id ?? null,
+    chapters: linkedSeries ? (chapterValue || job.chapterLabel) : undefined,
+    sourceKind: job.scraperId ? 'scraper' : undefined,
+    scraperId: job.scraperId ?? null,
+    sourceUrl: job.sourceUrl ?? job.refererUrl ?? null,
+  });
+
+  const inserted = Array.isArray(createdManga)
+    ? createdManga[createdManga.length - 1]
+    : null;
+
+  if (!inserted?.id) {
+    throw new Error('Le manga a ete telecharge, mais son ajout a la bibliotheque a echoue.');
+  }
+
+  if (job.thumbnailUrl) {
+    try {
+      const thumbnailResponse = await fetch(job.thumbnailUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: buildDownloadHeaders(job.refererUrl),
+      });
+
+      if (thumbnailResponse.ok && String(thumbnailResponse.headers.get('content-type') || '').toLowerCase().startsWith('image/')) {
+        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
+        const thumbnailPath = await createStoredThumbnailForMangaFromBuffer(String(inserted.id), thumbnailBuffer);
+
+        if (thumbnailPath) {
+          await patchMangaById(String(inserted.id), { thumbnailPath });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to override scraper download thumbnail from chapter image', {
+        mangaId: inserted.id,
+        thumbnailUrl: job.thumbnailUrl,
+        error,
+      });
+    }
+  }
+
+  return {
+    result: {
+      ok: true,
+      mangaId: String(inserted.id),
+      folderPath,
+      libraryRoot,
+      downloadedCount: job.pageUrls.length,
+    },
+    notifySeriesUpdated: Boolean(linkedSeries),
+  };
+};
+
+async function runQueuedScraperDownloadJob(job: InternalScraperDownloadJob): Promise<void> {
+  if (job.status !== 'queued') {
+    return;
+  }
+
+  touchScraperDownloadJob(job, {
+    status: 'running',
+    startedAt: job.startedAt ?? new Date().toISOString(),
+    error: null,
+    message: 'Preparation du telechargement',
+  });
+  job.abortController = new AbortController();
+
+  try {
+    const completed = await executeScraperDownloadJob(job);
+
+    finalizeScraperDownloadJob(job, {
+      status: 'completed',
+      downloadedPages: completed.result.downloadedCount,
+      downloadedCount: completed.result.downloadedCount,
+      folderPath: completed.result.folderPath,
+      libraryRoot: completed.result.libraryRoot,
+      mangaId: completed.result.mangaId,
+      message: `${completed.result.downloadedCount} page(s) telechargee(s)`,
+      error: null,
+      cancelRequested: false,
+    });
+
+    notifyScraperDownloadChannel('mangas-updated');
+    if (completed.notifySeriesUpdated) {
+      notifyScraperDownloadChannel('series-updated');
+    }
+  } catch (error) {
+    if (isScraperDownloadAbortError(error) || job.cancelRequested) {
+      finalizeScraperDownloadJob(job, {
+        status: 'cancelled',
+        message: 'Telechargement annule',
+        error: null,
+        cancelRequested: true,
+      });
+      return;
+    }
+
+    finalizeScraperDownloadJob(job, {
+      status: 'error',
+      message: 'Telechargement en erreur',
+      error: error instanceof Error ? error.message : 'Le telechargement a echoue.',
+      cancelRequested: false,
+    });
+  }
+}
+
+const scheduleScraperDownloadRun = () => {
+  if (scraperDownloadRunnerPromise) {
+    return;
+  }
+
+  scraperDownloadRunnerPromise = (async () => {
+    while (true) {
+      const nextJob = getNextQueuedScraperDownloadJob();
+      if (!nextJob) {
+        break;
+      }
+
+      try {
+        await runQueuedScraperDownloadJob(nextJob);
+      } catch (error) {
+        console.error('Unexpected scraper download queue failure', {
+          jobId: nextJob.id,
+          error,
+        });
+      }
+    }
+  })()
+    .finally(() => {
+      scraperDownloadRunnerPromise = null;
+      if (getNextQueuedScraperDownloadJob()) {
+        scheduleScraperDownloadRun();
+      }
+    });
+};
+
 const buildContentTypeWarning = (
   kind: ScraperAccessValidationRequest['kind'],
   contentType: string | undefined,
@@ -1035,158 +1498,82 @@ export async function fetchScraperDocument(
   }
 }
 
-export async function downloadScraperManga(
+export async function queueScraperDownload(
   _event: IpcMainInvokeEvent,
   request: DownloadScraperMangaRequest,
-): Promise<DownloadScraperMangaResult> {
-  const title = String(request.title || '').trim();
-  const pageUrls = Array.isArray(request.pageUrls)
-    ? request.pageUrls
-      .map((pageUrl) => String(pageUrl || '').trim())
-      .filter((pageUrl) => pageUrl.length > 0)
-    : [];
-  const refererUrl = typeof request.refererUrl === 'string' && request.refererUrl.trim().length > 0
-    ? request.refererUrl.trim()
-    : undefined;
-  const scraperId = typeof request.scraperId === 'string' && request.scraperId.trim().length > 0
-    ? request.scraperId.trim()
-    : undefined;
-  const sourceUrl = typeof request.sourceUrl === 'string' && request.sourceUrl.trim().length > 0
-    ? request.sourceUrl.trim()
-    : undefined;
-  const requestedDefaultTagIds = sanitizeStringList(request.defaultTagIds);
-  const requestedDefaultLanguage = String(request.defaultLanguage ?? '').trim().toLowerCase() || undefined;
-  const autoAssignSeriesOnChapterDownload = Boolean(request.autoAssignSeriesOnChapterDownload);
-  const seriesTitle = String(request.seriesTitle ?? '').trim();
-  const chapterLabel = String(request.chapterLabel ?? '').trim();
-  const thumbnailUrl = typeof request.thumbnailUrl === 'string' && request.thumbnailUrl.trim().length > 0
-    ? request.thumbnailUrl.trim()
-    : undefined;
+): Promise<QueueScraperDownloadResult> {
+  const normalizedRequest = normalizeScraperDownloadRequest(request);
+  const job = createScraperDownloadJob(normalizedRequest);
 
-  if (!title) {
-    throw new Error('Le titre du manga est requis pour le telechargement.');
-  }
-
-  if (!pageUrls.length) {
-    throw new Error('Aucune page a telecharger.');
-  }
-
-  if (pageUrls.length > MAX_SCRAPER_DOWNLOAD_PAGES) {
-    throw new Error(`Le telechargement est limite a ${MAX_SCRAPER_DOWNLOAD_PAGES} pages pour cette version.`);
-  }
-
-  const uniquePageUrls = Array.from(new Set(pageUrls));
-  const libraryRoot = await getConfiguredLibraryRoot();
-  await fs.mkdir(libraryRoot, { recursive: true });
-
-  const folderPath = await getUniqueFolderPath(libraryRoot, title);
-  await fs.mkdir(folderPath, { recursive: true });
-
-  const fileNameWidth = Math.max(3, String(uniquePageUrls.length - 1).length);
-
-  try {
-    for (let index = 0; index < uniquePageUrls.length; index += 1) {
-      const pageUrl = uniquePageUrls[index];
-      const response = await fetch(pageUrl, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: buildDownloadHeaders(refererUrl),
-      });
-
-      if (!response.ok) {
-        throw new Error(`La page ${index + 1} a repondu avec le code HTTP ${response.status}.`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!String(contentType || '').toLowerCase().startsWith('image/')) {
-        throw new Error(`La page ${index + 1} ne ressemble pas a une image telechargeable.`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const extension = inferExtensionFromUrl(response.url || pageUrl, contentType);
-      const fileName = `${String(index).padStart(fileNameWidth, '0')}${extension}`;
-      const targetFilePath = path.join(folderPath, fileName);
-
-      await fs.writeFile(targetFilePath, buffer);
-    }
-  } catch (error) {
-    try {
-      await fs.rm(folderPath, { recursive: true, force: true });
-    } catch {
-      // Best effort cleanup only.
-    }
-
-    throw error;
-  }
-
-  const availableTags = await getTags();
-  const availableTagIds = new Set(
-    Array.isArray(availableTags)
-      ? availableTags.map((tag) => String(tag?.id ?? '').trim()).filter((tagId) => tagId.length > 0)
-      : [],
-  );
-  const defaultTagIds = requestedDefaultTagIds.filter((tagId) => availableTagIds.has(tagId));
-  const linkedSeries = autoAssignSeriesOnChapterDownload && seriesTitle && chapterLabel
-    ? await ensureSeriesByTitle(seriesTitle)
-    : null;
-  const chapterValue = chapterLabel
-    ? extractChapterValueFromLabel(chapterLabel)
-    : undefined;
-
-  const createdManga = await addManga(undefined as any, {
-    id: randomUUID(),
-    title,
-    path: folderPath,
-    createdAt: new Date().toISOString(),
-    authorIds: [],
-    tagIds: defaultTagIds,
-    language: requestedDefaultLanguage,
-    seriesId: linkedSeries?.id ?? null,
-    chapters: linkedSeries ? (chapterValue || chapterLabel) : undefined,
-    sourceKind: scraperId ? 'scraper' : undefined,
-    scraperId: scraperId ?? null,
-    sourceUrl: sourceUrl ?? refererUrl ?? null,
-  });
-
-  const inserted = Array.isArray(createdManga)
-    ? createdManga[createdManga.length - 1]
-    : null;
-
-  if (!inserted?.id) {
-    throw new Error('Le manga a ete telecharge, mais son ajout a la bibliotheque a echoue.');
-  }
-
-  if (thumbnailUrl) {
-    try {
-      const thumbnailResponse = await fetch(thumbnailUrl, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: buildDownloadHeaders(refererUrl),
-      });
-
-      if (thumbnailResponse.ok && String(thumbnailResponse.headers.get('content-type') || '').toLowerCase().startsWith('image/')) {
-        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
-        const thumbnailPath = await createStoredThumbnailForMangaFromBuffer(String(inserted.id), thumbnailBuffer);
-
-        if (thumbnailPath) {
-          await patchMangaById(String(inserted.id), { thumbnailPath });
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to override scraper download thumbnail from chapter image', {
-        mangaId: inserted.id,
-        thumbnailUrl,
-        error,
-      });
-    }
-  }
+  scraperDownloadJobs.set(job.id, job);
+  scraperDownloadOrder = scraperDownloadOrder.filter((jobId) => jobId !== job.id);
+  scraperDownloadOrder.push(job.id);
+  scheduleScraperDownloadRun();
 
   return {
     ok: true,
-    mangaId: String(inserted.id),
-    folderPath,
-    libraryRoot,
-    downloadedCount: uniquePageUrls.length,
+    job: cloneScraperDownloadJob(job),
+    status: await getScraperDownloadQueueStatus(),
+  };
+}
+
+export async function getScraperDownloadQueueStatus(): Promise<ScraperDownloadQueueStatus> {
+  const jobs = scraperDownloadOrder
+    .map((jobId) => scraperDownloadJobs.get(jobId))
+    .filter((job): job is InternalScraperDownloadJob => Boolean(job))
+    .map((job) => cloneScraperDownloadJob(job));
+
+  return {
+    jobs,
+    counts: buildScraperDownloadQueueCounts(jobs),
+  };
+}
+
+export async function cancelScraperDownloadJob(
+  _event: IpcMainInvokeEvent,
+  jobId: string,
+): Promise<ScraperDownloadJob> {
+  const job = scraperDownloadJobs.get(String(jobId));
+  if (!job) {
+    throw new Error('Job de telechargement introuvable.');
+  }
+
+  if (isScraperDownloadTerminalStatus(job.status)) {
+    return cloneScraperDownloadJob(job);
+  }
+
+  const shouldFinishImmediately = job.status === 'queued';
+  touchScraperDownloadJob(job, {
+    cancelRequested: true,
+    status: shouldFinishImmediately ? 'cancelled' : job.status,
+    message: 'Annulation demandee',
+    completedAt: shouldFinishImmediately ? new Date().toISOString() : job.completedAt,
+  });
+
+  job.abortController?.abort();
+  return cloneScraperDownloadJob(job);
+}
+
+export async function cancelAllScraperDownloadJobs() {
+  const activeJobs = scraperDownloadOrder
+    .map((jobId) => scraperDownloadJobs.get(jobId))
+    .filter((job): job is InternalScraperDownloadJob => Boolean(job))
+    .filter((job) => !isScraperDownloadTerminalStatus(job.status));
+
+  for (const job of activeJobs) {
+    const shouldFinishImmediately = job.status === 'queued';
+    touchScraperDownloadJob(job, {
+      cancelRequested: true,
+      status: shouldFinishImmediately ? 'cancelled' : job.status,
+      message: 'Annulation demandee',
+      completedAt: shouldFinishImmediately ? new Date().toISOString() : job.completedAt,
+    });
+    job.abortController?.abort();
+  }
+
+  return {
+    cancelledCount: activeJobs.length,
+    status: await getScraperDownloadQueueStatus(),
   };
 }
 
