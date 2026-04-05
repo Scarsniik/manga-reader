@@ -1,567 +1,47 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Field } from '@/renderer/components/utils/Form/types';
-import RadioField from '@/renderer/components/utils/Form/fields/RadioField';
-import TextField from '@/renderer/components/utils/Form/fields/TextField';
 import {
-  buildScraperTemplateUrl,
   FetchScraperDocumentResult,
-  resolveScraperUrl,
-  ScraperDetailsDerivedValueConfig,
   ScraperDetailsDerivedValueResult,
-  ScraperDetailsFeatureConfig,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperRecord,
 } from '@/shared/scraper';
+import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
+import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
+import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import DetailsDerivedValuesSection from '@/renderer/components/ScraperConfig/details/DetailsDerivedValuesSection';
+import FakeDetailsPreview from '@/renderer/components/ScraperConfig/details/FakeDetailsPreview';
+import {
+  buildDetailsConfig,
+  buildDocumentFailure,
+  buildPreviewFromValidation,
+  buildValidationPresentation,
+  createDerivedValueFormItem,
+  createFormStateFromConfig,
+  DetailsFormState,
+  DerivedValueFormItem,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  getInitialConfig,
+  getSaveFieldErrors,
+  getValidationFieldErrors,
+  isFieldKey,
+  resolveTestTargetUrl,
+  SELECTOR_FIELDS,
+  TEST_URL_FIELD,
+  TEST_VALUE_FIELD,
+  URL_STRATEGY_FIELD,
+  URL_TEMPLATE_FIELD,
+} from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
 
 type Props = {
   scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
   onScraperChange: (scraper: ScraperRecord) => void;
-};
-
-type DerivedValueFormItem = ScraperDetailsDerivedValueConfig & {
-  draftId: string;
-};
-
-type DetailsFormState = Omit<ScraperDetailsFeatureConfig, 'derivedValues'> & {
-  derivedValues: DerivedValueFormItem[];
-};
-
-type FakeDetailsPreview = {
-  title?: string;
-  cover?: string;
-  description?: string;
-  authors?: string;
-  tags?: string;
-  status?: string;
-  derivedValues: Array<{ key: string; value: string }>;
-};
-
-const URL_STRATEGY_FIELD: Field = {
-  name: 'urlStrategy',
-  label: 'Strategie de construction de l\'URL',
-  type: 'radio',
-  layout: 'cards',
-  required: true,
-  options: [
-    {
-      label: 'Depuis une URL',
-      value: 'result_url',
-      description: 'La fiche sera ouverte a partir d\'une URL deja connue, par exemple depuis la recherche.',
-    },
-    {
-      label: 'Depuis un template',
-      value: 'template',
-      description: 'La fiche sera construite a partir d\'un pattern du type /manga/{{id}} ou /title/{{slug}}.',
-    },
-  ],
-};
-
-const URL_TEMPLATE_FIELD: Field = {
-  name: 'urlTemplate',
-  label: 'Template d\'URL',
-  type: 'text',
-  placeholder: 'Exemple : /manga/{{id}}/ ou /works/{{slug}}',
-};
-
-const TEST_URL_FIELD: Field = {
-  name: 'testUrl',
-  label: 'URL ou chemin de test',
-  type: 'text',
-  placeholder: 'Exemple : /manga/123 ou https://momoniji.com/...',
-};
-
-const TEST_VALUE_FIELD: Field = {
-  name: 'testValue',
-  label: 'Valeur de test',
-  type: 'text',
-  placeholder: 'Exemple : 123, one-piece ou autre valeur utile au template',
-};
-
-const SELECTOR_FIELDS: Field[] = [
-  {
-    name: 'titleSelector',
-    label: 'Selecteur du titre',
-    type: 'text',
-    required: true,
-    placeholder: 'Exemple : h1',
-  },
-  {
-    name: 'coverSelector',
-    label: 'Selecteur de la couverture',
-    type: 'text',
-    placeholder: 'Exemple : .cover img@src',
-  },
-  {
-    name: 'descriptionSelector',
-    label: 'Selecteur de la description',
-    type: 'text',
-    placeholder: 'Exemple : .entry-content p',
-  },
-  {
-    name: 'authorsSelector',
-    label: 'Selecteur des auteurs',
-    type: 'text',
-    placeholder: 'Exemple : .meta .author a',
-  },
-  {
-    name: 'tagsSelector',
-    label: 'Selecteur des tags',
-    type: 'text',
-    placeholder: 'Exemple : .tagcloud a',
-  },
-  {
-    name: 'statusSelector',
-    label: 'Selecteur du statut',
-    type: 'text',
-    placeholder: 'Exemple : .status',
-  },
-];
-
-const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
-  title: 'Titre',
-  cover: 'Couverture',
-  description: 'Description',
-  authors: 'Auteurs',
-  tags: 'Tags',
-  status: 'Statut',
-  pages: 'Pages',
-};
-
-const DERIVED_VALUE_SOURCE_OPTIONS = [
-  { value: 'field', label: 'Champ deja extrait' },
-  { value: 'selector', label: 'Selecteur personnalise' },
-  { value: 'requested_url', label: 'URL demandee' },
-  { value: 'final_url', label: 'URL finale' },
-] as const;
-
-const DERIVED_VALUE_FIELD_OPTIONS = [
-  { value: 'title', label: 'Titre' },
-  { value: 'cover', label: 'Couverture' },
-  { value: 'description', label: 'Description' },
-  { value: 'authors', label: 'Auteurs' },
-  { value: 'tags', label: 'Tags' },
-  { value: 'status', label: 'Statut' },
-] as const;
-
-const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
-  urlStrategy: 'result_url',
-  urlTemplate: '',
-  testUrl: '',
-  testValue: '',
-  titleSelector: '',
-  coverSelector: '',
-  descriptionSelector: '',
-  authorsSelector: '',
-  tagsSelector: '',
-  statusSelector: '',
-  derivedValues: [],
-};
-
-const DERIVED_VALUE_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
-};
-
-const truncateValue = (value: string, max = 160): string => (
-  value.length > max ? `${value.slice(0, max - 3)}...` : value
-);
-
-const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const isFieldKey = (value: unknown): value is ScraperFeatureValidationCheck['key'] => (
-  ['title', 'cover', 'description', 'authors', 'tags', 'status'].includes(String(value))
-);
-
-const createDerivedValueFormItem = (
-  value?: Partial<ScraperDetailsDerivedValueConfig>,
-): DerivedValueFormItem => ({
-  draftId: createDraftId(),
-  key: trimOptional(value?.key) ?? '',
-  sourceType: value?.sourceType === 'selector'
-    || value?.sourceType === 'requested_url'
-    || value?.sourceType === 'final_url'
-    ? value.sourceType
-    : 'field',
-  sourceField: isFieldKey(value?.sourceField) ? value.sourceField : undefined,
-  selector: trimOptionalSelector(value?.selector),
-  pattern: trimOptional(value?.pattern),
-});
-
-const buildDerivedValueConfig = (
-  value: Partial<ScraperDetailsDerivedValueConfig>,
-): ScraperDetailsDerivedValueConfig => ({
-  key: trimOptional(value.key) ?? '',
-  sourceType: value.sourceType === 'selector'
-    || value.sourceType === 'requested_url'
-    || value.sourceType === 'final_url'
-    ? value.sourceType
-    : 'field',
-  sourceField: isFieldKey(value.sourceField) ? value.sourceField : undefined,
-  selector: trimOptionalSelector(value.selector),
-  pattern: trimOptional(value.pattern),
-});
-
-const hasDerivedValueContent = (value: ScraperDetailsDerivedValueConfig): boolean => (
-  Boolean(value.key || value.selector || value.pattern || value.sourceField || value.sourceType !== 'field')
-);
-
-const getConfiguredDerivedValueItems = (
-  values: DerivedValueFormItem[],
-): Array<{ draftId: string; config: ScraperDetailsDerivedValueConfig }> => values
-  .map((value) => ({
-    draftId: value.draftId,
-    config: buildDerivedValueConfig(value),
-  }))
-  .filter(({ config }) => hasDerivedValueContent(config));
-
-const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDetailsFeatureConfig => ({
-  urlStrategy: values.urlStrategy === 'template' ? 'template' : 'result_url',
-  urlTemplate: trimOptional(values.urlTemplate),
-  testUrl: trimOptional(values.testUrl),
-  testValue: trimOptional(values.testValue),
-  titleSelector: normalizeSelectorInput(String(values.titleSelector ?? '')),
-  coverSelector: trimOptionalSelector(values.coverSelector),
-  descriptionSelector: trimOptionalSelector(values.descriptionSelector),
-  authorsSelector: trimOptionalSelector(values.authorsSelector),
-  tagsSelector: trimOptionalSelector(values.tagsSelector),
-  statusSelector: trimOptionalSelector(values.statusSelector),
-  derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
-});
-
-const getConfigSignature = (config: ScraperDetailsFeatureConfig): string => JSON.stringify(config);
-
-const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDetailsFeatureConfig => {
-  const raw = (feature.config ?? {}) as Record<string, unknown>;
-
-  return {
-    urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'result_url',
-    urlTemplate: trimOptional(raw.urlTemplate),
-    testUrl: trimOptional(
-      typeof raw.testUrl === 'string'
-        ? raw.testUrl
-        : typeof raw.exampleUrl === 'string'
-          ? raw.exampleUrl
-          : '',
-    ),
-    testValue: trimOptional(raw.testValue),
-    titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
-    coverSelector: trimOptionalSelector(raw.coverSelector),
-    descriptionSelector: trimOptionalSelector(raw.descriptionSelector),
-    authorsSelector: trimOptionalSelector(raw.authorsSelector),
-    tagsSelector: trimOptionalSelector(raw.tagsSelector),
-    statusSelector: trimOptionalSelector(raw.statusSelector),
-    derivedValues: Array.isArray(raw.derivedValues)
-      ? raw.derivedValues
-        .map((value) => buildDerivedValueConfig(value as Partial<ScraperDetailsDerivedValueConfig>))
-        .filter((value) => hasDerivedValueContent(value))
-      : DEFAULT_DETAILS_CONFIG.derivedValues,
-  };
-};
-
-const createFormStateFromConfig = (config: ScraperDetailsFeatureConfig): DetailsFormState => ({
-  ...config,
-  derivedValues: config.derivedValues.map((value) => createDerivedValueFormItem(value)),
-});
-
-const parseSelectorExpression = (input: string): { selector: string; attribute?: string } => {
-  const trimmed = normalizeSelectorInput(input);
-  const atIndex = trimmed.lastIndexOf('@');
-
-  if (atIndex <= 0 || atIndex === trimmed.length - 1) {
-    return { selector: trimmed };
-  }
-
-  return {
-    selector: trimmed.slice(0, atIndex).trim(),
-    attribute: trimmed.slice(atIndex + 1).trim(),
-  };
-};
-
-const extractSelectorValues = (doc: Document, input: string): string[] => {
-  const { selector, attribute } = parseSelectorExpression(input);
-  if (!selector) {
-    return [];
-  }
-
-  const elements = Array.from(doc.querySelectorAll(selector));
-  return elements
-    .map((element) => {
-      if (attribute) {
-        return element.getAttribute(attribute)?.trim() || '';
-      }
-
-      if (element.tagName === 'IMG') {
-        return element.getAttribute('src')?.trim() || '';
-      }
-
-      return element.textContent?.trim() || '';
-    })
-    .filter(Boolean);
-};
-
-const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-});
-
-const buildValidationPresentation = (
-  validationResult: ScraperFeatureValidationResult,
-): {
-  summary: string;
-  details: string[];
-  warning?: string;
-} => {
-  const details: string[] = [];
-  const warnings: string[] = [];
-  const errors: string[] = [];
-
-  if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
-  }
-
-  if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
-  }
-
-  if (typeof validationResult.status === 'number') {
-    details.push(`Code HTTP : ${validationResult.status}`);
-  }
-
-  if (validationResult.contentType) {
-    details.push(`Content-Type : ${validationResult.contentType}`);
-    if (!validationResult.contentType.toLowerCase().includes('html')) {
-      warnings.push('Le type de contenu ne ressemble pas a une page HTML.');
-    }
-  }
-
-  if (validationResult.failureCode === 'http_error') {
-    errors.push(
-      typeof validationResult.status === 'number'
-        ? `La page de test a repondu avec le code HTTP ${validationResult.status}.`
-        : 'La page de test a repondu avec une erreur HTTP.',
-    );
-  }
-
-  if (validationResult.failureCode === 'request_failed') {
-    errors.push('Impossible de recuperer la fiche de test.');
-  }
-
-  validationResult.checks.forEach((check) => {
-    const label = CHECK_LABELS[check.key];
-
-    if (check.matchedCount > 0) {
-      const sample = check.sample ? truncateValue(check.sample) : `${check.matchedCount} resultat(s)`;
-      details.push(`${label} : ${sample}`);
-      return;
-    }
-
-    if (check.issueCode === 'invalid_selector') {
-      const text = `${label} : selecteur invalide.`;
-      if (check.required) {
-        errors.push(text);
-      } else {
-        warnings.push(text);
-      }
-      return;
-    }
-
-    if (check.issueCode === 'no_match') {
-      const text = `${label} : aucun resultat trouve.`;
-      if (check.required) {
-        errors.push(text);
-      } else {
-        warnings.push(text);
-      }
-    }
-  });
-
-  validationResult.derivedValues.forEach((derivedValue) => {
-    if (derivedValue.value) {
-      details.push(`Variable {{${derivedValue.key}}} : ${truncateValue(derivedValue.value)}`);
-      return;
-    }
-
-    if (derivedValue.issueCode === 'invalid_pattern') {
-      errors.push(`Variable {{${derivedValue.key}}} : regex invalide.`);
-      return;
-    }
-
-    if (derivedValue.issueCode === 'invalid_selector') {
-      errors.push(`Variable {{${derivedValue.key}}} : selecteur source invalide.`);
-      return;
-    }
-
-    if (derivedValue.issueCode === 'missing_source') {
-      errors.push(`Variable {{${derivedValue.key}}} : aucune valeur source disponible.`);
-      return;
-    }
-
-    if (derivedValue.issueCode === 'no_match') {
-      errors.push(
-        derivedValue.pattern
-          ? `Variable {{${derivedValue.key}}} : la regex ne correspond pas a la valeur source.`
-          : `Variable {{${derivedValue.key}}} : aucune valeur source trouvee.`,
-      );
-    }
-  });
-
-  return {
-    summary: validationResult.ok
-      ? 'La fiche de test repond bien aux selecteurs fournis.'
-      : errors[0] || 'La validation de la fiche a echoue.',
-    details,
-    warning: warnings.length > 0 ? warnings.join(' ') : undefined,
-  };
-};
-
-const buildPreviewFromValidation = (
-  validationResult: ScraperFeatureValidationResult | null,
-): FakeDetailsPreview | null => {
-  if (!validationResult) {
-    return null;
-  }
-
-  const getSample = (key: ScraperFeatureValidationCheck['key']) => (
-    validationResult.checks.find((check) => check.key === key && check.matchedCount > 0)?.sample
-  );
-
-  const preview: FakeDetailsPreview = {
-    title: getSample('title'),
-    cover: getSample('cover'),
-    description: getSample('description'),
-    authors: getSample('authors'),
-    tags: getSample('tags'),
-    status: getSample('status'),
-    derivedValues: validationResult.derivedValues
-      .filter((derivedValue) => Boolean(derivedValue.value))
-      .map((derivedValue) => ({
-        key: derivedValue.key,
-        value: derivedValue.value as string,
-      })),
-  };
-
-  return Object.values(preview).some((value) => (
-    Array.isArray(value) ? value.length > 0 : Boolean(value)
-  )) ? preview : null;
-};
-
-const getSaveFieldErrors = (
-  formValues: DetailsFormState,
-  config: ScraperDetailsFeatureConfig,
-): Record<string, string> => {
-  const errors: Record<string, string> = {};
-  const configuredDerivedValues = getConfiguredDerivedValueItems(formValues.derivedValues);
-  const seenKeys = new Map<string, string[]>();
-
-  if (!config.titleSelector) {
-    errors.titleSelector = 'Le selecteur du titre est requis.';
-  }
-
-  if (config.urlStrategy === 'template' && !config.urlTemplate) {
-    errors.urlTemplate = 'Le template d\'URL est requis pour ce mode.';
-  }
-
-  configuredDerivedValues.forEach(({ draftId, config: derivedValue }) => {
-    if (!derivedValue.key) {
-      errors[`derivedValues.${draftId}.key`] = 'Le nom de variable est requis.';
-    } else if (!DERIVED_VALUE_KEY_PATTERN.test(derivedValue.key)) {
-      errors[`derivedValues.${draftId}.key`] = 'Utilise uniquement lettres, chiffres et _.';
-    }
-
-    if (derivedValue.sourceType === 'field' && !derivedValue.sourceField) {
-      errors[`derivedValues.${draftId}.sourceField`] = 'Choisis le champ source a reutiliser.';
-    }
-
-    if (derivedValue.sourceType === 'selector' && !derivedValue.selector) {
-      errors[`derivedValues.${draftId}.selector`] = 'Le selecteur source est requis.';
-    }
-
-    if (derivedValue.pattern) {
-      try {
-        new RegExp(derivedValue.pattern);
-      } catch {
-        errors[`derivedValues.${draftId}.pattern`] = 'Regex invalide.';
-      }
-    }
-
-    if (derivedValue.key) {
-      const current = seenKeys.get(derivedValue.key) ?? [];
-      current.push(draftId);
-      seenKeys.set(derivedValue.key, current);
-    }
-  });
-
-  seenKeys.forEach((draftIds, key) => {
-    if (draftIds.length < 2) {
-      return;
-    }
-
-    draftIds.forEach((draftId) => {
-      errors[`derivedValues.${draftId}.key`] = `La variable ${key} est deja definie.`;
-    });
-  });
-
-  return errors;
-};
-
-const getValidationFieldErrors = (
-  formValues: DetailsFormState,
-  config: ScraperDetailsFeatureConfig,
-): Record<string, string> => {
-  const errors = getSaveFieldErrors(formValues, config);
-
-  if (config.urlStrategy === 'result_url' && !config.testUrl) {
-    errors.testUrl = 'Une URL ou un chemin de test est requis pour valider.';
-  }
-
-  if (config.urlStrategy === 'template' && !config.testValue) {
-    errors.testValue = 'Une valeur de test est requise pour valider le template.';
-  }
-
-  return errors;
-};
-
-const resolveTestTargetUrl = (
-  baseUrl: string,
-  config: ScraperDetailsFeatureConfig,
-): string => {
-  if (config.urlStrategy === 'template') {
-    return buildScraperTemplateUrl(baseUrl, config.urlTemplate || '', config.testValue || '');
-  }
-
-  return resolveScraperUrl(baseUrl, config.testUrl || '');
 };
 
 export default function ScraperDetailsFeatureEditor({
@@ -734,33 +214,6 @@ export default function ScraperDetailsFeatureEditor({
     });
   }, []);
 
-  const renderField = useCallback((field: Field) => {
-    const value = formValues[field.name as keyof DetailsFormState] ?? '';
-    const error = fieldErrors[field.name];
-
-    return (
-      <div key={field.name} className="mh-form__field">
-        {field.label ? <label htmlFor={field.name}>{field.label}{field.required ? ' *' : ''}</label> : null}
-
-        {field.type === 'radio' ? (
-          <RadioField
-            field={field}
-            value={value}
-            onChange={handleFieldChange(field.name as Exclude<keyof DetailsFormState, 'derivedValues'>)}
-          />
-        ) : (
-          <TextField
-            field={field}
-            value={value}
-            onChange={handleFieldChange(field.name as Exclude<keyof DetailsFormState, 'derivedValues'>)}
-          />
-        )}
-
-        {error ? <div className="mh-form__field-error">{error}</div> : null}
-      </div>
-    );
-  }, [fieldErrors, formValues, handleFieldChange]);
-
   const handleValidate = useCallback(async () => {
     const config = buildDetailsConfig(formValues);
     const errors = getValidationFieldErrors(formValues, config);
@@ -812,7 +265,9 @@ export default function ScraperDetailsFeatureEditor({
         selector: string | undefined,
         required: boolean,
       ) => {
-        if (!selector) return;
+        if (!selector) {
+          return;
+        }
 
         try {
           const values = extractSelectorValues(doc, selector);
@@ -1013,30 +468,21 @@ export default function ScraperDetailsFeatureEditor({
 
   return (
     <section className="scraper-config-step">
-      <div className="scraper-feature-editor__topbar">
-        <button type="button" className="secondary" onClick={onBack}>
-          Retour aux composants
-        </button>
-        <span className={`scraper-feature-pill ${currentStatusMeta.className}`}>
-          {currentStatusMeta.label}
-        </span>
-      </div>
-
-      <div className="scraper-config-step__intro">
-        <h3>Configurer la fiche manga</h3>
-        <p>
-          La configuration est maintenant separee en quatre blocs : construction de l&apos;URL,
-          extraction par selecteurs, variables extraites, puis test avec apercu de la fiche.
-        </p>
-      </div>
-
-      <div className="scraper-config-note">
-        <strong>Validation facultative</strong>
-        <span>
-          L&apos;enregistrement reste possible sans test reussi. Dans ce cas, le composant reste
-          marque en jaune jusqu&apos;a une validation sauvegardee.
-        </span>
-      </div>
+      <ScraperFeatureEditorHeader
+        title="Configurer la fiche manga"
+        description={
+          'La configuration est maintenant separee en quatre blocs : construction de l\'URL, '
+          + 'extraction par selecteurs, variables extraites, puis test avec apercu de la fiche.'
+        }
+        noteTitle="Validation facultative"
+        noteText={
+          'L\'enregistrement reste possible sans test reussi. Dans ce cas, le composant reste '
+          + 'marque en jaune jusqu\'a une validation sauvegardee.'
+        }
+        statusClassName={currentStatusMeta.className}
+        statusLabel={currentStatusMeta.label}
+        onBack={onBack}
+      />
 
       <div className="mh-form">
         <div className="scraper-config-section">
@@ -1047,11 +493,21 @@ export default function ScraperDetailsFeatureEditor({
             </p>
           </div>
 
-          {renderField(URL_STRATEGY_FIELD)}
+          <ScraperConfigField
+            field={URL_STRATEGY_FIELD}
+            value={formValues.urlStrategy}
+            error={fieldErrors.urlStrategy}
+            onChange={handleFieldChange('urlStrategy')}
+          />
 
           {currentConfig.urlStrategy === 'template' ? (
             <>
-              {renderField(URL_TEMPLATE_FIELD)}
+              <ScraperConfigField
+                field={URL_TEMPLATE_FIELD}
+                value={formValues.urlTemplate}
+                error={fieldErrors.urlTemplate}
+                onChange={handleFieldChange('urlTemplate')}
+              />
               <div className="scraper-config-hint">
                 Placeholders supportes : <code>{'{{id}}'}</code>, <code>{'{{slug}}'}</code>,
                 <code>{' {{value}}'}</code>, ainsi que leurs variantes brutes
@@ -1070,7 +526,19 @@ export default function ScraperDetailsFeatureEditor({
           </div>
 
           <div className="scraper-config-section__grid">
-            {SELECTOR_FIELDS.map(renderField)}
+            {SELECTOR_FIELDS.map((field) => {
+              const fieldName = field.name as Exclude<keyof DetailsFormState, 'derivedValues'>;
+
+              return (
+                <ScraperConfigField
+                  key={field.name}
+                  field={field}
+                  value={formValues[fieldName] ?? ''}
+                  error={fieldErrors[field.name]}
+                  onChange={handleFieldChange(fieldName)}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -1090,136 +558,15 @@ export default function ScraperDetailsFeatureEditor({
             <code>{' d_(\\d+)'}</code>.
           </div>
 
-          {formValues.derivedValues.length ? (
-            <div className="scraper-derived-values">
-              {formValues.derivedValues.map((derivedValue, index) => (
-                <div key={derivedValue.draftId} className="scraper-derived-value-card">
-                  <div className="scraper-derived-value-card__header">
-                    <strong>{derivedValue.key ? `{{${derivedValue.key}}}` : `Variable ${index + 1}`}</strong>
-                    <button
-                      type="button"
-                      className="secondary scraper-derived-value-card__remove"
-                      onClick={() => handleRemoveDerivedValue(derivedValue.draftId)}
-                      disabled={validating || saving}
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-
-                  <div className="scraper-config-section__grid">
-                    <div className="mh-form__field">
-                      <label htmlFor={`derived-key-${derivedValue.draftId}`}>Nom de variable *</label>
-                      <input
-                        id={`derived-key-${derivedValue.draftId}`}
-                        type="text"
-                        placeholder="Exemple : mangaId"
-                        value={derivedValue.key}
-                        onChange={(event) => updateDerivedValue(derivedValue.draftId, 'key', event.target.value)}
-                      />
-                      {fieldErrors[`derivedValues.${derivedValue.draftId}.key`] ? (
-                        <div className="mh-form__field-error">
-                          {fieldErrors[`derivedValues.${derivedValue.draftId}.key`]}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="mh-form__field">
-                      <label htmlFor={`derived-source-type-${derivedValue.draftId}`}>Source *</label>
-                      <select
-                        id={`derived-source-type-${derivedValue.draftId}`}
-                        value={derivedValue.sourceType}
-                        onChange={(event) => updateDerivedValue(derivedValue.draftId, 'sourceType', event.target.value)}
-                      >
-                        {DERIVED_VALUE_SOURCE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {derivedValue.sourceType === 'field' ? (
-                      <div className="mh-form__field">
-                        <label htmlFor={`derived-source-field-${derivedValue.draftId}`}>Champ source *</label>
-                        <select
-                          id={`derived-source-field-${derivedValue.draftId}`}
-                          value={derivedValue.sourceField ?? ''}
-                          onChange={(event) => updateDerivedValue(derivedValue.draftId, 'sourceField', event.target.value)}
-                        >
-                          <option value="">--</option>
-                          {DERIVED_VALUE_FIELD_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        {fieldErrors[`derivedValues.${derivedValue.draftId}.sourceField`] ? (
-                          <div className="mh-form__field-error">
-                            {fieldErrors[`derivedValues.${derivedValue.draftId}.sourceField`]}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {derivedValue.sourceType === 'selector' ? (
-                      <div className="mh-form__field">
-                        <label htmlFor={`derived-selector-${derivedValue.draftId}`}>Selecteur source *</label>
-                        <input
-                          id={`derived-selector-${derivedValue.draftId}`}
-                          type="text"
-                          placeholder="Exemple : #cif .iw img@src"
-                          value={derivedValue.selector ?? ''}
-                          onChange={(event) => updateDerivedValue(derivedValue.draftId, 'selector', event.target.value)}
-                        />
-                        {fieldErrors[`derivedValues.${derivedValue.draftId}.selector`] ? (
-                          <div className="mh-form__field-error">
-                            {fieldErrors[`derivedValues.${derivedValue.draftId}.selector`]}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    <div className="mh-form__field">
-                      <label htmlFor={`derived-pattern-${derivedValue.draftId}`}>Regex optionnelle</label>
-                      <input
-                        id={`derived-pattern-${derivedValue.draftId}`}
-                        type="text"
-                        placeholder="Exemple : d_(\\d+)"
-                        value={derivedValue.pattern ?? ''}
-                        onChange={(event) => updateDerivedValue(derivedValue.draftId, 'pattern', event.target.value)}
-                      />
-                      {fieldErrors[`derivedValues.${derivedValue.draftId}.pattern`] ? (
-                        <div className="mh-form__field-error">
-                          {fieldErrors[`derivedValues.${derivedValue.draftId}.pattern`]}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="scraper-derived-value-card__footer">
-                    Cette variable pourra etre reutilisee plus tard dans les autres composants
-                    via <code>{`{{${derivedValue.key || 'nomVariable'}}}`}</code>.
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="scraper-config-placeholder">
-              Aucune variable definie pour le moment. Tu peux en ajouter une si la fiche contient
-              un identifiant, un token ou un chemin utile pour `Pages` ou d&apos;autres blocs.
-            </div>
-          )}
-
-          <div className="scraper-derived-values__actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={handleAddDerivedValue}
-              disabled={validating || saving}
-            >
-              Ajouter une variable
-            </button>
-          </div>
+          <DetailsDerivedValuesSection
+            derivedValues={formValues.derivedValues}
+            fieldErrors={fieldErrors}
+            validating={validating}
+            saving={saving}
+            onAdd={handleAddDerivedValue}
+            onRemove={handleRemoveDerivedValue}
+            onUpdate={updateDerivedValue}
+          />
         </div>
 
         <div className="scraper-config-section">
@@ -1230,7 +577,21 @@ export default function ScraperDetailsFeatureEditor({
             </p>
           </div>
 
-          {currentConfig.urlStrategy === 'template' ? renderField(TEST_VALUE_FIELD) : renderField(TEST_URL_FIELD)}
+          {currentConfig.urlStrategy === 'template' ? (
+            <ScraperConfigField
+              field={TEST_VALUE_FIELD}
+              value={formValues.testValue}
+              error={fieldErrors.testValue}
+              onChange={handleFieldChange('testValue')}
+            />
+          ) : (
+            <ScraperConfigField
+              field={TEST_URL_FIELD}
+              value={formValues.testUrl}
+              error={fieldErrors.testUrl}
+              onChange={handleFieldChange('testUrl')}
+            />
+          )}
 
           <div className="scraper-config-preview">
             <span>URL de test resolue</span>
@@ -1249,96 +610,20 @@ export default function ScraperDetailsFeatureEditor({
             </button>
           </div>
 
-          {validationResult ? (
-            <div className={`scraper-validation-result ${validationResult.ok ? 'is-success' : 'is-error'}`}>
-              <div className="scraper-validation-result__title">
-                <strong>{validationResult.ok ? 'Validation reussie' : 'Validation echouee'}</strong>
-              </div>
+          <ScraperValidationSummary
+            validationResult={validationResult}
+            presentation={validationPresentation}
+          />
 
-              <div className="scraper-validation-result__grid">
-                <div>
-                  <span>Etat</span>
-                  <strong>{validationPresentation?.summary}</strong>
-                </div>
-                <div>
-                  <span>Verifie le</span>
-                  <strong>{new Date(validationResult.checkedAt).toLocaleString()}</strong>
-                </div>
-              </div>
-
-              {validationPresentation?.details.length ? (
-                <div className="scraper-validation-result__list">
-                  {validationPresentation.details.map((detail) => (
-                    <div key={detail}>{detail}</div>
-                  ))}
-                </div>
-              ) : null}
-
-              {validationPresentation?.warning ? (
-                <div className="scraper-validation-result__message is-warning">
-                  {validationPresentation.warning}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {fakePreview ? (
-            <div className="scraper-fake-details">
-              <div className="scraper-fake-details__media">
-                {fakePreview.cover ? (
-                  <img src={fakePreview.cover} alt={fakePreview.title || 'Couverture'} />
-                ) : (
-                  <div className="scraper-fake-details__media-placeholder">Image</div>
-                )}
-              </div>
-
-              <div className="scraper-fake-details__content">
-                <h5>{fakePreview.title || 'Titre non detecte'}</h5>
-
-                <div className="scraper-fake-details__meta">
-                  {fakePreview.status ? (
-                    <span className="scraper-feature-pill is-not-configured">{fakePreview.status}</span>
-                  ) : null}
-                  {fakePreview.authors ? (
-                    <span className="scraper-feature-pill is-configured">{fakePreview.authors}</span>
-                  ) : null}
-                  {fakePreview.tags ? (
-                    <span className="scraper-feature-pill is-validated">{fakePreview.tags}</span>
-                  ) : null}
-                </div>
-
-                <p>{fakePreview.description || 'Aucune description detectee sur cette page de test.'}</p>
-
-                {fakePreview.derivedValues.length ? (
-                  <div className="scraper-fake-details__variables">
-                    <span className="scraper-fake-details__variables-title">Variables extraites</span>
-                    <div className="scraper-fake-details__variables-list">
-                      {fakePreview.derivedValues.map((derivedValue) => (
-                        <div key={derivedValue.key} className="scraper-fake-details__variable">
-                          <code>{`{{${derivedValue.key}}}`}</code>
-                          <strong>{derivedValue.value}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+          <FakeDetailsPreview preview={fakePreview} />
         </div>
       </div>
 
-      {validationUiError ? (
-        <div className="scraper-validation-result__message is-error">{validationUiError}</div>
-      ) : null}
-
-      {saveMessage ? (
-        <div className="scraper-validation-result__message is-success">{saveMessage}</div>
-      ) : null}
-
-      {saveError ? (
-        <div className="scraper-validation-result__message is-error">{saveError}</div>
-      ) : null}
+      <ScraperFeatureMessages
+        validationUiError={validationUiError}
+        saveMessage={saveMessage}
+        saveError={saveError}
+      />
     </section>
   );
 }

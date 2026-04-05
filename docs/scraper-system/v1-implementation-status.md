@@ -17,13 +17,15 @@ La V1 actuellement branchee couvre :
 9. la validation d'accessibilite par requete
 10. l'enregistrement local d'un premier scraper
 11. une etape `Composants`
-12. la configuration reelle de `Fiche`
-13. la configuration reelle de `Pages`
-14. l'ouverture temporaire d'un scraper depuis le header principal
+12. la configuration reelle de `Recherche`
+13. la configuration reelle de `Fiche`
+14. la configuration reelle de `Pages`
+15. l'ouverture temporaire d'un scraper depuis le header principal
+16. l'execution runtime reelle de `Recherche`
+17. l'ouverture runtime de `Fiche` depuis `Recherche` quand le lien est disponible
 
 Pas encore branche :
 
-- l'execution reelle de `Recherche`
 - le lecteur complet branche au composant `Pages`
 - `Categories` et les autres fonctionnalites secondaires
 
@@ -56,6 +58,31 @@ Objectifs :
 - pouvoir sortir ces etapes de la modal plus tard si besoin
 - reutiliser la brique de validation ailleurs
 - ajouter les etapes suivantes sans refonte
+
+## Organisation actuelle du code renderer
+
+Le code des ecrans scraper a ete redecoupe pour eviter les gros fichiers monolithiques.
+
+Principe retenu :
+
+- chaque ecran principal garde surtout le role d'orchestrateur
+- les sections UI sont sorties dans des composants thematiques
+- les helpers purs sont sortis dans des fichiers `*.utils.ts`
+- les composants partages du configurateur sont centralises
+
+Structure actuelle :
+
+- `src/renderer/components/ScraperConfig/shared` pour les briques communes
+- `src/renderer/components/ScraperConfig/search` pour les blocs lies a `Recherche`
+- `src/renderer/components/ScraperConfig/details` pour les blocs lies a `Fiche`
+- `src/renderer/components/ScraperConfig/pages` pour les blocs lies a `Pages`
+- `src/renderer/components/ScraperBrowser/components` pour les vues du runtime
+
+Objectif pratique :
+
+- garder des fichiers principaux plus lisibles
+- faciliter les evolutions sans toucher a tout l'ecran
+- limiter les regressions fonctionnelles en isolant les responsabilites
 
 ## Validation technique actuelle
 
@@ -244,7 +271,15 @@ La vue temporaire du scraper affiche :
 
 Dans la V1 actuelle, le runtime reel branche est surtout :
 
+- `Recherche`
 - `Manga` via `Fiche`
+
+Le mode `Recherche` permet deja :
+
+- de lancer une vraie requete
+- d'extraire les cartes de resultats
+- de naviguer entre les pages de recherche
+- d'ouvrir `Fiche` depuis un resultat quand un lien detail est disponible
 
 Le rendu temporaire affiche :
 
@@ -256,8 +291,6 @@ Le rendu temporaire affiche :
 - statut
 - URL demandee / URL finale
 - variables derivees resolues
-
-Le mode `Recherche` est deja present dans l'UI, mais reste un placeholder.
 
 ## Telechargement et lecture en ligne temporaires
 

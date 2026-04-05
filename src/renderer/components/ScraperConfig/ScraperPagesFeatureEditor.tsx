@@ -1,9 +1,5 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Field } from '@/renderer/components/utils/Form/types';
-import RadioField from '@/renderer/components/utils/Form/fields/RadioField';
-import TextField from '@/renderer/components/utils/Form/fields/TextField';
 import {
-  buildScraperContextTemplateUrl,
   FetchScraperDocumentResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
@@ -11,205 +7,36 @@ import {
   ScraperPagesFeatureConfig,
   ScraperRecord,
 } from '@/shared/scraper';
+import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
+import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
+import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
+import PagesTemplateContext from '@/renderer/components/ScraperConfig/pages/PagesTemplateContext';
+import {
+  buildDocumentFailure,
+  buildPagesConfig,
+  buildTemplatePageUrl,
+  buildValidationPresentation,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  getInitialConfig,
+  getSaveFieldErrors,
+  hasPagePlaceholder,
+  isImageLikeContentType,
+  padPageNumber,
+  PAGE_IMAGE_SELECTOR_FIELD,
+  toAbsoluteUrl,
+  URL_STRATEGY_FIELD,
+  URL_TEMPLATE_FIELD,
+} from '@/renderer/components/ScraperConfig/pages/pagesFeatureEditor.utils';
 
 type Props = {
   scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
   onScraperChange: (scraper: ScraperRecord) => void;
-};
-
-const URL_STRATEGY_FIELD: Field = {
-  name: 'urlStrategy',
-  label: 'Source des pages',
-  type: 'radio',
-  layout: 'cards',
-  required: true,
-  options: [
-    {
-      label: 'Depuis la fiche',
-      value: 'details_page',
-      description: 'Les pages sont lues directement depuis le HTML de la fiche manga validee.',
-    },
-    {
-      label: 'Depuis un template',
-      value: 'template',
-      description: 'Les pages sont lues depuis une URL construite avec les variables extraites de la fiche.',
-    },
-  ],
-};
-
-const URL_TEMPLATE_FIELD: Field = {
-  name: 'urlTemplate',
-  label: 'Template d\'URL des pages',
-  type: 'text',
-  placeholder: 'Exemple : /reader/{{mangaId}} ou {{raw:imageBasePath}}index.html',
-};
-
-const PAGE_IMAGE_SELECTOR_FIELD: Field = {
-  name: 'pageImageSelector',
-  label: 'Selecteur des pages',
-  type: 'text',
-  placeholder: 'Exemple : #cif .iw img@src',
-};
-
-const DEFAULT_PAGES_CONFIG: ScraperPagesFeatureConfig = {
-  urlStrategy: 'details_page',
-  urlTemplate: '',
-  pageImageSelector: '',
-};
-
-const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
-  title: 'Titre',
-  cover: 'Couverture',
-  description: 'Description',
-  authors: 'Auteurs',
-  tags: 'Tags',
-  status: 'Statut',
-  pages: 'Pages',
-};
-
-const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): ScraperPagesFeatureConfig => ({
-  urlStrategy: values.urlStrategy === 'template' ? 'template' : 'details_page',
-  urlTemplate: trimOptional(values.urlTemplate),
-  pageImageSelector: trimOptional(normalizeSelectorInput(String(values.pageImageSelector ?? ''))),
-});
-
-const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPagesFeatureConfig => {
-  const raw = (feature.config ?? {}) as Record<string, unknown>;
-
-  return {
-    urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
-    urlTemplate: trimOptional(raw.urlTemplate),
-    pageImageSelector: trimOptional(normalizeSelectorInput(String(raw.pageImageSelector ?? ''))),
-  };
-};
-
-const parseSelectorExpression = (input: string): { selector: string; attribute?: string } => {
-  const trimmed = normalizeSelectorInput(input);
-  const atIndex = trimmed.lastIndexOf('@');
-
-  if (atIndex <= 0 || atIndex === trimmed.length - 1) {
-    return { selector: trimmed };
-  }
-
-  return {
-    selector: trimmed.slice(0, atIndex).trim(),
-    attribute: trimmed.slice(atIndex + 1).trim(),
-  };
-};
-
-const extractSelectorValues = (doc: Document, input: string): string[] => {
-  const { selector, attribute } = parseSelectorExpression(input);
-  if (!selector) {
-    return [];
-  }
-
-  return Array.from(doc.querySelectorAll(selector))
-    .map((element) => {
-      if (attribute) {
-        return element.getAttribute(attribute)?.trim() || '';
-      }
-
-      if (element.tagName === 'IMG') {
-        return element.getAttribute('src')?.trim() || '';
-      }
-
-      return element.textContent?.trim() || '';
-    })
-    .filter(Boolean);
-};
-
-const toAbsoluteUrl = (value: string, baseUrl: string): string => {
-  try {
-    return new URL(value, baseUrl).toString();
-  } catch {
-    return value;
-  }
-};
-
-const getConfigSignature = (config: ScraperPagesFeatureConfig): string => JSON.stringify(config);
-
-const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<string, string> => {
-  const errors: Record<string, string> = {};
-
-  if (config.urlStrategy === 'details_page' && !config.pageImageSelector) {
-    errors.pageImageSelector = 'Le selecteur des pages est requis.';
-  }
-
-  if (config.urlStrategy === 'template' && !config.urlTemplate) {
-    errors.urlTemplate = 'Le template d\'URL des pages est requis dans ce mode.';
-  }
-
-  return errors;
-};
-
-const isImageLikeContentType = (contentType: string | undefined): boolean => (
-  typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')
-);
-
-const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
-
-const hasPagePlaceholder = (template: string | undefined): boolean => (
-  typeof template === 'string' && /{{\s*page(?:Index)?\d*\s*}}/.test(template)
-);
-
-const buildValidationPresentation = (validationResult: ScraperFeatureValidationResult): {
-  summary: string;
-  details: string[];
-} => {
-  const details: string[] = [];
-  const pagesCheck = validationResult.checks.find((check) => check.key === 'pages');
-
-  if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
-  }
-
-  if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
-  }
-
-  if (typeof validationResult.status === 'number') {
-    details.push(`Code HTTP : ${validationResult.status}`);
-  }
-
-  if (validationResult.contentType) {
-    details.push(`Content-Type : ${validationResult.contentType}`);
-  }
-
-  if (pagesCheck?.matchedCount) {
-    details.push(`Pages trouvees : ${pagesCheck.matchedCount}`);
-  }
-
-  return {
-    summary: validationResult.ok
-      ? pagesCheck?.selector
-        ? 'Les pages de test ont bien ete detectees.'
-        : 'La ressource de page directe est bien accessible.'
-      : pagesCheck?.issueCode === 'invalid_selector'
-        ? `${CHECK_LABELS.pages} : selecteur invalide.`
-        : pagesCheck?.issueCode === 'no_match'
-          ? `${CHECK_LABELS.pages} : aucune page trouvee.`
-          : 'La validation des pages a echoue.',
-    details,
-  };
 };
 
 export default function ScraperPagesFeatureEditor({
@@ -295,10 +122,11 @@ export default function ScraperPagesFeatureEditor({
 
     try {
       if (currentConfig.urlStrategy === 'template') {
-        return buildScraperContextTemplateUrl(
+        return buildTemplatePageUrl(
           scraper.baseUrl,
           currentConfig.urlTemplate || '',
-          buildTemplateContextForPage(0),
+          buildTemplateContextForPage,
+          0,
         );
       }
 
@@ -353,31 +181,6 @@ export default function ScraperPagesFeatureEditor({
     });
   }, []);
 
-  const renderField = useCallback((field: Field) => {
-    const value = formValues[field.name as keyof ScraperPagesFeatureConfig] ?? '';
-    const error = fieldErrors[field.name];
-
-    return (
-      <div key={field.name} className="mh-form__field">
-        {field.label ? <label htmlFor={field.name}>{field.label}{field.required ? ' *' : ''}</label> : null}
-        {field.type === 'radio' ? (
-          <RadioField
-            field={field}
-            value={value}
-            onChange={handleFieldChange(field.name as keyof ScraperPagesFeatureConfig)}
-          />
-        ) : (
-          <TextField
-            field={field}
-            value={value}
-            onChange={handleFieldChange(field.name as keyof ScraperPagesFeatureConfig)}
-          />
-        )}
-        {error ? <div className="mh-form__field-error">{error}</div> : null}
-      </div>
-    );
-  }, [fieldErrors, formValues, handleFieldChange]);
-
   const handleValidate = useCallback(async () => {
     const config = buildPagesConfig(formValues);
     const errors = getSaveFieldErrors(config);
@@ -401,7 +204,7 @@ export default function ScraperPagesFeatureEditor({
     let targetUrl = '';
     try {
       targetUrl = config.urlStrategy === 'template'
-        ? buildScraperContextTemplateUrl(scraper.baseUrl, config.urlTemplate || '', buildTemplateContextForPage(0))
+        ? buildTemplatePageUrl(scraper.baseUrl, config.urlTemplate || '', buildTemplateContextForPage, 0)
         : (detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl || '');
     } catch (error) {
       setValidationUiError(error instanceof Error ? error.message : 'Impossible de construire l\'URL des pages.');
@@ -426,17 +229,7 @@ export default function ScraperPagesFeatureEditor({
 
       const typedDocumentResult = documentResult as FetchScraperDocumentResult;
       if (!typedDocumentResult.ok) {
-        setValidationResult({
-          ok: false,
-          checkedAt: typedDocumentResult.checkedAt,
-          requestedUrl: typedDocumentResult.requestedUrl,
-          finalUrl: typedDocumentResult.finalUrl,
-          status: typedDocumentResult.status,
-          contentType: typedDocumentResult.contentType,
-          failureCode: typeof typedDocumentResult.status === 'number' ? 'http_error' : 'request_failed',
-          checks: [],
-          derivedValues: [],
-        });
+        setValidationResult(buildDocumentFailure(typedDocumentResult));
         return;
       }
 
@@ -446,10 +239,11 @@ export default function ScraperPagesFeatureEditor({
           const directPageUrls: string[] = [];
 
           for (let pageIndex = 0; pageIndex < 8; pageIndex += 1) {
-            const pageUrl = buildScraperContextTemplateUrl(
+            const pageUrl = buildTemplatePageUrl(
               scraper.baseUrl,
               config.urlTemplate || '',
-              buildTemplateContextForPage(pageIndex),
+              buildTemplateContextForPage,
+              pageIndex,
             );
 
             const resourceResult = await (window as any).api.fetchScraperDocument({
@@ -616,30 +410,21 @@ export default function ScraperPagesFeatureEditor({
 
   return (
     <section className="scraper-config-step">
-      <div className="scraper-feature-editor__topbar">
-        <button type="button" className="secondary" onClick={onBack}>
-          Retour aux composants
-        </button>
-        <span className={`scraper-feature-pill ${currentStatusMeta.className}`}>
-          {currentStatusMeta.label}
-        </span>
-      </div>
-
-      <div className="scraper-config-step__intro">
-        <h3>Configurer les pages</h3>
-        <p>
-          Ce composant sait lire les pages directement depuis la fiche, ou depuis une URL
-          construite avec les variables extraites du composant `Fiche`.
-        </p>
-      </div>
-
-      <div className="scraper-config-note">
-        <strong>Validation basee sur la fiche</strong>
-        <span>
-          Le test des pages repose sur la derniere validation reussie de `Fiche`. Cela permet
-          d&apos;utiliser directement son URL finale et ses variables derivees.
-        </span>
-      </div>
+      <ScraperFeatureEditorHeader
+        title="Configurer les pages"
+        description={
+          'Ce composant sait lire les pages directement depuis la fiche, ou depuis une URL '
+          + 'construite avec les variables extraites du composant `Fiche`.'
+        }
+        noteTitle="Validation basee sur la fiche"
+        noteText={
+          'Le test des pages repose sur la derniere validation reussie de `Fiche`. Cela permet '
+          + 'd\'utiliser directement son URL finale et ses variables derivees.'
+        }
+        statusClassName={currentStatusMeta.className}
+        statusLabel={currentStatusMeta.label}
+        onBack={onBack}
+      />
 
       <div className="mh-form">
         <div className="scraper-config-section">
@@ -648,11 +433,21 @@ export default function ScraperPagesFeatureEditor({
             <p>Choisis ou l&apos;application doit aller chercher les pages du manga.</p>
           </div>
 
-          {renderField(URL_STRATEGY_FIELD)}
+          <ScraperConfigField
+            field={URL_STRATEGY_FIELD}
+            value={formValues.urlStrategy}
+            error={fieldErrors.urlStrategy}
+            onChange={handleFieldChange('urlStrategy')}
+          />
 
           {currentConfig.urlStrategy === 'template' ? (
             <>
-              {renderField(URL_TEMPLATE_FIELD)}
+              <ScraperConfigField
+                field={URL_TEMPLATE_FIELD}
+                value={formValues.urlTemplate}
+                error={fieldErrors.urlTemplate}
+                onChange={handleFieldChange('urlTemplate')}
+              />
               <div className="scraper-config-hint">
                 Variables disponibles depuis `Fiche` : <code>{'{{requestedUrl}}'}</code>,
                 <code>{' {{finalUrl}}'}</code> et les variables extraites. Utilise
@@ -664,24 +459,7 @@ export default function ScraperPagesFeatureEditor({
             </>
           ) : null}
 
-          {Object.keys(templateContext).length > 0 ? (
-            <div className="scraper-template-context">
-              {Object.entries(templateContext).map(([key, value]) => (
-                value ? (
-                  <div key={key} className="scraper-template-context__item">
-                    <code>{`{{${key}}}`}</code>
-                    <span>{value}</span>
-                  </div>
-                ) : null
-              ))}
-            </div>
-          ) : (
-            <div className="scraper-config-placeholder">
-              Aucune fiche validee n&apos;est disponible pour le moment. Tu peux enregistrer la
-              configuration, mais la validation des pages restera indisponible tant que `Fiche`
-              n&apos;aura pas ete validee.
-            </div>
-          )}
+          <PagesTemplateContext templateContext={templateContext} />
         </div>
 
         <div className="scraper-config-section">
@@ -701,7 +479,12 @@ export default function ScraperPagesFeatureEditor({
           </div>
 
           <div className="scraper-config-section__grid">
-            {renderField(PAGE_IMAGE_SELECTOR_FIELD)}
+            <ScraperConfigField
+              field={PAGE_IMAGE_SELECTOR_FIELD}
+              value={formValues.pageImageSelector}
+              error={fieldErrors.pageImageSelector}
+              onChange={handleFieldChange('pageImageSelector')}
+            />
           </div>
         </div>
 
@@ -730,73 +513,26 @@ export default function ScraperPagesFeatureEditor({
             </button>
           </div>
 
-          {validationResult ? (
-            <div className={`scraper-validation-result ${validationResult.ok ? 'is-success' : 'is-error'}`}>
-              <div className="scraper-validation-result__title">
-                <strong>{validationResult.ok ? 'Validation reussie' : 'Validation echouee'}</strong>
-              </div>
+          <ScraperValidationSummary
+            validationResult={validationResult}
+            presentation={validationPresentation}
+          />
 
-              <div className="scraper-validation-result__grid">
-                <div>
-                  <span>Etat</span>
-                  <strong>{validationPresentation?.summary}</strong>
-                </div>
-                <div>
-                  <span>Verifie le</span>
-                  <strong>{new Date(validationResult.checkedAt).toLocaleString()}</strong>
-                </div>
-              </div>
-
-              {validationPresentation?.details.length ? (
-                <div className="scraper-validation-result__list">
-                  {validationPresentation.details.map((detail) => (
-                    <div key={detail}>{detail}</div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {currentPreviewUrl ? (
-            <div className="scraper-fake-reader">
-              <div className="scraper-fake-reader__viewport">
-                <img src={currentPreviewUrl} alt={`Page ${previewIndex + 1}`} />
-              </div>
-              <div className="scraper-fake-reader__controls">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setPreviewIndex((current) => Math.max(0, current - 1))}
-                  disabled={previewIndex <= 0}
-                >
-                  Precedent
-                </button>
-                <span>{previewIndex + 1} / {previewUrls.length}</span>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setPreviewIndex((current) => Math.min(previewUrls.length - 1, current + 1))}
-                  disabled={previewIndex >= previewUrls.length - 1}
-                >
-                  Suivant
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <FakeReaderPreview
+            currentPreviewUrl={currentPreviewUrl}
+            previewIndex={previewIndex}
+            previewUrls={previewUrls}
+            onPrevious={() => setPreviewIndex((current) => Math.max(0, current - 1))}
+            onNext={() => setPreviewIndex((current) => Math.min(previewUrls.length - 1, current + 1))}
+          />
         </div>
       </div>
 
-      {validationUiError ? (
-        <div className="scraper-validation-result__message is-error">{validationUiError}</div>
-      ) : null}
-
-      {saveMessage ? (
-        <div className="scraper-validation-result__message is-success">{saveMessage}</div>
-      ) : null}
-
-      {saveError ? (
-        <div className="scraper-validation-result__message is-error">{saveError}</div>
-      ) : null}
+      <ScraperFeatureMessages
+        validationUiError={validationUiError}
+        saveMessage={saveMessage}
+        saveError={saveError}
+      />
     </section>
   );
 }

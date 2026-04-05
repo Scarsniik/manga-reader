@@ -1,6 +1,4 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Field } from '@/renderer/components/utils/Form/types';
-import TextField from '@/renderer/components/utils/Form/fields/TextField';
 import {
   FetchScraperDocumentResult,
   ScraperFeatureDefinition,
@@ -12,243 +10,33 @@ import {
 import {
   extractScraperSearchPageFromDocument,
   hasSearchPagePlaceholder,
-  normalizeSelectorInput,
   resolveScraperSearchTargetUrl,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
+import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
+import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
+import {
+  buildDocumentFailure,
+  buildSearchConfig,
+  buildValidationPresentation,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  getInitialConfig,
+  getSaveFieldErrors,
+  getValidationFieldErrors,
+  SCRAPING_FIELDS,
+  TEST_QUERY_FIELD,
+  URL_TEMPLATE_FIELD,
+} from '@/renderer/components/ScraperConfig/search/searchFeatureEditor.utils';
 
 type Props = {
   scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
   onScraperChange: (scraper: ScraperRecord) => void;
-};
-
-const URL_TEMPLATE_FIELD: Field = {
-  name: 'urlTemplate',
-  label: 'Template d\'URL de recherche',
-  type: 'text',
-  required: true,
-  placeholder: 'Exemple : /?s={{query}}',
-};
-
-const TEST_QUERY_FIELD: Field = {
-  name: 'testQuery',
-  label: 'Requete de test',
-  type: 'text',
-  placeholder: 'Optionnel : one piece',
-};
-
-const SCRAPING_FIELDS: Field[] = [
-  {
-    name: 'resultListSelector',
-    label: 'Conteneur de resultats',
-    type: 'text',
-    placeholder: 'Optionnel : .search-results',
-  },
-  {
-    name: 'resultItemSelector',
-    label: 'Bloc resultat',
-    type: 'text',
-    required: true,
-    placeholder: 'Exemple : article, .gb, .result-item',
-  },
-  {
-    name: 'titleSelector',
-    label: 'Selecteur du titre',
-    type: 'text',
-    required: true,
-    placeholder: 'Exemple : a, h3 a',
-  },
-  {
-    name: 'detailUrlSelector',
-    label: 'Selecteur du lien fiche',
-    type: 'text',
-    placeholder: 'Optionnel : a@href',
-  },
-  {
-    name: 'thumbnailSelector',
-    label: 'Selecteur de miniature',
-    type: 'text',
-    placeholder: 'Optionnel : img@src',
-  },
-  {
-    name: 'summarySelector',
-    label: 'Selecteur de resume',
-    type: 'text',
-    placeholder: 'Optionnel : .excerpt, p',
-  },
-  {
-    name: 'nextPageSelector',
-    label: 'Selecteur page suivante',
-    type: 'text',
-    placeholder: 'Optionnel : .next a@href',
-  },
-];
-
-const DEFAULT_SEARCH_CONFIG: ScraperSearchFeatureConfig = {
-  urlTemplate: '',
-  testQuery: '',
-  resultListSelector: '',
-  resultItemSelector: '',
-  titleSelector: '',
-  detailUrlSelector: '',
-  thumbnailSelector: '',
-  summarySelector: '',
-  nextPageSelector: '',
-};
-
-const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
-};
-
-const buildSearchConfig = (values: Partial<ScraperSearchFeatureConfig>): ScraperSearchFeatureConfig => ({
-  urlTemplate: trimOptional(values.urlTemplate) ?? '',
-  testQuery: trimOptional(values.testQuery),
-  resultListSelector: trimOptionalSelector(values.resultListSelector),
-  resultItemSelector: normalizeSelectorInput(String(values.resultItemSelector ?? '')),
-  titleSelector: normalizeSelectorInput(String(values.titleSelector ?? '')),
-  detailUrlSelector: trimOptionalSelector(values.detailUrlSelector),
-  thumbnailSelector: trimOptionalSelector(values.thumbnailSelector),
-  summarySelector: trimOptionalSelector(values.summarySelector),
-  nextPageSelector: trimOptionalSelector(values.nextPageSelector),
-});
-
-const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperSearchFeatureConfig => {
-  const raw = (feature.config ?? {}) as Record<string, unknown>;
-
-  return {
-    urlTemplate: trimOptional(raw.urlTemplate) ?? '',
-    testQuery: trimOptional(raw.testQuery),
-    resultListSelector: trimOptionalSelector(raw.resultListSelector),
-    resultItemSelector: normalizeSelectorInput(String(raw.resultItemSelector ?? '')),
-    titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
-    detailUrlSelector: trimOptionalSelector(raw.detailUrlSelector),
-    thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
-    summarySelector: trimOptionalSelector(raw.summarySelector),
-    nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
-  };
-};
-
-const getConfigSignature = (config: ScraperSearchFeatureConfig): string => JSON.stringify(config);
-
-const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-});
-
-const getSaveFieldErrors = (config: ScraperSearchFeatureConfig): Record<string, string> => {
-  const errors: Record<string, string> = {};
-
-  if (!config.urlTemplate) {
-    errors.urlTemplate = 'Le template de recherche est requis.';
-  }
-
-  if (!config.resultItemSelector) {
-    errors.resultItemSelector = 'Le bloc resultat est requis.';
-  }
-
-  if (!config.titleSelector) {
-    errors.titleSelector = 'Le selecteur du titre est requis.';
-  }
-
-  return errors;
-};
-
-const getValidationFieldErrors = (config: ScraperSearchFeatureConfig): Record<string, string> => {
-  return getSaveFieldErrors(config);
-};
-
-const buildValidationPresentation = (
-  validationResult: ScraperFeatureValidationResult,
-  previewResults: ScraperSearchResultItem[],
-  previewPage: ScraperRuntimeSearchPageResult | null,
-): {
-  summary: string;
-  details: string[];
-  warning?: string;
-} => {
-  const details: string[] = [];
-  const warnings: string[] = [];
-  const titleCheck = validationResult.checks.find((check) => check.key === 'title');
-  const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
-  const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
-
-  if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
-  }
-
-  if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
-  }
-
-  if (typeof validationResult.status === 'number') {
-    details.push(`Code HTTP : ${validationResult.status}`);
-  }
-
-  if (validationResult.contentType) {
-    details.push(`Content-Type : ${validationResult.contentType}`);
-    if (!validationResult.contentType.toLowerCase().includes('html')) {
-      warnings.push('Le type de contenu ne ressemble pas a une page HTML.');
-    }
-  }
-
-  if (titleCheck?.matchedCount) {
-    details.push(`Resultats trouves : ${titleCheck.matchedCount}`);
-  }
-
-  if (previewResults[0]?.detailUrl) {
-    details.push(`Premier lien detecte : ${previewResults[0].detailUrl}`);
-  }
-
-  if (coverCheck?.matchedCount) {
-    details.push(`Miniatures detectees : ${coverCheck.matchedCount}`);
-  }
-
-  if (summaryCheck?.matchedCount) {
-    details.push(`Resumes detectes : ${summaryCheck.matchedCount}`);
-  }
-
-  if (previewPage?.nextPageUrl) {
-    details.push(`Page suivante detectee : ${previewPage.nextPageUrl}`);
-  }
-
-  return {
-    summary: validationResult.ok
-      ? 'La recherche de test renvoie des resultats exploitables.'
-      : validationResult.failureCode === 'http_error'
-        ? typeof validationResult.status === 'number'
-          ? `La page de recherche a repondu avec le code HTTP ${validationResult.status}.`
-          : 'La page de recherche a repondu avec une erreur HTTP.'
-        : validationResult.failureCode === 'request_failed'
-          ? 'Impossible de recuperer la page de recherche.'
-          : titleCheck?.issueCode === 'no_match'
-            ? 'Aucun resultat exploitable n\'a ete trouve avec la configuration actuelle.'
-            : 'La validation de la recherche a echoue.',
-    details,
-    warning: warnings.length ? warnings.join(' ') : undefined,
-  };
 };
 
 export default function ScraperSearchFeatureEditor({
@@ -363,23 +151,6 @@ export default function ScraperSearchFeatureEditor({
       return next;
     });
   }, []);
-
-  const renderField = useCallback((field: Field) => {
-    const value = formValues[field.name as keyof ScraperSearchFeatureConfig] ?? '';
-    const error = fieldErrors[field.name];
-
-    return (
-      <div key={field.name} className="mh-form__field">
-        {field.label ? <label htmlFor={field.name}>{field.label}{field.required ? ' *' : ''}</label> : null}
-        <TextField
-          field={field}
-          value={value}
-          onChange={handleFieldChange(field.name as keyof ScraperSearchFeatureConfig)}
-        />
-        {error ? <div className="mh-form__field-error">{error}</div> : null}
-      </div>
-    );
-  }, [fieldErrors, formValues, handleFieldChange]);
 
   const handleValidate = useCallback(async () => {
     const config = buildSearchConfig(formValues);
@@ -522,7 +293,7 @@ export default function ScraperSearchFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [fetchPreviewPage, formValues, scraper.baseUrl]);
+  }, [formValues, scraper.baseUrl]);
 
   const handlePreviewNextPage = useCallback(async () => {
     const config = buildSearchConfig(formValues);
@@ -642,30 +413,21 @@ export default function ScraperSearchFeatureEditor({
 
   return (
     <section className="scraper-config-step">
-      <div className="scraper-feature-editor__topbar">
-        <button type="button" className="secondary" onClick={onBack}>
-          Retour aux composants
-        </button>
-        <span className={`scraper-feature-pill ${currentStatusMeta.className}`}>
-          {currentStatusMeta.label}
-        </span>
-      </div>
-
-      <div className="scraper-config-step__intro">
-        <h3>Configurer la recherche</h3>
-        <p>
-          Definis ici comment lancer une recherche sur le site et comment extraire les cartes de
-          resultats qui serviront ensuite dans l&apos;affichage du scraper.
-        </p>
-      </div>
-
-      <div className="scraper-config-note">
-        <strong>Connexion avec la fiche</strong>
-        <span>
-          Si tu veux ouvrir un resultat directement dans `Fiche`, renseigne le selecteur du lien
-          de fiche puis configure simplement le composant `Fiche` pour parser correctement la page.
-        </span>
-      </div>
+      <ScraperFeatureEditorHeader
+        title="Configurer la recherche"
+        description={
+          'Definis ici comment lancer une recherche sur le site et comment extraire les cartes de '
+          + 'resultats qui serviront ensuite dans l\'affichage du scraper.'
+        }
+        noteTitle="Connexion avec la fiche"
+        noteText={
+          'Si tu veux ouvrir un resultat directement dans `Fiche`, renseigne le selecteur du lien '
+          + 'de fiche puis configure simplement le composant `Fiche` pour parser correctement la page.'
+        }
+        statusClassName={currentStatusMeta.className}
+        statusLabel={currentStatusMeta.label}
+        onBack={onBack}
+      />
 
       <div className="mh-form">
         <div className="scraper-config-section">
@@ -678,7 +440,12 @@ export default function ScraperSearchFeatureEditor({
           </div>
 
           <div className="scraper-config-section__grid">
-            {renderField(URL_TEMPLATE_FIELD)}
+            <ScraperConfigField
+              field={URL_TEMPLATE_FIELD}
+              value={formValues.urlTemplate}
+              error={fieldErrors.urlTemplate}
+              onChange={handleFieldChange('urlTemplate')}
+            />
           </div>
 
           <div className="scraper-config-hint">
@@ -706,7 +473,15 @@ export default function ScraperSearchFeatureEditor({
           </div>
 
           <div className="scraper-config-section__grid">
-            {SCRAPING_FIELDS.map(renderField)}
+            {SCRAPING_FIELDS.map((field) => (
+              <ScraperConfigField
+                key={field.name}
+                field={field}
+                value={formValues[field.name as keyof ScraperSearchFeatureConfig] ?? ''}
+                error={fieldErrors[field.name]}
+                onChange={handleFieldChange(field.name as keyof ScraperSearchFeatureConfig)}
+              />
+            ))}
           </div>
         </div>
 
@@ -718,7 +493,12 @@ export default function ScraperSearchFeatureEditor({
             </p>
           </div>
 
-          {renderField(TEST_QUERY_FIELD)}
+          <ScraperConfigField
+            field={TEST_QUERY_FIELD}
+            value={formValues.testQuery}
+            error={fieldErrors.testQuery}
+            onChange={handleFieldChange('testQuery')}
+          />
 
           <div className="scraper-config-preview">
             <span>URL de test resolue</span>
@@ -737,114 +517,28 @@ export default function ScraperSearchFeatureEditor({
             </button>
           </div>
 
-          {validationResult ? (
-            <div className={`scraper-validation-result ${validationResult.ok ? 'is-success' : 'is-error'}`}>
-              <div className="scraper-validation-result__title">
-                <strong>{validationResult.ok ? 'Validation reussie' : 'Validation echouee'}</strong>
-              </div>
+          <ScraperValidationSummary
+            validationResult={validationResult}
+            presentation={validationPresentation}
+          />
 
-              <div className="scraper-validation-result__grid">
-                <div>
-                  <span>Etat</span>
-                  <strong>{validationPresentation?.summary}</strong>
-                </div>
-                <div>
-                  <span>Verifie le</span>
-                  <strong>{new Date(validationResult.checkedAt).toLocaleString()}</strong>
-                </div>
-              </div>
-
-              {validationPresentation?.details.length ? (
-                <div className="scraper-validation-result__list">
-                  {validationPresentation.details.map((detail) => (
-                    <div key={detail}>{detail}</div>
-                  ))}
-                </div>
-              ) : null}
-
-              {validationPresentation?.warning ? (
-                <div className="scraper-validation-result__message is-warning">
-                  {validationPresentation.warning}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {previewCards.length ? (
-            <>
-              {previewPage?.nextPageUrl ? (
-                <div className="scraper-config-preview">
-                  <span>Page suivante detectee</span>
-                  <strong>{previewPage.nextPageUrl}</strong>
-                </div>
-              ) : null}
-
-              {(usesTemplatePaging || previewPageIndex > 0 || previewPage?.nextPageUrl) ? (
-                <div className="scraper-search-preview-pagination">
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => void handlePreviewPreviousPage()}
-                    disabled={validating || previewPageIndex <= 0}
-                  >
-                    Tester page precedente
-                  </button>
-                  <span>
-                    Page testee : {previewPageIndex + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => void handlePreviewNextPage()}
-                    disabled={validating || (!usesTemplatePaging && !previewPage?.nextPageUrl)}
-                  >
-                    Tester page suivante
-                  </button>
-                </div>
-              ) : null}
-
-              <div className="scraper-fake-search-results">
-                {previewCards.map((result) => (
-                  <article
-                    key={`${result.detailUrl ?? result.title}-${result.title}`}
-                    className="scraper-fake-search-card"
-                  >
-                    <div className="scraper-fake-search-card__media">
-                      {result.thumbnailUrl ? (
-                        <img src={result.thumbnailUrl} alt={result.title} />
-                      ) : (
-                        <div className="scraper-fake-search-card__media-placeholder">Image</div>
-                      )}
-                    </div>
-
-                    <div className="scraper-fake-search-card__content">
-                      <h5>{result.title}</h5>
-                      {result.summary ? <p>{result.summary}</p> : null}
-                      {result.detailUrl ? (
-                        <div className="scraper-fake-search-card__meta">Lien de fiche detecte</div>
-                      ) : (
-                        <div className="scraper-fake-search-card__meta is-muted">Aucun lien de fiche detecte</div>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
+          <SearchFeaturePreview
+            previewCards={previewCards}
+            previewPage={previewPage}
+            previewPageIndex={previewPageIndex}
+            usesTemplatePaging={usesTemplatePaging}
+            validating={validating}
+            onPreviousPage={() => void handlePreviewPreviousPage()}
+            onNextPage={() => void handlePreviewNextPage()}
+          />
         </div>
       </div>
 
-      {validationUiError ? (
-        <div className="scraper-validation-result__message is-error">{validationUiError}</div>
-      ) : null}
-
-      {saveMessage ? (
-        <div className="scraper-validation-result__message is-success">{saveMessage}</div>
-      ) : null}
-
-      {saveError ? (
-        <div className="scraper-validation-result__message is-error">{saveError}</div>
-      ) : null}
+      <ScraperFeatureMessages
+        validationUiError={validationUiError}
+        saveMessage={saveMessage}
+        saveError={saveError}
+      />
     </section>
   );
 }

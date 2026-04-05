@@ -4,7 +4,11 @@ import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
 import { useModal } from '@/renderer/hooks/useModal';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
-import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
+import ScraperBrowserHero from '@/renderer/components/ScraperBrowser/components/ScraperBrowserHero';
+import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/components/ScraperBrowserMessages';
+import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
+import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components/ScraperDetailsPanel';
+import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import {
   parseScraperRouteState,
   type ScraperRouteState,
@@ -28,6 +32,11 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import {
+  ScraperBrowseMode,
+  ScraperCapability,
+  ScraperSearchReturnState,
+} from '@/renderer/components/ScraperBrowser/types';
 import './style.scss';
 
 type Props = {
@@ -37,23 +46,6 @@ type Props = {
     detailsResult: ScraperRuntimeDetailsResult;
   } | null;
 };
-
-type ScraperBrowseMode = 'search' | 'manga';
-
-type ScraperSearchReturnState = {
-  hasExecutedSearch: boolean;
-  query: string;
-  page: ScraperRuntimeSearchPageResult | null;
-  visitedPageUrls: string[];
-  pageIndex: number;
-  results: ScraperSearchResultItem[];
-};
-
-const FEATURE_STATUS_LABELS = {
-  not_configured: 'Non configure',
-  configured: 'Configure',
-  validated: 'Valide',
-} as const;
 
 const MAX_VISIBLE_SEARCH_RESULTS = 18;
 
@@ -1071,52 +1063,15 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
   return (
     <section className="scraper-browser">
-      <div className="scraper-browser__hero">
-        <div className="scraper-browser__intro">
-          <span className="scraper-browser__eyebrow">Scrapper actif</span>
-          <h2>
-            <button
-              type="button"
-              className="scraper-browser__home"
-              onClick={() => void handleGoToHome()}
-              title="Revenir a la page d'accueil du scrapper"
-            >
-              {scraper.name}
-            </button>
-          </h2>
-          <p>{scraper.description || 'Affichage temporaire pour executer la configuration du scrapper sans passer par la bibliotheque.'}</p>
-        </div>
-
-        <div className="scraper-browser__meta">
-          <div className="scraper-browser__meta-actions">
-            <button
-              type="button"
-              className="scraper-browser__edit"
-              onClick={() => openModal(buildScraperConfigModal({
-                kind: 'edit',
-                scraperId: scraper.id,
-              }))}
-            >
-              Modifier
-            </button>
-          </div>
-          <span>{scraper.baseUrl}</span>
-          <div className="scraper-browser__caps">
-            {capabilities.map((capability) => (
-              <span
-                key={capability.label}
-                className={[
-                  'scraper-browser__capability',
-                  capability.enabled ? 'is-enabled' : 'is-disabled',
-                ].join(' ')}
-                title={capability.feature ? FEATURE_STATUS_LABELS[capability.feature.status] : 'Non configure'}
-              >
-                {capability.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ScraperBrowserHero
+        scraper={scraper}
+        capabilities={capabilities as ScraperCapability[]}
+        onHome={() => void handleGoToHome()}
+        onEdit={() => openModal(buildScraperConfigModal({
+          kind: 'edit',
+          scraperId: scraper.id,
+        }))}
+      />
 
       {availableModes.length === 0 ? (
         <div className="scraper-browser__panel scraper-browser__message is-warning">
@@ -1124,336 +1079,56 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           ou `Recherche` pour afficher une vue temporaire ici.
         </div>
       ) : (
-        <div className="scraper-browser__panel">
-          <form className="scraper-browser__toolbar" onSubmit={handleSubmit}>
-            {availableModes.length > 1 ? (
-              <select
-                className="scraper-browser__mode-select"
-                value={mode}
-                onChange={(event) => setMode(event.target.value as ScraperBrowseMode)}
-              >
-                <option value="search">Recherche</option>
-                <option value="manga">Manga</option>
-              </select>
-            ) : null}
-
-            <input
-              className="scraper-browser__query"
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={activePlaceholder}
-            />
-
-            <button type="submit" className="scraper-browser__submit" disabled={loading}>
-              {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : 'Lancer'}
-            </button>
-          </form>
-
-          <div className="scraper-browser__helper">
-            {helperText}
-          </div>
-        </div>
+        <ScraperBrowserToolbar
+          availableModes={availableModes}
+          mode={mode}
+          query={query}
+          activePlaceholder={activePlaceholder}
+          helperText={helperText}
+          loading={loading}
+          onSubmit={handleSubmit}
+          onModeChange={setMode}
+          onQueryChange={setQuery}
+        />
       )}
 
-      {runtimeMessage ? (
-        <div className="scraper-browser__message is-info">{runtimeMessage}</div>
-      ) : null}
+      <ScraperBrowserMessages
+        runtimeMessage={runtimeMessage}
+        runtimeError={runtimeError}
+        downloadMessage={downloadMessage}
+        downloadError={downloadError}
+      />
 
-      {runtimeError ? (
-        <div className="scraper-browser__message is-error">{runtimeError}</div>
-      ) : null}
+      <ScraperSearchResultsSection
+        visibleSearchResults={visibleSearchResults}
+        searchResultsCount={searchResults.length}
+        query={query}
+        searchPage={searchPage}
+        searchPageIndex={searchPageIndex}
+        shouldShowSearchPagination={shouldShowSearchPagination}
+        currentSearchPageLabel={currentSearchPageLabel}
+        paginationInfoLabel={paginationInfoLabel}
+        loading={loading}
+        usesSearchTemplatePaging={usesSearchTemplatePaging}
+        canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+        onPreviousPage={() => void handleSearchPreviousPage()}
+        onNextPage={() => void handleSearchNextPage()}
+        onOpenResult={(result) => void handleOpenSearchResult(result)}
+        onResultKeyDown={handleSearchResultKeyDown}
+        onOpenResultAction={handleOpenSearchResultAction}
+        onOpenResultImage={handleOpenSearchResultImage}
+      />
 
-      {downloadMessage ? (
-        <div className="scraper-browser__message is-success">{downloadMessage}</div>
-      ) : null}
-
-      {downloadError ? (
-        <div className="scraper-browser__message is-error">{downloadError}</div>
-      ) : null}
-
-      {visibleSearchResults.length ? (
-        <section className="scraper-browser__results">
-          <div className="scraper-browser__results-head">
-            <div>
-              <h3>Resultats de recherche</h3>
-              <p>
-                {query.trim()
-                  ? (
-                    <>
-                      {searchResults.length} resultat(s) extrait(s) pour <strong>{query.trim()}</strong>.
-                    </>
-                  )
-                  : (
-                    <>
-                      {searchResults.length} resultat(s) extrait(s) sans terme de recherche.
-                    </>
-                  )}
-              </p>
-            </div>
-
-            <div className="scraper-browser__results-side">
-              {searchPage ? (
-                <span className="scraper-browser__results-count">
-                  Page {searchPageIndex + 1}
-                </span>
-              ) : null}
-              {searchResults.length > visibleSearchResults.length ? (
-                <span className="scraper-browser__results-count">
-                  {visibleSearchResults.length} / {searchResults.length}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {shouldShowSearchPagination ? (
-            <ScraperSearchPagination
-              currentPageLabel={currentSearchPageLabel}
-              infoLabel={paginationInfoLabel}
-              onPrevious={() => void handleSearchPreviousPage()}
-              onNext={() => void handleSearchNextPage()}
-              previousDisabled={loading || searchPageIndex <= 0}
-              nextDisabled={loading || (!usesSearchTemplatePaging && !searchPage?.nextPageUrl)}
-            />
-          ) : null}
-
-          <div className="scraper-browser__results-grid">
-            {visibleSearchResults.map((result) => {
-              const canOpenResult = Boolean(result.detailUrl && canOpenSearchResultsAsDetails);
-              const resultActions = canOpenResult ? (
-                <>
-                  <button
-                    type="button"
-                    className="scraper-browser__result-action-button"
-                    onClick={(event) => handleOpenSearchResultAction(event, result)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        handleOpenSearchResultAction(event, result);
-                      } else {
-                        event.stopPropagation();
-                      }
-                    }}
-                    aria-label={`Ouvrir la fiche ${result.title}`}
-                  >
-                    Ouvrir la fiche
-                  </button>
-                  {result.thumbnailUrl ? (
-                    <button
-                      type="button"
-                      className="scraper-browser__result-preview-button"
-                      onClick={(event) => handleOpenSearchResultImage(event, result)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          handleOpenSearchResultImage(event, result);
-                        } else {
-                          event.stopPropagation();
-                        }
-                      }}
-                      aria-label={`Agrandir l'image de ${result.title}`}
-                    >
-                      Agrandir image
-                    </button>
-                  ) : null}
-                </>
-              ) : result.detailUrl ? (
-                <>
-                  <span className="scraper-browser__result-action-hint is-muted">
-                    Configure `Fiche` pour ouvrir
-                  </span>
-                  {result.thumbnailUrl ? (
-                    <button
-                      type="button"
-                      className="scraper-browser__result-preview-button"
-                      onClick={(event) => handleOpenSearchResultImage(event, result)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          handleOpenSearchResultImage(event, result);
-                        } else {
-                          event.stopPropagation();
-                        }
-                      }}
-                      aria-label={`Agrandir l'image de ${result.title}`}
-                    >
-                      Agrandir image
-                    </button>
-                  ) : null}
-                </>
-              ) : result.thumbnailUrl ? (
-                <button
-                  type="button"
-                  className="scraper-browser__result-preview-button"
-                  onClick={(event) => handleOpenSearchResultImage(event, result)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      handleOpenSearchResultImage(event, result);
-                    } else {
-                      event.stopPropagation();
-                    }
-                  }}
-                  aria-label={`Agrandir l'image de ${result.title}`}
-                >
-                  Agrandir image
-                </button>
-              ) : null;
-
-              return (
-                <article
-                  key={`${result.detailUrl ?? result.title}-${result.title}`}
-                  className={[
-                    'scraper-browser__result-card',
-                    canOpenResult ? 'is-actionable' : '',
-                  ].join(' ').trim()}
-                  onClick={canOpenResult ? () => void handleOpenSearchResult(result) : undefined}
-                  onKeyDown={canOpenResult ? (event) => handleSearchResultKeyDown(event, result) : undefined}
-                  role={canOpenResult ? 'button' : undefined}
-                  tabIndex={canOpenResult ? 0 : undefined}
-                  aria-label={canOpenResult ? `Ouvrir la fiche ${result.title}` : undefined}
-                >
-                <div className="scraper-browser__result-media">
-                  {result.thumbnailUrl ? (
-                    <img src={result.thumbnailUrl} alt={result.title} />
-                  ) : (
-                    <div className="scraper-browser__result-placeholder">Pas d&apos;image</div>
-                  )}
-                </div>
-
-                <div className="scraper-browser__result-body">
-                  <h4>{result.title}</h4>
-                  {result.summary ? (
-                    <p className="scraper-browser__result-summary">{result.summary}</p>
-                  ) : (
-                    <p className="scraper-browser__result-summary is-muted">
-                      Aucun resume extrait pour ce resultat.
-                    </p>
-                  )}
-                </div>
-
-                {resultActions ? (
-                  <div className="scraper-browser__result-actions">
-                    {resultActions}
-                  </div>
-                ) : null}
-              </article>
-              );
-            })}
-          </div>
-
-          {shouldShowSearchPagination ? (
-            <ScraperSearchPagination
-              currentPageLabel={currentSearchPageLabel}
-              infoLabel={paginationInfoLabel}
-              onPrevious={() => void handleSearchPreviousPage()}
-              onNext={() => void handleSearchNextPage()}
-              previousDisabled={loading || searchPageIndex <= 0}
-              nextDisabled={loading || (!usesSearchTemplatePaging && !searchPage?.nextPageUrl)}
-            />
-          ) : null}
-        </section>
-      ) : null}
-
-      {detailsResult ? (
-        <>
-          {canReturnToSearch ? (
-            <div className="scraper-browser__details-return">
-              <button
-                type="button"
-                className="scraper-browser__back-to-search"
-                onClick={handleBackToSearch}
-              >
-                Retour a la recherche
-              </button>
-            </div>
-          ) : null}
-
-          <article className="scraper-browser__details">
-            <div className="scraper-browser__details-media">
-              {detailsResult.cover ? (
-                <img src={detailsResult.cover} alt={detailsResult.title || 'Couverture'} />
-              ) : (
-                <div className="scraper-browser__details-placeholder">Pas d&apos;image</div>
-              )}
-            </div>
-
-            <div className="scraper-browser__details-body">
-              <div className="scraper-browser__details-head">
-                <h3>{detailsResult.title || 'Titre non detecte'}</h3>
-                <div className="scraper-browser__details-actions">
-                  {detailsResult.mangaStatus ? (
-                    <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
-                  ) : null}
-                  {hasPages ? (
-                    <button
-                      type="button"
-                      className="scraper-browser__read"
-                      onClick={() => void handleOpenReader()}
-                      disabled={openingReader}
-                    >
-                      {openingReader ? 'Ouverture...' : 'Lecteur'}
-                    </button>
-                  ) : null}
-                  {hasPages ? (
-                    <button
-                      type="button"
-                      className="scraper-browser__download"
-                      onClick={() => void handleDownload()}
-                      disabled={downloading}
-                    >
-                      {downloading ? 'Telechargement...' : 'Telecharger'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              {detailsResult.authors.length ? (
-                <div className="scraper-browser__chips">
-                  {detailsResult.authors.map((author) => (
-                    <span key={author} className="scraper-browser__chip is-author">{author}</span>
-                  ))}
-                </div>
-              ) : null}
-
-              {detailsResult.tags.length ? (
-                <div className="scraper-browser__chips">
-                  {detailsResult.tags.map((tag) => (
-                    <span key={tag} className="scraper-browser__chip is-tag">{tag}</span>
-                  ))}
-                </div>
-              ) : null}
-
-              <p className="scraper-browser__description">
-                {detailsResult.description || 'Aucune description extraite pour cette fiche.'}
-              </p>
-
-              <div className="scraper-browser__links">
-                <div>
-                  <span>URL demandee</span>
-                  <strong>{formatScraperValueForDisplay(detailsResult.requestedUrl)}</strong>
-                </div>
-                {detailsResult.finalUrl && detailsResult.finalUrl !== detailsResult.requestedUrl ? (
-                  <div>
-                    <span>URL finale</span>
-                    <strong>{formatScraperValueForDisplay(detailsResult.finalUrl)}</strong>
-                  </div>
-                ) : null}
-              </div>
-
-              {Object.keys(detailsResult.derivedValues).length ? (
-                <div className="scraper-browser__derived">
-                  <span className="scraper-browser__derived-title">Variables derivees</span>
-                  <div className="scraper-browser__derived-list">
-                    {Object.entries(detailsResult.derivedValues).map(([key, value]) => (
-                      <div key={key} className="scraper-browser__derived-item">
-                        <code>{`{{${key}}}`}</code>
-                        <strong>{formatScraperValueForDisplay(value)}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </article>
-        </>
-      ) : null}
+      <ScraperDetailsPanel
+        detailsResult={detailsResult}
+        hasPages={hasPages}
+        canReturnToSearch={canReturnToSearch}
+        openingReader={openingReader}
+        downloading={downloading}
+        onBackToSearch={() => void handleBackToSearch()}
+        onOpenReader={() => void handleOpenReader()}
+        onDownload={() => void handleDownload()}
+      />
     </section>
   );
 }

@@ -44,6 +44,23 @@ Ce decoupage permet :
 - de tester chaque bloc separement
 - de re-editer facilement un seul bloc
 
+### Traduction cote renderer
+
+Le meme principe doit s'appliquer aux ecrans React qui configurent ou executent un scraper.
+
+Regles d'organisation retenues :
+
+- un fichier principal par ecran pour l'orchestration
+- des sous-composants thematiques injectes pour les sections UI
+- des helpers purs isoles dans des fichiers `*.utils.ts`
+- des composants partages centralises quand plusieurs features reutilisent la meme brique
+
+But :
+
+- eviter les fichiers geants difficiles a relire
+- separer clairement logique runtime, presentation et helpers
+- rendre le refactor plus sur sans changer le comportement fonctionnel
+
 ## Portabilite
 
 La definition d'un scraper doit etre portable.
