@@ -44,6 +44,7 @@ type Props = {
   initialState?: {
     query: string;
     detailsResult: ScraperRuntimeDetailsResult;
+    searchReturnState?: ScraperSearchReturnState | null;
   } | null;
 };
 
@@ -60,6 +61,7 @@ const buildSearchReturnStateFromRoute = (
       visitedPageUrls: [],
       pageIndex: Math.max(0, routeState.searchPage - 1),
       results: [],
+      scrollTop: null,
     }
     : null
 );
@@ -151,8 +153,82 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [downloading, setDownloading] = useState(false);
   const [openingReader, setOpeningReader] = useState(false);
   const [urlRestoreReady, setUrlRestoreReady] = useState(false);
+  const browserRootRef = useRef<HTMLElement | null>(null);
   const lastInternalSearchRef = useRef<string | null>(null);
   const lastRestoredRouteSignatureRef = useRef<string | null>(null);
+  const scrollRestoreFrameRef = useRef<number | null>(null);
+  const nestedScrollRestoreFrameRef = useRef<number | null>(null);
+
+  const cancelScheduledScrollRestore = useCallback(() => {
+    if (scrollRestoreFrameRef.current !== null) {
+      cancelAnimationFrame(scrollRestoreFrameRef.current);
+      scrollRestoreFrameRef.current = null;
+    }
+
+    if (nestedScrollRestoreFrameRef.current !== null) {
+      cancelAnimationFrame(nestedScrollRestoreFrameRef.current);
+      nestedScrollRestoreFrameRef.current = null;
+    }
+  }, []);
+
+  const getCurrentScrollTop = useCallback(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return 0;
+    }
+
+    const windowScrollTop = window.scrollY || window.pageYOffset || 0;
+    const documentScrollTop = document.scrollingElement?.scrollTop
+      ?? document.documentElement.scrollTop
+      ?? document.body?.scrollTop
+      ?? 0;
+
+    return Math.max(windowScrollTop, documentScrollTop);
+  }, []);
+
+  const restoreSearchScrollPosition = useCallback((scrollTop: number | null | undefined) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (typeof scrollTop !== 'number' || !Number.isFinite(scrollTop)) {
+      return;
+    }
+
+    cancelScheduledScrollRestore();
+
+    const nextScrollTop = Math.max(0, scrollTop);
+    scrollRestoreFrameRef.current = requestAnimationFrame(() => {
+      scrollRestoreFrameRef.current = null;
+      nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+        nestedScrollRestoreFrameRef.current = null;
+        window.scrollTo({ top: nextScrollTop, left: 0, behavior: 'auto' });
+      });
+    });
+  }, [cancelScheduledScrollRestore]);
+
+  const scrollToBrowserTop = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    cancelScheduledScrollRestore();
+
+    scrollRestoreFrameRef.current = requestAnimationFrame(() => {
+      scrollRestoreFrameRef.current = null;
+      nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+        nestedScrollRestoreFrameRef.current = null;
+        const top = browserRootRef.current
+          ? browserRootRef.current.getBoundingClientRect().top + window.scrollY
+          : 0;
+
+        window.scrollTo({
+          top: Math.max(0, top),
+          left: 0,
+          behavior: 'auto',
+        });
+      });
+    });
+  }, [cancelScheduledScrollRestore]);
 
   useEffect(() => {
     setMode((previous) => (availableModes.includes(previous) ? previous : defaultMode));
@@ -165,7 +241,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setSearchPageIndex(0);
     setSearchResults([]);
     setHasExecutedSearch(false);
-    setSearchReturnState(null);
+    setSearchReturnState(initialState?.searchReturnState ?? null);
     setDetailsResult(initialState?.detailsResult ?? null);
     setRuntimeMessage(null);
     setRuntimeError(null);
@@ -175,9 +251,16 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloading(false);
     setOpeningReader(false);
     setUrlRestoreReady(false);
+    cancelScheduledScrollRestore();
     lastInternalSearchRef.current = null;
     lastRestoredRouteSignatureRef.current = null;
-  }, [initialState, scraper.id]);
+  }, [cancelScheduledScrollRestore, initialState, scraper.id]);
+
+  useEffect(() => (
+    () => {
+      cancelScheduledScrollRestore();
+    }
+  ), [cancelScheduledScrollRestore]);
 
   const routeState = useMemo(
     () => parseScraperRouteState(location.search),
@@ -462,12 +545,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           ? `Page ${searchPageIndex + 2} chargee. Une page suivante est encore disponible.`
           : `Page ${searchPageIndex + 2} chargee.`,
       );
+      scrollToBrowserTop();
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de charger la page suivante.');
     } finally {
       setLoading(false);
     }
-  }, [fetchSearchPage, query, scraper.baseUrl, searchConfig, searchPage, searchPageIndex, usesSearchTemplatePaging]);
+  }, [fetchSearchPage, query, scraper.baseUrl, scrollToBrowserTop, searchConfig, searchPage, searchPageIndex, usesSearchTemplatePaging]);
 
   const handleSearchPreviousPage = useCallback(async () => {
     if (searchPageIndex <= 0) {
@@ -495,12 +579,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         return nextHistory;
       });
       setRuntimeMessage(`Retour a la page ${searchPageIndex}.`);
+      scrollToBrowserTop();
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de revenir a la page precedente.');
     } finally {
       setLoading(false);
     }
-  }, [fetchSearchPage, searchPageIndex, searchVisitedPageUrls]);
+  }, [fetchSearchPage, scrollToBrowserTop, searchPageIndex, searchVisitedPageUrls]);
 
   const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -540,12 +625,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       visitedPageUrls: searchVisitedPageUrls,
       pageIndex: searchPageIndex,
       results: searchResults,
+      scrollTop: getCurrentScrollTop(),
     });
     setMode('manga');
     setQuery(formatScraperValueForDisplay(result.detailUrl));
     await loadDetailsFromTargetUrl(result.detailUrl);
   }, [
     detailsConfig,
+    getCurrentScrollTop,
     loadDetailsFromTargetUrl,
     query,
     searchPage,
@@ -615,6 +702,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       setSearchResults(searchReturnState.results);
       setHasExecutedSearch(searchReturnState.hasExecutedSearch);
       setRuntimeMessage('Retour a la derniere recherche.');
+      restoreSearchScrollPosition(searchReturnState.scrollTop);
       return;
     }
 
@@ -623,6 +711,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         pageIndex: searchReturnState.pageIndex,
         preserveSearchReturnState: true,
       });
+      restoreSearchScrollPosition(searchReturnState.scrollTop);
       return;
     }
 
@@ -632,7 +721,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setSearchResults([]);
     setHasExecutedSearch(false);
     setRuntimeMessage(null);
-  }, [runSearchLookup, searchReturnState]);
+  }, [restoreSearchScrollPosition, runSearchLookup, searchReturnState]);
 
   const handleGoToHome = useCallback(async () => {
     setRuntimeError(null);
@@ -674,6 +763,30 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setRuntimeMessage(null);
   }, [defaultMode, hasConfiguredHomeSearch, hasSearch, homeSearchQuery, runSearchLookup]);
 
+  const handleModeChange = useCallback(async (nextMode: ScraperBrowseMode) => {
+    if (nextMode === mode) {
+      return;
+    }
+
+    if (nextMode === 'search' && detailsResult) {
+      if (searchReturnState?.hasExecutedSearch) {
+        await handleBackToSearch();
+        return;
+      }
+
+      await handleGoToHome();
+      return;
+    }
+
+    setMode(nextMode);
+  }, [
+    detailsResult,
+    handleBackToSearch,
+    handleGoToHome,
+    mode,
+    searchReturnState,
+  ]);
+
   useEffect(() => {
     if (urlRestoreReady) {
       return;
@@ -685,7 +798,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     lastRestoredRouteSignatureRef.current = routeStateSignature;
 
-    const restoredSearchReturnState = buildSearchReturnStateFromRoute(routeState);
+    const restoredSearchReturnState = initialState?.searchReturnState
+      ?? buildSearchReturnStateFromRoute(routeState);
 
     if (initialState?.detailsResult) {
       setMode('manga');
@@ -983,6 +1097,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
               scraperId: scraper.id,
               query,
               detailsResult,
+              searchReturnState,
             },
             scraperReader: {
               id: readerMangaId,
@@ -1000,7 +1115,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     } finally {
       setOpeningReader(false);
     }
-  }, [detailsResult, location.pathname, location.search, navigate, pagesConfig, query, resolveCurrentPageUrls, scraper.id]);
+  }, [detailsResult, location.pathname, location.search, navigate, pagesConfig, query, resolveCurrentPageUrls, scraper.id, searchReturnState]);
 
   const activePlaceholder = useMemo(
     () => buildQueryPlaceholder(mode, hasDetails, detailsConfig?.urlStrategy ?? null),
@@ -1062,7 +1177,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   );
 
   return (
-    <section className="scraper-browser">
+    <section className="scraper-browser" ref={browserRootRef}>
       <ScraperBrowserHero
         scraper={scraper}
         capabilities={capabilities as ScraperCapability[]}
@@ -1087,7 +1202,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           helperText={helperText}
           loading={loading}
           onSubmit={handleSubmit}
-          onModeChange={setMode}
+          onModeChange={(nextMode) => void handleModeChange(nextMode)}
           onQueryChange={setQuery}
         />
       )}

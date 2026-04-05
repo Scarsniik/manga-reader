@@ -14,6 +14,7 @@ import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
+import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
 import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 import {
     clearScraperRouteState,
@@ -46,6 +47,7 @@ const MangaManager: React.FC = () => {
         scraperId: string;
         query: string;
         detailsResult: ScraperRuntimeDetailsResult;
+        searchReturnState?: ScraperSearchReturnState | null;
     } | null>(null);
     const { tags } = useTags();
     const { params, loading: paramsLoading, setParams } = useParams();
@@ -395,6 +397,7 @@ const MangaManager: React.FC = () => {
                 scraperId: string;
                 query: string;
                 detailsResult: ScraperRuntimeDetailsResult;
+                searchReturnState?: ScraperSearchReturnState | null;
             };
         } | null;
 

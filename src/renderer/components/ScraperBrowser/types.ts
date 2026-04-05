@@ -13,6 +13,7 @@ export type ScraperSearchReturnState = {
   visitedPageUrls: string[];
   pageIndex: number;
   results: ScraperSearchResultItem[];
+  scrollTop: number | null;
 };
 
 export type ScraperCapability = {

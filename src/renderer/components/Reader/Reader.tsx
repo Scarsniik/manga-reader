@@ -4,6 +4,7 @@ import './style.scss';
 import { Manga } from '@/renderer/types';
 import { ScraperReaderProgressRecord } from '@/shared/scraper';
 import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
+import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
 import ReaderHeader from './ReaderHeader';
 import ImageViewer from './ImageViewer';
 import OcrPanel from './OcrPanel';
@@ -20,6 +21,7 @@ type ReaderLocationState = {
         scraperId: string;
         query: string;
         detailsResult: ScraperRuntimeDetailsResult;
+        searchReturnState?: ScraperSearchReturnState | null;
     };
     scraperReader?: {
         id: string;
