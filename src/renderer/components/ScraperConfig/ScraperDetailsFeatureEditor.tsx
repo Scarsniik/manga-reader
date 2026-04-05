@@ -256,15 +256,29 @@ const getConfigSignature = (config: ScraperDetailsFeatureConfig): string => JSON
 const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDetailsFeatureConfig => {
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
-  return buildDetailsConfig({
-    ...DEFAULT_DETAILS_CONFIG,
-    ...raw,
+  return {
     urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'result_url',
-    testUrl: raw.testUrl ?? raw.exampleUrl ?? '',
+    urlTemplate: trimOptional(raw.urlTemplate),
+    testUrl: trimOptional(
+      typeof raw.testUrl === 'string'
+        ? raw.testUrl
+        : typeof raw.exampleUrl === 'string'
+          ? raw.exampleUrl
+          : '',
+    ),
+    testValue: trimOptional(raw.testValue),
+    titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
+    coverSelector: trimOptionalSelector(raw.coverSelector),
+    descriptionSelector: trimOptionalSelector(raw.descriptionSelector),
+    authorsSelector: trimOptionalSelector(raw.authorsSelector),
+    tagsSelector: trimOptionalSelector(raw.tagsSelector),
+    statusSelector: trimOptionalSelector(raw.statusSelector),
     derivedValues: Array.isArray(raw.derivedValues)
-      ? raw.derivedValues as ScraperDetailsFeatureConfig['derivedValues']
-      : [],
-  });
+      ? raw.derivedValues
+        .map((value) => buildDerivedValueConfig(value as Partial<ScraperDetailsDerivedValueConfig>))
+        .filter((value) => hasDerivedValueContent(value))
+      : DEFAULT_DETAILS_CONFIG.derivedValues,
+  };
 };
 
 const createFormStateFromConfig = (config: ScraperDetailsFeatureConfig): DetailsFormState => ({

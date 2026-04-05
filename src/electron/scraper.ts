@@ -87,6 +87,25 @@ export interface ScraperFeatureValidationResult {
   derivedValues: ScraperDetailsDerivedValueResult[];
 }
 
+export interface ScraperSearchFeatureConfig {
+  urlTemplate: string;
+  testQuery?: string;
+  resultListSelector?: string;
+  resultItemSelector: string;
+  titleSelector: string;
+  detailUrlSelector?: string;
+  thumbnailSelector?: string;
+  summarySelector?: string;
+  nextPageSelector?: string;
+}
+
+export interface ScraperSearchResultItem {
+  title: string;
+  detailUrl?: string;
+  thumbnailUrl?: string;
+  summary?: string;
+}
+
 export interface ScraperDetailsFeatureConfig {
   urlStrategy: ScraperDetailsUrlStrategy;
   urlTemplate?: string;
@@ -275,6 +294,50 @@ export function buildScraperTemplateUrl(
     ['{{rawValue}}', trimmedValue],
     ['{{rawId}}', trimmedValue],
     ['{{rawSlug}}', trimmedValue],
+  ];
+
+  const resolvedTemplate = replacements.reduce(
+    (current, [token, replacement]) => current.split(token).join(replacement),
+    trimmedTemplate,
+  );
+
+  return resolveScraperUrl(baseUrl, resolvedTemplate);
+}
+
+export function buildScraperSearchUrl(
+  baseUrl: string,
+  template: string,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): string {
+  const trimmedTemplate = template.trim();
+  const trimmedQuery = query.trim();
+  const pageIndex = Math.max(0, options?.pageIndex ?? 0);
+  const page = pageIndex + 1;
+  const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
+
+  if (!trimmedTemplate) {
+    throw new Error('Le template de recherche est requis.');
+  }
+
+  const encodedQuery = encodeURIComponent(trimmedQuery);
+  const replacements: Array<[string, string]> = [
+    ['{{query}}', encodedQuery],
+    ['{{search}}', encodedQuery],
+    ['{{value}}', encodedQuery],
+    ['{{page}}', String(page)],
+    ['{{page2}}', padPageNumber(page, 2)],
+    ['{{page3}}', padPageNumber(page, 3)],
+    ['{{page4}}', padPageNumber(page, 4)],
+    ['{{pageIndex}}', String(pageIndex)],
+    ['{{pageIndex2}}', padPageNumber(pageIndex, 2)],
+    ['{{pageIndex3}}', padPageNumber(pageIndex, 3)],
+    ['{{pageIndex4}}', padPageNumber(pageIndex, 4)],
+    ['{{rawQuery}}', trimmedQuery],
+    ['{{rawSearch}}', trimmedQuery],
+    ['{{rawValue}}', trimmedQuery],
   ];
 
   const resolvedTemplate = replacements.reduce(

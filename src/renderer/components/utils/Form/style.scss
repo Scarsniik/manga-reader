@@ -41,6 +41,10 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+.mh-form__field select:not([multiple]):not([size]) {
+  padding-right: var(--app-select-padding-right);
+}
+
 .mh-form__field input::placeholder,
 .mh-form__field textarea::placeholder {
   color: #64748b; /* muted */

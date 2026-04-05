@@ -18,6 +18,7 @@ const normalizeReaderPreloadPageCount = (value: unknown): number => {
 
 const defaultSettings = {
     libraryPath: "",
+    lastHomeSearch: "",
     showPageNumbers: true,
     showHiddens: false,
     titleLineCount: 2,

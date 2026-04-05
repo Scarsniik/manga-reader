@@ -6,6 +6,7 @@ import {
 } from '@/shared/scraper';
 import ScraperDetailsFeatureEditor from './ScraperDetailsFeatureEditor';
 import ScraperPagesFeatureEditor from './ScraperPagesFeatureEditor';
+import ScraperSearchFeatureEditor from './ScraperSearchFeatureEditor';
 import ScraperFeaturePlaceholderEditor from './ScraperFeaturePlaceholderEditor';
 
 type Props = {
@@ -43,6 +44,17 @@ export default function ScraperFeatureSelectionStep({
   );
 
   if (activeFeature) {
+    if (activeFeature.kind === 'search') {
+      return (
+        <ScraperSearchFeatureEditor
+          scraper={scraper}
+          feature={activeFeature}
+          onBack={() => setActiveFeatureKind(null)}
+          onScraperChange={onScraperChange}
+        />
+      );
+    }
+
     if (activeFeature.kind === 'details') {
       return (
         <ScraperDetailsFeatureEditor

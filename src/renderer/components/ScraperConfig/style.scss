@@ -740,6 +740,97 @@
   word-break: break-word;
 }
 
+.scraper-fake-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scraper-search-preview-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce6ef;
+}
+
+.scraper-search-preview-pagination span {
+  font-weight: 700;
+  text-align: center;
+}
+
+.scraper-search-preview-pagination button {
+  min-width: 170px !important;
+}
+
+.scraper-fake-search-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 21, 32, 0.98), rgba(10, 15, 25, 0.98));
+}
+
+.scraper-fake-search-card__media {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.scraper-fake-search-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scraper-fake-search-card__media-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #90a0b1;
+  font-weight: 700;
+}
+
+.scraper-fake-search-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scraper-fake-search-card__content h5 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.scraper-fake-search-card__content p {
+  margin: 0;
+  color: #b8c2cc;
+  line-height: 1.6;
+}
+
+.scraper-fake-search-card__meta {
+  color: #9cc0ff;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.scraper-fake-search-card__meta.is-muted {
+  color: #92a2b2;
+}
+
 .scraper-fake-reader {
   display: flex;
   flex-direction: column;
@@ -818,13 +909,15 @@
   }
 
   .scraper-config-section__grid,
-  .scraper-fake-details {
+  .scraper-fake-details,
+  .scraper-fake-search-card {
     grid-template-columns: 1fr;
   }
 
   .scraper-derived-value-card__header,
   .scraper-template-context__item,
-  .scraper-fake-details__variable {
+  .scraper-fake-details__variable,
+  .scraper-search-preview-pagination {
     align-items: stretch;
     flex-direction: column;
   }

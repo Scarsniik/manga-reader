@@ -26,8 +26,12 @@ const FEATURE_STATUS_CLASSNAMES = {
   validated: 'is-validated',
 } as const;
 
-export default function ScrapersModalContent() {
-  const [view, setView] = useState<ViewState>({ kind: 'list' });
+type Props = {
+  initialView?: ViewState;
+};
+
+export default function ScrapersModalContent({ initialView = { kind: 'list' } }: Props) {
+  const [view, setView] = useState<ViewState>(initialView);
   const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

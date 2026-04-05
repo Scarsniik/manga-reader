@@ -86,7 +86,7 @@ const trimOptional = (value: unknown): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
-const buildPagesConfig = (values: Record<string, unknown>): ScraperPagesFeatureConfig => ({
+const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): ScraperPagesFeatureConfig => ({
   urlStrategy: values.urlStrategy === 'template' ? 'template' : 'details_page',
   urlTemplate: trimOptional(values.urlTemplate),
   pageImageSelector: trimOptional(normalizeSelectorInput(String(values.pageImageSelector ?? ''))),
@@ -95,11 +95,11 @@ const buildPagesConfig = (values: Record<string, unknown>): ScraperPagesFeatureC
 const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPagesFeatureConfig => {
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
-  return buildPagesConfig({
-    ...DEFAULT_PAGES_CONFIG,
-    ...raw,
+  return {
     urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
-  });
+    urlTemplate: trimOptional(raw.urlTemplate),
+    pageImageSelector: trimOptional(normalizeSelectorInput(String(raw.pageImageSelector ?? ''))),
+  };
 };
 
 const parseSelectorExpression = (input: string): { selector: string; attribute?: string } => {
@@ -249,7 +249,7 @@ export default function ScraperPagesFeatureEditor({
     [scraper.features],
   );
 
-  const templateContext = useMemo(() => {
+  const templateContext = useMemo<Record<string, string | undefined>>(() => {
     if (!detailsFeature?.validation?.ok) {
       return {};
     }
@@ -261,7 +261,7 @@ export default function ScraperPagesFeatureEditor({
       detailsFeature.validation.derivedValues
         .filter((derivedValue) => Boolean(derivedValue.value))
         .map((derivedValue) => [derivedValue.key, derivedValue.value as string]),
-    );
+    ) as Record<string, string>;
 
     return {
       requestedUrl: detailsFeature.validation.requestedUrl,
@@ -276,7 +276,7 @@ export default function ScraperPagesFeatureEditor({
     };
   }, [detailsFeature]);
 
-  const buildTemplateContextForPage = useCallback((pageIndex: number) => ({
+  const buildTemplateContextForPage = useCallback((pageIndex: number): Record<string, string | undefined> => ({
     ...templateContext,
     page: String(pageIndex + 1),
     page2: padPageNumber(pageIndex + 1, 2),

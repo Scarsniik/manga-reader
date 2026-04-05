@@ -16,6 +16,11 @@ import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
 import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 import {
+    clearScraperRouteState,
+    parseScraperRouteState,
+    writeScraperRouteState,
+} from '@/renderer/utils/scraperBrowserNavigation';
+import {
     readMangaManagerViewState,
     writeMangaManagerViewState,
 } from '@/renderer/utils/readerNavigation';
@@ -37,18 +42,19 @@ const MangaManager: React.FC = () => {
     const [hasResolvedInitialFilters, setHasResolvedInitialFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
-    const [activeViewId, setActiveViewId] = useState<string>('library');
     const [scraperBrowserSeed, setScraperBrowserSeed] = useState<{
         scraperId: string;
         query: string;
         detailsResult: ScraperRuntimeDetailsResult;
     } | null>(null);
     const { tags } = useTags();
-    const { params } = useParams();
+    const { params, loading: paramsLoading, setParams } = useParams();
     const { openModal } = useModal();
     const contentRef = useRef<HTMLDivElement | null>(null);
     const hasRestoredViewRef = useRef(false);
+    const hasRestoredHomeSearchRef = useRef(false);
     const consumedScraperReturnKeyRef = useRef<string | null>(null);
+    const persistHomeSearchTimeoutRef = useRef<number | null>(null);
     const getCurrentScrollTop = useCallback(() => {
         const elementScrollTop = contentRef.current?.scrollTop ?? 0;
         const windowScrollTop = typeof window !== 'undefined'
@@ -308,12 +314,80 @@ const MangaManager: React.FC = () => {
         [scrapers],
     );
 
+    const routeScraperState = useMemo(
+        () => parseScraperRouteState(location.search),
+        [location.search],
+    );
+    const activeViewId = routeScraperState.scraperId ?? 'library';
     const activeScraper = useMemo(
         () => sortedScrapers.find((scraper) => scraper.id === activeViewId) ?? null,
         [activeViewId, sortedScrapers],
     );
 
     const isLibraryView = activeViewId === 'library';
+
+    useEffect(() => {
+        if (paramsLoading) {
+            return;
+        }
+
+        if (hasRestoredHomeSearchRef.current) {
+            return;
+        }
+
+        hasRestoredHomeSearchRef.current = true;
+
+        if (location.pathname !== '/') {
+            return;
+        }
+
+        if (location.search) {
+            return;
+        }
+
+        const lastHomeSearch = typeof params?.lastHomeSearch === 'string'
+            ? params.lastHomeSearch.trim()
+            : '';
+
+        if (!lastHomeSearch) {
+            return;
+        }
+
+        navigate(
+            {
+                pathname: location.pathname,
+                search: lastHomeSearch,
+            },
+            { replace: true }
+        );
+    }, [location.pathname, location.search, navigate, params?.lastHomeSearch, paramsLoading]);
+
+    useEffect(() => {
+        if (paramsLoading || location.pathname !== '/') {
+            return;
+        }
+
+        const nextSearch = location.search || '';
+        if ((params?.lastHomeSearch ?? '') === nextSearch) {
+            return;
+        }
+
+        if (persistHomeSearchTimeoutRef.current !== null) {
+            window.clearTimeout(persistHomeSearchTimeoutRef.current);
+        }
+
+        persistHomeSearchTimeoutRef.current = window.setTimeout(() => {
+            setParams({ lastHomeSearch: nextSearch }, { broadcast: false });
+            persistHomeSearchTimeoutRef.current = null;
+        }, 250);
+
+        return () => {
+            if (persistHomeSearchTimeoutRef.current !== null) {
+                window.clearTimeout(persistHomeSearchTimeoutRef.current);
+                persistHomeSearchTimeoutRef.current = null;
+            }
+        };
+    }, [location.pathname, location.search, params?.lastHomeSearch, paramsLoading, setParams]);
 
     useEffect(() => {
         const nextState = location.state as {
@@ -334,7 +408,6 @@ const MangaManager: React.FC = () => {
         }
 
         consumedScraperReturnKeyRef.current = location.key;
-        setActiveViewId(scraperBrowserReturn.scraperId);
         setScraperBrowserSeed(scraperBrowserReturn);
     }, [location.key, location.state]);
 
@@ -348,9 +421,15 @@ const MangaManager: React.FC = () => {
         }
 
         if (!scrapers.some((scraper) => scraper.id === activeViewId)) {
-            setActiveViewId('library');
+            navigate(
+                {
+                    pathname: location.pathname,
+                    search: clearScraperRouteState(location.search),
+                },
+                { replace: true }
+            );
         }
-    }, [activeViewId, hasLoadedScrapers, scrapers]);
+    }, [activeViewId, hasLoadedScrapers, location.pathname, location.search, navigate, scrapers]);
 
     const handleSearchResults = useCallback((result: Manga[]) => {
         setFiltered(result);
@@ -394,6 +473,31 @@ const MangaManager: React.FC = () => {
             alert('Impossible de supprimer le manga');
         }
     };
+
+    const handleActiveViewChange = useCallback((nextViewId: string) => {
+        if (nextViewId !== activeViewId) {
+            setScraperBrowserSeed(null);
+        }
+
+        const nextSearch = nextViewId === 'library'
+            ? clearScraperRouteState(location.search)
+            : writeScraperRouteState(location.search, {
+                scraperId: nextViewId,
+                mode: 'search',
+                searchActive: false,
+                searchQuery: '',
+                searchPage: 1,
+                mangaQuery: '',
+            });
+
+        navigate(
+            {
+                pathname: location.pathname,
+                search: nextSearch,
+            },
+            { replace: true }
+        );
+    }, [activeViewId, location.pathname, location.search, navigate]);
 
     useEffect(() => {
         if (!hasLoadedMangas) return;
@@ -457,7 +561,7 @@ const MangaManager: React.FC = () => {
                 <div className="mangaManager-header__view">
                     <select
                         value={activeViewId}
-                        onChange={(event) => setActiveViewId(event.target.value)}
+                        onChange={(event) => handleActiveViewChange(event.target.value)}
                         aria-label="Choisir la vue active"
                     >
                         <option value="library">Bibliotheque</option>

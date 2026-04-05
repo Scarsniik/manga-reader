@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 
 export type AppParams = {
     libraryPath?: string;
+    lastHomeSearch?: string | null;
     showPageNumbers?: boolean;
     showHiddens?: boolean;
     titleLineCount?: number;

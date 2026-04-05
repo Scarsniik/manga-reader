@@ -1,4 +1,5 @@
 import {
+  buildScraperSearchUrl,
   buildScraperContextTemplateUrl,
   buildScraperTemplateUrl,
   FetchScraperDocumentResult,
@@ -9,6 +10,8 @@ import {
   ScraperFeatureKind,
   ScraperFeatureValidationCheckKey,
   ScraperPagesFeatureConfig,
+  ScraperSearchFeatureConfig,
+  ScraperSearchResultItem,
   ScraperRecord,
 } from '@/shared/scraper';
 
@@ -35,6 +38,12 @@ export type ScraperReaderSession = {
   sourceUrl: string;
   cover?: string;
   pageUrls: string[];
+};
+
+export type ScraperRuntimeSearchPageResult = {
+  currentPageUrl: string;
+  nextPageUrl?: string;
+  items: ScraperSearchResultItem[];
 };
 
 export type ScraperDocumentFetcher = (request: {
@@ -104,6 +113,31 @@ export const getScraperFeature = (
   scraper.features.find((feature) => feature.kind === featureKind) ?? null
 );
 
+export const getScraperSearchFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperSearchFeatureConfig | null => {
+  if (!feature?.config) {
+    return null;
+  }
+
+  const raw = feature.config as Record<string, unknown>;
+  const urlTemplate = trimOptional(raw.urlTemplate);
+  const resultItemSelector = normalizeSelectorInput(String(raw.resultItemSelector ?? ''));
+  const titleSelector = normalizeSelectorInput(String(raw.titleSelector ?? ''));
+
+  return {
+    urlTemplate: urlTemplate ?? '',
+    testQuery: trimOptional(raw.testQuery),
+    resultListSelector: trimOptionalSelector(raw.resultListSelector),
+    resultItemSelector,
+    titleSelector,
+    detailUrlSelector: trimOptionalSelector(raw.detailUrlSelector),
+    thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
+    summarySelector: trimOptionalSelector(raw.summarySelector),
+    nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
+  };
+};
+
 export const isScraperFeatureConfigured = (
   feature: ScraperFeatureDefinition | null | undefined,
 ): boolean => Boolean(feature?.config && feature.status !== 'not_configured');
@@ -165,6 +199,15 @@ export const resolveScraperDetailsTargetUrl = (
   return resolveScraperUrl(baseUrl, query);
 };
 
+export const resolveScraperSearchTargetUrl = (
+  baseUrl: string,
+  config: ScraperSearchFeatureConfig,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): string => buildScraperSearchUrl(baseUrl, config.urlTemplate || '', query, options);
+
 export const parseSelectorExpression = (
   input: string,
 ): { selector: string; attribute?: string } => {
@@ -181,13 +224,13 @@ export const parseSelectorExpression = (
   };
 };
 
-export const extractSelectorValues = (doc: Document, input: string): string[] => {
+const extractSelectorValuesFromRoot = (root: ParentNode, input: string): string[] => {
   const { selector, attribute } = parseSelectorExpression(input);
   if (!selector) {
     return [];
   }
 
-  return Array.from(doc.querySelectorAll(selector))
+  return Array.from(root.querySelectorAll(selector))
     .map((element) => {
       if (attribute) {
         return element.getAttribute(attribute)?.trim() || '';
@@ -201,6 +244,10 @@ export const extractSelectorValues = (doc: Document, input: string): string[] =>
     })
     .filter(Boolean);
 };
+
+export const extractSelectorValues = (doc: Document, input: string): string[] => (
+  extractSelectorValuesFromRoot(doc, input)
+);
 
 export const toAbsoluteScraperUrl = (value: string, baseUrl: string): string => {
   try {
@@ -218,6 +265,22 @@ const uniqueValues = (values: string[]): string[] => {
     }
 
     seen.add(value);
+    return true;
+  });
+};
+
+const uniqueSearchResults = (
+  results: ScraperSearchResultItem[],
+): ScraperSearchResultItem[] => {
+  const seen = new Set<string>();
+
+  return results.filter((result) => {
+    const key = `${result.detailUrl ?? ''}::${result.title}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
     return true;
   });
 };
@@ -242,6 +305,10 @@ const padPageNumber = (value: number, length: number): string => String(value).p
 const hasPagePlaceholder = (template: string | undefined): boolean => (
   typeof template === 'string' && /{{\s*page(?:Index)?\d*\s*}}/.test(template)
 );
+
+export const hasSearchPagePlaceholder = (
+  config: ScraperSearchFeatureConfig | null | undefined,
+): boolean => hasPagePlaceholder(config?.urlTemplate);
 
 const isImageLikeContentType = (contentType: string | undefined): boolean => (
   typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')
@@ -275,6 +342,76 @@ const buildTemplateContextForPage = (
   pageIndex3: padPageNumber(pageIndex, 3),
   pageIndex4: padPageNumber(pageIndex, 4),
 });
+
+export const extractScraperSearchPageFromDocument = (
+  doc: Document,
+  config: ScraperSearchFeatureConfig,
+  requestMeta: {
+    requestedUrl: string;
+    finalUrl?: string;
+  },
+): ScraperRuntimeSearchPageResult => {
+  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const searchRoots = config.resultListSelector
+    ? Array.from(doc.querySelectorAll(config.resultListSelector))
+    : [doc];
+  const resultItems = Array.from(
+    new Set(
+      searchRoots.flatMap((root) => Array.from(root.querySelectorAll(config.resultItemSelector))),
+    ),
+  );
+
+  const results = resultItems.reduce<ScraperSearchResultItem[]>((accumulator, item) => {
+      const title = extractSelectorValuesFromRoot(item, config.titleSelector)[0];
+      if (!title) {
+        return accumulator;
+      }
+
+      const detailUrlValue = config.detailUrlSelector
+        ? extractSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
+        : undefined;
+      const thumbnailValue = config.thumbnailSelector
+        ? extractSelectorValuesFromRoot(item, config.thumbnailSelector)[0]
+        : undefined;
+      const summaryValue = config.summarySelector
+        ? extractSelectorValuesFromRoot(item, config.summarySelector)[0]
+        : undefined;
+
+      accumulator.push({
+        title,
+        detailUrl: detailUrlValue
+          ? toAbsoluteScraperUrl(detailUrlValue, documentUrl)
+          : undefined,
+        thumbnailUrl: thumbnailValue
+          ? toAbsoluteScraperUrl(thumbnailValue, documentUrl)
+          : undefined,
+        summary: summaryValue,
+      });
+
+      return accumulator;
+    }, []);
+
+  const nextPageValue = config.nextPageSelector
+    ? extractSelectorValuesFromRoot(doc, config.nextPageSelector)[0]
+    : undefined;
+
+  return {
+    currentPageUrl: documentUrl,
+    nextPageUrl: nextPageValue
+      ? toAbsoluteScraperUrl(nextPageValue, documentUrl)
+      : undefined,
+    items: uniqueSearchResults(results),
+  };
+};
+
+export const extractScraperSearchResultsFromDocument = (
+  doc: Document,
+  config: ScraperSearchFeatureConfig,
+  requestMeta: {
+    requestedUrl: string;
+    finalUrl?: string;
+  },
+): ScraperSearchResultItem[] => extractScraperSearchPageFromDocument(doc, config, requestMeta).items;
 
 export const extractScraperDetailsFromDocument = (
   doc: Document,
@@ -323,7 +460,7 @@ export const extractScraperDetailsFromDocument = (
           ? [requestMeta.requestedUrl]
           : [];
     } else if (derivedValue.sourceType === 'field') {
-      sourceValues = derivedValue.sourceField
+      sourceValues = isDetailsFieldKey(derivedValue.sourceField)
         ? fieldValuesByKey[derivedValue.sourceField] ?? []
         : [];
     } else {

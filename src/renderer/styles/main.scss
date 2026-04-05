@@ -8,6 +8,13 @@ body {
     padding: 0;
 }
 
+:root {
+    --app-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2399a8bc' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --app-select-chevron-size: 12px 8px;
+    --app-select-chevron-offset: 16px;
+    --app-select-padding-right: 42px;
+}
+
 h1, h2, h3 {
     color: #fff;
 }
@@ -86,6 +93,17 @@ select {
     border-radius: 6px;
     font-size: 0.95rem;
     transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+select:not([multiple]):not([size]) {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: var(--app-select-padding-right);
+    background-image: var(--app-select-chevron);
+    background-repeat: no-repeat;
+    background-position: right var(--app-select-chevron-offset) center;
+    background-size: var(--app-select-chevron-size);
 }
 
 input:focus, textarea:focus, select:focus {
