@@ -1,6 +1,8 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ScraperRecord } from '@/shared/scraper';
 import {
+  createScraperMangaId,
   extractScraperDetailsFromDocument,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -15,6 +17,10 @@ import './style.scss';
 
 type Props = {
   scraper: ScraperRecord;
+  initialState?: {
+    query: string;
+    detailsResult: ScraperRuntimeDetailsResult;
+  } | null;
 };
 
 type ScraperBrowseMode = 'search' | 'manga';
@@ -45,7 +51,9 @@ const buildQueryPlaceholder = (
   return 'Exemple : URL complete, chemin relatif ou slug';
 };
 
-export default function ScraperBrowser({ scraper }: Props) {
+export default function ScraperBrowser({ scraper, initialState = null }: Props) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
@@ -83,21 +91,23 @@ export default function ScraperBrowser({ scraper }: Props) {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [openingReader, setOpeningReader] = useState(false);
 
   useEffect(() => {
     setMode((previous) => (availableModes.includes(previous) ? previous : defaultMode));
   }, [availableModes, defaultMode]);
 
   useEffect(() => {
-    setQuery('');
-    setDetailsResult(null);
+    setQuery(initialState?.query ?? '');
+    setDetailsResult(initialState?.detailsResult ?? null);
     setRuntimeMessage(null);
     setRuntimeError(null);
     setDownloadError(null);
     setDownloadMessage(null);
     setLoading(false);
     setDownloading(false);
-  }, [scraper.id]);
+    setOpeningReader(false);
+  }, [initialState, scraper.id]);
 
   const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -170,20 +180,29 @@ export default function ScraperBrowser({ scraper }: Props) {
     }
   }, [detailsConfig, mode, query, scraper.baseUrl]);
 
-  const handleDownload = useCallback(async () => {
+  const resolveCurrentPageUrls = useCallback(async (): Promise<string[]> => {
     if (!detailsResult) {
-      setDownloadError('Charge d\'abord une fiche avant de lancer le telechargement.');
-      return;
+      throw new Error('Charge d\'abord une fiche avant de lire ou telecharger le manga.');
     }
 
     if (!pagesConfig) {
-      setDownloadError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
-      return;
+      throw new Error('Le composant Pages n\'est pas encore configure pour ce scrapper.');
     }
 
-    if (!(window as any).api
-      || typeof (window as any).api.fetchScraperDocument !== 'function'
-      || typeof (window as any).api.downloadScraperManga !== 'function') {
+    if (!(window as any).api || typeof (window as any).api.fetchScraperDocument !== 'function') {
+      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
+    }
+
+    return resolveScraperPageUrls(
+      scraper,
+      detailsResult,
+      pagesConfig,
+      async (request) => (window as any).api.fetchScraperDocument(request),
+    );
+  }, [detailsResult, pagesConfig, scraper]);
+
+  const handleDownload = useCallback(async () => {
+    if (!(window as any).api || typeof (window as any).api.downloadScraperManga !== 'function') {
       setDownloadError('Le telechargement du scrapper n\'est pas disponible dans cette version.');
       return;
     }
@@ -193,12 +212,7 @@ export default function ScraperBrowser({ scraper }: Props) {
     setDownloadMessage(null);
 
     try {
-      const pageUrls = await resolveScraperPageUrls(
-        scraper,
-        detailsResult,
-        pagesConfig,
-        async (request) => (window as any).api.fetchScraperDocument(request),
-      );
+      const pageUrls = await resolveCurrentPageUrls();
 
       const downloadResult = await (window as any).api.downloadScraperManga({
         title: detailsResult.title || query.trim() || 'manga',
@@ -214,7 +228,66 @@ export default function ScraperBrowser({ scraper }: Props) {
     } finally {
       setDownloading(false);
     }
-  }, [detailsResult, pagesConfig, query, scraper]);
+  }, [detailsResult, query, resolveCurrentPageUrls]);
+
+  const handleOpenReader = useCallback(async () => {
+    if (!detailsResult) {
+      setRuntimeError('Charge d\'abord une fiche avant d\'ouvrir le lecteur.');
+      return;
+    }
+
+    if (!pagesConfig) {
+      setRuntimeError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
+      return;
+    }
+
+    setOpeningReader(true);
+    setRuntimeError(null);
+    setDownloadError(null);
+    setDownloadMessage(null);
+
+    try {
+      const pageUrls = await resolveCurrentPageUrls();
+      const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+      const readerMangaId = createScraperMangaId(scraper.id, sourceUrl);
+      const savedProgress = (window as any).api && typeof (window as any).api.getScraperReaderProgress === 'function'
+        ? await (window as any).api.getScraperReaderProgress(readerMangaId)
+        : null;
+      const savedPage = typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
+        ? savedProgress.currentPage
+        : 1;
+
+      navigate(
+        `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(savedPage))}`,
+        {
+          state: {
+            from: {
+              pathname: location.pathname,
+              search: location.search,
+            },
+            mangaId: readerMangaId,
+            scraperBrowserReturn: {
+              scraperId: scraper.id,
+              query,
+              detailsResult,
+            },
+            scraperReader: {
+              id: readerMangaId,
+              scraperId: scraper.id,
+              title: detailsResult.title || query.trim() || 'manga',
+              sourceUrl,
+              cover: detailsResult.cover,
+              pageUrls,
+            },
+          },
+        },
+      );
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir le lecteur.');
+    } finally {
+      setOpeningReader(false);
+    }
+  }, [detailsResult, location.pathname, location.search, navigate, pagesConfig, query, resolveCurrentPageUrls, scraper.id]);
 
   const activePlaceholder = useMemo(
     () => buildQueryPlaceholder(mode, hasDetails, detailsConfig?.urlStrategy ?? null),
@@ -327,6 +400,16 @@ export default function ScraperBrowser({ scraper }: Props) {
               <div className="scraper-browser__details-actions">
                 {detailsResult.mangaStatus ? (
                   <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
+                ) : null}
+                {hasPages ? (
+                  <button
+                    type="button"
+                    className="scraper-browser__read"
+                    onClick={() => void handleOpenReader()}
+                    disabled={openingReader}
+                  >
+                    {openingReader ? 'Ouverture...' : 'Lecteur'}
+                  </button>
                 ) : null}
                 {hasPages ? (
                   <button

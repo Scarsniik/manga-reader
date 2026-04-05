@@ -28,6 +28,15 @@ export type ScraperRuntimeDetailsResult = {
   derivedValues: Record<string, string>;
 };
 
+export type ScraperReaderSession = {
+  id: string;
+  scraperId: string;
+  title: string;
+  sourceUrl: string;
+  cover?: string;
+  pageUrls: string[];
+};
+
 export type ScraperDocumentFetcher = (request: {
   baseUrl: string;
   targetUrl: string;
@@ -212,6 +221,21 @@ const uniqueValues = (values: string[]): string[] => {
     return true;
   });
 };
+
+const createStableHash = (input: string): string => {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+export const createScraperMangaId = (scraperId: string, sourceUrl: string): string => (
+  `scraper-${scraperId}-${createStableHash(`${scraperId}::${sourceUrl}`)}`
+);
 
 const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
 

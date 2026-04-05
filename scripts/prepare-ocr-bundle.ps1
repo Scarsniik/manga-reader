@@ -1,3 +1,7 @@
+param(
+    [switch]$ForceRebuild
+)
+
 $ErrorActionPreference = 'Stop'
 
 $workspace = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -82,6 +86,10 @@ $args = @(
     '--mokuro-cache-root', $mokuroCacheRoot,
     '--clean'
 )
+
+if (-not $ForceRebuild) {
+    $args += '--skip-if-fresh'
+}
 
 if ($repoRoot) {
     $args += @('--repo-root', $repoRoot)

@@ -47,6 +47,9 @@ export interface Manga {
     tagIds: string[];
     seriesId?: string | null;
     chapters?: string;
+    sourceKind?: 'library' | 'scraper';
+    scraperId?: string | null;
+    sourceUrl?: string | null;
 }
 
 export type MangasList = Manga[];

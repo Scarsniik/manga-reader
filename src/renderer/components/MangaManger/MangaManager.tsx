@@ -14,6 +14,7 @@ import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
+import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 import {
     readMangaManagerViewState,
     writeMangaManagerViewState,
@@ -26,21 +27,28 @@ declare global {
 }
 
 const MangaManager: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [hasLoadedMangas, setHasLoadedMangas] = useState<boolean>(false);
     const [mangas, setMangas] = useState<Manga[]>([]);
     const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
+    const [hasLoadedScrapers, setHasLoadedScrapers] = useState<boolean>(false);
     const [filtered, setFiltered] = useState<Manga[] | null>(null);
     const [hasResolvedInitialFilters, setHasResolvedInitialFilters] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
     const [activeViewId, setActiveViewId] = useState<string>('library');
+    const [scraperBrowserSeed, setScraperBrowserSeed] = useState<{
+        scraperId: string;
+        query: string;
+        detailsResult: ScraperRuntimeDetailsResult;
+    } | null>(null);
     const { tags } = useTags();
     const { params } = useParams();
     const { openModal } = useModal();
     const contentRef = useRef<HTMLDivElement | null>(null);
     const hasRestoredViewRef = useRef(false);
-    const location = useLocation();
-    const navigate = useNavigate();
+    const consumedScraperReturnKeyRef = useRef<string | null>(null);
     const getCurrentScrollTop = useCallback(() => {
         const elementScrollTop = contentRef.current?.scrollTop ?? 0;
         const windowScrollTop = typeof window !== 'undefined'
@@ -76,6 +84,8 @@ const MangaManager: React.FC = () => {
             setScrapers(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error('Failed to load scrapers', err);
+        } finally {
+            setHasLoadedScrapers(true);
         }
     }, []);
 
@@ -306,14 +316,41 @@ const MangaManager: React.FC = () => {
     const isLibraryView = activeViewId === 'library';
 
     useEffect(() => {
+        const nextState = location.state as {
+            scraperBrowserReturn?: {
+                scraperId: string;
+                query: string;
+                detailsResult: ScraperRuntimeDetailsResult;
+            };
+        } | null;
+
+        const scraperBrowserReturn = nextState?.scraperBrowserReturn;
+        if (!scraperBrowserReturn) {
+            return;
+        }
+
+        if (consumedScraperReturnKeyRef.current === location.key) {
+            return;
+        }
+
+        consumedScraperReturnKeyRef.current = location.key;
+        setActiveViewId(scraperBrowserReturn.scraperId);
+        setScraperBrowserSeed(scraperBrowserReturn);
+    }, [location.key, location.state]);
+
+    useEffect(() => {
         if (activeViewId === 'library') {
+            return;
+        }
+
+        if (!hasLoadedScrapers) {
             return;
         }
 
         if (!scrapers.some((scraper) => scraper.id === activeViewId)) {
             setActiveViewId('library');
         }
-    }, [activeViewId, scrapers]);
+    }, [activeViewId, hasLoadedScrapers, scrapers]);
 
     const handleSearchResults = useCallback((result: Manga[]) => {
         setFiltered(result);
@@ -492,8 +529,15 @@ const MangaManager: React.FC = () => {
                 </>
             ) : (
                 <div className="mangaManager-content mangaManager-content--scraper">
-                    {activeScraper ? (
-                        <ScraperBrowser scraper={activeScraper} />
+                    {!hasLoadedScrapers ? (
+                        <div className="empty">Chargement du scrapper...</div>
+                    ) : activeScraper ? (
+                        <ScraperBrowser
+                            scraper={activeScraper}
+                            initialState={scraperBrowserSeed && scraperBrowserSeed.scraperId === activeScraper.id
+                                ? scraperBrowserSeed
+                                : null}
+                        />
                     ) : (
                         <div className="empty">Le scrapper selectionne est introuvable.</div>
                     )}

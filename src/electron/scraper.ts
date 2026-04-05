@@ -172,6 +172,25 @@ export interface DownloadScraperMangaResult {
   downloadedCount: number;
 }
 
+export interface ScraperReaderProgressRecord {
+  id: string;
+  scraperId: string;
+  title: string;
+  sourceUrl: string;
+  currentPage?: number | null;
+  totalPages?: number | null;
+  updatedAt: string;
+}
+
+export interface SaveScraperReaderProgressRequest {
+  id: string;
+  scraperId: string;
+  title: string;
+  sourceUrl: string;
+  currentPage?: number | null;
+  totalPages?: number | null;
+}
+
 export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
   kind: ScraperFeatureKind;
   label: string;

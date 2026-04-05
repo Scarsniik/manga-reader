@@ -6,6 +6,7 @@ type Props = {
     imagesLength: number;
     currentIndex: number;
     ocrEnabled: boolean;
+    ocrAvailable?: boolean;
     canCopyImage: boolean;
     copyFeedback: { type: 'success' | 'error'; message: string } | null;
     onBack: () => void;
@@ -18,6 +19,7 @@ const ReaderHeader: React.FC<Props> = ({
     imagesLength,
     currentIndex,
     ocrEnabled,
+    ocrAvailable = true,
     canCopyImage,
     copyFeedback,
     onBack,
@@ -47,9 +49,10 @@ const ReaderHeader: React.FC<Props> = ({
                 <button
                     type="button"
                     className={"reader-action-button ocr-toggle" + (ocrEnabled ? ' active' : '')}
-                    title="Activer/Désactiver OCR"
+                    title={ocrAvailable ? 'Activer/Désactiver OCR' : 'OCR indisponible en lecture en ligne'}
                     onClick={onToggleOcr}
                     aria-pressed={ocrEnabled}
+                    disabled={!ocrAvailable}
                 >
                     OCR
                 </button>

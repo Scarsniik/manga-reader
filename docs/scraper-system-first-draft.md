@@ -1030,6 +1030,33 @@ Regles volontairement simples pour la V1 :
 - pas de mapping de metadonnees supplementaires
 - telechargement sequentiel de toutes les pages detectees
 
+### Lecteur en ligne temporaire depuis une fiche
+
+La vue temporaire `Manga` expose maintenant aussi un bouton `Lecteur` quand le composant
+`Pages` est configure.
+
+Comportement retenu pour cette iteration :
+
+- le bouton resolve les pages du manga sans les telecharger
+- l'application ouvre directement le `Reader` existant en mode lecture en ligne
+- les URLs de pages sont chargees dans le reader via un mode `scraper`
+- le bouton OCR du reader est desactive dans ce mode
+
+Pour garder la progression entre deux ouvertures, un identifiant stable est maintenant cree
+pour chaque manga de scrapper.
+
+Regle retenue :
+
+- l'identifiant derive du scrapper et de l'URL stable de la fiche manga
+- cet identifiant reste le meme si le user ferme puis rouvre l'application
+- la progression de lecture est stockee separement des mangas locaux
+
+Effet attendu :
+
+- rouvrir la meme fiche depuis un scrapper relance le reader a la page connue la plus recente
+- cette progression ne cree pas de manga local tant que le user ne telecharge pas le manga
+- le bouton `Retour` du reader renvoie sur la fiche scrapper qui etait ouverte juste avant
+
 ### Site de test de reference dans la V1
 
 Le site de reference pour verifier le parcours complet reste :

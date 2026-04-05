@@ -7,12 +7,14 @@ import {
   DownloadScraperMangaResult,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  SaveScraperReaderProgressRequest,
   ScraperAccessValidationRequest,
   ScraperAccessValidationResult,
   ScraperDetailsDerivedValueResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
+  ScraperReaderProgressRecord,
   ScraperRecord,
   SaveScraperDraftRequest,
   SaveScraperFeatureRequest,
@@ -20,7 +22,7 @@ import {
   normalizeScraperBaseUrl,
   resolveScraperUrl,
 } from '../scraper';
-import { ensureDataDir, scrapersFilePath } from '../utils';
+import { ensureDataDir, scraperReaderProgressFilePath, scrapersFilePath } from '../utils';
 import { addManga } from './mangas';
 import { getSettings } from './params';
 
@@ -206,6 +208,69 @@ async function writeScrapersFile(scrapers: ScraperRecord[]): Promise<void> {
   await ensureDataDir();
   const persisted = scrapers.map((scraper) => toPersistedScraperRecord(scraper));
   await fs.writeFile(scrapersFilePath, JSON.stringify(persisted, null, 2));
+}
+
+const sanitizeScraperReaderProgressRecord = (
+  record: Partial<ScraperReaderProgressRecord>,
+): ScraperReaderProgressRecord | null => {
+  const id = String(record.id ?? '').trim();
+  const scraperId = String(record.scraperId ?? '').trim();
+  const title = String(record.title ?? '').trim();
+  const sourceUrl = String(record.sourceUrl ?? '').trim();
+  const updatedAt = String(record.updatedAt ?? '').trim();
+
+  if (!id || !scraperId || !title || !sourceUrl) {
+    return null;
+  }
+
+  return {
+    id,
+    scraperId,
+    title,
+    sourceUrl,
+    currentPage: typeof record.currentPage === 'number' && Number.isFinite(record.currentPage)
+      ? Math.max(1, Math.floor(record.currentPage))
+      : null,
+    totalPages: typeof record.totalPages === 'number' && Number.isFinite(record.totalPages)
+      ? Math.max(1, Math.floor(record.totalPages))
+      : null,
+    updatedAt: updatedAt || new Date().toISOString(),
+  };
+};
+
+async function readScraperReaderProgressFile(): Promise<ScraperReaderProgressRecord[]> {
+  try {
+    const data = await fs.readFile(scraperReaderProgressFilePath, 'utf-8');
+    const parsed = JSON.parse(data) as Partial<ScraperReaderProgressRecord>[];
+    const sanitized = Array.isArray(parsed)
+      ? parsed
+        .map((record) => sanitizeScraperReaderProgressRecord(record))
+        .filter((record): record is ScraperReaderProgressRecord => Boolean(record))
+      : [];
+
+    const normalizedRaw = JSON.stringify(parsed, null, 2);
+    const normalizedSanitized = JSON.stringify(sanitized, null, 2);
+    if (normalizedRaw !== normalizedSanitized) {
+      await ensureDataDir();
+      await fs.writeFile(scraperReaderProgressFilePath, normalizedSanitized);
+    }
+
+    return sanitized;
+  } catch (error: any) {
+    if (error && error.code === 'ENOENT') {
+      await ensureDataDir();
+      await fs.writeFile(scraperReaderProgressFilePath, JSON.stringify([], null, 2));
+      return [];
+    }
+
+    console.error('Error reading scraper reader progress file:', error);
+    throw new Error('Failed to read scraper reader progress');
+  }
+}
+
+async function writeScraperReaderProgressFile(records: ScraperReaderProgressRecord[]): Promise<void> {
+  await ensureDataDir();
+  await fs.writeFile(scraperReaderProgressFilePath, JSON.stringify(records, null, 2));
 }
 
 const sanitizePathSegment = (value: string): string => {
@@ -400,6 +465,40 @@ export async function deleteScraper(
 
   await writeScrapersFile(filtered);
   return filtered;
+}
+
+export async function getScraperReaderProgress(
+  _event: IpcMainInvokeEvent,
+  scraperMangaId: string,
+): Promise<ScraperReaderProgressRecord | null> {
+  const records = await readScraperReaderProgressFile();
+  return records.find((record) => record.id === String(scraperMangaId)) ?? null;
+}
+
+export async function saveScraperReaderProgress(
+  _event: IpcMainInvokeEvent,
+  request: SaveScraperReaderProgressRequest,
+): Promise<ScraperReaderProgressRecord> {
+  const normalized = sanitizeScraperReaderProgressRecord({
+    ...request,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (!normalized) {
+    throw new Error('La progression du reader scraper est incomplete.');
+  }
+
+  const records = await readScraperReaderProgressFile();
+  const existingIndex = records.findIndex((record) => record.id === normalized.id);
+
+  if (existingIndex >= 0) {
+    records[existingIndex] = normalized;
+  } else {
+    records.push(normalized);
+  }
+
+  await writeScraperReaderProgressFile(records);
+  return normalized;
 }
 
 export async function fetchScraperDocument(

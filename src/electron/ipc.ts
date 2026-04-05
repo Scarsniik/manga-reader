@@ -100,6 +100,12 @@ ipcMain.handle("save-scraper-feature-config", async (event: IpcMainInvokeEvent, 
     notifyScrapersUpdated();
     return updated;
 });
+ipcMain.handle("get-scraper-reader-progress", async (event: IpcMainInvokeEvent, scraperMangaId: string) => (
+    scrapers.getScraperReaderProgress(event, scraperMangaId)
+));
+ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.saveScraperReaderProgress(event, request)
+));
 ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => {
     const result = await scrapers.downloadScraperManga(event, request);
     for (const win of BrowserWindow.getAllWindows()) {

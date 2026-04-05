@@ -256,7 +256,20 @@
   cursor: pointer;
 }
 
-.scraper-browser__download:disabled {
+.scraper-browser__read {
+  min-height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: #1f6feb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-browser__download:disabled,
+.scraper-browser__read:disabled {
   opacity: 0.7;
   cursor: wait;
 }

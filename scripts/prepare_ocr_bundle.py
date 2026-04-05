@@ -50,6 +50,9 @@ OPTIONAL_REPO_CHILDREN = (
     "manga-ocr-master",
 )
 
+BUNDLE_VERSION = 2
+MANIFEST_FILE_NAME = "manifest.json"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage a standalone OCR bundle for electron-builder.")
@@ -60,6 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mokuro-cache-root", required=True, help="Source mokuro cache directory containing comictextdetector.pt.")
     parser.add_argument("--repo-root", default="", help="Optional root containing mokuro/manga-ocr source folders.")
     parser.add_argument("--clean", action="store_true", help="Delete the target bundle directory before staging.")
+    parser.add_argument("--skip-if-fresh", action="store_true", help="Reuse the existing bundle when the OCR sources match the current manifest.")
     return parser.parse_args()
 
 
@@ -217,6 +221,158 @@ def copy_optional_repos(repo_root: Path, target_root: Path) -> list[str]:
     return copied
 
 
+def load_json(path: Path) -> dict | None:
+    if not path.is_file():
+        return None
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def file_signature(path: Path) -> dict[str, int | str]:
+    stat = path.stat()
+    return {
+        "path": str(path),
+        "size": stat.st_size,
+        "mtimeNs": stat.st_mtime_ns,
+    }
+
+
+def dir_signature(path: Path) -> dict[str, int | str] | None:
+    if not path.exists():
+        return None
+
+    stat = path.stat()
+    return {
+        "path": str(path),
+        "mtimeNs": stat.st_mtime_ns,
+    }
+
+
+def build_model_file_signatures(model_source_dir: Path) -> dict[str, dict[str, int | str]]:
+    result: dict[str, dict[str, int | str]] = {}
+    for file_name in (
+        "config.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "preprocessor_config.json",
+        "vocab.txt",
+        "pytorch_model.bin",
+        "model.safetensors",
+    ):
+        candidate = model_source_dir / file_name
+        if candidate.is_file():
+            result[file_name] = file_signature(candidate)
+    return result
+
+
+def build_source_fingerprint(
+    *,
+    python_executable: Path,
+    python_root: Path,
+    worker_script: Path,
+    model_source_dir: Path,
+    detector_model: Path,
+    repo_root: Path | None,
+    site_package_sources: list[Path],
+) -> dict:
+    repo_children = []
+    if repo_root and repo_root.exists():
+        for child_name in OPTIONAL_REPO_CHILDREN:
+            child = repo_root / child_name
+            if child.is_dir():
+                signature = dir_signature(child)
+                if signature:
+                    repo_children.append(signature)
+
+    return {
+        "bundleVersion": BUNDLE_VERSION,
+        "python": {
+            "executable": file_signature(python_executable),
+            "root": str(python_root),
+            "version": sys.version,
+            "sitePackageSources": [str(path) for path in site_package_sources],
+            "sitePackageRoots": [signature for path in site_package_sources if (signature := dir_signature(path))],
+        },
+        "workerScript": file_signature(worker_script),
+        "models": {
+            "mangaOcrModelSource": str(model_source_dir),
+            "mangaOcrModelFiles": build_model_file_signatures(model_source_dir),
+            "comicTextDetector": file_signature(detector_model),
+        },
+        "repos": {
+            "sourceRoot": str(repo_root) if repo_root else None,
+            "availableChildren": repo_children,
+        },
+    }
+
+
+def bundle_has_expected_structure(output_root: Path) -> bool:
+    expected_paths = (
+        output_root / "python" / "python.exe",
+        output_root / "scripts" / "ocr_worker.py",
+        output_root / "models" / "manga-ocr-base" / "config.json",
+        output_root / "models" / "manga-ocr-base" / "tokenizer_config.json",
+        output_root / "cache" / "manga-ocr" / "comictextdetector.pt",
+    )
+    if not all(path.is_file() for path in expected_paths):
+        return False
+
+    model_root = output_root / "models" / "manga-ocr-base"
+    return any((model_root / name).is_file() for name in ("pytorch_model.bin", "model.safetensors"))
+
+
+def file_matches_signature(path: Path, signature: dict[str, int | str]) -> bool:
+    if not path.is_file():
+        return False
+
+    stat = path.stat()
+    return stat.st_size == signature.get("size") and stat.st_mtime_ns == signature.get("mtimeNs")
+
+
+def can_adopt_existing_bundle(output_root: Path, source_fingerprint: dict) -> bool:
+    if not bundle_has_expected_structure(output_root):
+        return False
+
+    python_signature = source_fingerprint["python"]["executable"]
+    if not file_matches_signature(output_root / "python" / "python.exe", python_signature):
+        return False
+
+    if not file_matches_signature(output_root / "scripts" / "ocr_worker.py", source_fingerprint["workerScript"]):
+        return False
+
+    if not file_matches_signature(
+        output_root / "cache" / "manga-ocr" / "comictextdetector.pt",
+        source_fingerprint["models"]["comicTextDetector"],
+    ):
+        return False
+
+    model_output_root = output_root / "models" / "manga-ocr-base"
+    for file_name, signature in source_fingerprint["models"]["mangaOcrModelFiles"].items():
+        if not file_matches_signature(model_output_root / file_name, signature):
+            return False
+
+    return True
+
+
+def build_cached_manifest(
+    *,
+    output_root: Path,
+    source_fingerprint: dict,
+    reused_existing_bundle: bool,
+) -> Path:
+    manifest = build_manifest(
+        bundleVersion=BUNDLE_VERSION,
+        sourceFingerprint=source_fingerprint,
+        reusedExistingBundle=reused_existing_bundle,
+    )
+    manifest_path = output_root / MANIFEST_FILE_NAME
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest_path
+
+
 def build_manifest(**kwargs) -> dict:
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -242,6 +398,63 @@ def main() -> int:
     if not mokuro_cache_root.is_dir():
         raise FileNotFoundError(f"mokuro cache root not found: {mokuro_cache_root}")
 
+    site_package_sources = unique_existing_dirs(
+        [
+            Path(path)
+            for path in [
+                sysconfig.get_paths().get("platlib"),
+                sysconfig.get_paths().get("purelib"),
+                *site.getsitepackages(),
+                site.getusersitepackages(),
+            ]
+            if path and is_site_packages_dir(Path(path))
+        ]
+    )
+
+    model_source_dir = find_manga_ocr_snapshot_dir(hf_model_root)
+    detector_model = mokuro_cache_root / "comictextdetector.pt"
+    if not detector_model.is_file():
+        raise FileNotFoundError(f"comictextdetector.pt not found in {mokuro_cache_root}")
+
+    source_fingerprint = build_source_fingerprint(
+        python_executable=python_executable,
+        python_root=python_root,
+        worker_script=worker_script,
+        model_source_dir=model_source_dir,
+        detector_model=detector_model,
+        repo_root=repo_root,
+        site_package_sources=site_package_sources,
+    )
+
+    manifest_path = output_root / MANIFEST_FILE_NAME
+    existing_manifest = load_json(manifest_path)
+
+    if args.skip_if_fresh and bundle_has_expected_structure(output_root):
+        if existing_manifest and existing_manifest.get("sourceFingerprint") == source_fingerprint:
+            print(json.dumps({
+                "ok": True,
+                "outputRoot": str(output_root),
+                "manifest": str(manifest_path),
+                "reused": True,
+                "reason": "fresh-manifest",
+            }, ensure_ascii=False))
+            return 0
+
+        if existing_manifest is None and can_adopt_existing_bundle(output_root, source_fingerprint):
+            adopted_manifest_path = build_cached_manifest(
+                output_root=output_root,
+                source_fingerprint=source_fingerprint,
+                reused_existing_bundle=True,
+            )
+            print(json.dumps({
+                "ok": True,
+                "outputRoot": str(output_root),
+                "manifest": str(adopted_manifest_path),
+                "reused": True,
+                "reason": "adopted-existing-bundle",
+            }, ensure_ascii=False))
+            return 0
+
     ensure_clean_dir(output_root, clean=args.clean)
 
     python_home_out = output_root / "python"
@@ -261,19 +474,6 @@ def main() -> int:
     libs_dir_copy = copy_tree_filtered(python_root / "libs", python_home_out / "libs", prune_dir_names={"__pycache__"})
 
     target_site_packages = python_home_out / "Lib" / "site-packages"
-    site_package_sources = unique_existing_dirs(
-        [
-            Path(path)
-            for path in [
-                sysconfig.get_paths().get("platlib"),
-                sysconfig.get_paths().get("purelib"),
-                *site.getsitepackages(),
-                site.getusersitepackages(),
-            ]
-            if path and is_site_packages_dir(Path(path))
-        ]
-    )
-
     site_packages_copy = {"files": 0, "bytes": 0}
     for source in site_package_sources:
         stats = copy_tree_filtered(source, target_site_packages, prune_dir_names=SITE_PACKAGES_PRUNE_DIRS)
@@ -282,18 +482,15 @@ def main() -> int:
 
     copy_file(worker_script, scripts_out / "ocr_worker.py")
 
-    model_source_dir = find_manga_ocr_snapshot_dir(hf_model_root)
     model_copy = copy_tree_filtered(model_source_dir, models_out, prune_dir_names={"__pycache__"})
 
-    detector_model = mokuro_cache_root / "comictextdetector.pt"
-    if not detector_model.is_file():
-        raise FileNotFoundError(f"comictextdetector.pt not found in {mokuro_cache_root}")
     copy_file(detector_model, cache_out / "comictextdetector.pt")
 
     copied_repos = copy_optional_repos(repo_root, repos_out) if repo_root else []
 
     manifest = build_manifest(
-        bundleVersion=1,
+        bundleVersion=BUNDLE_VERSION,
+        sourceFingerprint=source_fingerprint,
         python={
             "executable": str(python_executable),
             "root": str(python_root),
@@ -319,7 +516,7 @@ def main() -> int:
         },
     )
 
-    manifest_path = output_root / "manifest.json"
+    manifest_path = output_root / MANIFEST_FILE_NAME
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(json.dumps({"ok": True, "outputRoot": str(output_root), "manifest": str(manifest_path)}, ensure_ascii=False))

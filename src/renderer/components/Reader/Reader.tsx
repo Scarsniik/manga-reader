@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './style.scss';
 import { Manga } from '@/renderer/types';
+import { ScraperReaderProgressRecord } from '@/shared/scraper';
+import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
 import ReaderHeader from './ReaderHeader';
 import ImageViewer from './ImageViewer';
 import OcrPanel from './OcrPanel';
@@ -14,6 +16,19 @@ type ReaderLocationState = {
         search?: string;
     };
     mangaId?: string;
+    scraperBrowserReturn?: {
+        scraperId: string;
+        query: string;
+        detailsResult: ScraperRuntimeDetailsResult;
+    };
+    scraperReader?: {
+        id: string;
+        scraperId: string;
+        title: string;
+        sourceUrl: string;
+        cover?: string;
+        pageUrls: string[];
+    };
 } | null;
 
 type ReaderOcrBox = {
@@ -538,6 +553,8 @@ const findDirectionalOcrBox = (
     return bestCandidate;
 };
 
+const isScraperReaderManga = (manga: Manga | null): boolean => manga?.sourceKind === 'scraper';
+
 // We'll read location once and derive query params from it
 
 const Reader: React.FC = () => {
@@ -577,8 +594,25 @@ const Reader: React.FC = () => {
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
     const allOcrBoxes = [...detectedBoxes, ...manualBoxes];
+    const ocrAvailable = !isScraperReaderManga(manga);
 
     const handleBack = useCallback(() => {
+        if (locationState?.scraperBrowserReturn) {
+            navigate(
+                {
+                    pathname: locationState?.from?.pathname ?? '/',
+                    search: locationState?.from?.search ?? '',
+                },
+                {
+                    replace: true,
+                    state: {
+                        scraperBrowserReturn: locationState.scraperBrowserReturn,
+                    },
+                }
+            );
+            return;
+        }
+
         const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
             ? window.history.state.idx
             : null;
@@ -614,6 +648,51 @@ const Reader: React.FC = () => {
             }
 
             console.debug('Reader:init params', { id, pageParam, startPage });
+
+            const scraperReaderState = locationState?.scraperReader;
+            if (
+                scraperReaderState
+                && id
+                && String(scraperReaderState.id) === String(id)
+                && Array.isArray(scraperReaderState.pageUrls)
+                && scraperReaderState.pageUrls.length > 0
+            ) {
+                let savedProgress: ScraperReaderProgressRecord | null = null;
+                if (window.api && typeof window.api.getScraperReaderProgress === 'function') {
+                    try {
+                        savedProgress = await window.api.getScraperReaderProgress(scraperReaderState.id);
+                    } catch (err) {
+                        console.warn('Reader: failed to load scraper reader progress', err);
+                    }
+                }
+
+                const remoteManga: Manga = {
+                    id: scraperReaderState.id,
+                    title: scraperReaderState.title,
+                    path: '',
+                    thumbnailPath: scraperReaderState.cover || null,
+                    createdAt: new Date().toISOString(),
+                    currentPage: typeof savedProgress?.currentPage === 'number' ? savedProgress.currentPage : null,
+                    pages: scraperReaderState.pageUrls.length,
+                    authorIds: [],
+                    tagIds: [],
+                    sourceKind: 'scraper',
+                    scraperId: scraperReaderState.scraperId,
+                    sourceUrl: scraperReaderState.sourceUrl,
+                };
+
+                setManga(remoteManga);
+                openedCompletedRef.current = scraperReaderState.pageUrls.length > 0
+                    && typeof remoteManga.currentPage === 'number'
+                    && remoteManga.currentPage >= scraperReaderState.pageUrls.length;
+                setImages(scraperReaderState.pageUrls);
+                const initialPage = typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
+                    ? savedProgress.currentPage
+                    : startPage;
+                const idx = Math.max(0, Math.min(scraperReaderState.pageUrls.length - 1, initialPage - 1));
+                setCurrentIndex(idx);
+                return;
+            }
 
             // get mangas list from backend and find the one with this id
             if (!window.api || typeof window.api.getMangas !== 'function') {
@@ -660,6 +739,12 @@ const Reader: React.FC = () => {
         init();
         // Run when location.search changes
     }, [location.search]);
+
+    useEffect(() => {
+        if (!ocrAvailable && ocrEnabled) {
+            setOcrEnabled(false);
+        }
+    }, [ocrAvailable, ocrEnabled]);
 
     // Navigation helpers
     // Ensure view is scrolled to top immediately before changing page
@@ -871,7 +956,6 @@ const Reader: React.FC = () => {
             if (cancelled) return;
             try {
                 if (!manga || !manga.id) return;
-                if (!window.api || typeof window.api.updateManga !== 'function') return;
                 const visiblePage = images && images.length > 0 ? currentIndex + 1 : null;
                 const totalPages = images && images.length > 0 ? images.length : null;
                 let persistedPage = visiblePage;
@@ -884,6 +968,20 @@ const Reader: React.FC = () => {
                     }
                 }
 
+                if (isScraperReaderManga(manga)) {
+                    if (!window.api || typeof window.api.saveScraperReaderProgress !== 'function') return;
+                    await window.api.saveScraperReaderProgress({
+                        id: manga.id,
+                        scraperId: String(manga.scraperId || ''),
+                        title: manga.title,
+                        sourceUrl: String(manga.sourceUrl || ''),
+                        currentPage: persistedPage,
+                        totalPages,
+                    });
+                    return;
+                }
+
+                if (!window.api || typeof window.api.updateManga !== 'function') return;
                 const payload: Partial<any> = { id: manga.id, currentPage: persistedPage };
                 await window.api.updateManga(payload);
                 try { window.dispatchEvent(new CustomEvent('mangas-updated')); } catch (e) { /* noop */ }
@@ -1465,6 +1563,7 @@ const Reader: React.FC = () => {
                 imagesLength={images.length}
                 currentIndex={currentIndex}
                 ocrEnabled={ocrEnabled}
+                ocrAvailable={ocrAvailable}
                 canCopyImage={images.length > 0}
                 copyFeedback={copyFeedback}
                 onBack={handleBack}
