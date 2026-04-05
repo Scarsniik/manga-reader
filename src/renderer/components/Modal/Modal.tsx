@@ -12,8 +12,10 @@ const Modal: React.FC<{
   title?: React.ReactNode;
   content?: React.ReactNode;
   actions?: Action[];
+  className?: string;
+  bodyClassName?: string;
   onClose?: () => void;
-}> = ({ title, content, actions = [], onClose }) => {
+}> = ({ title, content, actions = [], className, bodyClassName, onClose }) => {
   const backdropPressStarted = useRef(false);
 
   useEffect(() => {
@@ -52,25 +54,27 @@ const Modal: React.FC<{
       onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
     >
-      <div className="app-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={['app-modal', className].filter(Boolean).join(' ')} onClick={(e) => e.stopPropagation()}>
         {title ? <div className="app-modal-header">{title}</div> : null}
-        <div className="app-modal-body">{content}</div>
-        <div className="app-modal-actions">
-          {actions.map((a, i) => (
-            <button
-              key={i}
-              type="button"
-              id={a.id}
-              className={`app-modal-btn ${a.variant === 'primary' ? 'primary' : 'secondary'}`}
-              onClick={() => {
-                a.onClick?.();
-                onClose?.();
-              }}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
+        <div className={['app-modal-body', bodyClassName].filter(Boolean).join(' ')}>{content}</div>
+        {actions.length > 0 ? (
+          <div className="app-modal-actions">
+            {actions.map((a, i) => (
+              <button
+                key={i}
+                type="button"
+                id={a.id}
+                className={`app-modal-btn ${a.variant === 'primary' ? 'primary' : 'secondary'}`}
+                onClick={() => {
+                  a.onClick?.();
+                  onClose?.();
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

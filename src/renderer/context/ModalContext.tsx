@@ -12,6 +12,8 @@ export type ModalOptions = {
   title?: ReactNode;
   content?: ReactNode;
   actions?: ModalAction[];
+  className?: string;
+  bodyClassName?: string;
 };
 
 export type ModalContextValue = {
@@ -35,6 +37,8 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           title={modal.title}
           content={modal.content}
           actions={modal.actions}
+          className={modal.className}
+          bodyClassName={modal.bodyClassName}
           onClose={closeModal}
         />
       ) : null}

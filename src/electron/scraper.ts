@@ -9,6 +9,17 @@ export interface ScraperIdentityDraft {
   description?: string;
 }
 
+export interface ScraperHomeSearchConfig {
+  enabled: boolean;
+  query: string;
+}
+
+export interface ScraperGlobalConfig {
+  defaultTagIds: string[];
+  defaultLanguage?: string;
+  homeSearch: ScraperHomeSearchConfig;
+}
+
 export interface ScraperAccessValidationRequest {
   kind: ScraperSourceKind;
   baseUrl: string;
@@ -145,6 +156,7 @@ export interface ScraperRecord {
   createdAt: string;
   updatedAt: string;
   validation: ScraperAccessValidationResult | null;
+  globalConfig: ScraperGlobalConfig;
   features: ScraperFeatureDefinition[];
 }
 
@@ -159,6 +171,11 @@ export interface SaveScraperFeatureRequest {
   featureKind: ScraperFeatureKind;
   config: Record<string, unknown>;
   validation?: ScraperFeatureValidationResult | null;
+}
+
+export interface SaveScraperGlobalConfigRequest {
+  scraperId: string;
+  globalConfig: ScraperGlobalConfig;
 }
 
 export interface FetchScraperDocumentRequest {
@@ -181,6 +198,10 @@ export interface DownloadScraperMangaRequest {
   title: string;
   pageUrls: string[];
   refererUrl?: string;
+  scraperId?: string;
+  sourceUrl?: string;
+  defaultTagIds?: string[];
+  defaultLanguage?: string;
 }
 
 export interface DownloadScraperMangaResult {
@@ -232,6 +253,17 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
   },
 ];
 
+export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
+  return {
+    defaultTagIds: [],
+    defaultLanguage: undefined,
+    homeSearch: {
+      enabled: false,
+      query: '',
+    },
+  };
+}
+
 export function createDefaultScraperFeatures(): ScraperFeatureDefinition[] {
   return SCRAPER_FEATURE_TEMPLATES.map((feature) => ({
     ...feature,
@@ -270,6 +302,14 @@ export function resolveScraperUrl(baseUrl: string, input: string): string {
   return new URL(trimmed, normalizedBaseUrl).toString();
 }
 
+const encodeScraperTemplateValue = (value: string): string => {
+  try {
+    return encodeURIComponent(decodeURIComponent(value));
+  } catch {
+    return encodeURIComponent(value);
+  }
+};
+
 export function buildScraperTemplateUrl(
   baseUrl: string,
   template: string,
@@ -286,7 +326,7 @@ export function buildScraperTemplateUrl(
     throw new Error('La valeur de test est requise.');
   }
 
-  const encodedValue = encodeURIComponent(trimmedValue);
+  const encodedValue = encodeScraperTemplateValue(trimmedValue);
   const replacements: Array<[string, string]> = [
     ['{{value}}', encodedValue],
     ['{{id}}', encodedValue],
@@ -322,7 +362,7 @@ export function buildScraperSearchUrl(
     throw new Error('Le template de recherche est requis.');
   }
 
-  const encodedQuery = encodeURIComponent(trimmedQuery);
+  const encodedQuery = encodeScraperTemplateValue(trimmedQuery);
   const replacements: Array<[string, string]> = [
     ['{{query}}', encodedQuery],
     ['{{search}}', encodedQuery],
@@ -370,7 +410,7 @@ export function buildScraperContextTemplateUrl(
       .split(`{{raw:${key}}}`)
       .join(rawValue)
       .split(`{{${key}}}`)
-      .join(encodeURIComponent(rawValue));
+      .join(encodeScraperTemplateValue(rawValue));
   });
 
   const unresolvedMatches = resolvedTemplate.match(/{{\s*[^}]+\s*}}/g);

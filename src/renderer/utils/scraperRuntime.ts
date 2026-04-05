@@ -65,11 +65,50 @@ const trimOptional = (value: unknown): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
+const RESERVED_SCRAPER_DISPLAY_CHARACTERS = new Set([
+  ':',
+  '/',
+  '?',
+  '#',
+  '[',
+  ']',
+  '@',
+  '!',
+  '$',
+  '&',
+  '\'',
+  '(',
+  ')',
+  '*',
+  '+',
+  ',',
+  ';',
+  '=',
+  '%',
+]);
+
 export const normalizeSelectorInput = (input: string): string => input
   .replace(/[\u200B-\u200D\uFEFF]/g, '')
   .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
   .replace(/\s+/g, ' ')
   .trim();
+
+export const formatScraperValueForDisplay = (value: string | undefined): string => {
+  if (typeof value !== 'string' || !value.length) {
+    return '';
+  }
+
+  return value.replace(/(?:%[0-9A-Fa-f]{2})+/g, (encodedChunk) => {
+    try {
+      const decodedChunk = decodeURIComponent(encodedChunk);
+      return Array.from(decodedChunk).some((character) => RESERVED_SCRAPER_DISPLAY_CHARACTERS.has(character))
+        ? encodedChunk
+        : decodedChunk;
+    } catch {
+      return encodedChunk;
+    }
+  });
+};
 
 const trimOptionalSelector = (value: unknown): string | undefined => {
   const normalized = normalizeSelectorInput(String(value ?? ''));
@@ -192,11 +231,20 @@ export const resolveScraperDetailsTargetUrl = (
   config: ScraperDetailsFeatureConfig,
   query: string,
 ): string => {
-  if (config.urlStrategy === 'template') {
-    return buildScraperTemplateUrl(baseUrl, config.urlTemplate || '', query);
+  const trimmedQuery = query.trim();
+  const looksLikeDirectUrlInput = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmedQuery)
+    || trimmedQuery.startsWith('//')
+    || trimmedQuery.startsWith('/')
+    || trimmedQuery.startsWith('./')
+    || trimmedQuery.startsWith('../')
+    || trimmedQuery.startsWith('?')
+    || trimmedQuery.startsWith('#');
+
+  if (config.urlStrategy === 'template' && !looksLikeDirectUrlInput) {
+    return buildScraperTemplateUrl(baseUrl, config.urlTemplate || '', trimmedQuery);
   }
 
-  return resolveScraperUrl(baseUrl, query);
+  return resolveScraperUrl(baseUrl, trimmedQuery);
 };
 
 export const resolveScraperSearchTargetUrl = (
@@ -313,6 +361,79 @@ export const hasSearchPagePlaceholder = (
 const isImageLikeContentType = (contentType: string | undefined): boolean => (
   typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')
 );
+
+const buildSequentialImageUrl = (
+  prefix: string,
+  index: number,
+  padLength: number,
+  extension: string,
+  suffix: string,
+): string => `${prefix}${String(index).padStart(padLength, '0')}${extension}${suffix}`;
+
+const parseSequentialImagePattern = (imageUrl: string): {
+  prefix: string;
+  startIndex: number;
+  padLength: number;
+  extension: string;
+  suffix: string;
+} | null => {
+  const match = imageUrl.match(/^(.*\/)(\d+)(\.[^./?#]+)([?#].*)?$/);
+  if (!match) {
+    return null;
+  }
+
+  const startIndex = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(startIndex)) {
+    return null;
+  }
+
+  return {
+    prefix: match[1],
+    startIndex,
+    padLength: match[2].length,
+    extension: match[3],
+    suffix: match[4] || '',
+  };
+};
+
+const resolveSequentialPageUrlsFromCover = async (
+  details: ScraperRuntimeDetailsResult,
+  fetchDocument: ScraperDocumentFetcher,
+  maxTemplatePages: number,
+): Promise<string[] | null> => {
+  const coverUrl = String(details.cover || '').trim();
+  const imagePattern = parseSequentialImagePattern(coverUrl);
+  if (!imagePattern) {
+    return null;
+  }
+
+  const pageUrls: string[] = [];
+
+  for (let pageOffset = 0; pageOffset < maxTemplatePages; pageOffset += 1) {
+    const targetUrl = buildSequentialImageUrl(
+      imagePattern.prefix,
+      imagePattern.startIndex + pageOffset,
+      imagePattern.padLength,
+      imagePattern.extension,
+      imagePattern.suffix,
+    );
+    const result = await fetchDocument({
+      baseUrl: details.requestedUrl,
+      targetUrl,
+    });
+
+    if (!result.ok || !isImageLikeContentType(result.contentType)) {
+      if (pageOffset === 0) {
+        return null;
+      }
+      break;
+    }
+
+    pageUrls.push(result.finalUrl || result.requestedUrl);
+  }
+
+  return pageUrls.length ? uniqueValues(pageUrls) : null;
+};
 
 const buildDetailsTemplateContext = (
   details: ScraperRuntimeDetailsResult,
@@ -613,6 +734,15 @@ export async function resolveScraperPageUrls(
     });
 
     if (!result.ok || !isImageLikeContentType(result.contentType)) {
+      const fallbackPageUrls = await resolveSequentialPageUrlsFromCover(
+        details,
+        fetchDocument,
+        maxTemplatePages,
+      );
+      if (fallbackPageUrls?.length) {
+        return fallbackPageUrls;
+      }
+
       throw new Error(
         result.error
         || 'Le template des pages ne renvoie pas une image exploitable.',
@@ -637,6 +767,15 @@ export async function resolveScraperPageUrls(
 
     if (!result.ok || !isImageLikeContentType(result.contentType)) {
       if (pageIndex === 0) {
+        const fallbackPageUrls = await resolveSequentialPageUrlsFromCover(
+          details,
+          fetchDocument,
+          maxTemplatePages,
+        );
+        if (fallbackPageUrls?.length) {
+          return fallbackPageUrls;
+        }
+
         throw new Error(
           result.error
           || 'Le template des pages ne renvoie pas une premiere page valide.',

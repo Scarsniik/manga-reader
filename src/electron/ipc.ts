@@ -100,6 +100,11 @@ ipcMain.handle("save-scraper-feature-config", async (event: IpcMainInvokeEvent, 
     notifyScrapersUpdated();
     return updated;
 });
+ipcMain.handle("save-scraper-global-config", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperGlobalConfig(event, request);
+    notifyScrapersUpdated();
+    return updated;
+});
 ipcMain.handle("get-scraper-reader-progress", async (event: IpcMainInvokeEvent, scraperMangaId: string) => (
     scrapers.getScraperReaderProgress(event, scraperMangaId)
 ));

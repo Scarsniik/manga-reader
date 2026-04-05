@@ -5,6 +5,7 @@ import {
   ScraperRecord,
 } from '@/shared/scraper';
 import ScraperDetailsFeatureEditor from './ScraperDetailsFeatureEditor';
+import ScraperGlobalSettingsEditor from './ScraperGlobalSettingsEditor';
 import ScraperPagesFeatureEditor from './ScraperPagesFeatureEditor';
 import ScraperSearchFeatureEditor from './ScraperSearchFeatureEditor';
 import ScraperFeaturePlaceholderEditor from './ScraperFeaturePlaceholderEditor';
@@ -26,7 +27,7 @@ export default function ScraperFeatureSelectionStep({
   onScraperChange,
   onEditSource,
 }: Props) {
-  const [activeFeatureKind, setActiveFeatureKind] = useState<ScraperFeatureKind | null>(null);
+  const [activeFeatureKind, setActiveFeatureKind] = useState<ScraperFeatureKind | 'global' | null>(null);
 
   const configuredFeatures = useMemo(
     () => scraper.features.filter((feature) => feature.status !== 'not_configured'),
@@ -42,6 +43,25 @@ export default function ScraperFeatureSelectionStep({
     () => scraper.features.find((feature) => feature.kind === activeFeatureKind) || null,
     [activeFeatureKind, scraper.features],
   );
+  const globalSettingsStatus = useMemo(() => {
+    const { defaultTagIds, defaultLanguage, homeSearch } = scraper.globalConfig;
+
+    if (defaultTagIds.length || defaultLanguage || homeSearch.enabled) {
+      return { label: 'Configure', className: 'is-configured' };
+    }
+
+    return { label: 'Non configure', className: 'is-not-configured' };
+  }, [scraper.globalConfig]);
+
+  if (activeFeatureKind === 'global') {
+    return (
+      <ScraperGlobalSettingsEditor
+        scraper={scraper}
+        onBack={() => setActiveFeatureKind(null)}
+        onScraperChange={onScraperChange}
+      />
+    );
+  }
 
   if (activeFeature) {
     if (activeFeature.kind === 'search') {
@@ -117,9 +137,32 @@ export default function ScraperFeatureSelectionStep({
       <div className="scraper-config-step__intro">
         <h3>Choisir les composants du scraper</h3>
         <p>
-          Clique sur un composant pour ouvrir sa configuration. Un composant en jaune est
-          enregistre mais pas encore valide, un composant en vert est deja valide.
+          Commence par les reglages globaux si tu veux preconfigurer les telechargements ou la
+          page d&apos;accueil, puis configure les composants executables du scrapper.
         </p>
+      </div>
+
+      <div className="scraper-feature-section">
+        <div className="scraper-feature-section__header">
+          <h4>Reglages globaux</h4>
+          <span>1</span>
+        </div>
+
+        <div className="scraper-feature-grid">
+          <button
+            type="button"
+            className={['scraper-feature-card', globalSettingsStatus.className].join(' ')}
+            onClick={() => setActiveFeatureKind('global')}
+          >
+            <span className="scraper-feature-card__title">Reglages globaux</span>
+            <span className={`scraper-feature-card__status ${globalSettingsStatus.className}`}>
+              {globalSettingsStatus.label}
+            </span>
+            <span className="scraper-feature-card__description">
+              Tags par defaut, langue par defaut et recherche d&apos;accueil du scrapper.
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="scraper-feature-section">

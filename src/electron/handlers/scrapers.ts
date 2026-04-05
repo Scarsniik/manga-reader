@@ -7,6 +7,7 @@ import {
   DownloadScraperMangaResult,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  SaveScraperGlobalConfigRequest,
   SaveScraperReaderProgressRequest,
   ScraperAccessValidationRequest,
   ScraperAccessValidationResult,
@@ -14,10 +15,12 @@ import {
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
+  ScraperGlobalConfig,
   ScraperReaderProgressRecord,
   ScraperRecord,
   SaveScraperDraftRequest,
   SaveScraperFeatureRequest,
+  createDefaultScraperGlobalConfig,
   createDefaultScraperFeatures,
   normalizeScraperBaseUrl,
   resolveScraperUrl,
@@ -25,6 +28,7 @@ import {
 import { ensureDataDir, scraperReaderProgressFilePath, scrapersFilePath } from '../utils';
 import { addManga } from './mangas';
 import { getSettings } from './params';
+import { getTags } from './tags';
 
 const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
 const DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME = 'Manga Helper Library';
@@ -134,6 +138,32 @@ const sanitizeFeatureValidation = (
   };
 };
 
+const sanitizeStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? Array.from(new Set(
+      value
+        .map((entry) => String(entry ?? '').trim())
+        .filter((entry) => entry.length > 0),
+    ))
+    : []
+);
+
+const sanitizeGlobalConfig = (
+  globalConfig: Partial<ScraperGlobalConfig> | null | undefined,
+): ScraperGlobalConfig => {
+  const defaultLanguage = String(globalConfig?.defaultLanguage ?? '').trim().toLowerCase();
+  const homeSearchQuery = String(globalConfig?.homeSearch?.query ?? '').trim();
+
+  return {
+    defaultTagIds: sanitizeStringList(globalConfig?.defaultTagIds),
+    defaultLanguage: defaultLanguage || undefined,
+    homeSearch: {
+      enabled: Boolean(globalConfig?.homeSearch?.enabled),
+      query: homeSearchQuery,
+    },
+  };
+};
+
 const toPersistedScraperRecord = (scraper: ScraperRecord) => ({
   id: scraper.id,
   kind: scraper.kind,
@@ -144,6 +174,7 @@ const toPersistedScraperRecord = (scraper: ScraperRecord) => ({
   createdAt: scraper.createdAt,
   updatedAt: scraper.updatedAt,
   validation: sanitizeAccessValidation(scraper.validation),
+  globalConfig: sanitizeGlobalConfig(scraper.globalConfig),
   features: scraper.features.map((feature) => ({
     kind: feature.kind,
     status: feature.status,
@@ -181,6 +212,7 @@ async function readScrapersFile(): Promise<ScraperRecord[]> {
     const hydrated = parsed.map((scraper) => ({
       ...scraper,
       validation: sanitizeAccessValidation(scraper.validation),
+      globalConfig: sanitizeGlobalConfig(scraper.globalConfig),
       features: hydrateScraperFeatures(scraper.features),
     }));
 
@@ -582,6 +614,14 @@ export async function downloadScraperManga(
   const refererUrl = typeof request.refererUrl === 'string' && request.refererUrl.trim().length > 0
     ? request.refererUrl.trim()
     : undefined;
+  const scraperId = typeof request.scraperId === 'string' && request.scraperId.trim().length > 0
+    ? request.scraperId.trim()
+    : undefined;
+  const sourceUrl = typeof request.sourceUrl === 'string' && request.sourceUrl.trim().length > 0
+    ? request.sourceUrl.trim()
+    : undefined;
+  const requestedDefaultTagIds = sanitizeStringList(request.defaultTagIds);
+  const requestedDefaultLanguage = String(request.defaultLanguage ?? '').trim().toLowerCase() || undefined;
 
   if (!title) {
     throw new Error('Le titre du manga est requis pour le telechargement.');
@@ -639,13 +679,25 @@ export async function downloadScraperManga(
     throw error;
   }
 
+  const availableTags = await getTags();
+  const availableTagIds = new Set(
+    Array.isArray(availableTags)
+      ? availableTags.map((tag) => String(tag?.id ?? '').trim()).filter((tagId) => tagId.length > 0)
+      : [],
+  );
+  const defaultTagIds = requestedDefaultTagIds.filter((tagId) => availableTagIds.has(tagId));
+
   const createdManga = await addManga(undefined as any, {
     id: randomUUID(),
     title,
     path: folderPath,
     createdAt: new Date().toISOString(),
     authorIds: [],
-    tagIds: [],
+    tagIds: defaultTagIds,
+    language: requestedDefaultLanguage,
+    sourceKind: scraperId ? 'scraper' : undefined,
+    scraperId: scraperId ?? null,
+    sourceUrl: sourceUrl ?? refererUrl ?? null,
   });
 
   const inserted = Array.isArray(createdManga)
@@ -695,6 +747,7 @@ export async function saveScraperDraft(
         ...request.validation,
         normalizedUrl,
       },
+      globalConfig: sanitizeGlobalConfig(existing.globalConfig),
       features: existing.features?.length ? hydrateScraperFeatures(existing.features) : createDefaultScraperFeatures(),
     };
 
@@ -716,6 +769,7 @@ export async function saveScraperDraft(
       ...request.validation,
       normalizedUrl,
     },
+    globalConfig: createDefaultScraperGlobalConfig(),
     features: createDefaultScraperFeatures(),
   };
 
@@ -754,6 +808,29 @@ export async function saveScraperFeatureConfig(
     ...scraper,
     updatedAt: new Date().toISOString(),
     features,
+  };
+
+  scrapers[scraperIndex] = updated;
+  await writeScrapersFile(scrapers);
+  return updated;
+}
+
+export async function saveScraperGlobalConfig(
+  _event: IpcMainInvokeEvent,
+  request: SaveScraperGlobalConfigRequest,
+): Promise<ScraperRecord> {
+  const scrapers = await readScrapersFile();
+  const scraperIndex = scrapers.findIndex((scraper) => String(scraper.id) === String(request.scraperId));
+
+  if (scraperIndex < 0) {
+    throw new Error('Scraper introuvable.');
+  }
+
+  const scraper = scrapers[scraperIndex];
+  const updated: ScraperRecord = {
+    ...scraper,
+    updatedAt: new Date().toISOString(),
+    globalConfig: sanitizeGlobalConfig(request.globalConfig),
   };
 
   scrapers[scraperIndex] = updated;

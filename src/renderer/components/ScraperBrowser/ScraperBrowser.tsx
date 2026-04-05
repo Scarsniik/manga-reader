@@ -3,15 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
 import { useModal } from '@/renderer/hooks/useModal';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
+import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
 import {
   parseScraperRouteState,
+  type ScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import {
   createScraperMangaId,
   extractScraperDetailsFromDocument,
   extractScraperSearchPageFromDocument,
+  formatScraperValueForDisplay,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
@@ -53,6 +56,21 @@ const FEATURE_STATUS_LABELS = {
 } as const;
 
 const MAX_VISIBLE_SEARCH_RESULTS = 18;
+
+const buildSearchReturnStateFromRoute = (
+  routeState: ScraperRouteState,
+): ScraperSearchReturnState | null => (
+  routeState.searchActive
+    ? {
+      hasExecutedSearch: true,
+      query: routeState.searchQuery,
+      page: null,
+      visitedPageUrls: [],
+      pageIndex: Math.max(0, routeState.searchPage - 1),
+      results: [],
+    }
+    : null
+);
 
 const buildQueryPlaceholder = (
   mode: ScraperBrowseMode,
@@ -115,6 +133,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     hasDetails && detailsConfig?.titleSelector,
   );
   const usesSearchTemplatePaging = hasSearchPagePlaceholder(searchConfig);
+  const hasConfiguredHomeSearch = useMemo(
+    () => Boolean(scraper.globalConfig.homeSearch.enabled && hasSearch),
+    [hasSearch, scraper.globalConfig.homeSearch.enabled],
+  );
+  const homeSearchQuery = useMemo(
+    () => scraper.globalConfig.homeSearch.query || '',
+    [scraper.globalConfig.homeSearch.query],
+  );
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
   const [query, setQuery] = useState('');
@@ -141,7 +167,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [availableModes, defaultMode]);
 
   useEffect(() => {
-    setQuery(initialState?.query ?? '');
+    setQuery(formatScraperValueForDisplay(initialState?.query ?? ''));
     setSearchPage(null);
     setSearchVisitedPageUrls([]);
     setSearchPageIndex(0);
@@ -156,7 +182,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setLoading(false);
     setDownloading(false);
     setOpeningReader(false);
-    setUrlRestoreReady(Boolean(initialState?.detailsResult));
+    setUrlRestoreReady(false);
     lastInternalSearchRef.current = null;
     lastRestoredRouteSignatureRef.current = null;
   }, [initialState, scraper.id]);
@@ -524,7 +550,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       results: searchResults,
     });
     setMode('manga');
-    setQuery(result.detailUrl);
+    setQuery(formatScraperValueForDisplay(result.detailUrl));
     await loadDetailsFromTargetUrl(result.detailUrl);
   }, [
     detailsConfig,
@@ -548,6 +574,32 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     event.preventDefault();
     void handleOpenSearchResult(result);
   }, [handleOpenSearchResult]);
+
+  const handleOpenSearchResultAction = useCallback((
+    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
+    result: ScraperSearchResultItem,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleOpenSearchResult(result);
+  }, [handleOpenSearchResult]);
+
+  const handleOpenSearchResultImage = useCallback((
+    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
+    result: ScraperSearchResultItem,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!result.thumbnailUrl) {
+      return;
+    }
+
+    openModal(buildScraperImagePreviewModal({
+      imageUrl: result.thumbnailUrl,
+      title: result.title,
+    }));
+  }, [openModal]);
 
   const handleBackToSearch = useCallback(async () => {
     if (!searchReturnState) {
@@ -590,6 +642,46 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setRuntimeMessage(null);
   }, [runSearchLookup, searchReturnState]);
 
+  const handleGoToHome = useCallback(async () => {
+    setRuntimeError(null);
+    setDownloadError(null);
+    setDownloadMessage(null);
+    setLoading(false);
+    setDownloading(false);
+    setOpeningReader(false);
+    setSearchReturnState(null);
+
+    if (!hasSearch) {
+      setMode(defaultMode);
+      setQuery('');
+      setDetailsResult(null);
+      setSearchPage(null);
+      setSearchVisitedPageUrls([]);
+      setSearchPageIndex(0);
+      setSearchResults([]);
+      setHasExecutedSearch(false);
+      setRuntimeMessage(null);
+      return;
+    }
+
+    setMode('search');
+    setDetailsResult(null);
+
+    if (hasConfiguredHomeSearch) {
+      setQuery(homeSearchQuery);
+      await runSearchLookup(homeSearchQuery);
+      return;
+    }
+
+    setQuery('');
+    setSearchPage(null);
+    setSearchVisitedPageUrls([]);
+    setSearchPageIndex(0);
+    setSearchResults([]);
+    setHasExecutedSearch(false);
+    setRuntimeMessage(null);
+  }, [defaultMode, hasConfiguredHomeSearch, hasSearch, homeSearchQuery, runSearchLookup]);
+
   useEffect(() => {
     if (urlRestoreReady) {
       return;
@@ -601,7 +693,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     lastRestoredRouteSignatureRef.current = routeStateSignature;
 
+    const restoredSearchReturnState = buildSearchReturnStateFromRoute(routeState);
+
     if (initialState?.detailsResult) {
+      setMode('manga');
+      setQuery(formatScraperValueForDisplay(
+        routeState.mangaQuery || routeState.mangaUrl || initialState.query || '',
+      ));
+      setSearchReturnState(restoredSearchReturnState);
       setUrlRestoreReady(true);
       return;
     }
@@ -614,16 +713,6 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     const nextMode = availableModes.includes(routeState.mode)
       ? routeState.mode
       : defaultMode;
-    const restoredSearchReturnState = routeState.searchActive
-      ? {
-        hasExecutedSearch: true,
-        query: routeState.searchQuery,
-        page: null,
-        visitedPageUrls: [],
-        pageIndex: Math.max(0, routeState.searchPage - 1),
-        results: [],
-      }
-      : null;
     let cancelled = false;
 
     const finalizeRestore = () => {
@@ -648,6 +737,18 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           return;
         }
 
+        if (
+          hasConfiguredHomeSearch
+          && !routeState.searchActive
+          && !routeState.mangaQuery
+          && !routeState.mangaUrl
+        ) {
+          setQuery(homeSearchQuery);
+          await runSearchLookup(homeSearchQuery);
+          finalizeRestore();
+          return;
+        }
+
         setSearchReturnState(null);
         setDetailsResult(null);
         setSearchPage(null);
@@ -663,7 +764,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         return;
       }
 
-      setQuery(routeState.mangaQuery || routeState.mangaUrl || '');
+      setQuery(formatScraperValueForDisplay(routeState.mangaQuery || routeState.mangaUrl || ''));
       setSearchReturnState(restoredSearchReturnState);
 
       if (hasDetails && routeState.mangaUrl) {
@@ -706,7 +807,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     availableModes,
     defaultMode,
     hasDetails,
+    hasConfiguredHomeSearch,
     hasSearch,
+    homeSearchQuery,
     initialState?.detailsResult,
     loadDetailsFromTargetUrl,
     routeState.mangaQuery,
@@ -753,7 +856,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       searchQuery: persistedSearchState.query,
       searchPage: persistedSearchState.page,
       mangaQuery: mode === 'manga' ? query : '',
-      mangaUrl: mode === 'manga' ? currentDetailsUrl || undefined : undefined,
+      mangaUrl: mode === 'manga'
+        ? formatScraperValueForDisplay(currentDetailsUrl) || undefined
+        : undefined,
     });
 
     if (nextSearch === location.search) {
@@ -825,17 +930,26 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         title: detailsResult?.title || query.trim() || 'manga',
         pageUrls,
         refererUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
+        scraperId: scraper.id,
+        sourceUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
+        defaultTagIds: scraper.globalConfig.defaultTagIds,
+        defaultLanguage: scraper.globalConfig.defaultLanguage,
       });
+      const hasDefaultMetadata = Boolean(
+        scraper.globalConfig.defaultTagIds.length || scraper.globalConfig.defaultLanguage,
+      );
 
       setDownloadMessage(
-        `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque.`,
+        hasDefaultMetadata
+          ? `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque avec les reglages par defaut du scrapper.`
+          : `${downloadResult.downloadedCount} page(s) telechargee(s) dans ${downloadResult.folderPath}. Le manga a ete ajoute a la bibliotheque.`,
       );
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : 'Le telechargement du manga a echoue.');
     } finally {
       setDownloading(false);
     }
-  }, [detailsResult, query, resolveCurrentPageUrls]);
+  }, [detailsResult, query, resolveCurrentPageUrls, scraper.globalConfig.defaultLanguage, scraper.globalConfig.defaultTagIds, scraper.id]);
 
   const handleOpenReader = useCallback(async () => {
     if (!detailsResult) {
@@ -960,7 +1074,16 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       <div className="scraper-browser__hero">
         <div className="scraper-browser__intro">
           <span className="scraper-browser__eyebrow">Scrapper actif</span>
-          <h2>{scraper.name}</h2>
+          <h2>
+            <button
+              type="button"
+              className="scraper-browser__home"
+              onClick={() => void handleGoToHome()}
+              title="Revenir a la page d'accueil du scrapper"
+            >
+              {scraper.name}
+            </button>
+          </h2>
           <p>{scraper.description || 'Affichage temporaire pour executer la configuration du scrapper sans passer par la bibliotheque.'}</p>
         </div>
 
@@ -1097,6 +1220,81 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           <div className="scraper-browser__results-grid">
             {visibleSearchResults.map((result) => {
               const canOpenResult = Boolean(result.detailUrl && canOpenSearchResultsAsDetails);
+              const resultActions = canOpenResult ? (
+                <>
+                  <button
+                    type="button"
+                    className="scraper-browser__result-action-button"
+                    onClick={(event) => handleOpenSearchResultAction(event, result)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        handleOpenSearchResultAction(event, result);
+                      } else {
+                        event.stopPropagation();
+                      }
+                    }}
+                    aria-label={`Ouvrir la fiche ${result.title}`}
+                  >
+                    Ouvrir la fiche
+                  </button>
+                  {result.thumbnailUrl ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__result-preview-button"
+                      onClick={(event) => handleOpenSearchResultImage(event, result)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          handleOpenSearchResultImage(event, result);
+                        } else {
+                          event.stopPropagation();
+                        }
+                      }}
+                      aria-label={`Agrandir l'image de ${result.title}`}
+                    >
+                      Agrandir image
+                    </button>
+                  ) : null}
+                </>
+              ) : result.detailUrl ? (
+                <>
+                  <span className="scraper-browser__result-action-hint is-muted">
+                    Configure `Fiche` pour ouvrir
+                  </span>
+                  {result.thumbnailUrl ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__result-preview-button"
+                      onClick={(event) => handleOpenSearchResultImage(event, result)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          handleOpenSearchResultImage(event, result);
+                        } else {
+                          event.stopPropagation();
+                        }
+                      }}
+                      aria-label={`Agrandir l'image de ${result.title}`}
+                    >
+                      Agrandir image
+                    </button>
+                  ) : null}
+                </>
+              ) : result.thumbnailUrl ? (
+                <button
+                  type="button"
+                  className="scraper-browser__result-preview-button"
+                  onClick={(event) => handleOpenSearchResultImage(event, result)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      handleOpenSearchResultImage(event, result);
+                    } else {
+                      event.stopPropagation();
+                    }
+                  }}
+                  aria-label={`Agrandir l'image de ${result.title}`}
+                >
+                  Agrandir image
+                </button>
+              ) : null;
 
               return (
                 <article
@@ -1128,19 +1326,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
                       Aucun resume extrait pour ce resultat.
                     </p>
                   )}
-
-                  {canOpenResult ? (
-                    <div className="scraper-browser__result-actions">
-                      <span className="scraper-browser__result-action-hint">Ouvrir la fiche</span>
-                    </div>
-                  ) : result.detailUrl ? (
-                    <div className="scraper-browser__result-actions">
-                      <span className="scraper-browser__result-action-hint is-muted">
-                        Configure `Fiche` pour ouvrir
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
+
+                {resultActions ? (
+                  <div className="scraper-browser__result-actions">
+                    {resultActions}
+                  </div>
+                ) : null}
               </article>
               );
             })}
@@ -1160,102 +1352,107 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       ) : null}
 
       {detailsResult ? (
-        <article className="scraper-browser__details">
-          <div className="scraper-browser__details-media">
-            {detailsResult.cover ? (
-              <img src={detailsResult.cover} alt={detailsResult.title || 'Couverture'} />
-            ) : (
-              <div className="scraper-browser__details-placeholder">Pas d&apos;image</div>
-            )}
-          </div>
+        <>
+          {canReturnToSearch ? (
+            <div className="scraper-browser__details-return">
+              <button
+                type="button"
+                className="scraper-browser__back-to-search"
+                onClick={handleBackToSearch}
+              >
+                Retour a la recherche
+              </button>
+            </div>
+          ) : null}
 
-          <div className="scraper-browser__details-body">
-            <div className="scraper-browser__details-head">
-              <h3>{detailsResult.title || 'Titre non detecte'}</h3>
-              <div className="scraper-browser__details-actions">
-                {canReturnToSearch ? (
-                  <button
-                    type="button"
-                    className="scraper-browser__back-to-search"
-                    onClick={handleBackToSearch}
-                  >
-                    Retour a la recherche
-                  </button>
-                ) : null}
-                {detailsResult.mangaStatus ? (
-                  <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
-                ) : null}
-                {hasPages ? (
-                  <button
-                    type="button"
-                    className="scraper-browser__read"
-                    onClick={() => void handleOpenReader()}
-                    disabled={openingReader}
-                  >
-                    {openingReader ? 'Ouverture...' : 'Lecteur'}
-                  </button>
-                ) : null}
-                {hasPages ? (
-                  <button
-                    type="button"
-                    className="scraper-browser__download"
-                    onClick={() => void handleDownload()}
-                    disabled={downloading}
-                  >
-                    {downloading ? 'Telechargement...' : 'Telecharger'}
-                  </button>
-                ) : null}
-              </div>
+          <article className="scraper-browser__details">
+            <div className="scraper-browser__details-media">
+              {detailsResult.cover ? (
+                <img src={detailsResult.cover} alt={detailsResult.title || 'Couverture'} />
+              ) : (
+                <div className="scraper-browser__details-placeholder">Pas d&apos;image</div>
+              )}
             </div>
 
-            {detailsResult.authors.length ? (
-              <div className="scraper-browser__chips">
-                {detailsResult.authors.map((author) => (
-                  <span key={author} className="scraper-browser__chip is-author">{author}</span>
-                ))}
+            <div className="scraper-browser__details-body">
+              <div className="scraper-browser__details-head">
+                <h3>{detailsResult.title || 'Titre non detecte'}</h3>
+                <div className="scraper-browser__details-actions">
+                  {detailsResult.mangaStatus ? (
+                    <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
+                  ) : null}
+                  {hasPages ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__read"
+                      onClick={() => void handleOpenReader()}
+                      disabled={openingReader}
+                    >
+                      {openingReader ? 'Ouverture...' : 'Lecteur'}
+                    </button>
+                  ) : null}
+                  {hasPages ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__download"
+                      onClick={() => void handleDownload()}
+                      disabled={downloading}
+                    >
+                      {downloading ? 'Telechargement...' : 'Telecharger'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            ) : null}
 
-            {detailsResult.tags.length ? (
-              <div className="scraper-browser__chips">
-                {detailsResult.tags.map((tag) => (
-                  <span key={tag} className="scraper-browser__chip is-tag">{tag}</span>
-                ))}
-              </div>
-            ) : null}
+              {detailsResult.authors.length ? (
+                <div className="scraper-browser__chips">
+                  {detailsResult.authors.map((author) => (
+                    <span key={author} className="scraper-browser__chip is-author">{author}</span>
+                  ))}
+                </div>
+              ) : null}
 
-            <p className="scraper-browser__description">
-              {detailsResult.description || 'Aucune description extraite pour cette fiche.'}
-            </p>
+              {detailsResult.tags.length ? (
+                <div className="scraper-browser__chips">
+                  {detailsResult.tags.map((tag) => (
+                    <span key={tag} className="scraper-browser__chip is-tag">{tag}</span>
+                  ))}
+                </div>
+              ) : null}
 
-            <div className="scraper-browser__links">
-              <div>
-                <span>URL demandee</span>
-                <strong>{detailsResult.requestedUrl}</strong>
-              </div>
-              {detailsResult.finalUrl && detailsResult.finalUrl !== detailsResult.requestedUrl ? (
+              <p className="scraper-browser__description">
+                {detailsResult.description || 'Aucune description extraite pour cette fiche.'}
+              </p>
+
+              <div className="scraper-browser__links">
                 <div>
-                  <span>URL finale</span>
-                  <strong>{detailsResult.finalUrl}</strong>
+                  <span>URL demandee</span>
+                  <strong>{formatScraperValueForDisplay(detailsResult.requestedUrl)}</strong>
+                </div>
+                {detailsResult.finalUrl && detailsResult.finalUrl !== detailsResult.requestedUrl ? (
+                  <div>
+                    <span>URL finale</span>
+                    <strong>{formatScraperValueForDisplay(detailsResult.finalUrl)}</strong>
+                  </div>
+                ) : null}
+              </div>
+
+              {Object.keys(detailsResult.derivedValues).length ? (
+                <div className="scraper-browser__derived">
+                  <span className="scraper-browser__derived-title">Variables derivees</span>
+                  <div className="scraper-browser__derived-list">
+                    {Object.entries(detailsResult.derivedValues).map(([key, value]) => (
+                      <div key={key} className="scraper-browser__derived-item">
+                        <code>{`{{${key}}}`}</code>
+                        <strong>{formatScraperValueForDisplay(value)}</strong>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
-
-            {Object.keys(detailsResult.derivedValues).length ? (
-              <div className="scraper-browser__derived">
-                <span className="scraper-browser__derived-title">Variables derivees</span>
-                <div className="scraper-browser__derived-list">
-                  {Object.entries(detailsResult.derivedValues).map(([key, value]) => (
-                    <div key={key} className="scraper-browser__derived-item">
-                      <code>{`{{${key}}}`}</code>
-                      <strong>{value}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </article>
+          </article>
+        </>
       ) : null}
     </section>
   );
