@@ -1,6 +1,21 @@
 export type ScraperSourceKind = 'site' | 'api';
-export type ScraperFeatureKind = 'search' | 'details' | 'pages';
+export type ScraperFeatureKind = 'search' | 'details' | 'chapters' | 'pages';
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
+export type ScraperRequestMethod = 'GET' | 'POST';
+export type ScraperRequestBodyMode = 'form' | 'raw';
+
+export interface ScraperRequestField {
+  key: string;
+  value: string;
+}
+
+export interface ScraperRequestConfig {
+  method?: ScraperRequestMethod;
+  bodyMode?: ScraperRequestBodyMode;
+  bodyFields?: ScraperRequestField[];
+  body?: string;
+  contentType?: string;
+}
 
 export interface ScraperIdentityDraft {
   kind: ScraperSourceKind;
@@ -14,10 +29,28 @@ export interface ScraperHomeSearchConfig {
   query: string;
 }
 
+export type ScraperBookmarkMetadataField =
+  | 'cover'
+  | 'summary'
+  | 'description'
+  | 'authors'
+  | 'tags'
+  | 'mangaStatus';
+
+export interface ScraperBookmarkConfig {
+  excludedFields: ScraperBookmarkMetadataField[];
+}
+
+export interface ScraperChapterDownloadConfig {
+  autoAssignSeries: boolean;
+}
+
 export interface ScraperGlobalConfig {
   defaultTagIds: string[];
   defaultLanguage?: string;
   homeSearch: ScraperHomeSearchConfig;
+  bookmark: ScraperBookmarkConfig;
+  chapterDownloads: ScraperChapterDownloadConfig;
 }
 
 export interface ScraperAccessValidationRequest {
@@ -44,13 +77,16 @@ export type ScraperFeatureValidationCheckKey =
   | 'authors'
   | 'tags'
   | 'status'
+  | 'chapters'
   | 'pages';
 
 export type ScraperFeatureValidationIssueCode = 'no_match' | 'invalid_selector';
 export type ScraperFeatureValidationFailureCode = 'request_failed' | 'http_error';
 export type ScraperDetailsUrlStrategy = 'result_url' | 'template';
-export type ScraperPagesUrlStrategy = 'details_page' | 'template';
-export type ScraperDetailsDerivedValueSourceType = 'requested_url' | 'final_url' | 'field' | 'selector';
+export type ScraperChaptersUrlStrategy = 'details_page' | 'template';
+export type ScraperPagesUrlStrategy = 'details_page' | 'chapter_page' | 'template';
+export type ScraperPagesTemplateBase = 'scraper_base' | 'details_page';
+export type ScraperDetailsDerivedValueSourceType = 'requested_url' | 'final_url' | 'field' | 'selector' | 'html';
 export type ScraperDetailsDerivedValueIssueCode =
   | 'missing_source'
   | 'invalid_selector'
@@ -65,6 +101,12 @@ export interface ScraperFeatureValidationCheck {
   sample?: string;
   samples?: string[];
   issueCode?: ScraperFeatureValidationIssueCode;
+}
+
+export interface ScraperChapterItem {
+  url: string;
+  label: string;
+  image?: string;
 }
 
 export interface ScraperDetailsDerivedValueConfig {
@@ -96,11 +138,13 @@ export interface ScraperFeatureValidationResult {
   failureCode?: ScraperFeatureValidationFailureCode;
   checks: ScraperFeatureValidationCheck[];
   derivedValues: ScraperDetailsDerivedValueResult[];
+  chapters?: ScraperChapterItem[];
 }
 
 export interface ScraperSearchFeatureConfig {
   urlTemplate: string;
   testQuery?: string;
+  request?: ScraperRequestConfig;
   resultListSelector?: string;
   resultItemSelector: string;
   titleSelector: string;
@@ -131,10 +175,24 @@ export interface ScraperDetailsFeatureConfig {
   derivedValues: ScraperDetailsDerivedValueConfig[];
 }
 
+export interface ScraperChaptersFeatureConfig {
+  urlStrategy: ScraperChaptersUrlStrategy;
+  urlTemplate?: string;
+  templateBase?: ScraperPagesTemplateBase;
+  chapterListSelector?: string;
+  chapterItemSelector: string;
+  chapterUrlSelector: string;
+  chapterImageSelector?: string;
+  chapterLabelSelector: string;
+  reverseOrder?: boolean;
+}
+
 export interface ScraperPagesFeatureConfig {
   urlStrategy: ScraperPagesUrlStrategy;
   urlTemplate?: string;
+  templateBase?: ScraperPagesTemplateBase;
   pageImageSelector?: string;
+  linkedToChapters?: boolean;
 }
 
 export interface ScraperFeatureDefinition {
@@ -181,6 +239,7 @@ export interface SaveScraperGlobalConfigRequest {
 export interface FetchScraperDocumentRequest {
   baseUrl: string;
   targetUrl: string;
+  requestConfig?: ScraperRequestConfig;
 }
 
 export interface FetchScraperDocumentResult {
@@ -202,6 +261,10 @@ export interface DownloadScraperMangaRequest {
   sourceUrl?: string;
   defaultTagIds?: string[];
   defaultLanguage?: string;
+  autoAssignSeriesOnChapterDownload?: boolean;
+  seriesTitle?: string;
+  chapterLabel?: string;
+  thumbnailUrl?: string;
 }
 
 export interface DownloadScraperMangaResult {
@@ -236,6 +299,7 @@ export interface SaveScraperBookmarkRequest {
   authors?: string[];
   tags?: string[];
   mangaStatus?: string;
+  excludedFields?: ScraperBookmarkMetadataField[];
 }
 
 export interface RemoveScraperBookmarkRequest {
@@ -278,6 +342,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     description: 'Definir comment ouvrir une fiche manga et recuperer ses metadonnees.',
   },
   {
+    kind: 'chapters',
+    label: 'Chapitres',
+    description: 'Definir comment recuperer la liste des chapitres depuis une fiche manga.',
+  },
+  {
     kind: 'pages',
     label: 'Pages',
     description: 'Definir comment recuperer les pages du manga et ouvrir un lecteur.',
@@ -291,6 +360,12 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
     homeSearch: {
       enabled: false,
       query: '',
+    },
+    bookmark: {
+      excludedFields: [],
+    },
+    chapterDownloads: {
+      autoAssignSeries: false,
     },
   };
 }
@@ -341,6 +416,44 @@ const encodeScraperTemplateValue = (value: string): string => {
   }
 };
 
+const applyScraperTemplateReplacements = (
+  template: string,
+  replacements: Array<[string, string]>,
+): string => replacements.reduce(
+  (current, [token, replacement]) => current.split(token).join(replacement),
+  template,
+);
+
+const buildScraperSearchTemplateReplacements = (
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): Array<[string, string]> => {
+  const trimmedQuery = query.trim();
+  const pageIndex = Math.max(0, options?.pageIndex ?? 0);
+  const page = pageIndex + 1;
+  const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
+  const encodedQuery = encodeScraperTemplateValue(trimmedQuery);
+
+  return [
+    ['{{query}}', encodedQuery],
+    ['{{search}}', encodedQuery],
+    ['{{value}}', encodedQuery],
+    ['{{page}}', String(page)],
+    ['{{page2}}', padPageNumber(page, 2)],
+    ['{{page3}}', padPageNumber(page, 3)],
+    ['{{page4}}', padPageNumber(page, 4)],
+    ['{{pageIndex}}', String(pageIndex)],
+    ['{{pageIndex2}}', padPageNumber(pageIndex, 2)],
+    ['{{pageIndex3}}', padPageNumber(pageIndex, 3)],
+    ['{{pageIndex4}}', padPageNumber(pageIndex, 4)],
+    ['{{rawQuery}}', trimmedQuery],
+    ['{{rawSearch}}', trimmedQuery],
+    ['{{rawValue}}', trimmedQuery],
+  ];
+};
+
 export function buildScraperTemplateUrl(
   baseUrl: string,
   template: string,
@@ -367,12 +480,38 @@ export function buildScraperTemplateUrl(
     ['{{rawSlug}}', trimmedValue],
   ];
 
-  const resolvedTemplate = replacements.reduce(
-    (current, [token, replacement]) => current.split(token).join(replacement),
-    trimmedTemplate,
-  );
+  const resolvedTemplate = applyScraperTemplateReplacements(trimmedTemplate, replacements);
 
   return resolveScraperUrl(baseUrl, resolvedTemplate);
+}
+
+export function applyScraperSearchTemplate(
+  template: string,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): string {
+  return applyScraperTemplateReplacements(
+    template,
+    buildScraperSearchTemplateReplacements(query, options),
+  );
+}
+
+export function resolveScraperSearchTemplateString(
+  template: string,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): string {
+  const trimmedTemplate = template.trim();
+
+  if (!trimmedTemplate) {
+    throw new Error('Le template de recherche est requis.');
+  }
+
+  return applyScraperSearchTemplate(trimmedTemplate, query, options);
 }
 
 export function buildScraperSearchUrl(
@@ -383,46 +522,19 @@ export function buildScraperSearchUrl(
     pageIndex?: number;
   },
 ): string {
-  const trimmedTemplate = template.trim();
-  const trimmedQuery = query.trim();
-  const pageIndex = Math.max(0, options?.pageIndex ?? 0);
-  const page = pageIndex + 1;
-  const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
-
-  if (!trimmedTemplate) {
-    throw new Error('Le template de recherche est requis.');
-  }
-
-  const encodedQuery = encodeScraperTemplateValue(trimmedQuery);
-  const replacements: Array<[string, string]> = [
-    ['{{query}}', encodedQuery],
-    ['{{search}}', encodedQuery],
-    ['{{value}}', encodedQuery],
-    ['{{page}}', String(page)],
-    ['{{page2}}', padPageNumber(page, 2)],
-    ['{{page3}}', padPageNumber(page, 3)],
-    ['{{page4}}', padPageNumber(page, 4)],
-    ['{{pageIndex}}', String(pageIndex)],
-    ['{{pageIndex2}}', padPageNumber(pageIndex, 2)],
-    ['{{pageIndex3}}', padPageNumber(pageIndex, 3)],
-    ['{{pageIndex4}}', padPageNumber(pageIndex, 4)],
-    ['{{rawQuery}}', trimmedQuery],
-    ['{{rawSearch}}', trimmedQuery],
-    ['{{rawValue}}', trimmedQuery],
-  ];
-
-  const resolvedTemplate = replacements.reduce(
-    (current, [token, replacement]) => current.split(token).join(replacement),
-    trimmedTemplate,
+  return resolveScraperUrl(
+    baseUrl,
+    resolveScraperSearchTemplateString(template, query, options),
   );
-
-  return resolveScraperUrl(baseUrl, resolvedTemplate);
 }
 
 export function buildScraperContextTemplateUrl(
   baseUrl: string,
   template: string,
   context: Record<string, string | undefined>,
+  options?: {
+    relativeToUrl?: string;
+  },
 ): string {
   const trimmedTemplate = template.trim();
 
@@ -449,5 +561,6 @@ export function buildScraperContextTemplateUrl(
     throw new Error(`Variables non resolues dans le template : ${unresolvedMatches.join(', ')}`);
   }
 
-  return resolveScraperUrl(baseUrl, resolvedTemplate);
+  const resolutionBaseUrl = options?.relativeToUrl?.trim() || baseUrl;
+  return resolveScraperUrl(resolutionBaseUrl, resolvedTemplate);
 }

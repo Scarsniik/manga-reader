@@ -10,9 +10,9 @@ import {
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
-import PagesTemplateContext from '@/renderer/components/ScraperConfig/pages/PagesTemplateContext';
 import {
   buildDocumentFailure,
   buildPagesConfig,
@@ -25,12 +25,21 @@ import {
   getSaveFieldErrors,
   hasPagePlaceholder,
   isImageLikeContentType,
+  LINKED_TO_CHAPTERS_FIELD,
   padPageNumber,
   PAGE_IMAGE_SELECTOR_FIELD,
+  resolveTemplateBaseUrl,
+  TEMPLATE_BASE_FIELD,
   toAbsoluteUrl,
   URL_STRATEGY_FIELD,
   URL_TEMPLATE_FIELD,
 } from '@/renderer/components/ScraperConfig/pages/pagesFeatureEditor.utils';
+import {
+  usesScraperPagesChapterSource,
+  usesScraperPagesChapters,
+  usesScraperPagesTemplateChapterContext,
+} from '@/renderer/utils/scraperPages';
+import { buildScraperTemplateContextFromValidation } from '@/renderer/utils/scraperTemplateContext';
 
 type Props = {
   scraper: ScraperRecord;
@@ -71,37 +80,44 @@ export default function ScraperPagesFeatureEditor({
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildPagesConfig(formValues), [formValues]);
+  const usesChapterSource = useMemo(
+    () => usesScraperPagesChapterSource(currentConfig),
+    [currentConfig],
+  );
+  const usesTemplateChapterContext = useMemo(
+    () => usesScraperPagesTemplateChapterContext(currentConfig),
+    [currentConfig],
+  );
+  const usesChaptersForPages = useMemo(
+    () => usesScraperPagesChapters(currentConfig),
+    [currentConfig],
+  );
   const detailsFeature = useMemo(
     () => scraper.features.find((candidate) => candidate.kind === 'details') || null,
     [scraper.features],
   );
+  const detailsUrl = useMemo(
+    () => detailsFeature?.validation?.ok
+      ? (detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl || '')
+      : '',
+    [detailsFeature],
+  );
+  const chaptersFeature = useMemo(
+    () => scraper.features.find((candidate) => candidate.kind === 'chapters') || null,
+    [scraper.features],
+  );
+  const selectedValidationChapter = useMemo(
+    () => usesChaptersForPages
+      ? chaptersFeature?.validation?.chapters?.[0] || null
+      : null,
+    [chaptersFeature, usesChaptersForPages],
+  );
 
-  const templateContext = useMemo<Record<string, string | undefined>>(() => {
-    if (!detailsFeature?.validation?.ok) {
-      return {};
-    }
-
-    const checksByKey = new Map(
-      detailsFeature.validation.checks.map((check) => [check.key, check.sample]),
-    );
-    const derivedValues = Object.fromEntries(
-      detailsFeature.validation.derivedValues
-        .filter((derivedValue) => Boolean(derivedValue.value))
-        .map((derivedValue) => [derivedValue.key, derivedValue.value as string]),
-    ) as Record<string, string>;
-
-    return {
-      requestedUrl: detailsFeature.validation.requestedUrl,
-      finalUrl: detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl,
-      title: checksByKey.get('title'),
-      cover: checksByKey.get('cover'),
-      description: checksByKey.get('description'),
-      authors: checksByKey.get('authors'),
-      tags: checksByKey.get('tags'),
-      status: checksByKey.get('status'),
-      ...derivedValues,
-    };
-  }, [detailsFeature]);
+  const templateContext = useMemo<Record<string, string | undefined>>(() => (
+    buildScraperTemplateContextFromValidation(detailsFeature?.validation, {
+      chapterUrl: usesChaptersForPages ? selectedValidationChapter?.url : undefined,
+    })
+  ), [detailsFeature?.validation, selectedValidationChapter?.url, usesChaptersForPages]);
 
   const buildTemplateContextForPage = useCallback((pageIndex: number): Record<string, string | undefined> => ({
     ...templateContext,
@@ -120,6 +136,10 @@ export default function ScraperPagesFeatureEditor({
       return null;
     }
 
+    if (usesChaptersForPages && !selectedValidationChapter?.url) {
+      return null;
+    }
+
     try {
       if (currentConfig.urlStrategy === 'template') {
         return buildTemplatePageUrl(
@@ -127,14 +147,35 @@ export default function ScraperPagesFeatureEditor({
           currentConfig.urlTemplate || '',
           buildTemplateContextForPage,
           0,
+          {
+            relativeToUrl: resolveTemplateBaseUrl(
+              scraper.baseUrl,
+              currentConfig,
+              usesTemplateChapterContext
+                ? selectedValidationChapter?.url || detailsUrl
+                : detailsUrl,
+            ),
+          },
         );
       }
 
-      return detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl || null;
+      return usesChapterSource
+        ? selectedValidationChapter?.url || null
+        : detailsUrl || null;
     } catch {
       return null;
     }
-  }, [buildTemplateContextForPage, currentConfig, detailsFeature, scraper.baseUrl]);
+  }, [
+    buildTemplateContextForPage,
+    currentConfig,
+    detailsFeature?.validation?.ok,
+    detailsUrl,
+    scraper.baseUrl,
+    selectedValidationChapter,
+    usesChapterSource,
+    usesChaptersForPages,
+    usesTemplateChapterContext,
+  ]);
 
   const previewUrls = useMemo(() => {
     const pagesCheck = validationResult?.checks.find((check) => check.key === 'pages' && check.matchedCount > 0);
@@ -181,6 +222,29 @@ export default function ScraperPagesFeatureEditor({
     });
   }, []);
 
+  const handleCheckboxChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const nextValue = event.target.checked;
+    setFormValues((previous) => ({
+      ...previous,
+      [fieldName]: nextValue,
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    setFieldErrors((previous) => {
+      if (!previous[fieldName]) {
+        return previous;
+      }
+
+      const next = { ...previous };
+      delete next[fieldName];
+      return next;
+    });
+  }, []);
+
   const handleValidate = useCallback(async () => {
     const config = buildPagesConfig(formValues);
     const errors = getSaveFieldErrors(config);
@@ -196,6 +260,20 @@ export default function ScraperPagesFeatureEditor({
       return;
     }
 
+    if (usesScraperPagesChapters(config) && !chaptersFeature?.validation?.ok) {
+      setValidationUiError('Valide d\'abord le composant Chapitres pour tester des pages liees a un chapitre.');
+      return;
+    }
+
+    if (usesScraperPagesChapters(config) && !selectedValidationChapter?.url) {
+      setValidationUiError(
+        config.urlStrategy === 'template'
+          ? 'Aucun chapitre de test n\'est disponible pour alimenter la variable {{chapter}}.'
+          : 'Aucun chapitre de test n\'est disponible pour cette configuration.',
+      );
+      return;
+    }
+
     if (!(window as any).api || typeof (window as any).api.fetchScraperDocument !== 'function') {
       setValidationUiError('La validation des pages n\'est pas disponible dans cette version.');
       return;
@@ -203,9 +281,23 @@ export default function ScraperPagesFeatureEditor({
 
     let targetUrl = '';
     try {
+      const templateBaseUrl = resolveTemplateBaseUrl(
+        scraper.baseUrl,
+        config,
+        usesScraperPagesTemplateChapterContext(config)
+          ? selectedValidationChapter?.url || detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl
+          : detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl,
+      );
+
       targetUrl = config.urlStrategy === 'template'
-        ? buildTemplatePageUrl(scraper.baseUrl, config.urlTemplate || '', buildTemplateContextForPage, 0)
-        : (detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl || '');
+        ? buildTemplatePageUrl(scraper.baseUrl, config.urlTemplate || '', buildTemplateContextForPage, 0, {
+          relativeToUrl: templateBaseUrl,
+        })
+        : (
+          config.urlStrategy === 'chapter_page'
+            ? selectedValidationChapter?.url || ''
+            : detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl || ''
+        );
     } catch (error) {
       setValidationUiError(error instanceof Error ? error.message : 'Impossible de construire l\'URL des pages.');
       return;
@@ -237,6 +329,13 @@ export default function ScraperPagesFeatureEditor({
       if (!config.pageImageSelector) {
         if (config.urlStrategy === 'template' && hasPagePlaceholder(config.urlTemplate)) {
           const directPageUrls: string[] = [];
+          const templateBaseUrl = resolveTemplateBaseUrl(
+            scraper.baseUrl,
+            config,
+            usesScraperPagesTemplateChapterContext(config)
+              ? selectedValidationChapter?.url || detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl
+              : detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl,
+          );
 
           for (let pageIndex = 0; pageIndex < 8; pageIndex += 1) {
             const pageUrl = buildTemplatePageUrl(
@@ -244,6 +343,9 @@ export default function ScraperPagesFeatureEditor({
               config.urlTemplate || '',
               buildTemplateContextForPage,
               pageIndex,
+              {
+                relativeToUrl: templateBaseUrl,
+              },
             );
 
             const resourceResult = await (window as any).api.fetchScraperDocument({
@@ -359,7 +461,7 @@ export default function ScraperPagesFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [buildTemplateContextForPage, detailsFeature, formValues, scraper.baseUrl]);
+  }, [buildTemplateContextForPage, chaptersFeature, detailsFeature, formValues, scraper.baseUrl, selectedValidationChapter]);
 
   const handleSave = useCallback(async () => {
     const config = buildPagesConfig(formValues);
@@ -413,13 +515,13 @@ export default function ScraperPagesFeatureEditor({
       <ScraperFeatureEditorHeader
         title="Configurer les pages"
         description={
-          'Ce composant sait lire les pages directement depuis la fiche, ou depuis une URL '
-          + 'construite avec les variables extraites du composant `Fiche`.'
+          'Ce composant sait lire les pages depuis la fiche, depuis un chapitre, '
+          + 'ou depuis une URL construite avec les variables extraites du composant `Fiche`.'
         }
         noteTitle="Validation basee sur la fiche"
         noteText={
           'Le test des pages repose sur la derniere validation reussie de `Fiche`. Cela permet '
-          + 'd\'utiliser directement son URL finale et ses variables derivees.'
+          + 'd\'utiliser directement son URL finale, ses variables derivees et, si besoin, les chapitres valides.'
         }
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
@@ -448,18 +550,38 @@ export default function ScraperPagesFeatureEditor({
                 error={fieldErrors.urlTemplate}
                 onChange={handleFieldChange('urlTemplate')}
               />
+              <ScraperConfigField
+                field={TEMPLATE_BASE_FIELD}
+                value={formValues.templateBase || 'scraper_base'}
+                error={fieldErrors.templateBase}
+                onChange={handleFieldChange('templateBase')}
+              />
               <div className="scraper-config-hint">
                 Variables disponibles depuis `Fiche` : <code>{'{{requestedUrl}}'}</code>,
                 <code>{' {{finalUrl}}'}</code> et les variables extraites. Utilise
                 <code>{' {{raw:nomVariable}}'}</code> pour inserer une valeur brute sans encodage.
-                Pour les pages directes, tu peux aussi utiliser <code>{'{{page}}'}</code>,
+                Les variables URL sont encodees par defaut, et la base relative du template peut
+                partir soit du scraper, soit de la fiche validee ou du chapitre courant. Pour les pages directes, tu peux
+                aussi utiliser <code>{'{{page}}'}</code>,
                 <code>{' {{page3}}'}</code>, <code>{'{{pageIndex}}'}</code> ou
                 <code>{' {{pageIndex3}}'}</code>.
+                {usesTemplateChapterContext ? (
+                  <> La variable <code>{'{{chapter}}'}</code> contient l&apos;URL du premier chapitre valide detecte.</>
+                ) : null}
               </div>
             </>
           ) : null}
 
-          <PagesTemplateContext templateContext={templateContext} />
+          <ScraperTemplateContext
+            templateContext={templateContext}
+            emptyMessage={(
+              <>
+                Aucune fiche validee n&apos;est disponible pour le moment. Tu peux enregistrer la
+                configuration, mais la validation des pages restera indisponible tant que `Fiche`
+                n&apos;aura pas ete validee.
+              </>
+            )}
+          />
         </div>
 
         <div className="scraper-config-section">
@@ -467,15 +589,47 @@ export default function ScraperPagesFeatureEditor({
             <h4>Scraping</h4>
             <p>
               Indique comment recuperer les URLs des pages depuis le HTML cible. En mode
-              `template`, ce selecteur est optionnel si l&apos;URL resolue pointe deja directement
+              `Depuis un template`, ce selecteur est optionnel si l&apos;URL resolue pointe deja directement
               vers une image.
             </p>
           </div>
 
+          {currentConfig.urlStrategy === 'template' ? (
+            <>
+              <ScraperConfigField
+                field={LINKED_TO_CHAPTERS_FIELD}
+                value={Boolean(formValues.linkedToChapters)}
+                error={fieldErrors.linkedToChapters}
+                onChange={handleCheckboxChange('linkedToChapters')}
+              />
+
+              {usesTemplateChapterContext ? (
+                <div className="scraper-config-hint">
+                  Les pages seront resolues chapitre par chapitre. Le composant `Chapitres`
+                  doit etre valide pour fournir la variable <code>{'{{chapter}}'}</code>.
+                  {selectedValidationChapter?.label ? (
+                    <> Le chapitre de test courant est <strong>{selectedValidationChapter.label}</strong>.</>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {usesChapterSource ? (
+            <div className="scraper-config-hint">
+              Les pages seront lues directement depuis la page du chapitre choisi. Le composant
+              `Chapitres` doit etre valide pour fournir un chapitre de test et les actions de lecture.
+              {selectedValidationChapter?.label ? (
+                <> Le chapitre de test courant est <strong>{selectedValidationChapter.label}</strong>.</>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="scraper-config-hint">
-            Laisse ce champ vide si ton template retourne directement une image exploitable comme
-            page. Dans ce cas, la validation verifiera seulement que la ressource repond bien comme
-            une image.
+            En mode `Depuis la fiche` ou `Depuis un chapitre`, ce selecteur lit le HTML de la
+            source choisie. Laisse ce champ vide seulement si ton template retourne directement
+            une image exploitable comme page. Dans ce cas, la validation verifiera seulement que
+            la ressource repond bien comme une image.
           </div>
 
           <div className="scraper-config-section__grid">

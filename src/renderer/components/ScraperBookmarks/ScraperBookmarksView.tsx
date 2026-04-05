@@ -217,6 +217,7 @@ export default function ScraperBookmarksView({
                     authors={bookmark.authors}
                     tags={bookmark.tags}
                     mangaStatus={bookmark.mangaStatus}
+                    excludedFields={scraper?.globalConfig.bookmark.excludedFields}
                     size="sm"
                   />
 

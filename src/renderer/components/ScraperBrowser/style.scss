@@ -271,8 +271,9 @@
 
 .scraper-browser__results-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .scraper-browser__results-pagination {
@@ -506,6 +507,7 @@
 .scraper-browser__details {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
   gap: 20px;
   padding: 20px;
 }
@@ -516,7 +518,11 @@
 }
 
 .scraper-browser__details-media {
-  min-height: 300px;
+  width: min(100%, 220px);
+  aspect-ratio: 7 / 10;
+  min-height: 0;
+  align-self: start;
+  justify-self: start;
   border-radius: 12px;
   overflow: hidden;
   background: #0e0e0e;
@@ -535,7 +541,6 @@
   place-items: center;
   width: 100%;
   height: 100%;
-  min-height: 300px;
   color: #818181;
   font-size: 14px;
 }
@@ -627,6 +632,133 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
+}
+
+.scraper-browser__chapters {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scraper-browser__chapters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scraper-browser__chapters-head strong {
+  color: #f0f0f0;
+  font-size: 15px;
+}
+
+.scraper-browser__chapters-head span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d8d8d8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scraper-browser__chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scraper-browser__chapter-card {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #2a2a2a;
+  background: #101010;
+}
+
+.scraper-browser__chapter-card.is-with-actions {
+  grid-template-columns: 72px minmax(0, 1fr) minmax(112px, auto);
+}
+
+.scraper-browser__chapter-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0c0c0c;
+  border: 1px solid #202020;
+}
+
+.scraper-browser__chapter-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scraper-browser__chapter-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #838383;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scraper-browser__chapter-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scraper-browser__chapter-body strong {
+  color: #f5f5f5;
+  font-size: 14px;
+}
+
+.scraper-browser__chapter-body span {
+  color: #b8b8b8;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.scraper-browser__chapter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.scraper-browser__chapter-actions--side {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  justify-self: end;
+  margin-top: 0;
+}
+
+.scraper-browser__chapter-actions--side .scraper-browser__read,
+.scraper-browser__chapter-actions--side .scraper-browser__download {
+  width: 100%;
+}
+
+.scraper-browser__chapters-empty {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #b7b7b7;
+  line-height: 1.5;
 }
 
 .scraper-browser__chip {
@@ -749,6 +881,25 @@
   .scraper-browser__details-actions {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .scraper-browser__chapter-card {
+    grid-template-columns: 1fr;
+  }
+
+  .scraper-browser__chapter-card.is-with-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .scraper-browser__chapter-actions--side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .scraper-browser__chapter-actions--side .scraper-browser__read,
+  .scraper-browser__chapter-actions--side .scraper-browser__download {
+    width: auto;
   }
 
   .scraper-browser__meta {

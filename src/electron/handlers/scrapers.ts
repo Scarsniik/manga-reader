@@ -14,11 +14,15 @@ import {
   ScraperAccessValidationRequest,
   ScraperAccessValidationResult,
   ScraperBookmarkRecord,
+  ScraperBookmarkMetadataField,
+  ScraperChapterItem,
   ScraperDetailsDerivedValueResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperGlobalConfig,
+  ScraperRequestConfig,
+  ScraperRequestField,
   ScraperReaderProgressRecord,
   ScraperRecord,
   SaveScraperDraftRequest,
@@ -34,8 +38,9 @@ import {
   scraperReaderProgressFilePath,
   scrapersFilePath,
 } from '../utils';
-import { addManga } from './mangas';
+import { addManga, createStoredThumbnailForMangaFromBuffer, patchMangaById } from './mangas';
 import { getSettings } from './params';
+import { ensureSeriesByTitle } from './series';
 import { getTags } from './tags';
 
 const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
@@ -63,7 +68,7 @@ const sanitizeAccessValidation = (
 const sanitizeFeatureValidationCheck = (
   check: Partial<ScraperFeatureValidationCheck>,
 ): ScraperFeatureValidationCheck | null => {
-  const allowedKeys = ['title', 'cover', 'description', 'authors', 'tags', 'status', 'pages'];
+  const allowedKeys = ['title', 'cover', 'description', 'authors', 'tags', 'status', 'chapters', 'pages'];
   if (!allowedKeys.includes(String(check.key))) {
     return null;
   }
@@ -83,10 +88,32 @@ const sanitizeFeatureValidationCheck = (
   };
 };
 
+const sanitizeChapterItem = (
+  chapter: Partial<ScraperChapterItem> | null | undefined,
+): ScraperChapterItem | null => {
+  if (!chapter) {
+    return null;
+  }
+
+  const url = String(chapter.url ?? '').trim();
+  const label = String(chapter.label ?? '').trim();
+  const image = String(chapter.image ?? '').trim();
+
+  if (!url || !label) {
+    return null;
+  }
+
+  return {
+    url,
+    label,
+    image: image || undefined,
+  };
+};
+
 const sanitizeDerivedValueResult = (
   derivedValue: Partial<ScraperDetailsDerivedValueResult>,
 ): ScraperDetailsDerivedValueResult | null => {
-  const allowedSourceTypes = ['requested_url', 'final_url', 'field', 'selector'];
+  const allowedSourceTypes = ['requested_url', 'final_url', 'field', 'selector', 'html'];
   const allowedFieldKeys = ['title', 'cover', 'description', 'authors', 'tags', 'status'];
   const allowedIssueCodes = ['missing_source', 'invalid_selector', 'invalid_pattern', 'no_match'];
 
@@ -143,6 +170,11 @@ const sanitizeFeatureValidation = (
       : undefined,
     checks,
     derivedValues,
+    chapters: Array.isArray(validation.chapters)
+      ? validation.chapters
+        .map((chapter) => sanitizeChapterItem(chapter))
+        .filter((chapter): chapter is ScraperChapterItem => Boolean(chapter))
+      : undefined,
   };
 };
 
@@ -155,6 +187,133 @@ const sanitizeStringList = (value: unknown): string[] => (
     ))
     : []
 );
+
+const SCRAPER_BOOKMARK_METADATA_FIELDS: ScraperBookmarkMetadataField[] = [
+  'cover',
+  'summary',
+  'description',
+  'authors',
+  'tags',
+  'mangaStatus',
+];
+
+const sanitizeBookmarkMetadataFieldList = (value: unknown): ScraperBookmarkMetadataField[] => (
+  Array.isArray(value)
+    ? Array.from(new Set(
+      value.filter((entry): entry is ScraperBookmarkMetadataField => (
+        SCRAPER_BOOKMARK_METADATA_FIELDS.includes(String(entry ?? '').trim() as ScraperBookmarkMetadataField)
+      )),
+    ))
+    : []
+);
+
+const sanitizeRequestField = (value: unknown): ScraperRequestField | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const key = String(raw.key ?? '').trim();
+  const fieldValue = typeof raw.value === 'string'
+    ? raw.value
+    : raw.value == null
+      ? ''
+      : String(raw.value);
+
+  if (!key && fieldValue.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    key,
+    value: fieldValue,
+  };
+};
+
+const sanitizeRequestConfig = (
+  requestConfig: Partial<ScraperRequestConfig> | null | undefined,
+): ScraperRequestConfig | undefined => {
+  if (!requestConfig) {
+    return undefined;
+  }
+
+  const method = requestConfig.method === 'POST' ? 'POST' : 'GET';
+  const bodyMode = requestConfig.bodyMode === 'raw' ? 'raw' : 'form';
+  const bodyFields = Array.isArray(requestConfig.bodyFields)
+    ? requestConfig.bodyFields
+      .map((field) => sanitizeRequestField(field))
+      .filter((field): field is ScraperRequestField => Boolean(field))
+    : [];
+  const body = typeof requestConfig.body === 'string' ? requestConfig.body : undefined;
+  const contentType = String(requestConfig.contentType ?? '').trim() || undefined;
+
+  if (
+    method === 'GET'
+    && bodyMode === 'form'
+    && bodyFields.length === 0
+    && !body
+    && !contentType
+  ) {
+    return undefined;
+  }
+
+  return {
+    method,
+    bodyMode,
+    bodyFields,
+    body,
+    contentType,
+  };
+};
+
+const buildScraperFetchInit = (
+  requestConfig: ScraperRequestConfig | undefined,
+  defaultAccept: string,
+): {
+  method: 'GET' | 'POST';
+  headers: Record<string, string>;
+  body?: string;
+} => {
+  const method = requestConfig?.method === 'POST' ? 'POST' : 'GET';
+  const headers: Record<string, string> = {
+    'User-Agent': 'Manga Helper Scraper Validation/1.0',
+    Accept: defaultAccept,
+  };
+
+  if (method !== 'POST') {
+    return {
+      method,
+      headers,
+    };
+  }
+
+  if (requestConfig?.bodyMode === 'raw') {
+    if (requestConfig.contentType) {
+      headers['Content-Type'] = requestConfig.contentType;
+    }
+
+    return {
+      method,
+      headers,
+      body: requestConfig.body ?? '',
+    };
+  }
+
+  const body = new URLSearchParams();
+  (requestConfig?.bodyFields ?? [])
+    .filter((field) => field.key.trim().length > 0)
+    .forEach((field) => {
+      body.append(field.key, field.value);
+    });
+
+  headers['Content-Type'] = requestConfig?.contentType || 'application/x-www-form-urlencoded;charset=UTF-8';
+
+  return {
+    method,
+    headers,
+    body: body.toString(),
+  };
+};
 
 const sanitizeGlobalConfig = (
   globalConfig: Partial<ScraperGlobalConfig> | null | undefined,
@@ -169,7 +328,41 @@ const sanitizeGlobalConfig = (
       enabled: Boolean(globalConfig?.homeSearch?.enabled),
       query: homeSearchQuery,
     },
+    bookmark: {
+      excludedFields: sanitizeBookmarkMetadataFieldList(globalConfig?.bookmark?.excludedFields),
+    },
+    chapterDownloads: {
+      autoAssignSeries: Boolean(globalConfig?.chapterDownloads?.autoAssignSeries),
+    },
   };
+};
+
+const normalizeChapterValue = (value: string): string => value
+  .replace(/[–—]/g, '-')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const extractChapterValueFromLabel = (label: string): string | undefined => {
+  const normalizedLabel = normalizeChapterValue(label);
+  if (!normalizedLabel) {
+    return undefined;
+  }
+
+  const explicitChapterMatch = normalizedLabel.match(
+    /(?:chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|ep(?:isode)?)\s*\.?\s*([0-9]+(?:[.,][0-9]+)?(?:\s*-\s*[0-9]+(?:[.,][0-9]+)?)?)/i,
+  );
+  if (explicitChapterMatch?.[1]) {
+    return normalizeChapterValue(explicitChapterMatch[1]).replace(/\s*-\s*/g, '-');
+  }
+
+  const lastNumericMatch = Array.from(
+    normalizedLabel.matchAll(/([0-9]+(?:[.,][0-9]+)?(?:\s*-\s*[0-9]+(?:[.,][0-9]+)?)?)/g),
+  ).pop();
+  if (lastNumericMatch?.[1]) {
+    return normalizeChapterValue(lastNumericMatch[1]).replace(/\s*-\s*/g, '-');
+  }
+
+  return normalizedLabel || undefined;
 };
 
 const toPersistedScraperRecord = (scraper: ScraperRecord) => ({
@@ -359,14 +552,33 @@ const sanitizeScraperBookmarkRecord = (
   };
 };
 
+const applyExcludedBookmarkFields = <T extends Partial<ScraperBookmarkRecord>>(
+  record: T,
+  excludedFields: ScraperBookmarkMetadataField[],
+): T => {
+  const nextRecord: Partial<ScraperBookmarkRecord> = { ...record };
+
+  excludedFields.forEach((field) => {
+    if (field === 'authors' || field === 'tags') {
+      nextRecord[field] = [];
+      return;
+    }
+
+    nextRecord[field] = undefined;
+  });
+
+  return nextRecord as T;
+};
+
 const mergeScraperBookmarkRecord = (
   existing: ScraperBookmarkRecord | null,
   request: SaveScraperBookmarkRequest,
 ): ScraperBookmarkRecord | null => {
   const now = new Date().toISOString();
+  const excludedFields = sanitizeBookmarkMetadataFieldList(request.excludedFields);
   const normalizedRequest = sanitizeScraperBookmarkRecord({
     ...existing,
-    ...request,
+    ...applyExcludedBookmarkFields(request, excludedFields),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   });
@@ -379,7 +591,7 @@ const mergeScraperBookmarkRecord = (
     return normalizedRequest;
   }
 
-  return sanitizeScraperBookmarkRecord({
+  return sanitizeScraperBookmarkRecord(applyExcludedBookmarkFields({
     scraperId: existing.scraperId,
     sourceUrl: existing.sourceUrl,
     title: normalizedRequest.title || existing.title,
@@ -391,7 +603,7 @@ const mergeScraperBookmarkRecord = (
     mangaStatus: normalizedRequest.mangaStatus || existing.mangaStatus,
     createdAt: existing.createdAt,
     updatedAt: now,
-  });
+  }, excludedFields));
 };
 
 const sortScraperBookmarks = (records: ScraperBookmarkRecord[]): ScraperBookmarkRecord[] => (
@@ -757,6 +969,7 @@ export async function fetchScraperDocument(
   request: FetchScraperDocumentRequest,
 ): Promise<FetchScraperDocumentResult> {
   const checkedAt = new Date().toISOString();
+  const requestConfig = sanitizeRequestConfig(request.requestConfig);
 
   let requestedUrl = '';
   try {
@@ -776,14 +989,16 @@ export async function fetchScraperDocument(
   }, DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS);
 
   try {
+    const fetchInit = buildScraperFetchInit(
+      requestConfig,
+      'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    );
     const response = await fetch(requestedUrl, {
-      method: 'GET',
+      method: fetchInit.method,
       redirect: 'follow',
       signal: controller.signal,
-      headers: {
-        'User-Agent': 'Manga Helper Scraper Validation/1.0',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
+      headers: fetchInit.headers,
+      body: fetchInit.body,
     });
     const contentType = response.headers.get('content-type') ?? undefined;
     let html: string | undefined;
@@ -841,6 +1056,12 @@ export async function downloadScraperManga(
     : undefined;
   const requestedDefaultTagIds = sanitizeStringList(request.defaultTagIds);
   const requestedDefaultLanguage = String(request.defaultLanguage ?? '').trim().toLowerCase() || undefined;
+  const autoAssignSeriesOnChapterDownload = Boolean(request.autoAssignSeriesOnChapterDownload);
+  const seriesTitle = String(request.seriesTitle ?? '').trim();
+  const chapterLabel = String(request.chapterLabel ?? '').trim();
+  const thumbnailUrl = typeof request.thumbnailUrl === 'string' && request.thumbnailUrl.trim().length > 0
+    ? request.thumbnailUrl.trim()
+    : undefined;
 
   if (!title) {
     throw new Error('Le titre du manga est requis pour le telechargement.');
@@ -905,6 +1126,12 @@ export async function downloadScraperManga(
       : [],
   );
   const defaultTagIds = requestedDefaultTagIds.filter((tagId) => availableTagIds.has(tagId));
+  const linkedSeries = autoAssignSeriesOnChapterDownload && seriesTitle && chapterLabel
+    ? await ensureSeriesByTitle(seriesTitle)
+    : null;
+  const chapterValue = chapterLabel
+    ? extractChapterValueFromLabel(chapterLabel)
+    : undefined;
 
   const createdManga = await addManga(undefined as any, {
     id: randomUUID(),
@@ -914,6 +1141,8 @@ export async function downloadScraperManga(
     authorIds: [],
     tagIds: defaultTagIds,
     language: requestedDefaultLanguage,
+    seriesId: linkedSeries?.id ?? null,
+    chapters: linkedSeries ? (chapterValue || chapterLabel) : undefined,
     sourceKind: scraperId ? 'scraper' : undefined,
     scraperId: scraperId ?? null,
     sourceUrl: sourceUrl ?? refererUrl ?? null,
@@ -925,6 +1154,31 @@ export async function downloadScraperManga(
 
   if (!inserted?.id) {
     throw new Error('Le manga a ete telecharge, mais son ajout a la bibliotheque a echoue.');
+  }
+
+  if (thumbnailUrl) {
+    try {
+      const thumbnailResponse = await fetch(thumbnailUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: buildDownloadHeaders(refererUrl),
+      });
+
+      if (thumbnailResponse.ok && String(thumbnailResponse.headers.get('content-type') || '').toLowerCase().startsWith('image/')) {
+        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
+        const thumbnailPath = await createStoredThumbnailForMangaFromBuffer(String(inserted.id), thumbnailBuffer);
+
+        if (thumbnailPath) {
+          await patchMangaById(String(inserted.id), { thumbnailPath });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to override scraper download thumbnail from chapter image', {
+        mangaId: inserted.id,
+        thumbnailUrl,
+        error,
+      });
+    }
   }
 
   return {

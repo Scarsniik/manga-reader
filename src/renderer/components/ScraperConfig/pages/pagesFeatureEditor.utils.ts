@@ -5,9 +5,12 @@ import {
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperPagesFeatureConfig,
+  ScraperPagesTemplateBase,
 } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { usesScraperPagesSelectorSource } from '@/renderer/utils/scraperPages';
+import { resolveScraperTemplateBaseUrl } from '@/renderer/utils/scraperTemplateContext';
 
 export const URL_STRATEGY_FIELD: Field = {
   name: 'urlStrategy',
@@ -19,7 +22,12 @@ export const URL_STRATEGY_FIELD: Field = {
     {
       label: 'Depuis la fiche',
       value: 'details_page',
-      description: 'Les pages sont lues directement depuis le HTML de la fiche manga validee.',
+      description: 'Les pages sont lues depuis le HTML de la fiche manga.',
+    },
+    {
+      label: 'Depuis un chapitre',
+      value: 'chapter_page',
+      description: 'Les pages sont lues depuis le HTML d\'une page chapitre du composant `Chapitres`.',
     },
     {
       label: 'Depuis un template',
@@ -36,6 +44,26 @@ export const URL_TEMPLATE_FIELD: Field = {
   placeholder: 'Exemple : /reader/{{mangaId}} ou {{raw:imageBasePath}}index.html',
 };
 
+export const TEMPLATE_BASE_FIELD: Field = {
+  name: 'templateBase',
+  label: 'Base des URLs relatives',
+  type: 'radio',
+  layout: 'cards',
+  required: true,
+  options: [
+    {
+      label: 'Base du scraper',
+      value: 'scraper_base',
+      description: 'Les URLs relatives du template partent du baseUrl du scraper.',
+    },
+    {
+      label: 'URL de la fiche',
+      value: 'details_page',
+      description: 'Les URLs relatives du template partent de l\'URL finale validee de la fiche, ou de la page chapitre si ce mode est actif.',
+    },
+  ],
+};
+
 export const PAGE_IMAGE_SELECTOR_FIELD: Field = {
   name: 'pageImageSelector',
   label: 'Selecteur des pages',
@@ -43,10 +71,18 @@ export const PAGE_IMAGE_SELECTOR_FIELD: Field = {
   placeholder: 'Exemple : #cif .iw img@src',
 };
 
+export const LINKED_TO_CHAPTERS_FIELD: Field = {
+  name: 'linkedToChapters',
+  label: 'Pages liees a des chapitres',
+  type: 'checkbox',
+};
+
 export const DEFAULT_PAGES_CONFIG: ScraperPagesFeatureConfig = {
   urlStrategy: 'details_page',
   urlTemplate: '',
+  templateBase: 'scraper_base',
   pageImageSelector: '',
+  linkedToChapters: false,
 };
 
 export const FEATURE_STATUS_META = {
@@ -62,6 +98,7 @@ const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
   authors: 'Auteurs',
   tags: 'Tags',
   status: 'Statut',
+  chapters: 'Chapitres',
   pages: 'Pages',
 };
 
@@ -76,19 +113,57 @@ const trimOptional = (value: unknown): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
-export const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): ScraperPagesFeatureConfig => ({
-  urlStrategy: values.urlStrategy === 'template' ? 'template' : 'details_page',
-  urlTemplate: trimOptional(values.urlTemplate),
-  pageImageSelector: trimOptional(normalizeSelectorInput(String(values.pageImageSelector ?? ''))),
-});
+const normalizeTemplateBase = (value: unknown): ScraperPagesTemplateBase => (
+  value === 'details_page' ? 'details_page' : 'scraper_base'
+);
+
+const normalizePagesUrlStrategy = (value: unknown): ScraperPagesFeatureConfig['urlStrategy'] => {
+  if (value === 'template') {
+    return 'template';
+  }
+
+  if (value === 'chapter_page') {
+    return 'chapter_page';
+  }
+
+  return 'details_page';
+};
+
+const getInitialPagesUrlStrategy = (raw: Record<string, unknown>): ScraperPagesFeatureConfig['urlStrategy'] => {
+  const normalizedStrategy = normalizePagesUrlStrategy(raw.urlStrategy);
+
+  if (normalizedStrategy === 'details_page' && Boolean(raw.linkedToChapters)) {
+    return 'chapter_page';
+  }
+
+  return normalizedStrategy;
+};
+
+export const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): ScraperPagesFeatureConfig => {
+  const urlStrategy = normalizePagesUrlStrategy(values.urlStrategy);
+
+  return {
+    urlStrategy,
+    urlTemplate: trimOptional(values.urlTemplate),
+    templateBase: normalizeTemplateBase(values.templateBase),
+    pageImageSelector: trimOptional(normalizeSelectorInput(String(values.pageImageSelector ?? ''))),
+    linkedToChapters: urlStrategy === 'template'
+      ? Boolean(values.linkedToChapters)
+      : false,
+  };
+};
 
 export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPagesFeatureConfig => {
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
   return {
-    urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
+    urlStrategy: getInitialPagesUrlStrategy(raw),
     urlTemplate: trimOptional(raw.urlTemplate),
+    templateBase: normalizeTemplateBase(raw.templateBase),
     pageImageSelector: trimOptional(normalizeSelectorInput(String(raw.pageImageSelector ?? ''))),
+    linkedToChapters: raw.urlStrategy === 'template'
+      ? Boolean(raw.linkedToChapters)
+      : false,
   };
 };
 
@@ -140,7 +215,7 @@ export const getConfigSignature = (config: ScraperPagesFeatureConfig): string =>
 export const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<string, string> => {
   const errors: Record<string, string> = {};
 
-  if (config.urlStrategy === 'details_page' && !config.pageImageSelector) {
+  if (usesScraperPagesSelectorSource(config) && !config.pageImageSelector) {
     errors.pageImageSelector = 'Le selecteur des pages est requis.';
   }
 
@@ -175,12 +250,21 @@ export const hasPagePlaceholder = (template: string | undefined): boolean => (
   typeof template === 'string' && /{{\s*page(?:Index)?\d*\s*}}/.test(template)
 );
 
+export const resolveTemplateBaseUrl = (
+  scraperBaseUrl: string,
+  config: Pick<ScraperPagesFeatureConfig, 'templateBase'>,
+  detailsUrl?: string,
+): string => resolveScraperTemplateBaseUrl(scraperBaseUrl, config.templateBase, detailsUrl);
+
 export const buildTemplatePageUrl = (
   baseUrl: string,
   template: string,
   contextBuilder: (pageIndex: number) => Record<string, string | undefined>,
   pageIndex: number,
-): string => buildScraperContextTemplateUrl(baseUrl, template, contextBuilder(pageIndex));
+  options?: {
+    relativeToUrl?: string;
+  },
+): string => buildScraperContextTemplateUrl(baseUrl, template, contextBuilder(pageIndex), options);
 
 export const buildValidationPresentation = (
   validationResult: ScraperFeatureValidationResult,

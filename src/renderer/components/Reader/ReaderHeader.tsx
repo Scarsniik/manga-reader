@@ -1,9 +1,11 @@
 import React from 'react';
 import { Manga } from '@/renderer/types';
+import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 
 type Props = {
     manga: Manga | null;
+    bookmarkExcludedFields?: ScraperBookmarkMetadataField[];
     imagesLength: number;
     currentIndex: number;
     ocrEnabled: boolean;
@@ -17,6 +19,7 @@ type Props = {
 
 const ReaderHeader: React.FC<Props> = ({
     manga,
+    bookmarkExcludedFields,
     imagesLength,
     currentIndex,
     ocrEnabled,
@@ -31,7 +34,10 @@ const ReaderHeader: React.FC<Props> = ({
         <div className="reader-header">
             <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
             <div className="reader-info">
-                {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}
+                <div className="reader-info__text">
+                    {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}
+                    {manga?.chapters ? <span className="reader-info__subtitle">{manga.chapters}</span> : null}
+                </div>
                 <span className="page-counter">
                     {imagesLength > 0 ? `${currentIndex + 1} / ${imagesLength}` : '0 / 0'}
                 </span>
@@ -44,6 +50,7 @@ const ReaderHeader: React.FC<Props> = ({
                         sourceUrl={manga.sourceUrl}
                         title={manga.title}
                         cover={manga.thumbnailPath || undefined}
+                        excludedFields={bookmarkExcludedFields}
                         className="reader-bookmark-button"
                     />
                 ) : null}

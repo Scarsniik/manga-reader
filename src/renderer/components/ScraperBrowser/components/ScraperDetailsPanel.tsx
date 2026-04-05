@@ -1,23 +1,34 @@
 import React from 'react';
+import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
-import { formatScraperValueForDisplay, ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
+import {
+  formatScraperValueForDisplay,
+  ScraperRuntimeChapterResult,
+  ScraperRuntimeDetailsResult,
+} from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   scraperId: string;
+  bookmarkExcludedFields: ScraperBookmarkMetadataField[];
   detailsResult: ScraperRuntimeDetailsResult | null;
+  chapters: ScraperRuntimeChapterResult[];
   hasPages: boolean;
+  usesChapters: boolean;
   canReturnToSearch: boolean;
   openingReader: boolean;
   downloading: boolean;
   onBackToSearch: () => void;
-  onOpenReader: () => void;
-  onDownload: () => void;
+  onOpenReader: (chapter?: ScraperRuntimeChapterResult) => void;
+  onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
 };
 
 export default function ScraperDetailsPanel({
   scraperId,
+  bookmarkExcludedFields,
   detailsResult,
+  chapters,
   hasPages,
+  usesChapters,
   canReturnToSearch,
   openingReader,
   downloading,
@@ -68,8 +79,9 @@ export default function ScraperDetailsPanel({
                 authors={detailsResult.authors}
                 tags={detailsResult.tags}
                 mangaStatus={detailsResult.mangaStatus}
+                excludedFields={bookmarkExcludedFields}
               />
-              {hasPages ? (
+              {hasPages && !usesChapters ? (
                 <button
                   type="button"
                   className="scraper-browser__read"
@@ -79,7 +91,7 @@ export default function ScraperDetailsPanel({
                   {openingReader ? 'Ouverture...' : 'Lecteur'}
                 </button>
               ) : null}
-              {hasPages ? (
+              {hasPages && !usesChapters ? (
                 <button
                   type="button"
                   className="scraper-browser__download"
@@ -136,6 +148,72 @@ export default function ScraperDetailsPanel({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {chapters.length ? (
+            <div className="scraper-browser__chapters">
+              <div className="scraper-browser__chapters-head">
+                <strong>Chapitres</strong>
+                <span>{chapters.length}</span>
+              </div>
+
+              <div className="scraper-browser__chapters-list">
+                {chapters.map((chapter) => {
+                  const hasChapterActions = hasPages && usesChapters;
+
+                  return (
+                    <article
+                      key={`${chapter.url}-${chapter.label}`}
+                      className={[
+                        'scraper-browser__chapter-card',
+                        hasChapterActions ? 'is-with-actions' : '',
+                      ].join(' ').trim()}
+                    >
+                      <div className="scraper-browser__chapter-media">
+                        {chapter.image ? (
+                          <img src={chapter.image} alt={chapter.label} />
+                        ) : (
+                          <div className="scraper-browser__chapter-placeholder">Chapitre</div>
+                        )}
+                      </div>
+
+                      <div className="scraper-browser__chapter-body">
+                        <strong>{chapter.label}</strong>
+                        <span>{formatScraperValueForDisplay(chapter.url)}</span>
+                      </div>
+
+                      {hasChapterActions ? (
+                        <div className="scraper-browser__chapter-actions scraper-browser__chapter-actions--side">
+                          <button
+                            type="button"
+                            className="scraper-browser__read"
+                            onClick={() => onOpenReader(chapter)}
+                            disabled={openingReader}
+                          >
+                            {openingReader ? 'Ouverture...' : 'Lecteur'}
+                          </button>
+                          <button
+                            type="button"
+                            className="scraper-browser__download"
+                            onClick={() => onDownload(chapter)}
+                            disabled={downloading}
+                          >
+                            {downloading ? 'Telechargement...' : 'Telecharger'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {usesChapters && hasPages && !chapters.length ? (
+            <div className="scraper-browser__chapters-empty">
+              Aucun chapitre n&apos;a ete extrait pour cette fiche. Configure et valide le composant
+              `Chapitres` pour ouvrir le lecteur depuis un chapitre.
             </div>
           ) : null}
         </div>

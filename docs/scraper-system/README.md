@@ -18,6 +18,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - preparer des maintenant la structure `api`
 - modeliser chaque fonctionnalite comme un bloc autonome
 - rendre un scraper configure directement utilisable dans l'application
+- centraliser aussi les regles de bookmarks dans la config globale du scraper
 
 ## Site de reference
 
@@ -30,4 +31,5 @@ Il sert a verifier en priorite :
 - le flux de creation d'un `site scraper`
 - la configuration de `Recherche`
 - la configuration de `Fiche`
+- la configuration de `Chapitres`
 - la configuration de `Pages`

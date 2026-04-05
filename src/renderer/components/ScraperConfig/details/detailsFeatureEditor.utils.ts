@@ -123,12 +123,14 @@ const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
   authors: 'Auteurs',
   tags: 'Tags',
   status: 'Statut',
+  chapters: 'Chapitres',
   pages: 'Pages',
 };
 
 export const DERIVED_VALUE_SOURCE_OPTIONS = [
   { value: 'field', label: 'Champ deja extrait' },
   { value: 'selector', label: 'Selecteur personnalise' },
+  { value: 'html', label: 'Regex sur le HTML brut' },
   { value: 'requested_url', label: 'URL demandee' },
   { value: 'final_url', label: 'URL finale' },
 ] as const;
@@ -190,6 +192,7 @@ export const createDerivedValueFormItem = (
   draftId: createDraftId(),
   key: trimOptional(value?.key) ?? '',
   sourceType: value?.sourceType === 'selector'
+    || value?.sourceType === 'html'
     || value?.sourceType === 'requested_url'
     || value?.sourceType === 'final_url'
     ? value.sourceType
@@ -204,6 +207,7 @@ export const buildDerivedValueConfig = (
 ): ScraperDetailsDerivedValueConfig => ({
   key: trimOptional(value.key) ?? '',
   sourceType: value.sourceType === 'selector'
+    || value.sourceType === 'html'
     || value.sourceType === 'requested_url'
     || value.sourceType === 'final_url'
     ? value.sourceType
@@ -391,7 +395,6 @@ export const buildValidationPresentation = (
       }
     }
   });
-
   validationResult.derivedValues.forEach((derivedValue) => {
     if (derivedValue.value) {
       details.push(`Variable {{${derivedValue.key}}} : ${truncateValue(derivedValue.value)}`);
@@ -491,6 +494,10 @@ export const getSaveFieldErrors = (
 
     if (derivedValue.sourceType === 'selector' && !derivedValue.selector) {
       errors[`derivedValues.${draftId}.selector`] = 'Le selecteur source est requis.';
+    }
+
+    if (derivedValue.sourceType === 'html' && !derivedValue.pattern) {
+      errors[`derivedValues.${draftId}.pattern`] = 'Une regex est requise pour lire le HTML brut.';
     }
 
     if (derivedValue.pattern) {

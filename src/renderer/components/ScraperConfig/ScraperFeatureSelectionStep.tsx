@@ -4,6 +4,7 @@ import {
   ScraperFeatureKind,
   ScraperRecord,
 } from '@/shared/scraper';
+import ScraperChaptersFeatureEditor from './ScraperChaptersFeatureEditor';
 import ScraperDetailsFeatureEditor from './ScraperDetailsFeatureEditor';
 import ScraperGlobalSettingsEditor from './ScraperGlobalSettingsEditor';
 import ScraperPagesFeatureEditor from './ScraperPagesFeatureEditor';
@@ -44,9 +45,14 @@ export default function ScraperFeatureSelectionStep({
     [activeFeatureKind, scraper.features],
   );
   const globalSettingsStatus = useMemo(() => {
-    const { defaultTagIds, defaultLanguage, homeSearch } = scraper.globalConfig;
+    const {
+      defaultTagIds,
+      defaultLanguage,
+      homeSearch,
+      bookmark,
+    } = scraper.globalConfig;
 
-    if (defaultTagIds.length || defaultLanguage || homeSearch.enabled) {
+    if (defaultTagIds.length || defaultLanguage || homeSearch.enabled || bookmark.excludedFields.length) {
       return { label: 'Configure', className: 'is-configured' };
     }
 
@@ -78,6 +84,17 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'details') {
       return (
         <ScraperDetailsFeatureEditor
+          scraper={scraper}
+          feature={activeFeature}
+          onBack={() => setActiveFeatureKind(null)}
+          onScraperChange={onScraperChange}
+        />
+      );
+    }
+
+    if (activeFeature.kind === 'chapters') {
+      return (
+        <ScraperChaptersFeatureEditor
           scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
@@ -159,7 +176,7 @@ export default function ScraperFeatureSelectionStep({
               {globalSettingsStatus.label}
             </span>
             <span className="scraper-feature-card__description">
-              Tags par defaut, langue par defaut et recherche d&apos;accueil du scrapper.
+              Tags par defaut, langue par defaut, regles de bookmark et recherche d&apos;accueil du scrapper.
             </span>
           </button>
         </div>

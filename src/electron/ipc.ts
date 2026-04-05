@@ -29,6 +29,12 @@ const notifyScraperBookmarksUpdated = () => {
     }
 };
 
+const notifySeriesUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("series-updated");
+    }
+};
+
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
@@ -79,9 +85,21 @@ ipcMain.handle("update-tag", async (event: IpcMainInvokeEvent, updatedTag: any) 
 
 // Series
 ipcMain.handle("get-series", async () => series.getSeries());
-ipcMain.handle("add-series", async (event: IpcMainInvokeEvent, seriesItem: any) => series.addSeries(event, seriesItem));
-ipcMain.handle("remove-series", async (event: IpcMainInvokeEvent, seriesId: string) => series.removeSeries(event, seriesId));
-ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries: any) => series.updateSeries(event, updatedSeries));
+ipcMain.handle("add-series", async (event: IpcMainInvokeEvent, seriesItem: any) => {
+    const updated = await series.addSeries(event, seriesItem);
+    notifySeriesUpdated();
+    return updated;
+});
+ipcMain.handle("remove-series", async (event: IpcMainInvokeEvent, seriesId: string) => {
+    const updated = await series.removeSeries(event, seriesId);
+    notifySeriesUpdated();
+    return updated;
+});
+ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries: any) => {
+    const updated = await series.updateSeries(event, updatedSeries);
+    notifySeriesUpdated();
+    return updated;
+});
 
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
@@ -135,6 +153,9 @@ ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, reque
     const result = await scrapers.downloadScraperManga(event, request);
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("mangas-updated");
+    }
+    if (request?.autoAssignSeriesOnChapterDownload) {
+        notifySeriesUpdated();
     }
     return result;
 });

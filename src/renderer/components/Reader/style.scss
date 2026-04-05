@@ -24,6 +24,18 @@
 	flex: 1 1 auto;
 }
 
+.reader-info__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.reader-info__subtitle {
+	color: rgba(255,255,255,0.72);
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
 .reader-actions {
 	display: flex;
 	align-items: center;

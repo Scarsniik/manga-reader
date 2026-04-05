@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  ScraperBookmarkMetadataField,
   SaveScraperBookmarkRequest,
   ScraperBookmarkRecord,
   ScraperRecord,
@@ -29,6 +30,7 @@ type Props = {
   authors?: string[];
   tags?: string[];
   mangaStatus?: string | null;
+  excludedFields?: ScraperBookmarkMetadataField[];
   className?: string;
   size?: 'sm' | 'md';
   disabled?: boolean;
@@ -51,12 +53,42 @@ const normalizeStringList = (values: string[] | undefined): string[] => (
     : []
 );
 
+const BOOKMARK_METADATA_FIELDS = new Set<ScraperBookmarkMetadataField>([
+  'cover',
+  'summary',
+  'description',
+  'authors',
+  'tags',
+  'mangaStatus',
+]);
+
+const normalizeExcludedFields = (values: ScraperBookmarkMetadataField[] | undefined): ScraperBookmarkMetadataField[] => (
+  Array.isArray(values)
+    ? Array.from(new Set(
+      values.filter((value): value is ScraperBookmarkMetadataField => (
+        BOOKMARK_METADATA_FIELDS.has(String(value ?? '').trim() as ScraperBookmarkMetadataField)
+      )),
+    ))
+    : []
+);
+
 const areSameStringLists = (left: string[], right: string[]): boolean => {
   if (left.length !== right.length) {
     return false;
   }
 
   return left.every((value, index) => value === right[index]);
+};
+
+const bookmarkHasExcludedFieldData = (
+  bookmark: ScraperBookmarkRecord,
+  field: ScraperBookmarkMetadataField,
+): boolean => {
+  if (field === 'authors' || field === 'tags') {
+    return bookmark[field].length > 0;
+  }
+
+  return Boolean(bookmark[field]);
 };
 
 const shouldSyncBookmarkMetadata = (
@@ -67,38 +99,44 @@ const shouldSyncBookmarkMetadata = (
     return false;
   }
 
+  const excludedFields = new Set(normalizeExcludedFields(request.excludedFields));
+
+  if (Array.from(excludedFields).some((field) => bookmarkHasExcludedFieldData(bookmark, field))) {
+    return true;
+  }
+
   const nextTitle = normalizeOptional(request.title);
   if (nextTitle && nextTitle !== bookmark.title) {
     return true;
   }
 
   const nextCover = normalizeOptional(request.cover);
-  if (nextCover && nextCover !== bookmark.cover) {
+  if (!excludedFields.has('cover') && nextCover && nextCover !== bookmark.cover) {
     return true;
   }
 
   const nextSummary = normalizeOptional(request.summary);
-  if (nextSummary && nextSummary !== bookmark.summary) {
+  if (!excludedFields.has('summary') && nextSummary && nextSummary !== bookmark.summary) {
     return true;
   }
 
   const nextDescription = normalizeOptional(request.description);
-  if (nextDescription && nextDescription !== bookmark.description) {
+  if (!excludedFields.has('description') && nextDescription && nextDescription !== bookmark.description) {
     return true;
   }
 
   const nextMangaStatus = normalizeOptional(request.mangaStatus);
-  if (nextMangaStatus && nextMangaStatus !== bookmark.mangaStatus) {
+  if (!excludedFields.has('mangaStatus') && nextMangaStatus && nextMangaStatus !== bookmark.mangaStatus) {
     return true;
   }
 
   const nextAuthors = normalizeStringList(request.authors);
-  if (nextAuthors.length && !areSameStringLists(nextAuthors, bookmark.authors)) {
+  if (!excludedFields.has('authors') && nextAuthors.length && !areSameStringLists(nextAuthors, bookmark.authors)) {
     return true;
   }
 
   const nextTags = normalizeStringList(request.tags);
-  if (nextTags.length && !areSameStringLists(nextTags, bookmark.tags)) {
+  if (!excludedFields.has('tags') && nextTags.length && !areSameStringLists(nextTags, bookmark.tags)) {
     return true;
   }
 
@@ -169,26 +207,33 @@ const enrichBookmarkRequestFromDetails = async (
     return request;
   }
 
+  const requestWithGlobalConfig: SaveScraperBookmarkRequest = {
+    ...request,
+    excludedFields: normalizeExcludedFields(request.excludedFields).length
+      ? normalizeExcludedFields(request.excludedFields)
+      : scraper.globalConfig.bookmark.excludedFields,
+  };
+
   const detailsFeature = getScraperFeature(scraper, 'details');
   if (!isScraperFeatureConfigured(detailsFeature)) {
-    return request;
+    return requestWithGlobalConfig;
   }
 
   const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
   if (!detailsConfig?.titleSelector) {
-    return request;
+    return requestWithGlobalConfig;
   }
 
   const api = getApi();
   if (!api || typeof api.fetchScraperDocument !== 'function') {
-    return request;
+    return requestWithGlobalConfig;
   }
 
   try {
     const targetUrl = resolveScraperDetailsTargetUrl(
       scraper.baseUrl,
       detailsConfig,
-      request.sourceUrl,
+      requestWithGlobalConfig.sourceUrl,
     );
     const documentResult = await api.fetchScraperDocument({
       baseUrl: scraper.baseUrl,
@@ -196,7 +241,7 @@ const enrichBookmarkRequestFromDetails = async (
     });
 
     if (!documentResult?.ok || !documentResult.html) {
-      return request;
+      return requestWithGlobalConfig;
     }
 
     const parser = new DOMParser();
@@ -206,28 +251,29 @@ const enrichBookmarkRequestFromDetails = async (
       finalUrl: documentResult.finalUrl,
       status: documentResult.status,
       contentType: documentResult.contentType,
+      html: documentResult.html,
     });
 
     if (!hasRenderableDetails(extractedDetails)) {
-      return request;
+      return requestWithGlobalConfig;
     }
 
     return {
-      ...request,
-      title: normalizeOptional(extractedDetails.title) || request.title,
-      cover: normalizeOptional(extractedDetails.cover) || request.cover,
-      description: normalizeOptional(extractedDetails.description) || request.description,
+      ...requestWithGlobalConfig,
+      title: normalizeOptional(extractedDetails.title) || requestWithGlobalConfig.title,
+      cover: normalizeOptional(extractedDetails.cover) || requestWithGlobalConfig.cover,
+      description: normalizeOptional(extractedDetails.description) || requestWithGlobalConfig.description,
       authors: normalizeStringList(extractedDetails.authors).length
         ? normalizeStringList(extractedDetails.authors)
-        : request.authors,
+        : requestWithGlobalConfig.authors,
       tags: normalizeStringList(extractedDetails.tags).length
         ? normalizeStringList(extractedDetails.tags)
-        : request.tags,
-      mangaStatus: normalizeOptional(extractedDetails.mangaStatus) || request.mangaStatus,
+        : requestWithGlobalConfig.tags,
+      mangaStatus: normalizeOptional(extractedDetails.mangaStatus) || requestWithGlobalConfig.mangaStatus,
     };
   } catch (error) {
     console.warn('Failed to enrich scraper bookmark from details page', error);
-    return request;
+    return requestWithGlobalConfig;
   }
 };
 
@@ -241,6 +287,7 @@ export default function ScraperBookmarkButton({
   authors,
   tags,
   mangaStatus,
+  excludedFields,
   className = '',
   size = 'md',
   disabled = false,
@@ -252,6 +299,7 @@ export default function ScraperBookmarkButton({
   const normalizedTitle = normalizeOptional(title) || normalizeOptional(sourceUrl) || 'Bookmark';
   const normalizedAuthors = useMemo(() => normalizeStringList(authors), [authors]);
   const normalizedTags = useMemo(() => normalizeStringList(tags), [tags]);
+  const normalizedExcludedFields = useMemo(() => normalizeExcludedFields(excludedFields), [excludedFields]);
   const bookmarkRequest = useMemo<SaveScraperBookmarkRequest | null>(() => {
     if (!normalizedScraperId || !normalizedSourceUrl) {
       return null;
@@ -267,10 +315,12 @@ export default function ScraperBookmarkButton({
       authors: normalizedAuthors,
       tags: normalizedTags,
       mangaStatus: normalizeOptional(mangaStatus),
+      excludedFields: normalizedExcludedFields,
     };
   }, [
     cover,
     description,
+    normalizedExcludedFields,
     mangaStatus,
     normalizedAuthors,
     normalizedScraperId,

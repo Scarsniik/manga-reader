@@ -1,16 +1,19 @@
 import React from 'react';
+import type { ScraperTemplateContext as ScraperTemplateContextMap } from '@/renderer/utils/scraperTemplateContext';
 
 type Props = {
-  templateContext: Record<string, string | undefined>;
+  templateContext: ScraperTemplateContextMap;
+  emptyMessage: React.ReactNode;
 };
 
-export default function PagesTemplateContext({ templateContext }: Props) {
+export default function ScraperTemplateContext({
+  templateContext,
+  emptyMessage,
+}: Props) {
   if (Object.keys(templateContext).length === 0) {
     return (
       <div className="scraper-config-placeholder">
-        Aucune fiche validee n&apos;est disponible pour le moment. Tu peux enregistrer la
-        configuration, mais la validation des pages restera indisponible tant que `Fiche`
-        n&apos;aura pas ete validee.
+        {emptyMessage}
       </div>
     );
   }

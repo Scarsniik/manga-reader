@@ -59,21 +59,15 @@ async function getFirstMangaImagePath(manga: any) {
     }
 }
 
-export async function createStoredThumbnailForManga(manga: any) {
-    if (!manga?.id) {
-        return null;
-    }
-
-    const sourceImagePath = await getFirstMangaImagePath(manga);
-    if (!sourceImagePath) {
-        return null;
-    }
-
-    const thumbnailPath = getThumbnailPathForMangaId(String(manga.id));
+async function writeStoredThumbnail(
+    mangaId: string,
+    source: string | Buffer,
+) {
+    const thumbnailPath = getThumbnailPathForMangaId(String(mangaId));
     await ensureThumbnailsDir();
     await removeFileIfExists(thumbnailPath);
 
-    await sharp(sourceImagePath)
+    await sharp(source)
         .rotate()
         .resize({
             width: THUMBNAIL_WIDTH,
@@ -84,6 +78,30 @@ export async function createStoredThumbnailForManga(manga: any) {
         .toFile(thumbnailPath);
 
     return thumbnailPath;
+}
+
+export async function createStoredThumbnailForManga(manga: any) {
+    if (!manga?.id) {
+        return null;
+    }
+
+    const sourceImagePath = await getFirstMangaImagePath(manga);
+    if (!sourceImagePath) {
+        return null;
+    }
+
+    return writeStoredThumbnail(String(manga.id), sourceImagePath);
+}
+
+export async function createStoredThumbnailForMangaFromBuffer(
+    mangaId: string,
+    sourceBuffer: Buffer,
+) {
+    if (!mangaId || !sourceBuffer?.length) {
+        return null;
+    }
+
+    return writeStoredThumbnail(mangaId, sourceBuffer);
 }
 
 export async function ensureStoredThumbnailForManga(

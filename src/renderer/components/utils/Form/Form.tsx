@@ -11,6 +11,7 @@ import CheckboxField from "./fields/CheckboxField";
 import FileField from "./fields/FileField";
 import SeriesField from "./fields/SeriesField";
 import AuthorField from "./fields/AuthorField";
+import EntityPickerField from "./fields/EntityPickerField";
 import './style.scss'
 
 type Props = {
@@ -39,7 +40,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                 continue
             }
 
-            if (f.type === 'selectMulti' || f.type === 'tagsPicker') {
+            if (f.type === 'selectMulti' || f.type === 'tagsPicker' || f.type === 'entityPicker') {
                 s[f.name] = srcInitial?.[f.name] || []
                 continue
             }
@@ -108,7 +109,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         }
 
         // Multi-select / Tag picker
-        if (f.type === 'selectMulti' || f.type === 'tagsPicker') {
+        if (f.type === 'selectMulti' || f.type === 'tagsPicker' || f.type === 'entityPicker') {
             const target = e.target as any
             if (Array.isArray(target.value)) {
                 if (isBatchDebugForm) {
@@ -190,7 +191,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                             continue
                         }
 
-                        if (f.type === 'tagsPicker') {
+                        if (f.type === 'tagsPicker' || f.type === 'entityPicker') {
                             const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
                             if (input && input.value) {
                                 try {
@@ -301,6 +302,18 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
             {f.type === "select" ? <SelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
             {f.type === "selectMulti" ? <MultiSelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
             {f.type === "tagsPicker" ? <TagPickerField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
+            {f.type === "entityPicker" ? (
+              <EntityPickerField
+                field={f}
+                options={(f.options || []).map((option) => ({
+                  id: option.value,
+                  name: option.label,
+                }))}
+                value={values[f.name] || []}
+                onChange={handleChange(f) as any}
+                placeholder={f.placeholder}
+              />
+            ) : null}
             {f.type === "radio" ? <RadioField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
             {f.type === "checkbox" ? <CheckboxField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
             {f.type === "file" ? <FileField field={f} onChange={handleChange(f) as any} /> : null}

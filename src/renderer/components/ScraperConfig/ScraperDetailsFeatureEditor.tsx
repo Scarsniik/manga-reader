@@ -36,6 +36,10 @@ import {
   URL_STRATEGY_FIELD,
   URL_TEMPLATE_FIELD,
 } from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
+import {
+  extractScraperDetailsDerivedValueResults,
+  extractScraperDetailsFieldValues,
+} from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   scraper: ScraperRecord;
@@ -137,6 +141,7 @@ export default function ScraperDetailsFeatureEditor({
 
         if (field === 'sourceType') {
           const normalizedSourceType = nextValue === 'selector'
+            || nextValue === 'html'
             || nextValue === 'requested_url'
             || nextValue === 'final_url'
             ? nextValue
@@ -258,7 +263,10 @@ export default function ScraperDetailsFeatureEditor({
       const doc = parser.parseFromString(typedDocumentResult.html, 'text/html');
       const errorsForValidation: string[] = [];
       const checks: ScraperFeatureValidationCheck[] = [];
-      const extractedValuesByKey: Partial<Record<ScraperFeatureValidationCheck['key'], string[]>> = {};
+      const extractedValuesByKey = extractScraperDetailsFieldValues(doc, config, {
+        requestedUrl: typedDocumentResult.requestedUrl,
+        finalUrl: typedDocumentResult.finalUrl,
+      });
 
       const testSelector = (
         key: ScraperFeatureValidationCheck['key'],
@@ -316,86 +324,22 @@ export default function ScraperDetailsFeatureEditor({
       testSelector('tags', config.tagsSelector, false);
       testSelector('status', config.statusSelector, false);
 
-      const derivedValues: ScraperDetailsDerivedValueResult[] = config.derivedValues.map((derivedValue) => {
-        const baseResult: ScraperDetailsDerivedValueResult = {
-          key: derivedValue.key,
-          sourceType: derivedValue.sourceType,
-          sourceField: derivedValue.sourceField,
-          selector: derivedValue.selector,
-          pattern: derivedValue.pattern,
-        };
+      const derivedValues: ScraperDetailsDerivedValueResult[] = extractScraperDetailsDerivedValueResults(
+        doc,
+        config,
+        {
+          requestedUrl: typedDocumentResult.requestedUrl,
+          finalUrl: typedDocumentResult.finalUrl,
+          status: typedDocumentResult.status,
+          contentType: typedDocumentResult.contentType,
+          html: typedDocumentResult.html,
+        },
+        extractedValuesByKey,
+      );
 
-        let sourceValues: string[] = [];
-
-        if (derivedValue.sourceType === 'requested_url') {
-          sourceValues = typedDocumentResult.requestedUrl ? [typedDocumentResult.requestedUrl] : [];
-        } else if (derivedValue.sourceType === 'final_url') {
-          sourceValues = typedDocumentResult.finalUrl
-            ? [typedDocumentResult.finalUrl]
-            : typedDocumentResult.requestedUrl
-              ? [typedDocumentResult.requestedUrl]
-              : [];
-        } else if (derivedValue.sourceType === 'field') {
-          sourceValues = derivedValue.sourceField
-            ? (extractedValuesByKey[derivedValue.sourceField] ?? [])
-            : [];
-        } else {
-          try {
-            sourceValues = derivedValue.selector
-              ? extractSelectorValues(doc, derivedValue.selector)
-              : [];
-          } catch {
-            errorsForValidation.push(`derived:${derivedValue.key}`);
-            return {
-              ...baseResult,
-              issueCode: 'invalid_selector',
-            };
-          }
-        }
-
-        if (sourceValues.length === 0) {
+      derivedValues.forEach((derivedValue) => {
+        if (derivedValue.issueCode) {
           errorsForValidation.push(`derived:${derivedValue.key}`);
-          return {
-            ...baseResult,
-            issueCode: derivedValue.sourceType === 'requested_url' || derivedValue.sourceType === 'final_url'
-              ? 'missing_source'
-              : 'no_match',
-          };
-        }
-
-        const sourceSample = sourceValues[0];
-
-        if (!derivedValue.pattern) {
-          return {
-            ...baseResult,
-            sourceSample,
-            value: sourceSample,
-          };
-        }
-
-        try {
-          const match = sourceSample.match(new RegExp(derivedValue.pattern));
-          if (!match) {
-            errorsForValidation.push(`derived:${derivedValue.key}`);
-            return {
-              ...baseResult,
-              sourceSample,
-              issueCode: 'no_match',
-            };
-          }
-
-          return {
-            ...baseResult,
-            sourceSample,
-            value: match[1] ?? match[0],
-          };
-        } catch {
-          errorsForValidation.push(`derived:${derivedValue.key}`);
-          return {
-            ...baseResult,
-            sourceSample,
-            issueCode: 'invalid_pattern',
-          };
         }
       });
 
@@ -555,7 +499,8 @@ export default function ScraperDetailsFeatureEditor({
             Chaque variable prend la premiere valeur trouvee dans sa source. Si une regex est
             fournie, le premier groupe capture est utilise. Exemple pour Momoniji :
             <code>{' mangaId'}</code> depuis <code>{'#cif .iw img@src'}</code> avec
-            <code>{' d_(\\d+)'}</code>.
+            <code>{' d_(\\d+)'}</code>. Pour des cas plus tordus, choisis aussi
+            <code>{' Regex sur le HTML brut'}</code>.
           </div>
 
           <DetailsDerivedValuesSection

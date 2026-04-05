@@ -19,14 +19,16 @@ La V1 actuellement branchee couvre :
 11. une etape `Composants`
 12. la configuration reelle de `Recherche`
 13. la configuration reelle de `Fiche`
-14. la configuration reelle de `Pages`
-15. l'ouverture temporaire d'un scraper depuis le header principal
-16. l'execution runtime reelle de `Recherche`
-17. l'ouverture runtime de `Fiche` depuis `Recherche` quand le lien est disponible
+14. la configuration reelle de `Chapitres`
+15. la configuration reelle de `Pages`
+16. l'ouverture temporaire d'un scraper depuis le header principal
+17. l'execution runtime reelle de `Recherche`
+18. l'ouverture runtime de `Fiche` depuis `Recherche` quand le lien est disponible
+19. l'execution runtime de `Chapitres` et `Pages`
+20. le telechargement et la lecture en ligne branches sur `Pages`
 
 Pas encore branche :
 
-- le lecteur complet branche au composant `Pages`
 - `Categories` et les autres fonctionnalites secondaires
 
 ## Choix UI retenus
@@ -75,8 +77,10 @@ Structure actuelle :
 - `src/renderer/components/ScraperConfig/shared` pour les briques communes
 - `src/renderer/components/ScraperConfig/search` pour les blocs lies a `Recherche`
 - `src/renderer/components/ScraperConfig/details` pour les blocs lies a `Fiche`
+- `src/renderer/components/ScraperConfig/chapters` pour les blocs lies a `Chapitres`
 - `src/renderer/components/ScraperConfig/pages` pour les blocs lies a `Pages`
 - `src/renderer/components/ScraperBrowser/components` pour les vues du runtime
+- `src/renderer/utils/scraperTemplateContext.ts` pour le contexte partage entre `Fiche`, `Chapitres` et `Pages`
 
 Objectif pratique :
 
@@ -132,6 +136,7 @@ L'etape `Composants` expose pour le moment :
 
 - `Recherche`
 - `Fiche`
+- `Chapitres`
 - `Pages`
 
 Etat de chaque composant :
@@ -145,6 +150,24 @@ Code couleur actuel :
 - gris
 - jaune
 - vert
+
+## Reglages globaux actuels
+
+Les reglages globaux du scraper couvrent maintenant :
+
+- les tags appliques automatiquement au telechargement
+- la langue par defaut des mangas importes
+- la recherche d'accueil eventuelle
+- les metadonnees de bookmark a exclure du stockage local
+
+Pour les bookmarks, une section dediee permet de choisir plusieurs informations a ne pas conserver, par exemple :
+
+- le resume
+- la description
+- les auteurs
+- les tags
+- le statut
+- la couverture
 
 ## Configuration actuelle de `Fiche`
 
@@ -169,10 +192,19 @@ Pour chaque variable extraite, on peut definir :
 - une source
 - une regex optionnelle
 
+Sources actuellement disponibles :
+
+- un champ deja extrait
+- un selecteur personnalise
+- l'URL demandee
+- l'URL finale
+- une regex appliquee directement sur le HTML brut
+
 Regles actuelles :
 
 - la premiere valeur trouvee est utilisee
 - si une regex contient un groupe capture, le premier groupe est conserve
+- si la source est `HTML brut`, la regex devient obligatoire
 - si une variable configuree ne peut pas etre extraite pendant le test, la validation echoue
 
 Exemple utile pour `Momoniji` :
@@ -198,6 +230,41 @@ Regles pratiques :
 - les selecteurs optionnels absents remontent en warning
 - le mode `template` supporte deja `{{id}}`, `{{slug}}`, `{{value}}` et leurs variantes `raw`
 
+## Configuration actuelle de `Chapitres`
+
+La configuration de `Chapitres` repose sur :
+
+- une section `Source`
+- une section `Scraping`
+- une section `Test`
+
+Le composant reutilise la derniere validation reussie de `Fiche` pour :
+
+- recharger la meme page manga
+- ou construire une URL dediee a partir des variables de `Fiche`
+- extraire une liste de chapitres
+- stocker pour chaque chapitre son URL, son image eventuelle et son label
+
+Regles actuelles :
+
+- `Depuis la fiche` et `Depuis une URL` sont disponibles
+- le mode URL supporte les variables derivees de `Fiche`
+- `{{chapterPage}}` peut etre utilise dans l'URL des chapitres pour paginer automatiquement
+- `templateBase = scraper_base` ou `details_page` controle la resolution des URLs relatives
+- `Bloc chapitre` est obligatoire
+- `URL du chapitre` est obligatoire
+- `Label du chapitre` est obligatoire
+- `Bloc liste` et `Image du chapitre` restent optionnels
+
+Validation actuelle de `Chapitres` :
+
+- resolution de la source a partir de `Fiche`
+- recuperation HTML
+- si `{{chapterPage}}` est present, enchainement automatique des pages jusqu'a absence de resultat
+- parsing cote renderer
+- extraction de la liste de chapitres
+- affichage d'un apercu de la liste detectee
+
 ## Configuration actuelle de `Pages`
 
 La configuration de `Pages` repose sur :
@@ -214,21 +281,27 @@ Modes disponibles :
 Le mode `Depuis la fiche` reutilise :
 
 - l'URL validee du composant `Fiche`
+- ou l'URL du chapitre choisi si `Pages` est lie a des chapitres
 
 Le mode `Depuis un template` reutilise :
 
 - l'URL validee de `Fiche`
 - les champs extraits par `Fiche`
 - les variables derivees de `Fiche`
+- l'URL du chapitre choisi via `{{chapter}}` si le checkbox correspondant est actif
 
 Regles actuelles du template :
 
 - `{{nomVariable}}` insere une valeur encodee
 - `{{raw:nomVariable}}` insere une valeur brute
+- `{{requestedUrl}}` et `{{finalUrl}}` encodent donc les `/` en `%2F`
+- `{{chapter}}` insere l'URL du chapitre choisi quand `Pages` est lie a des chapitres
 - `{{page}}` insere un numero 1-based
 - `{{page3}}` insere un numero 1-based zero-padde sur 3 chiffres
 - `{{pageIndex}}` insere un index 0-based
 - `{{pageIndex3}}` insere un index 0-based zero-padde sur 3 chiffres
+- `templateBase = scraper_base` resout les URLs relatives a partir du `baseUrl` du scraper
+- `templateBase = details_page` resout les URLs relatives a partir de l'URL finale validee de `Fiche`
 
 Quand le template pointe directement vers une image :
 
@@ -265,7 +338,7 @@ Elements conserves hors `Bibliotheque` :
 La vue temporaire du scraper affiche :
 
 - son identite
-- l'etat de `Recherche`, `Fiche` et `Pages`
+- l'etat de `Recherche`, `Fiche`, `Chapitres` et `Pages`
 - une barre de saisie runtime
 - un select `Recherche / Manga` seulement si les deux composants sont utilisables
 
@@ -289,6 +362,7 @@ Le rendu temporaire affiche :
 - auteurs
 - tags
 - statut
+- la liste des chapitres extraits sous la fiche manga
 - URL demandee / URL finale
 - variables derivees resolues
 
@@ -296,8 +370,8 @@ Le rendu temporaire affiche :
 
 Quand `Pages` est configure, la vue `Manga` expose :
 
-- un bouton `Telecharger`
-- un bouton `Lecteur`
+- un bouton `Telecharger` et un bouton `Lecteur` au niveau manga
+- ou ces actions au niveau de chaque chapitre si `Pages` est lie a des chapitres
 
 ### Telechargement
 

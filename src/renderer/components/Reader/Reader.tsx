@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './style.scss';
 import { Manga } from '@/renderer/types';
-import { ScraperReaderProgressRecord } from '@/shared/scraper';
-import { ScraperRuntimeDetailsResult } from '@/renderer/utils/scraperRuntime';
+import { ScraperBookmarkMetadataField, ScraperReaderProgressRecord } from '@/shared/scraper';
+import {
+    ScraperRuntimeChapterResult,
+    ScraperRuntimeDetailsResult,
+} from '@/renderer/utils/scraperRuntime';
 import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
 import ReaderHeader from './ReaderHeader';
 import ImageViewer from './ImageViewer';
@@ -21,6 +24,7 @@ type ReaderLocationState = {
         scraperId: string;
         query: string;
         detailsResult: ScraperRuntimeDetailsResult;
+        chaptersResult?: ScraperRuntimeChapterResult[];
         searchReturnState?: ScraperSearchReturnState | null;
     };
     scraperReader?: {
@@ -30,6 +34,8 @@ type ReaderLocationState = {
         sourceUrl: string;
         cover?: string;
         pageUrls: string[];
+        chapter?: ScraperRuntimeChapterResult;
+        bookmarkExcludedFields?: ScraperBookmarkMetadataField[];
     };
 } | null;
 
@@ -563,6 +569,7 @@ const Reader: React.FC = () => {
     const [images, setImages] = useState<string[]>([]);
     const [currentIndex, setCurrentIndex] = useState<number>(0);
     const [manga, setManga] = useState<Manga | null>(null);
+    const [bookmarkExcludedFields, setBookmarkExcludedFields] = useState<ScraperBookmarkMetadataField[]>([]);
     const [ocrEnabled, setOcrEnabled] = useState<boolean>(false);
     const [copyFeedback, setCopyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [showBoxes, setShowBoxes] = useState<boolean>(true);
@@ -681,9 +688,13 @@ const Reader: React.FC = () => {
                     sourceKind: 'scraper',
                     scraperId: scraperReaderState.scraperId,
                     sourceUrl: scraperReaderState.sourceUrl,
+                    chapters: scraperReaderState.chapter?.label,
                 };
 
                 setManga(remoteManga);
+                setBookmarkExcludedFields(Array.isArray(scraperReaderState.bookmarkExcludedFields)
+                    ? scraperReaderState.bookmarkExcludedFields
+                    : []);
                 openedCompletedRef.current = scraperReaderState.pageUrls.length > 0
                     && typeof remoteManga.currentPage === 'number'
                     && remoteManga.currentPage >= scraperReaderState.pageUrls.length;
@@ -707,6 +718,7 @@ const Reader: React.FC = () => {
             const found = id ? mangas.find(m => String(m.id) === String(id)) || null : null;
             console.debug('Reader: found manga', found);
             setManga(found);
+            setBookmarkExcludedFields([]);
             openedCompletedRef.current = false;
 
             // If manga found and has a path, list pages
@@ -1562,6 +1574,7 @@ const Reader: React.FC = () => {
         <div className="reader">
             <ReaderHeader
                 manga={manga}
+                bookmarkExcludedFields={bookmarkExcludedFields}
                 imagesLength={images.length}
                 currentIndex={currentIndex}
                 ocrEnabled={ocrEnabled}

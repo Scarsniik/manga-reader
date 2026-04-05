@@ -2,7 +2,11 @@ import React, { useCallback, useMemo, useState } from 'react';
 import Form from '@/renderer/components/utils/Form/Form';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { languages } from '@/renderer/consts/languages';
-import { ScraperGlobalConfig, ScraperRecord } from '@/shared/scraper';
+import {
+  ScraperBookmarkMetadataField,
+  ScraperGlobalConfig,
+  ScraperRecord,
+} from '@/shared/scraper';
 
 declare global {
   interface Window {
@@ -26,12 +30,44 @@ const sanitizeTagIds = (value: unknown): string[] => (
     : []
 );
 
+const BOOKMARK_FIELD_OPTIONS: Array<{
+  label: string;
+  value: ScraperBookmarkMetadataField;
+}> = [
+  { label: 'Couverture', value: 'cover' },
+  { label: 'Resume', value: 'summary' },
+  { label: 'Description', value: 'description' },
+  { label: 'Auteurs', value: 'authors' },
+  { label: 'Tags', value: 'tags' },
+  { label: 'Statut', value: 'mangaStatus' },
+];
+
+const BOOKMARK_FIELD_LABELS = new Map(
+  BOOKMARK_FIELD_OPTIONS.map((option) => [option.value, option.label]),
+);
+
+const sanitizeBookmarkExcludedFields = (value: unknown): ScraperBookmarkMetadataField[] => (
+  Array.isArray(value)
+    ? Array.from(new Set(
+      value.filter((entry): entry is ScraperBookmarkMetadataField => (
+        BOOKMARK_FIELD_LABELS.has(String(entry ?? '').trim() as ScraperBookmarkMetadataField)
+      )),
+    ))
+    : []
+);
+
 const buildGlobalConfig = (values: Record<string, unknown>): ScraperGlobalConfig => ({
   defaultTagIds: sanitizeTagIds(values.defaultTagIds),
   defaultLanguage: String(values.defaultLanguage ?? '').trim().toLowerCase() || undefined,
   homeSearch: {
     enabled: Boolean(values.homeSearchEnabled),
     query: String(values.homeSearchQuery ?? '').trim(),
+  },
+  bookmark: {
+    excludedFields: sanitizeBookmarkExcludedFields(values.bookmarkExcludedFields),
+  },
+  chapterDownloads: {
+    autoAssignSeries: Boolean(values.chapterDownloadsAutoAssignSeries),
   },
 });
 
@@ -62,6 +98,18 @@ export default function ScraperGlobalSettingsEditor({
       })),
     },
     {
+      name: 'bookmarkExcludedFields',
+      label: 'Informations a ne pas enregistrer dans les bookmarks',
+      type: 'entityPicker',
+      options: BOOKMARK_FIELD_OPTIONS,
+      placeholder: 'Selectionner les metadonnees a exclure des bookmarks',
+    },
+    {
+      name: 'chapterDownloadsAutoAssignSeries',
+      label: 'Associer automatiquement les telechargements de chapitre a une serie',
+      type: 'checkbox',
+    },
+    {
       name: 'homeSearchEnabled',
       label: 'Jouer une recherche d\'accueil automatiquement',
       type: 'checkbox',
@@ -77,6 +125,8 @@ export default function ScraperGlobalSettingsEditor({
   const initialValues = useMemo(() => ({
     defaultTagIds: scraper.globalConfig.defaultTagIds,
     defaultLanguage: scraper.globalConfig.defaultLanguage ?? '',
+    bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+    chapterDownloadsAutoAssignSeries: scraper.globalConfig.chapterDownloads.autoAssignSeries,
     homeSearchEnabled: scraper.globalConfig.homeSearch.enabled,
     homeSearchQuery: scraper.globalConfig.homeSearch.query,
   }), [scraper.globalConfig]);
@@ -99,6 +149,28 @@ export default function ScraperGlobalSettingsEditor({
       ? `Recherche lancee avec "${scraper.globalConfig.homeSearch.query}"`
       : 'Recherche globale lancee sans terme pre-rempli';
   }, [scraper.globalConfig.homeSearch.enabled, scraper.globalConfig.homeSearch.query]);
+
+  const bookmarkLabel = useMemo(() => {
+    const excludedFields = scraper.globalConfig.bookmark.excludedFields;
+    if (!excludedFields.length) {
+      return 'Toutes les metadonnees de bookmark sont conservees';
+    }
+
+    const labels = excludedFields
+      .map((field) => BOOKMARK_FIELD_LABELS.get(field) || field);
+
+    if (labels.length <= 3) {
+      return labels.join(', ');
+    }
+
+    return `${labels.length} informations exclues (${labels.slice(0, 3).join(', ')}, ...)`;
+  }, [scraper.globalConfig.bookmark.excludedFields]);
+
+  const chapterDownloadsLabel = useMemo(() => (
+    scraper.globalConfig.chapterDownloads.autoAssignSeries
+      ? 'Les telechargements lances depuis un chapitre creeront ou reutiliseront une serie avec le titre de la fiche'
+      : 'Les telechargements de chapitre restent des mangas independants'
+  ), [scraper.globalConfig.chapterDownloads.autoAssignSeries]);
 
   const handleSubmit = useCallback(async (values: Record<string, unknown>) => {
     if (!window.api || typeof window.api.saveScraperGlobalConfig !== 'function') {
@@ -145,6 +217,24 @@ export default function ScraperGlobalSettingsEditor({
       </div>
 
       <div className="scraper-config-note">
+        <strong>Series et chapitres</strong>
+        <span>
+          Active cette option pour que les telechargements lances depuis un chapitre soient
+          automatiquement rattaches a une serie creee avec le titre de la fiche, puis ranges avec
+          leur numero de chapitre.
+        </span>
+      </div>
+
+      <div className="scraper-config-note">
+        <strong>Bookmark</strong>
+        <span>
+          Choisis ici les metadonnees qui ne doivent pas etre conservees dans les bookmarks de ce
+          scrapper. Si tu exclus par exemple le resume ou les tags, ces informations ne seront plus
+          enregistrees dans la carte bookmark.
+        </span>
+      </div>
+
+      <div className="scraper-config-note">
         <strong>Page d&apos;accueil</strong>
         <span>
           Quand la recherche d&apos;accueil est active, elle se lance a l&apos;arrivee sur la page du
@@ -179,6 +269,14 @@ export default function ScraperGlobalSettingsEditor({
         <div className="scraper-config-summary__row">
           <span>Langue par defaut</span>
           <strong>{languageLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Bookmark</span>
+          <strong>{bookmarkLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Series et chapitres</span>
+          <strong>{chapterDownloadsLabel}</strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Page d&apos;accueil</span>

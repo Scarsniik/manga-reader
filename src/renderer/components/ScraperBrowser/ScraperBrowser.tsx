@@ -17,10 +17,15 @@ import {
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import {
+  buildScraperTemplateContextFromDetails,
+} from '@/renderer/utils/scraperTemplateContext';
+import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
+import {
   createScraperMangaId,
   extractScraperDetailsFromDocument,
   extractScraperSearchPageFromDocument,
   formatScraperValueForDisplay,
+  getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
@@ -28,9 +33,12 @@ import {
   hasSearchPagePlaceholder,
   hasRenderableDetails,
   isScraperFeatureConfigured,
+  resolveScraperChapters,
   resolveScraperDetailsTargetUrl,
   resolveScraperPageUrls,
+  resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
+  ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
@@ -46,6 +54,7 @@ type Props = {
   initialState?: {
     query: string;
     detailsResult: ScraperRuntimeDetailsResult;
+    chaptersResult?: ScraperRuntimeChapterResult[];
     searchReturnState?: ScraperSearchReturnState | null;
   } | null;
 };
@@ -94,14 +103,18 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const { openModal } = useModal();
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
+  const chaptersFeature = useMemo(() => getScraperFeature(scraper, 'chapters'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
   const searchConfig = useMemo(() => getScraperSearchFeatureConfig(searchFeature), [searchFeature]);
   const detailsConfig = useMemo(() => getScraperDetailsFeatureConfig(detailsFeature), [detailsFeature]);
+  const chaptersConfig = useMemo(() => getScraperChaptersFeatureConfig(chaptersFeature), [chaptersFeature]);
   const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
 
   const hasSearch = isScraperFeatureConfigured(searchFeature);
   const hasDetails = isScraperFeatureConfigured(detailsFeature);
+  const hasChapters = isScraperFeatureConfigured(chaptersFeature);
   const hasPages = isScraperFeatureConfigured(pagesFeature);
+  const usesChaptersForPages = usesScraperPagesChapters(pagesConfig);
   const availableModes = useMemo<ScraperBrowseMode[]>(() => {
     const nextModes: ScraperBrowseMode[] = [];
     if (hasSearch) {
@@ -148,6 +161,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [hasExecutedSearch, setHasExecutedSearch] = useState(false);
   const [searchReturnState, setSearchReturnState] = useState<ScraperSearchReturnState | null>(null);
   const [detailsResult, setDetailsResult] = useState<ScraperRuntimeDetailsResult | null>(null);
+  const [chaptersResult, setChaptersResult] = useState<ScraperRuntimeChapterResult[]>([]);
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -246,6 +260,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setHasExecutedSearch(false);
     setSearchReturnState(initialState?.searchReturnState ?? null);
     setDetailsResult(initialState?.detailsResult ?? null);
+    setChaptersResult(initialState?.chaptersResult ?? []);
     setRuntimeMessage(null);
     setRuntimeError(null);
     setDownloadError(null);
@@ -289,6 +304,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setSearchResults([]);
     setHasExecutedSearch(false);
     setDetailsResult(null);
+    setChaptersResult([]);
 
     if (!detailsConfig || !detailsConfig.titleSelector) {
       setRuntimeError('Le composant Fiche n\'est pas encore suffisamment configure pour etre execute.');
@@ -325,7 +341,31 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         finalUrl: documentResult.finalUrl,
         status: documentResult.status,
         contentType: documentResult.contentType,
+        html: documentResult.html,
       });
+      const extractedChapters = chaptersConfig
+        ? await (async () => {
+          try {
+            const chaptersResolution = await resolveScraperChapters(
+              scraper.baseUrl,
+              extractedDetails.finalUrl || extractedDetails.requestedUrl,
+              chaptersConfig,
+              buildScraperTemplateContextFromDetails(extractedDetails),
+              async (request) => (window as any).api.fetchScraperDocument(request),
+            );
+
+            if (!chaptersResolution.sourceResult.ok || !chaptersResolution.sourceResult.html) {
+              console.warn('Scraper chapters source fetch failed', chaptersResolution.sourceResult);
+              return [];
+            }
+
+            return chaptersResolution.chapters;
+          } catch (error) {
+            console.warn('Scraper chapters extraction failed', error);
+            return [];
+          }
+        })()
+        : [];
 
       if (!hasRenderableDetails(extractedDetails)) {
         setRuntimeError('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');
@@ -333,12 +373,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       }
 
       setDetailsResult(extractedDetails);
+      setChaptersResult(extractedChapters);
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du scrapper.');
     } finally {
       setLoading(false);
     }
-  }, [detailsConfig, scraper.baseUrl]);
+  }, [chaptersConfig, detailsConfig, scraper.baseUrl]);
 
   const runDetailsLookup = useCallback(async (nextQuery: string) => {
     setSearchReturnState(null);
@@ -359,7 +400,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     await loadDetailsFromTargetUrl(targetUrl);
   }, [detailsConfig, loadDetailsFromTargetUrl, scraper.baseUrl]);
 
-  const fetchSearchPage = useCallback(async (targetUrl: string): Promise<ScraperRuntimeSearchPageResult> => {
+  const fetchSearchPage = useCallback(async (
+    targetUrl: string,
+    options?: {
+      query?: string;
+      pageIndex?: number;
+    },
+  ): Promise<ScraperRuntimeSearchPageResult> => {
     if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
       throw new Error('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
     }
@@ -371,6 +418,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     const documentResult = await (window as any).api.fetchScraperDocument({
       baseUrl: scraper.baseUrl,
       targetUrl,
+      requestConfig: resolveScraperSearchRequestConfig(searchConfig, options?.query || '', {
+        pageIndex: options?.pageIndex ?? 0,
+      }),
     });
 
     if (!documentResult?.ok || !documentResult.html) {
@@ -405,7 +455,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       const targetUrl = resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, {
         pageIndex: normalizedTargetPageIndex,
       });
-      const page = await fetchSearchPage(targetUrl);
+      const page = await fetchSearchPage(targetUrl, {
+        query: nextQuery,
+        pageIndex: normalizedTargetPageIndex,
+      });
       const visitedPageUrls = Array.from({ length: normalizedTargetPageIndex + 1 }, (_, index) => (
         resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex: index })
       ));
@@ -420,13 +473,20 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     const firstPage = await fetchSearchPage(
       resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery),
+      {
+        query: nextQuery,
+        pageIndex: 0,
+      },
     );
     const visitedPageUrls = [firstPage.currentPageUrl];
     let currentPage = firstPage;
     let currentPageIndex = 0;
 
     while (currentPageIndex < normalizedTargetPageIndex && currentPage.nextPageUrl) {
-      const nextPage = await fetchSearchPage(currentPage.nextPageUrl);
+      const nextPage = await fetchSearchPage(currentPage.nextPageUrl, {
+        query: nextQuery,
+        pageIndex: currentPageIndex + 1,
+      });
       if (!nextPage.items.length) {
         break;
       }
@@ -456,6 +516,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadError(null);
     setDownloadMessage(null);
     setDetailsResult(null);
+    setChaptersResult([]);
     setSearchPage(null);
     setSearchVisitedPageUrls([]);
     setSearchPageIndex(0);
@@ -526,7 +587,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         return;
       }
 
-      const nextPage = await fetchSearchPage(nextPageTargetUrl);
+      const nextPage = await fetchSearchPage(nextPageTargetUrl, {
+        query,
+        pageIndex: searchPageIndex + 1,
+      });
       if (!nextPage.items.length) {
         setRuntimeMessage('Aucun resultat exploitable n\'a ete trouve sur la page suivante.');
         return;
@@ -571,7 +635,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setRuntimeError(null);
 
     try {
-      const previousPage = await fetchSearchPage(previousPageUrl);
+      const previousPage = await fetchSearchPage(previousPageUrl, {
+        query,
+        pageIndex: Math.max(0, searchPageIndex - 1),
+      });
       setSearchPage(previousPage);
       setSearchResults(previousPage.items);
       setHasExecutedSearch(true);
@@ -691,6 +758,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setMode('search');
     setQuery(searchReturnState.query);
     setDetailsResult(null);
+    setChaptersResult([]);
     setRuntimeError(null);
     setDownloadError(null);
     setDownloadMessage(null);
@@ -739,6 +807,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       setMode(defaultMode);
       setQuery('');
       setDetailsResult(null);
+      setChaptersResult([]);
       setSearchPage(null);
       setSearchVisitedPageUrls([]);
       setSearchPageIndex(0);
@@ -750,6 +819,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     setMode('search');
     setDetailsResult(null);
+    setChaptersResult([]);
 
     if (hasConfiguredHomeSearch) {
       setQuery(homeSearchQuery);
@@ -860,6 +930,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
         setSearchReturnState(null);
         setDetailsResult(null);
+        setChaptersResult([]);
         setSearchPage(null);
         setSearchVisitedPageUrls([]);
         setSearchPageIndex(0);
@@ -895,6 +966,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       }
 
       setDetailsResult(null);
+      setChaptersResult([]);
       setSearchPage(null);
       setSearchVisitedPageUrls([]);
       setSearchPageIndex(0);
@@ -1001,7 +1073,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     urlRestoreReady,
   ]);
 
-  const resolveCurrentPageUrls = useCallback(async (): Promise<string[]> => {
+  const resolveCurrentPageUrls = useCallback(async (
+    chapter?: ScraperRuntimeChapterResult | null,
+  ): Promise<string[]> => {
     if (!detailsResult) {
       throw new Error('Charge d\'abord une fiche avant de lire ou telecharger le manga.');
     }
@@ -1019,10 +1093,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       detailsResult,
       pagesConfig,
       async (request) => (window as any).api.fetchScraperDocument(request),
+      {
+        chapter: chapter ?? null,
+      },
     );
   }, [detailsResult, pagesConfig, scraper]);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
     if (!(window as any).api || typeof (window as any).api.downloadScraperManga !== 'function') {
       setDownloadError('Le telechargement du scrapper n\'est pas disponible dans cette version.');
       return;
@@ -1033,16 +1110,23 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage(null);
 
     try {
-      const pageUrls = await resolveCurrentPageUrls();
+      const pageUrls = await resolveCurrentPageUrls(chapter);
+      const downloadTitle = chapter?.label
+        ? `${detailsResult?.title || query.trim() || 'manga'} - ${chapter.label}`
+        : detailsResult?.title || query.trim() || 'manga';
 
       const downloadResult = await (window as any).api.downloadScraperManga({
-        title: detailsResult?.title || query.trim() || 'manga',
+        title: downloadTitle,
         pageUrls,
         refererUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
         scraperId: scraper.id,
         sourceUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
         defaultTagIds: scraper.globalConfig.defaultTagIds,
         defaultLanguage: scraper.globalConfig.defaultLanguage,
+        autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
+        seriesTitle: detailsResult?.title || query.trim() || 'manga',
+        chapterLabel: chapter?.label,
+        thumbnailUrl: chapter?.image,
       });
       const hasDefaultMetadata = Boolean(
         scraper.globalConfig.defaultTagIds.length || scraper.globalConfig.defaultLanguage,
@@ -1060,7 +1144,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }
   }, [detailsResult, query, resolveCurrentPageUrls, scraper.globalConfig.defaultLanguage, scraper.globalConfig.defaultTagIds, scraper.id]);
 
-  const handleOpenReader = useCallback(async () => {
+  const handleOpenReader = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
     if (!detailsResult) {
       setRuntimeError('Charge d\'abord une fiche avant d\'ouvrir le lecteur.');
       return;
@@ -1077,9 +1161,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage(null);
 
     try {
-      const pageUrls = await resolveCurrentPageUrls();
+      const pageUrls = await resolveCurrentPageUrls(chapter);
       const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
-      const readerMangaId = createScraperMangaId(scraper.id, sourceUrl);
+      const readerMangaId = createScraperMangaId(
+        scraper.id,
+        sourceUrl,
+        usesChaptersForPages ? chapter?.url : null,
+      );
       const savedProgress = (window as any).api && typeof (window as any).api.getScraperReaderProgress === 'function'
         ? await (window as any).api.getScraperReaderProgress(readerMangaId)
         : null;
@@ -1100,6 +1188,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
               scraperId: scraper.id,
               query,
               detailsResult,
+              chaptersResult,
               searchReturnState,
             },
             scraperReader: {
@@ -1109,6 +1198,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
               sourceUrl,
               cover: detailsResult.cover,
               pageUrls,
+              chapter,
+              bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
             },
           },
         },
@@ -1118,7 +1209,20 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     } finally {
       setOpeningReader(false);
     }
-  }, [detailsResult, location.pathname, location.search, navigate, pagesConfig, query, resolveCurrentPageUrls, scraper.id, searchReturnState]);
+  }, [
+    detailsResult,
+    location.pathname,
+    location.search,
+    navigate,
+    pagesConfig,
+    query,
+    resolveCurrentPageUrls,
+    chaptersResult,
+    scraper.globalConfig.bookmark.excludedFields,
+    scraper.id,
+    searchReturnState,
+    usesChaptersForPages,
+  ]);
 
   const activePlaceholder = useMemo(
     () => buildQueryPlaceholder(mode, hasDetails, detailsConfig?.urlStrategy ?? null),
@@ -1128,8 +1232,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const capabilities = useMemo(() => ([
     { label: 'Recherche', feature: searchFeature, enabled: hasSearch },
     { label: 'Fiche', feature: detailsFeature, enabled: hasDetails },
+    { label: 'Chapitres', feature: chaptersFeature, enabled: hasChapters },
     { label: 'Pages', feature: pagesFeature, enabled: hasPages },
-  ]), [detailsFeature, hasDetails, hasPages, hasSearch, pagesFeature, searchFeature]);
+  ]), [chaptersFeature, detailsFeature, hasChapters, hasDetails, hasPages, hasSearch, pagesFeature, searchFeature]);
 
   const helperText = useMemo(() => {
     if (mode === 'manga') {
@@ -1212,10 +1317,11 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         title={result.title}
         cover={result.thumbnailUrl}
         summary={result.summary}
+        excludedFields={scraper.globalConfig.bookmark.excludedFields}
         size="sm"
       />
     );
-  }, [scraper.id]);
+  }, [scraper.globalConfig.bookmark.excludedFields, scraper.id]);
 
   return (
     <section className="scraper-browser" ref={browserRootRef}>
@@ -1280,14 +1386,17 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
       <ScraperDetailsPanel
         scraperId={scraper.id}
+        bookmarkExcludedFields={scraper.globalConfig.bookmark.excludedFields}
         detailsResult={detailsResult}
+        chapters={chaptersResult}
         hasPages={hasPages}
+        usesChapters={usesChaptersForPages}
         canReturnToSearch={canReturnToSearch}
         openingReader={openingReader}
         downloading={downloading}
         onBackToSearch={() => void handleBackToSearch()}
-        onOpenReader={() => void handleOpenReader()}
-        onDownload={() => void handleDownload()}
+        onOpenReader={(chapter) => void handleOpenReader(chapter)}
+        onDownload={(chapter) => void handleDownload(chapter)}
       />
     </section>
   );

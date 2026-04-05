@@ -35,6 +35,14 @@ ipcRenderer.on('scraper-bookmarks-updated', () => {
     }
 });
 
+ipcRenderer.on('series-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('series-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch series-updated event', error);
+    }
+});
+
 contextBridge.exposeInMainWorld('api', {
     getLinks: () => ipcRenderer.invoke('get-links'),
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),

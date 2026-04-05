@@ -1,21 +1,43 @@
 import {
+  applyScraperSearchTemplate,
   buildScraperSearchUrl,
+  ScraperChapterItem,
+  ScraperChaptersFeatureConfig,
   buildScraperContextTemplateUrl,
   buildScraperTemplateUrl,
   FetchScraperDocumentResult,
   resolveScraperUrl,
   ScraperDetailsDerivedValueConfig,
+  ScraperDetailsDerivedValueResult,
   ScraperDetailsFeatureConfig,
   ScraperFeatureDefinition,
   ScraperFeatureKind,
   ScraperFeatureValidationCheckKey,
   ScraperPagesFeatureConfig,
+  ScraperPagesTemplateBase,
+  ScraperRequestConfig,
+  ScraperRequestField,
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
   ScraperRecord,
 } from '@/shared/scraper';
+import {
+  buildScraperTemplateContextFromDetails,
+  hasScraperChapterPagePlaceholder,
+  resolveScraperChaptersSourceUrl,
+  resolveScraperTemplateBaseUrl,
+  type ScraperTemplateContext,
+} from '@/renderer/utils/scraperTemplateContext';
+import {
+  usesScraperPagesChapterSource,
+  usesScraperPagesChapters,
+  usesScraperPagesSelectorSource,
+  usesScraperPagesTemplateChapterContext,
+} from '@/renderer/utils/scraperPages';
 
-type DetailsFieldKey = Exclude<ScraperFeatureValidationCheckKey, 'pages'>;
+type DetailsFieldKey = Exclude<ScraperFeatureValidationCheckKey, 'pages' | 'chapters'>;
+
+export type ScraperRuntimeChapterResult = ScraperChapterItem;
 
 export type ScraperRuntimeDetailsResult = {
   requestedUrl: string;
@@ -50,6 +72,12 @@ export type ScraperDocumentFetcher = (request: {
   baseUrl: string;
   targetUrl: string;
 }) => Promise<FetchScraperDocumentResult>;
+
+export type ScraperResolvedChaptersResult = {
+  sourceResult: FetchScraperDocumentResult;
+  chapters: ScraperRuntimeChapterResult[];
+  pagesVisited: number;
+};
 
 const DETAILS_FIELD_KEYS: DetailsFieldKey[] = [
   'title',
@@ -115,6 +143,68 @@ const trimOptionalSelector = (value: unknown): string | undefined => {
   return normalized ? normalized : undefined;
 };
 
+const normalizePagesTemplateBase = (value: unknown): ScraperPagesTemplateBase => (
+  value === 'details_page' ? 'details_page' : 'scraper_base'
+);
+
+const normalizeRequestField = (value: unknown): ScraperRequestField | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const key = trimOptional(raw.key) ?? '';
+  const fieldValue = typeof raw.value === 'string'
+    ? raw.value
+    : raw.value == null
+      ? ''
+      : String(raw.value);
+
+  if (!key && fieldValue.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    key,
+    value: fieldValue,
+  };
+};
+
+const normalizeRequestConfig = (value: unknown): ScraperRequestConfig | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const method = raw.method === 'POST' ? 'POST' : 'GET';
+  const bodyMode = raw.bodyMode === 'raw' ? 'raw' : 'form';
+  const bodyFields = Array.isArray(raw.bodyFields)
+    ? raw.bodyFields
+      .map((field) => normalizeRequestField(field))
+      .filter((field): field is ScraperRequestField => Boolean(field))
+    : [];
+  const body = typeof raw.body === 'string' ? raw.body : undefined;
+  const contentType = trimOptional(raw.contentType);
+
+  if (
+    method === 'GET'
+    && bodyMode === 'form'
+    && bodyFields.length === 0
+    && !body
+    && !contentType
+  ) {
+    return undefined;
+  }
+
+  return {
+    method,
+    bodyMode,
+    bodyFields,
+    body,
+    contentType,
+  };
+};
+
 const isDetailsFieldKey = (value: unknown): value is DetailsFieldKey => (
   DETAILS_FIELD_KEYS.includes(String(value) as DetailsFieldKey)
 );
@@ -135,6 +225,7 @@ const normalizeDerivedValueConfig = (
   return {
     key,
     sourceType: raw.sourceType === 'selector'
+      || raw.sourceType === 'html'
       || raw.sourceType === 'requested_url'
       || raw.sourceType === 'final_url'
       ? raw.sourceType
@@ -167,6 +258,7 @@ export const getScraperSearchFeatureConfig = (
   return {
     urlTemplate: urlTemplate ?? '',
     testQuery: trimOptional(raw.testQuery),
+    request: normalizeRequestConfig(raw.request),
     resultListSelector: trimOptionalSelector(raw.resultListSelector),
     resultItemSelector,
     titleSelector,
@@ -210,6 +302,31 @@ export const getScraperDetailsFeatureConfig = (
   };
 };
 
+export const getScraperChaptersFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperChaptersFeatureConfig | null => {
+  if (!feature?.config) {
+    return null;
+  }
+
+  const raw = feature.config as Record<string, unknown>;
+  const chapterItemSelector = normalizeSelectorInput(String(raw.chapterItemSelector ?? ''));
+  const chapterUrlSelector = normalizeSelectorInput(String(raw.chapterUrlSelector ?? ''));
+  const chapterLabelSelector = normalizeSelectorInput(String(raw.chapterLabelSelector ?? ''));
+
+  return {
+    urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
+    urlTemplate: trimOptional(raw.urlTemplate),
+    templateBase: normalizePagesTemplateBase(raw.templateBase),
+    chapterListSelector: trimOptionalSelector(raw.chapterListSelector),
+    chapterItemSelector,
+    chapterUrlSelector,
+    chapterImageSelector: trimOptionalSelector(raw.chapterImageSelector),
+    chapterLabelSelector,
+    reverseOrder: Boolean(raw.reverseOrder),
+  };
+};
+
 export const getScraperPagesFeatureConfig = (
   feature: ScraperFeatureDefinition | null | undefined,
 ): ScraperPagesFeatureConfig | null => {
@@ -220,9 +337,17 @@ export const getScraperPagesFeatureConfig = (
   const raw = feature.config as Record<string, unknown>;
 
   return {
-    urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
+    urlStrategy: raw.urlStrategy === 'template'
+      ? 'template'
+      : raw.urlStrategy === 'chapter_page' || Boolean(raw.linkedToChapters)
+        ? 'chapter_page'
+        : 'details_page',
     urlTemplate: trimOptional(raw.urlTemplate),
+    templateBase: normalizePagesTemplateBase(raw.templateBase),
     pageImageSelector: trimOptionalSelector(raw.pageImageSelector),
+    linkedToChapters: raw.urlStrategy === 'template'
+      ? Boolean(raw.linkedToChapters)
+      : false,
   };
 };
 
@@ -255,6 +380,42 @@ export const resolveScraperSearchTargetUrl = (
     pageIndex?: number;
   },
 ): string => buildScraperSearchUrl(baseUrl, config.urlTemplate || '', query, options);
+
+export const resolveScraperSearchRequestConfig = (
+  config: ScraperSearchFeatureConfig,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): ScraperRequestConfig | undefined => {
+  const request = normalizeRequestConfig(config.request);
+  if (!request || request.method !== 'POST') {
+    return undefined;
+  }
+
+  if (request.bodyMode === 'raw') {
+    return {
+      method: 'POST',
+      bodyMode: 'raw',
+      body: typeof request.body === 'string'
+        ? applyScraperSearchTemplate(request.body, query, options)
+        : '',
+      contentType: request.contentType,
+    };
+  }
+
+  return {
+    method: 'POST',
+    bodyMode: 'form',
+    bodyFields: (request.bodyFields ?? [])
+      .filter((field) => field.key.trim().length > 0)
+      .map((field) => ({
+        key: applyScraperSearchTemplate(field.key, query, options),
+        value: applyScraperSearchTemplate(field.value, query, options),
+      })),
+    contentType: request.contentType,
+  };
+};
 
 export const parseSelectorExpression = (
   input: string,
@@ -317,6 +478,29 @@ const uniqueValues = (values: string[]): string[] => {
   });
 };
 
+const uniqueChapterResults = (
+  chapters: ScraperRuntimeChapterResult[],
+): ScraperRuntimeChapterResult[] => {
+  const seen = new Set<string>();
+
+  return chapters.filter((chapter) => {
+    const key = `${chapter.url}::${chapter.label}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+};
+
+const applyScraperChaptersOrder = (
+  chapters: ScraperRuntimeChapterResult[],
+  config: Pick<ScraperChaptersFeatureConfig, 'reverseOrder'>,
+): ScraperRuntimeChapterResult[] => (
+  config.reverseOrder ? [...chapters].reverse() : chapters
+);
+
 const uniqueSearchResults = (
   results: ScraperSearchResultItem[],
 ): ScraperSearchResultItem[] => {
@@ -344,8 +528,12 @@ const createStableHash = (input: string): string => {
   return (hash >>> 0).toString(16).padStart(8, '0');
 };
 
-export const createScraperMangaId = (scraperId: string, sourceUrl: string): string => (
-  `scraper-${scraperId}-${createStableHash(`${scraperId}::${sourceUrl}`)}`
+export const createScraperMangaId = (
+  scraperId: string,
+  sourceUrl: string,
+  contextKey?: string | null,
+): string => (
+  `scraper-${scraperId}-${createStableHash(`${scraperId}::${sourceUrl}::${contextKey || ''}`)}`
 );
 
 const padPageNumber = (value: number, length: number): string => String(value).padStart(length, '0');
@@ -435,24 +623,10 @@ const resolveSequentialPageUrlsFromCover = async (
   return pageUrls.length ? uniqueValues(pageUrls) : null;
 };
 
-const buildDetailsTemplateContext = (
-  details: ScraperRuntimeDetailsResult,
-): Record<string, string | undefined> => ({
-  requestedUrl: details.requestedUrl,
-  finalUrl: details.finalUrl || details.requestedUrl,
-  title: details.title,
-  cover: details.cover,
-  description: details.description,
-  authors: details.authors.length ? details.authors.join(', ') : undefined,
-  tags: details.tags.length ? details.tags.join(', ') : undefined,
-  status: details.mangaStatus,
-  ...details.derivedValues,
-});
-
 const buildTemplateContextForPage = (
-  context: Record<string, string | undefined>,
+  context: ScraperTemplateContext,
   pageIndex: number,
-): Record<string, string | undefined> => ({
+): ScraperTemplateContext => ({
   ...context,
   page: String(pageIndex + 1),
   page2: padPageNumber(pageIndex + 1, 2),
@@ -534,18 +708,23 @@ export const extractScraperSearchResultsFromDocument = (
   },
 ): ScraperSearchResultItem[] => extractScraperSearchPageFromDocument(doc, config, requestMeta).items;
 
-export const extractScraperDetailsFromDocument = (
+export type ScraperRuntimeDetailsRequestMeta = {
+  requestedUrl: string;
+  finalUrl?: string;
+  status?: number;
+  contentType?: string;
+  html?: string;
+};
+
+export type ScraperRuntimeDetailsFieldValues = Partial<Record<DetailsFieldKey, string[]>>;
+
+export const extractScraperDetailsFieldValues = (
   doc: Document,
   config: ScraperDetailsFeatureConfig,
-  requestMeta: {
-    requestedUrl: string;
-    finalUrl?: string;
-    status?: number;
-    contentType?: string;
-  },
-): ScraperRuntimeDetailsResult => {
+  requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, 'requestedUrl' | 'finalUrl'>,
+): ScraperRuntimeDetailsFieldValues => {
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
-  const fieldValuesByKey: Partial<Record<DetailsFieldKey, string[]>> = {};
+  const fieldValuesByKey: ScraperRuntimeDetailsFieldValues = {};
 
   const selectorMap: Partial<Record<DetailsFieldKey, string | undefined>> = {
     title: config.titleSelector,
@@ -569,48 +748,122 @@ export const extractScraperDetailsFromDocument = (
       : values;
   });
 
-  const derivedValues = config.derivedValues.reduce<Record<string, string>>((accumulator, derivedValue) => {
-    let sourceValues: string[] = [];
+  return fieldValuesByKey;
+};
 
-    if (derivedValue.sourceType === 'requested_url') {
-      sourceValues = requestMeta.requestedUrl ? [requestMeta.requestedUrl] : [];
-    } else if (derivedValue.sourceType === 'final_url') {
-      sourceValues = requestMeta.finalUrl
-        ? [requestMeta.finalUrl]
-        : requestMeta.requestedUrl
-          ? [requestMeta.requestedUrl]
-          : [];
-    } else if (derivedValue.sourceType === 'field') {
-      sourceValues = isDetailsFieldKey(derivedValue.sourceField)
-        ? fieldValuesByKey[derivedValue.sourceField] ?? []
+export const extractScraperDetailsDerivedValueResults = (
+  doc: Document,
+  config: ScraperDetailsFeatureConfig,
+  requestMeta: ScraperRuntimeDetailsRequestMeta,
+  fieldValuesByKey: ScraperRuntimeDetailsFieldValues,
+): ScraperDetailsDerivedValueResult[] => config.derivedValues.map((derivedValue) => {
+  const baseResult: ScraperDetailsDerivedValueResult = {
+    key: derivedValue.key,
+    sourceType: derivedValue.sourceType,
+    sourceField: derivedValue.sourceField,
+    selector: derivedValue.selector,
+    pattern: derivedValue.pattern,
+  };
+
+  let sourceValues: string[] = [];
+
+  if (derivedValue.sourceType === 'requested_url') {
+    sourceValues = requestMeta.requestedUrl ? [requestMeta.requestedUrl] : [];
+  } else if (derivedValue.sourceType === 'final_url') {
+    sourceValues = requestMeta.finalUrl
+      ? [requestMeta.finalUrl]
+      : requestMeta.requestedUrl
+        ? [requestMeta.requestedUrl]
         : [];
-    } else {
+  } else if (derivedValue.sourceType === 'field') {
+    sourceValues = isDetailsFieldKey(derivedValue.sourceField)
+      ? fieldValuesByKey[derivedValue.sourceField] ?? []
+      : [];
+  } else if (derivedValue.sourceType === 'selector') {
+    try {
       sourceValues = derivedValue.selector
         ? extractSelectorValues(doc, derivedValue.selector)
         : [];
-    }
-
-    if (!sourceValues.length) {
-      return accumulator;
-    }
-
-    const sourceSample = sourceValues[0];
-    if (!derivedValue.pattern) {
-      accumulator[derivedValue.key] = sourceSample;
-      return accumulator;
-    }
-
-    try {
-      const match = sourceSample.match(new RegExp(derivedValue.pattern));
-      if (!match) {
-        return accumulator;
-      }
-
-      accumulator[derivedValue.key] = match[1] ?? match[0];
-      return accumulator;
     } catch {
-      return accumulator;
+      return {
+        ...baseResult,
+        issueCode: 'invalid_selector',
+      };
     }
+  } else {
+    sourceValues = requestMeta.html
+      ? [requestMeta.html]
+      : doc.documentElement?.outerHTML
+        ? [doc.documentElement.outerHTML]
+        : [];
+  }
+
+  if (sourceValues.length === 0) {
+    return {
+      ...baseResult,
+      issueCode: derivedValue.sourceType === 'requested_url'
+        || derivedValue.sourceType === 'final_url'
+        || derivedValue.sourceType === 'html'
+        ? 'missing_source'
+        : 'no_match',
+    };
+  }
+
+  const sourceSample = derivedValue.sourceType === 'html' ? 'HTML brut de la page' : sourceValues[0];
+
+  if (derivedValue.sourceType === 'html' && !derivedValue.pattern) {
+    return {
+      ...baseResult,
+      sourceSample,
+      issueCode: 'invalid_pattern',
+    };
+  }
+
+  if (!derivedValue.pattern) {
+    return {
+      ...baseResult,
+      sourceSample,
+      value: sourceValues[0],
+    };
+  }
+
+  try {
+    const match = sourceValues[0].match(new RegExp(derivedValue.pattern));
+    if (!match) {
+      return {
+        ...baseResult,
+        sourceSample,
+        issueCode: 'no_match',
+      };
+    }
+
+    return {
+      ...baseResult,
+      sourceSample,
+      value: match[1] ?? match[0],
+    };
+  } catch {
+    return {
+      ...baseResult,
+      sourceSample,
+      issueCode: 'invalid_pattern',
+    };
+  }
+});
+
+export const extractScraperDetailsFromDocument = (
+  doc: Document,
+  config: ScraperDetailsFeatureConfig,
+  requestMeta: ScraperRuntimeDetailsRequestMeta,
+): ScraperRuntimeDetailsResult => {
+  const fieldValuesByKey = extractScraperDetailsFieldValues(doc, config, requestMeta);
+  const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
+  const derivedValues = derivedValueResults.reduce<Record<string, string>>((accumulator, derivedValue) => {
+    if (derivedValue.value) {
+      accumulator[derivedValue.key] = derivedValue.value;
+    }
+
+    return accumulator;
   }, {});
 
   return {
@@ -628,6 +881,145 @@ export const extractScraperDetailsFromDocument = (
   };
 };
 
+export const extractScraperChaptersFromDocument = (
+  doc: Document,
+  config: ScraperChaptersFeatureConfig,
+  requestMeta: {
+    requestedUrl: string;
+    finalUrl?: string;
+  },
+): ScraperRuntimeChapterResult[] => {
+  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const chapterRoots = config.chapterListSelector
+    ? Array.from(doc.querySelectorAll(config.chapterListSelector))
+    : [doc];
+  const chapterItems = Array.from(
+    new Set(
+      chapterRoots.flatMap((root) => Array.from(root.querySelectorAll(config.chapterItemSelector))),
+    ),
+  );
+
+  const chapters = chapterItems.reduce<ScraperRuntimeChapterResult[]>((accumulator, item, index) => {
+    const chapterUrl = extractSelectorValuesFromRoot(item, config.chapterUrlSelector)[0];
+    const chapterLabel = extractSelectorValuesFromRoot(item, config.chapterLabelSelector)[0];
+    const chapterImage = config.chapterImageSelector
+      ? extractSelectorValuesFromRoot(item, config.chapterImageSelector)[0]
+      : undefined;
+
+    if (!chapterUrl || !chapterLabel) {
+      return accumulator;
+    }
+
+    accumulator.push({
+      url: toAbsoluteScraperUrl(chapterUrl, documentUrl),
+      label: chapterLabel || `Chapitre ${index + 1}`,
+      image: chapterImage
+        ? toAbsoluteScraperUrl(chapterImage, documentUrl)
+        : undefined,
+    });
+
+    return accumulator;
+  }, []);
+
+  return uniqueChapterResults(chapters);
+};
+
+export async function resolveScraperChapters(
+  scraperBaseUrl: string,
+  detailsUrl: string,
+  config: ScraperChaptersFeatureConfig,
+  templateContext: ScraperTemplateContext,
+  fetchDocument: ScraperDocumentFetcher,
+  options?: {
+    maxChapterPages?: number;
+  },
+): Promise<ScraperResolvedChaptersResult> {
+  const maxChapterPages = Math.max(1, options?.maxChapterPages ?? 100);
+  const usesChapterPagination = config.urlStrategy === 'template'
+    && hasScraperChapterPagePlaceholder(config.urlTemplate);
+  const parser = new DOMParser();
+  let sourceResult: FetchScraperDocumentResult | null = null;
+  let chapters: ScraperRuntimeChapterResult[] = [];
+  let pagesVisited = 0;
+
+  for (let chapterPageIndex = 0; chapterPageIndex < maxChapterPages; chapterPageIndex += 1) {
+    const targetUrl = resolveScraperChaptersSourceUrl(
+      scraperBaseUrl,
+      config,
+      templateContext,
+      detailsUrl,
+      {
+        chapterPage: chapterPageIndex + 1,
+      },
+    );
+
+    const documentResult = await fetchDocument({
+      baseUrl: scraperBaseUrl,
+      targetUrl,
+    });
+    pagesVisited += 1;
+
+    if (!sourceResult) {
+      sourceResult = documentResult;
+    }
+
+    if (!documentResult.ok || !documentResult.html) {
+      if (chapterPageIndex === 0) {
+        return {
+          sourceResult: documentResult,
+          chapters: [],
+          pagesVisited,
+        };
+      }
+
+      break;
+    }
+
+    const doc = parser.parseFromString(documentResult.html, 'text/html');
+    const pageChapters = extractScraperChaptersFromDocument(doc, config, {
+      requestedUrl: documentResult.requestedUrl,
+      finalUrl: documentResult.finalUrl,
+    });
+
+    if (!pageChapters.length) {
+      if (chapterPageIndex === 0) {
+        return {
+          sourceResult: documentResult,
+          chapters: [],
+          pagesVisited,
+        };
+      }
+
+      break;
+    }
+
+    const mergedChapters = uniqueChapterResults([
+      ...chapters,
+      ...pageChapters,
+    ]);
+    const addedChapterCount = mergedChapters.length - chapters.length;
+    chapters = mergedChapters;
+
+    if (!usesChapterPagination) {
+      break;
+    }
+
+    if (chapterPageIndex > 0 && addedChapterCount === 0) {
+      break;
+    }
+  }
+
+  if (!sourceResult) {
+    throw new Error('Impossible de recuperer la source des chapitres.');
+  }
+
+  return {
+    sourceResult,
+    chapters: applyScraperChaptersOrder(chapters, config),
+    pagesVisited,
+  };
+}
+
 export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): boolean => (
   Boolean(
     details.title
@@ -644,27 +1036,48 @@ export async function resolveScraperPageUrls(
   details: ScraperRuntimeDetailsResult,
   pagesConfig: ScraperPagesFeatureConfig,
   fetchDocument: ScraperDocumentFetcher,
-  options?: { maxTemplatePages?: number },
+  options?: {
+    maxTemplatePages?: number;
+    chapter?: ScraperRuntimeChapterResult | null;
+  },
 ): Promise<string[]> {
   const maxTemplatePages = Math.max(1, options?.maxTemplatePages ?? 2000);
+  const chapter = options?.chapter ?? null;
   const detailsUrl = details.finalUrl || details.requestedUrl;
+  const usesChapterSource = usesScraperPagesChapterSource(pagesConfig);
+  const usesChapterContext = usesScraperPagesChapters(pagesConfig);
+  const usesTemplateChapterContext = usesScraperPagesTemplateChapterContext(pagesConfig);
+  const targetUrl = usesChapterSource
+    ? chapter?.url || ''
+    : detailsUrl;
+  const templateBaseUrl = resolveScraperTemplateBaseUrl(
+    scraper.baseUrl,
+    pagesConfig.templateBase,
+    usesTemplateChapterContext && chapter?.url
+      ? chapter.url
+      : detailsUrl,
+  );
 
-  if (pagesConfig.urlStrategy === 'details_page') {
+  if (usesChapterContext && !chapter?.url) {
+    throw new Error('Choisis d\'abord un chapitre pour recuperer les pages.');
+  }
+
+  if (usesScraperPagesSelectorSource(pagesConfig)) {
     if (!pagesConfig.pageImageSelector) {
-      throw new Error('Le composant Pages doit avoir un selecteur pour lire les pages depuis la fiche.');
+      throw new Error('Le composant Pages doit avoir un selecteur pour lire les pages depuis la fiche ou un chapitre.');
     }
 
     const result = await fetchDocument({
       baseUrl: scraper.baseUrl,
-      targetUrl: detailsUrl,
+      targetUrl,
     });
 
     if (!result.ok || !result.html) {
       throw new Error(
         result.error
         || (typeof result.status === 'number'
-          ? `La fiche a repondu avec le code HTTP ${result.status}.`
-          : 'Impossible de recuperer la fiche pour extraire les pages.'),
+          ? `La source des pages a repondu avec le code HTTP ${result.status}.`
+          : 'Impossible de recuperer la source des pages pour extraire les pages.'),
       );
     }
 
@@ -686,13 +1099,16 @@ export async function resolveScraperPageUrls(
     throw new Error('Le template des pages est requis pour ce mode.');
   }
 
-  const templateContext = buildDetailsTemplateContext(details);
+  const templateContext = buildScraperTemplateContextFromDetails(details, chapter);
 
   if (pagesConfig.pageImageSelector) {
     const targetUrl = buildScraperContextTemplateUrl(
       scraper.baseUrl,
       pagesConfig.urlTemplate,
       buildTemplateContextForPage(templateContext, 0),
+      {
+        relativeToUrl: templateBaseUrl,
+      },
     );
     const result = await fetchDocument({
       baseUrl: scraper.baseUrl,
@@ -727,6 +1143,9 @@ export async function resolveScraperPageUrls(
       scraper.baseUrl,
       pagesConfig.urlTemplate,
       buildTemplateContextForPage(templateContext, 0),
+      {
+        relativeToUrl: templateBaseUrl,
+      },
     );
     const result = await fetchDocument({
       baseUrl: scraper.baseUrl,
@@ -759,6 +1178,9 @@ export async function resolveScraperPageUrls(
       scraper.baseUrl,
       pagesConfig.urlTemplate,
       buildTemplateContextForPage(templateContext, pageIndex),
+      {
+        relativeToUrl: templateBaseUrl,
+      },
     );
     const result = await fetchDocument({
       baseUrl: scraper.baseUrl,

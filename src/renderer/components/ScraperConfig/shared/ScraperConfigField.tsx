@@ -1,11 +1,12 @@
 import React, { ChangeEvent } from 'react';
 import { Field } from '@/renderer/components/utils/Form/types';
+import CheckboxField from '@/renderer/components/utils/Form/fields/CheckboxField';
 import RadioField from '@/renderer/components/utils/Form/fields/RadioField';
 import TextField from '@/renderer/components/utils/Form/fields/TextField';
 
 type Props = {
   field: Field;
-  value?: string;
+  value?: string | boolean;
   error?: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
@@ -23,13 +24,19 @@ export default function ScraperConfigField({
       {field.type === 'radio' ? (
         <RadioField
           field={field}
-          value={value}
+          value={String(value ?? '')}
+          onChange={onChange}
+        />
+      ) : field.type === 'checkbox' ? (
+        <CheckboxField
+          field={field}
+          value={Boolean(value)}
           onChange={onChange}
         />
       ) : (
         <TextField
           field={field}
-          value={value}
+          value={String(value ?? '')}
           onChange={onChange}
         />
       )}

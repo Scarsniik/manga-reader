@@ -4,12 +4,12 @@ import {
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperRecord,
-  ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import {
   extractScraperSearchPageFromDocument,
   hasSearchPagePlaceholder,
+  resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
@@ -18,16 +18,19 @@ import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shar
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
+import SearchRequestSection from '@/renderer/components/ScraperConfig/search/SearchRequestSection';
 import {
   buildDocumentFailure,
   buildSearchConfig,
   buildValidationPresentation,
+  createSearchRequestFieldFormItem,
   FEATURE_STATUS_META,
   getConfigSignature,
   getInitialConfig,
   getSaveFieldErrors,
   getValidationFieldErrors,
   SCRAPING_FIELDS,
+  SearchFeatureFormState,
   TEST_QUERY_FIELD,
   URL_TEMPLATE_FIELD,
 } from '@/renderer/components/ScraperConfig/search/searchFeatureEditor.utils';
@@ -46,7 +49,7 @@ export default function ScraperSearchFeatureEditor({
   onScraperChange,
 }: Props) {
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
-  const [formValues, setFormValues] = useState<ScraperSearchFeatureConfig>(initialConfig);
+  const [formValues, setFormValues] = useState<SearchFeatureFormState>(initialConfig);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [validationResult, setValidationResult] = useState<ScraperFeatureValidationResult | null>(
     feature.validation,
@@ -56,7 +59,7 @@ export default function ScraperSearchFeatureEditor({
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewResults, setPreviewResults] = useState<ScraperSearchResultItem[]>([]);
   const [lastValidatedSignature, setLastValidatedSignature] = useState<string | null>(
-    feature.validation?.ok ? getConfigSignature(initialConfig) : null,
+    feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null,
   );
   const [validationUiError, setValidationUiError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
@@ -72,7 +75,7 @@ export default function ScraperSearchFeatureEditor({
     setPreviewVisitedPageUrls([]);
     setPreviewPageIndex(0);
     setPreviewResults([]);
-    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(initialConfig) : null);
+    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null);
     setValidationUiError(null);
     setSaveError(null);
     setSaveMessage(null);
@@ -92,6 +95,16 @@ export default function ScraperSearchFeatureEditor({
     }
   }, [currentConfig, scraper.baseUrl]);
 
+  const resolvedTestRequestConfig = useMemo(() => {
+    try {
+      return resolveScraperSearchRequestConfig(currentConfig, currentConfig.testQuery || '', {
+        pageIndex: 0,
+      });
+    } catch {
+      return null;
+    }
+  }, [currentConfig]);
+
   const validationPresentation = useMemo(
     () => (validationResult ? buildValidationPresentation(validationResult, previewResults, previewPage) : null),
     [previewPage, previewResults, validationResult],
@@ -103,12 +116,15 @@ export default function ScraperSearchFeatureEditor({
   );
 
   const fetchPreviewPage = useCallback(async (
+    query: string,
     targetUrl: string,
-    config: ScraperSearchFeatureConfig,
+    config: ReturnType<typeof buildSearchConfig>,
+    pageIndex: number,
   ): Promise<ScraperRuntimeSearchPageResult> => {
     const documentResult = await (window as any).api.fetchScraperDocument({
       baseUrl: scraper.baseUrl,
       targetUrl,
+      requestConfig: resolveScraperSearchRequestConfig(config, query, { pageIndex }),
     });
 
     const typedDocumentResult = documentResult as FetchScraperDocumentResult;
@@ -129,7 +145,7 @@ export default function ScraperSearchFeatureEditor({
     });
   }, [scraper.baseUrl]);
 
-  const handleFieldChange = useCallback((fieldName: keyof ScraperSearchFeatureConfig) => (
+  const handleFieldChange = useCallback((fieldName: Exclude<keyof SearchFeatureFormState, 'request'>) => (
     event: ChangeEvent<HTMLInputElement>,
   ) => {
     const nextValue = event.target.value;
@@ -152,9 +168,152 @@ export default function ScraperSearchFeatureEditor({
     });
   }, []);
 
+  const handleRequestMethodChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const nextMethod = event.target.value === 'POST' ? 'POST' : 'GET';
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        method: nextMethod,
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    setFieldErrors((previous) => {
+      const next = { ...previous };
+      Object.keys(next)
+        .filter((key) => key.startsWith('request.'))
+        .forEach((key) => {
+          delete next[key];
+        });
+      return next;
+    });
+  }, []);
+
+  const handleRequestBodyModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const nextBodyMode = event.target.value === 'raw' ? 'raw' : 'form';
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        bodyMode: nextBodyMode,
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    setFieldErrors((previous) => {
+      const next = { ...previous };
+      Object.keys(next)
+        .filter((key) => key.startsWith('request.'))
+        .forEach((key) => {
+          delete next[key];
+        });
+      return next;
+    });
+  }, []);
+
+  const handleAddRequestField = useCallback(() => {
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        bodyFields: [
+          ...previous.request.bodyFields,
+          createSearchRequestFieldFormItem(),
+        ],
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+  }, []);
+
+  const handleRemoveRequestField = useCallback((draftId: string) => {
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        bodyFields: previous.request.bodyFields.filter((field) => field.draftId !== draftId),
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    setFieldErrors((previous) => {
+      const next = { ...previous };
+      Object.keys(next)
+        .filter((key) => key.startsWith(`request.bodyFields.${draftId}.`))
+        .forEach((key) => {
+          delete next[key];
+        });
+      return next;
+    });
+  }, []);
+
+  const handleUpdateRequestField = useCallback((
+    draftId: string,
+    fieldName: 'key' | 'value',
+    nextValue: string,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        bodyFields: previous.request.bodyFields.map((field) => (
+          field.draftId === draftId
+            ? {
+              ...field,
+              [fieldName]: nextValue,
+            }
+            : field
+        )),
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    setFieldErrors((previous) => {
+      const next = { ...previous };
+      delete next[`request.bodyFields.${draftId}.${fieldName}`];
+      return next;
+    });
+  }, []);
+
+  const handleRequestBodyChange = useCallback((nextValue: string) => {
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        body: nextValue,
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+  }, []);
+
+  const handleRequestContentTypeChange = useCallback((nextValue: string) => {
+    setFormValues((previous) => ({
+      ...previous,
+      request: {
+        ...previous.request,
+        contentType: nextValue,
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+  }, []);
+
   const handleValidate = useCallback(async () => {
     const config = buildSearchConfig(formValues);
-    const errors = getValidationFieldErrors(config);
+    const errors = getValidationFieldErrors(formValues, config);
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -186,6 +345,9 @@ export default function ScraperSearchFeatureEditor({
       const documentResult = await (window as any).api.fetchScraperDocument({
         baseUrl: scraper.baseUrl,
         targetUrl,
+        requestConfig: resolveScraperSearchRequestConfig(config, config.testQuery || '', {
+          pageIndex: 0,
+        }),
       });
 
       const typedDocumentResult = documentResult as FetchScraperDocumentResult;
@@ -301,9 +463,10 @@ export default function ScraperSearchFeatureEditor({
       return;
     }
 
+    const nextPageIndex = previewPageIndex + 1;
     const nextTargetUrl = usesTemplatePaging
       ? resolveScraperSearchTargetUrl(scraper.baseUrl, config, config.testQuery || '', {
-        pageIndex: previewPageIndex + 1,
+        pageIndex: nextPageIndex,
       })
       : previewPage.nextPageUrl;
 
@@ -315,7 +478,7 @@ export default function ScraperSearchFeatureEditor({
     setValidationUiError(null);
 
     try {
-      const nextPage = await fetchPreviewPage(nextTargetUrl, config);
+      const nextPage = await fetchPreviewPage(config.testQuery || '', nextTargetUrl, config, nextPageIndex);
       if (!nextPage.items.length) {
         setValidationUiError('Aucun resultat exploitable n\'a ete trouve sur la page suivante.');
         return;
@@ -327,7 +490,7 @@ export default function ScraperSearchFeatureEditor({
         const trimmedHistory = previous.slice(0, previewPageIndex + 1);
         return [...trimmedHistory, nextPage.currentPageUrl];
       });
-      setPreviewPageIndex((previous) => previous + 1);
+      setPreviewPageIndex(nextPageIndex);
     } catch (error) {
       setValidationUiError(error instanceof Error ? error.message : 'Impossible de charger la page suivante.');
     } finally {
@@ -350,7 +513,12 @@ export default function ScraperSearchFeatureEditor({
     setValidationUiError(null);
 
     try {
-      const previousPage = await fetchPreviewPage(previousTargetUrl, config);
+      const previousPage = await fetchPreviewPage(
+        config.testQuery || '',
+        previousTargetUrl,
+        config,
+        previewPageIndex - 1,
+      );
       setPreviewPage(previousPage);
       setPreviewResults(previousPage.items);
       setPreviewPageIndex((previous) => Math.max(0, previous - 1));
@@ -368,7 +536,7 @@ export default function ScraperSearchFeatureEditor({
 
   const handleSave = useCallback(async () => {
     const config = buildSearchConfig(formValues);
-    const errors = getSaveFieldErrors(config);
+    const errors = getSaveFieldErrors(formValues, config);
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -458,6 +626,30 @@ export default function ScraperSearchFeatureEditor({
 
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
+            <h4>Requete HTTP</h4>
+            <p>
+              Choisis si la recherche doit etre envoyee en `GET` ou en `POST`, puis configure le
+              body si le site attend un formulaire ou une charge utile specifique.
+            </p>
+          </div>
+
+          <SearchRequestSection
+            request={formValues.request}
+            fieldErrors={fieldErrors}
+            validating={validating}
+            saving={saving}
+            onMethodChange={handleRequestMethodChange}
+            onBodyModeChange={handleRequestBodyModeChange}
+            onBodyChange={handleRequestBodyChange}
+            onContentTypeChange={handleRequestContentTypeChange}
+            onAddField={handleAddRequestField}
+            onRemoveField={handleRemoveRequestField}
+            onUpdateField={handleUpdateRequestField}
+          />
+        </div>
+
+        <div className="scraper-config-section">
+          <div className="scraper-config-section__header">
             <h4>Scraping</h4>
             <p>
               Definis les selecteurs a utiliser pour parcourir les cartes de resultats et extraire
@@ -477,9 +669,9 @@ export default function ScraperSearchFeatureEditor({
               <ScraperConfigField
                 key={field.name}
                 field={field}
-                value={formValues[field.name as keyof ScraperSearchFeatureConfig] ?? ''}
+                value={formValues[field.name as Exclude<keyof SearchFeatureFormState, 'request'>] ?? ''}
                 error={fieldErrors[field.name]}
-                onChange={handleFieldChange(field.name as keyof ScraperSearchFeatureConfig)}
+                onChange={handleFieldChange(field.name as Exclude<keyof SearchFeatureFormState, 'request'>)}
               />
             ))}
           </div>
@@ -504,6 +696,28 @@ export default function ScraperSearchFeatureEditor({
             <span>URL de test resolue</span>
             <strong>{resolvedTestUrl || 'Complete le template pour voir l\'apercu. La requete de test est optionnelle.'}</strong>
           </div>
+
+          {resolvedTestRequestConfig?.method === 'POST' ? (
+            <div className="scraper-config-preview">
+              <span>Requete de test resolue</span>
+              <strong>
+                {resolvedTestRequestConfig.bodyMode === 'raw'
+                  ? resolvedTestRequestConfig.contentType
+                    ? `POST (${resolvedTestRequestConfig.contentType})`
+                    : 'POST'
+                  : `POST formulaire avec ${(resolvedTestRequestConfig.bodyFields ?? []).length} champ(s)`}
+              </strong>
+              {resolvedTestRequestConfig.bodyMode === 'raw' ? (
+                <code>{resolvedTestRequestConfig.body || '(body vide)'}</code>
+              ) : (
+                <code>
+                  {(resolvedTestRequestConfig.bodyFields ?? [])
+                    .map((field) => `${field.key}=${field.value}`)
+                    .join('&') || '(aucun champ)'}
+                </code>
+              )}
+            </div>
+          ) : null}
 
           <div className="scraper-config-step__actions">
             <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>

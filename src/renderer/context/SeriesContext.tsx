@@ -29,6 +29,17 @@ export const SeriesProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const handleSeriesUpdated = () => {
+      void load();
+    };
+
+    window.addEventListener('series-updated', handleSeriesUpdated);
+    return () => {
+      window.removeEventListener('series-updated', handleSeriesUpdated);
+    };
+  }, [load]);
+
   const refresh = async () => load();
 
   const addSeries = async (s: Omit<Series, 'id'>) => {
