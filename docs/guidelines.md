@@ -5,7 +5,7 @@
 - le code se fait en anglais (commentaire inclus)
 - les noms de variables et de fonctions doivent être explicites
 - les fonctions doivent être courtes
-- eviter au maximum les enormes fichiers
+- eviter au maximum les enormes fichiers. D'une manière générale, un fichier de plus de 400 lignes est mauvais signe. Sauf cas exceptionnel il ne faut pas en arriver là.
 
 ## React
 
