@@ -278,16 +278,31 @@ export async function writeJsonFileAtomically(targetPath: string, tempPath: stri
     }
   }
 
+  // On Windows, replacing an existing JSON file can fail transiently if another
+  // part of the app is polling the file at the same time. Retry the direct write
+  // fallback as well instead of failing the whole OCR job on the first collision.
   try {
-    await fs.writeFile(targetPath, content, "utf-8");
-    try {
-      await fs.unlink(tempPath);
-    } catch {
-      // ignore temp cleanup failures
+    for (let attempt = 0; attempt <= WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        await fs.writeFile(targetPath, content, "utf-8");
+        try {
+          await fs.unlink(tempPath);
+        } catch {
+          // ignore temp cleanup failures
+        }
+        return;
+      } catch (fallbackError: any) {
+        lastError = fallbackError;
+        const code = String(fallbackError?.code || "");
+        if (!WINDOWS_TRANSIENT_FS_ERROR_CODES.has(code) || attempt >= WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS.length) {
+          break;
+        }
+
+        await delay(WINDOWS_ATOMIC_WRITE_RETRY_DELAYS_MS[attempt]);
+      }
     }
-    return;
-  } catch (fallbackError: any) {
-    lastError = fallbackError;
+  } catch {
+    // ignore: lastError already captured above
   }
 
   try {

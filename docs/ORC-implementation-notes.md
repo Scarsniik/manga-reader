@@ -360,3 +360,27 @@ Si l'auto-detection ne fonctionne pas :
 3. ajouter prefetch et pre-rendu optionnel
 4. stabiliser la configuration utilisateur
 5. seulement ensuite, travailler le vrai mode tout-en-un embarque
+
+## Notes packaging Windows 2026-04-06
+
+Pour les builds Windows packagés, le worker OCR :
+
+- privilegie maintenant le Python embarque dans `ocr-bundle` quand l'application est packagée
+- evite de melanger par defaut le bundle OCR avec un `ocrPythonPath` configure pour le dev
+- evite maintenant de lancer `ocr_worker.py` depuis `app.asar` :
+  - Electron peut resoudre ce chemin cote Node
+  - mais le Python externe embarque ne peut pas ouvrir un script a l'interieur de l'archive `app.asar`
+  - le worker doit donc utiliser le script situe dans `resources\\ocr-bundle\\scripts\\ocr_worker.py` ou `app.asar.unpacked`
+- le flux `full_manga` avec ecrasement est plus tolerant aux collisions de fichier Windows :
+  - le modal OCR relit regulierement le fichier `.manga-helper.ocr.json` pendant le job
+  - le fallback d'ecriture directe retente maintenant plusieurs fois avant d'abandonner
+  - cela evite qu'un conflit transitoire `EPERM` / `EACCES` fasse echouer tout le job OCR
+- le script `prepare-ocr-bundle.ps1` charge maintenant aussi le fichier `.env` a la racine du projet pour les variables `MANGA_HELPER_*`
+- `MANGA_HELPER_DISABLE_OCR_BUNDLE_CACHE=1` dans `.env` desactive le cache `--skip-if-fresh` pendant `prepare:ocr-bundle` et `package:win-unpacked`
+
+Notes de build ajoutees le 2026-04-07 :
+
+- un ancien artefact compile `dist\\handlers\\ocr.js` pouvait survivre a un refactor de `src\\electron\\handlers\\ocr.ts` vers le dossier `src\\electron\\handlers\\ocr\\`
+- dans ce cas, `require('./handlers/ocr')` chargeait encore ce vieux fichier avant `dist\\handlers\\ocr\\index.js`
+- le build Electron nettoie maintenant `dist` hors `dist\\renderer` avant `tsc`
+- les imports Electron pointent explicitement vers `./handlers/ocr/index` pour eviter toute ambiguite de resolution

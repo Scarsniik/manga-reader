@@ -9,6 +9,79 @@ $outputRoot = Join-Path $workspace 'build-resources\ocr-bundle'
 $workerScript = Join-Path $workspace 'scripts\ocr_worker.py'
 $prepareScript = Join-Path $workspace 'scripts\prepare_ocr_bundle.py'
 $paramsPath = Join-Path $env:APPDATA 'manga-helper\data\params.json'
+$dotEnvPath = Join-Path $workspace '.env'
+
+function Import-DotEnvFile {
+    param(
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return 0
+    }
+
+    $loadedCount = 0
+
+    foreach ($rawLine in Get-Content -LiteralPath $Path) {
+        $line = $rawLine.Trim()
+        if (-not $line -or $line.StartsWith('#')) {
+            continue
+        }
+
+        if ($line.StartsWith('export ')) {
+            $line = $line.Substring(7).TrimStart()
+        }
+
+        $separatorIndex = $line.IndexOf('=')
+        if ($separatorIndex -lt 1) {
+            continue
+        }
+
+        $name = $line.Substring(0, $separatorIndex).Trim()
+        if (-not $name) {
+            continue
+        }
+
+        $existingValue = [Environment]::GetEnvironmentVariable($name)
+        if ($null -ne $existingValue) {
+            continue
+        }
+
+        $value = $line.Substring($separatorIndex + 1)
+        if ($value.Length -ge 2) {
+            $hasDoubleQuotes = $value.StartsWith('"') -and $value.EndsWith('"')
+            $hasSingleQuotes = $value.StartsWith("'") -and $value.EndsWith("'")
+            if ($hasDoubleQuotes -or $hasSingleQuotes) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+        }
+
+        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+        $loadedCount += 1
+    }
+
+    return $loadedCount
+}
+
+function Test-TruthyEnvVar {
+    param(
+        [string]$Name
+    )
+
+    $envValue = [Environment]::GetEnvironmentVariable($Name)
+    $rawValue = if ($null -eq $envValue) { '' } else { [string]$envValue }
+    if (-not $rawValue) {
+        return $false
+    }
+
+    switch ($rawValue.Trim().ToLowerInvariant()) {
+        '1' { return $true }
+        'true' { return $true }
+        'yes' { return $true }
+        'on' { return $true }
+        default { return $false }
+    }
+}
 
 function Resolve-OcrPythonPath {
     if ($env:MANGA_HELPER_OCR_PYTHON -and (Test-Path -LiteralPath $env:MANGA_HELPER_OCR_PYTHON)) {
@@ -64,6 +137,8 @@ function Resolve-RepoRoot {
     return $null
 }
 
+$loadedDotEnvCount = Import-DotEnvFile -Path $dotEnvPath
+
 $pythonPath = Resolve-OcrPythonPath
 $repoRoot = Resolve-RepoRoot
 $hfModelRoot = if ($env:MANGA_HELPER_OCR_HF_MODEL_ROOT) {
@@ -76,6 +151,7 @@ $mokuroCacheRoot = if ($env:MANGA_HELPER_OCR_MOKURO_CACHE_ROOT) {
 } else {
     Join-Path $env:USERPROFILE '.cache\manga-ocr'
 }
+$disableBundleCache = $ForceRebuild -or (Test-TruthyEnvVar -Name 'MANGA_HELPER_DISABLE_OCR_BUNDLE_CACHE')
 
 $args = @(
     $prepareScript,
@@ -87,7 +163,7 @@ $args = @(
     '--clean'
 )
 
-if (-not $ForceRebuild) {
+if (-not $disableBundleCache) {
     $args += '--skip-if-fresh'
 }
 
@@ -96,9 +172,13 @@ if ($repoRoot) {
 }
 
 Write-Host "Preparation du bundle OCR..."
+if ($loadedDotEnvCount -gt 0) {
+    Write-Host "Variables .env chargees : $loadedDotEnvCount"
+}
 Write-Host "Python OCR : $pythonPath"
 Write-Host "Modele manga-ocr : $hfModelRoot"
 Write-Host "Cache mokuro : $mokuroCacheRoot"
+Write-Host "Cache bundle OCR : $(if ($disableBundleCache) { 'disabled' } else { 'enabled' })"
 if ($repoRoot) {
     Write-Host "Repo OCR source : $repoRoot"
 }

@@ -350,6 +350,11 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
   }, [copyTextToClipboard, manga.id, vocabularyData]);
 
   const progressLabel = useMemo(() => {
+    const activeJob = status?.activeJob;
+    if (activeJob && ['queued', 'detecting_language', 'running', 'paused'].includes(activeJob.status)) {
+      return `${activeJob.completedPages || 0}/${activeJob.totalPages || 0}`;
+    }
+
     if (!status?.progress) {
       return '0/0';
     }

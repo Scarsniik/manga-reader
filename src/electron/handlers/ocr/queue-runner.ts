@@ -58,6 +58,22 @@ async function processQueueJob(job: OcrQueueJob) {
   let workingProfile = createEmptyMangaOcrProfileFile(job, manga, pageFiles.length);
   syncMangaOcrProfileSession(workingProfile, job, pageFiles.length);
 
+  if (job.overwrite) {
+    workingFile = {
+      ...workingFile,
+      pages: {},
+      progress: {
+        ...workingFile.progress,
+        totalPages: pageFiles.length,
+        completedPages: 0,
+        failedPages: 0,
+        lastProcessedPage: undefined,
+        mode: job.mode,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
   let ocrFileDirty = true;
   let profileFileDirty = true;
   let dirtyPageCount = 0;
@@ -88,7 +104,9 @@ async function processQueueJob(job: OcrQueueJob) {
     return true;
   };
 
-  await flushWorkingState(true);
+  if (!job.overwrite) {
+    await flushWorkingState(true);
+  }
   touchQueueJob(job, {
     completedPages: Number(workingFile.progress.completedPages || 0),
     failedPages: Number(workingFile.progress.failedPages || 0),

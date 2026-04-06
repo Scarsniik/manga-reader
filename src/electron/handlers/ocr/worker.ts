@@ -4,7 +4,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import readline from "readline";
 import { app } from "electron";
-import { dataDir, getImageSize } from "../../utils";
+import { getImageSize } from "../../utils";
 import {
   WORKER_BOOT_TIMEOUT_MS,
   WORKER_PREWARM_TIMEOUT_MS,
@@ -101,11 +101,71 @@ async function resolveBundledOcrAssets(): Promise<BundledOcrAssets | null> {
 }
 
 async function resolveWorkerScriptPath(bundledAssets?: BundledOcrAssets | null) {
-  return findExistingPath([
-    path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
-    path.join(process.cwd(), "scripts", "ocr_worker.py"),
-    bundledAssets?.workerScriptPath || "",
-  ]);
+  const candidates = app.isPackaged
+    ? [
+      bundledAssets?.workerScriptPath || "",
+      process.resourcesPath ? path.join(process.resourcesPath, "app.asar.unpacked", "scripts", "ocr_worker.py") : "",
+      path.join(process.cwd(), "scripts", "ocr_worker.py"),
+      path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
+    ]
+    : [
+      path.join(app.getAppPath(), "scripts", "ocr_worker.py"),
+      path.join(process.cwd(), "scripts", "ocr_worker.py"),
+      bundledAssets?.workerScriptPath || "",
+    ];
+
+  const filteredCandidates = candidates.filter((candidate) => {
+    if (!candidate) {
+      return false;
+    }
+
+    return !/\.asar([\\/]|$)/i.test(candidate);
+  });
+
+  return findExistingPath(filteredCandidates);
+}
+
+function normalizeComparablePath(target?: string | null) {
+  if (!target) {
+    return "";
+  }
+
+  try {
+    return path.resolve(target).replace(/\//g, "\\").toLowerCase();
+  } catch {
+    return String(target).replace(/\//g, "\\").toLowerCase();
+  }
+}
+
+function resolvePythonRuntime(settings: any, bundledAssets?: BundledOcrAssets | null) {
+  const candidates = app.isPackaged
+    ? [
+      { value: process.env.MANGA_HELPER_PYTHON },
+      { value: bundledAssets?.pythonExecutable },
+      { value: settings?.ocrPythonPath },
+      { value: process.env.PYTHON },
+      { value: "python" },
+    ]
+    : [
+      { value: settings?.ocrPythonPath },
+      { value: process.env.MANGA_HELPER_PYTHON },
+      { value: bundledAssets?.pythonExecutable },
+      { value: process.env.PYTHON },
+      { value: "python" },
+    ];
+
+  const selected = candidates.find((candidate) => typeof candidate.value === "string" && candidate.value.trim().length > 0)
+    || { value: "python" };
+  const pythonExecutable = String(selected.value).trim();
+  const usesBundledEnvironment = (
+    !!bundledAssets?.pythonExecutable
+    && normalizeComparablePath(pythonExecutable) === normalizeComparablePath(bundledAssets.pythonExecutable)
+  );
+
+  return {
+    pythonExecutable,
+    usesBundledEnvironment,
+  };
 }
 
 function buildCandidateRoots(settings: any, bundledAssets?: BundledOcrAssets | null): string[] {
@@ -132,7 +192,11 @@ function buildCandidateRoots(settings: any, bundledAssets?: BundledOcrAssets | n
   return uniqueStrings(roots);
 }
 
-async function buildWorkerEnvironment(settings: any, bundledAssets?: BundledOcrAssets | null) {
+async function buildWorkerEnvironment(
+  settings: any,
+  runtime: ReturnType<typeof resolvePythonRuntime>,
+  bundledAssets?: BundledOcrAssets | null,
+) {
   const candidateRoots = buildCandidateRoots(settings, bundledAssets);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -142,11 +206,11 @@ async function buildWorkerEnvironment(settings: any, bundledAssets?: BundledOcrA
     MANGA_HELPER_OCR_FORCE_CPU: settings?.ocrForceCpu ? "1" : "0",
   };
 
-  if (bundledAssets?.pythonHome) {
+  if (runtime.usesBundledEnvironment && bundledAssets?.pythonHome) {
     env.PYTHONHOME = bundledAssets.pythonHome;
     env.PYTHONNOUSERSITE = "1";
     env.PYTHONDONTWRITEBYTECODE = "1";
-    env.PYTHONPYCACHEPREFIX = path.join(dataDir, "python-cache");
+    env.PYTHONPYCACHEPREFIX = path.join(app.getPath("userData"), "data", "python-cache");
 
     const pythonPathEntries = uniqueStrings([
       bundledAssets.pythonLib || "",
@@ -271,17 +335,12 @@ export async function ensureWorker(settings: any): Promise<OcrWorkerState> {
     throw new Error("OCR worker script not found. Expected scripts/ocr_worker.py or a packaged ocr-bundle.");
   }
 
-  const pythonExecutable = String(
-    settings?.ocrPythonPath
-    || process.env.MANGA_HELPER_PYTHON
-    || bundledAssets?.pythonExecutable
-    || process.env.PYTHON
-    || "python",
-  );
+  const runtime = resolvePythonRuntime(settings, bundledAssets);
+  const cwd = bundledAssets?.root || path.dirname(scriptPath);
 
-  const proc = spawn(pythonExecutable, ["-u", scriptPath], {
-    cwd: bundledAssets?.root || path.dirname(scriptPath),
-    env: await buildWorkerEnvironment(settings, bundledAssets),
+  const proc = spawn(runtime.pythonExecutable, ["-u", scriptPath], {
+    cwd,
+    env: await buildWorkerEnvironment(settings, runtime, bundledAssets),
     stdio: ["pipe", "pipe", "pipe"],
   });
 
@@ -297,6 +356,12 @@ export async function ensureWorker(settings: any): Promise<OcrWorkerState> {
   const ping = await sendWorkerRequest(nextState, { type: "ping" }, WORKER_BOOT_TIMEOUT_MS);
   if (!ping.ok) {
     const details = ping.error || "Unknown OCR worker boot failure";
+    try {
+      proc.kill();
+    } catch {
+      // ignore shutdown failures during bootstrap
+    }
+    ocrRuntimeState.workerState = null;
     throw new Error(details);
   }
 

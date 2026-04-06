@@ -7,7 +7,7 @@ import * as params from "./handlers/params";
 import * as links from "./handlers/links";
 import * as pages from "./handlers/pages";
 import * as clipboardHandlers from "./handlers/clipboard";
-import * as ocr from "./handlers/ocr";
+import * as ocr from "./handlers/ocr/index";
 import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
 import * as series from "./handlers/series";

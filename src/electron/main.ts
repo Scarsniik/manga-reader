@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { prewarmOcrEngine } from './handlers/ocr';
+import { prewarmOcrEngine } from './handlers/ocr/index';
 
 // Ensure IPC handlers (links, mangas, count-pages...) are registered
 import './ipc';
