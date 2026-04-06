@@ -97,6 +97,15 @@ const buildQueryPlaceholder = (
   return 'Exemple : URL complete, chemin relatif ou slug';
 };
 
+const isScraperRuntimeChapterResult = (value: unknown): value is ScraperRuntimeChapterResult => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<ScraperRuntimeChapterResult>;
+  return typeof candidate.url === 'string' && typeof candidate.label === 'string';
+};
+
 export default function ScraperBrowser({ scraper, initialState = null }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1102,6 +1111,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const handleDownload = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
     const queueDownloadApi = (window as any).api?.queueScraperDownload
       || (window as any).api?.downloadScraperManga;
+    const normalizedChapter = isScraperRuntimeChapterResult(chapter) ? chapter : undefined;
 
     if (typeof queueDownloadApi !== 'function') {
       setDownloadError('Le telechargement du scrapper n\'est pas disponible dans cette version.');
@@ -1113,9 +1123,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage(null);
 
     try {
-      const pageUrls = await resolveCurrentPageUrls(chapter);
-      const downloadTitle = chapter?.label
-        ? `${detailsResult?.title || query.trim() || 'manga'} - ${chapter.label}`
+      const pageUrls = await resolveCurrentPageUrls(normalizedChapter);
+      const downloadTitle = normalizedChapter?.label
+        ? `${detailsResult?.title || query.trim() || 'manga'} - ${normalizedChapter.label}`
         : detailsResult?.title || query.trim() || 'manga';
 
       const queueResult = await queueDownloadApi({
@@ -1129,13 +1139,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         defaultLanguage: scraper.globalConfig.defaultLanguage,
         autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
         seriesTitle: detailsResult?.title || query.trim() || 'manga',
-        chapterLabel: chapter?.label,
-        thumbnailUrl: chapter
-          ? (detailsResult?.cover || chapter.image)
+        chapterLabel: normalizedChapter?.label,
+        thumbnailUrl: normalizedChapter
+          ? (detailsResult?.cover || normalizedChapter.image)
           : undefined,
       });
       const activeJobs = Number(queueResult?.status?.counts?.active || 0);
-      const isChapterDownload = Boolean(chapter?.label);
+      const isChapterDownload = Boolean(normalizedChapter?.label);
       const statusLabel = queueResult?.job?.status === 'running'
         ? 'demarre'
         : 'a ete ajoute a la file';
@@ -1158,6 +1168,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return;
     }
 
+    const normalizedChapter = isScraperRuntimeChapterResult(chapter) ? chapter : undefined;
+
     if (!pagesConfig) {
       setRuntimeError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
       return;
@@ -1169,12 +1181,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage(null);
 
     try {
-      const pageUrls = await resolveCurrentPageUrls(chapter);
+      const pageUrls = await resolveCurrentPageUrls(normalizedChapter);
       const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
       const readerMangaId = createScraperMangaId(
         scraper.id,
         sourceUrl,
-        usesChaptersForPages ? chapter?.url : null,
+        usesChaptersForPages ? normalizedChapter?.url : null,
       );
       const savedProgress = (window as any).api && typeof (window as any).api.getScraperReaderProgress === 'function'
         ? await (window as any).api.getScraperReaderProgress(readerMangaId)
@@ -1202,14 +1214,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
             scraperReader: {
               id: readerMangaId,
               scraperId: scraper.id,
-              title: detailsResult.title || query.trim() || 'manga',
-              sourceUrl,
-              cover: detailsResult.cover,
-              pageUrls,
-              chapter,
-              bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+                title: detailsResult.title || query.trim() || 'manga',
+                sourceUrl,
+                cover: detailsResult.cover,
+                pageUrls,
+                chapter: normalizedChapter,
+                bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+              },
             },
-          },
         },
       );
     } catch (error) {

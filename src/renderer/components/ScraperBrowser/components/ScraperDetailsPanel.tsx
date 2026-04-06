@@ -85,7 +85,7 @@ export default function ScraperDetailsPanel({
                 <button
                   type="button"
                   className="scraper-browser__read"
-                  onClick={onOpenReader}
+                  onClick={() => onOpenReader()}
                   disabled={openingReader}
                 >
                   {openingReader ? 'Ouverture...' : 'Lecteur'}
@@ -95,7 +95,7 @@ export default function ScraperDetailsPanel({
                 <button
                   type="button"
                   className="scraper-browser__download"
-                  onClick={onDownload}
+                  onClick={() => onDownload()}
                   disabled={downloading}
                 >
                   {downloading ? 'Telechargement...' : 'Telecharger'}
