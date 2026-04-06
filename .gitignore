@@ -74,5 +74,7 @@ tsc_full.log
 build/*.exe
 build-resources/
 
+.VSCodeCounter/
+
 # NOTE: files already tracked by git will not be removed from the index automatically.
 # To stop tracking an already committed file, run: git rm --cached <file> and commit.
