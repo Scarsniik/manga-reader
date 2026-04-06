@@ -381,6 +381,7 @@ Comportement actuel :
 - telechargement dans la bibliotheque definie dans les parametres
 - creation d'un dossier avec le titre du manga
 - ajout du dossier a la bibliotheque locale
+- pour un telechargement lance depuis un chapitre, la couverture locale priorise l'image de `Fiche`, puis fallback sur l'image du chapitre si la fiche n'a pas de couverture
 
 Limites volontaires :
 

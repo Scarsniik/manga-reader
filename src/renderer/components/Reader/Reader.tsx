@@ -2,17 +2,23 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './style.scss';
 import { Manga } from '@/renderer/types';
-import { ScraperBookmarkMetadataField, ScraperReaderProgressRecord } from '@/shared/scraper';
+import { ScraperBookmarkMetadataField, ScraperReaderProgressRecord, ScraperRecord } from '@/shared/scraper';
 import {
+    createScraperMangaId,
+    getScraperFeature,
+    getScraperPagesFeatureConfig,
+    resolveScraperPageUrls,
     ScraperRuntimeChapterResult,
     ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
 import ReaderHeader from './ReaderHeader';
+import ReaderChapterTransition from './ReaderChapterTransition';
 import ImageViewer from './ImageViewer';
 import OcrPanel from './OcrPanel';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
 import useParams from '@/renderer/hooks/useParams';
+import { findNextSeriesManga, findPreviousSeriesManga } from '@/renderer/utils/seriesChapters';
 
 type ReaderLocationState = {
     from?: {
@@ -36,6 +42,7 @@ type ReaderLocationState = {
         pageUrls: string[];
         chapter?: ScraperRuntimeChapterResult;
         bookmarkExcludedFields?: ScraperBookmarkMetadataField[];
+        ignoreSavedProgress?: boolean;
     };
 } | null;
 
@@ -69,6 +76,17 @@ type OcrDirectionalCandidateMetrics = {
     primaryDistance: number;
     secondaryDistance: number;
     secondaryOverlap: number;
+};
+
+type ReaderAdjacentTarget = {
+    kind: 'library' | 'scraper';
+    title: string;
+    chapterLabel?: string | null;
+    cover?: string | null;
+    adjacentManga?: Manga;
+    adjacentChapter?: ScraperRuntimeChapterResult;
+    detailsResult?: ScraperRuntimeDetailsResult;
+    scraperId?: string;
 };
 
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
@@ -402,6 +420,48 @@ const getOcrSourceLabel = (source?: string | null) => (
                 : 'calcul backend'
 );
 
+const normalizeReaderAssetSrc = (value?: string | null): string | null => {
+    const src = String(value ?? '').trim();
+    if (!src) {
+        return null;
+    }
+
+    if (
+        src.startsWith('http://')
+        || src.startsWith('https://')
+        || src.startsWith('data:')
+        || src.startsWith('blob:')
+        || src.startsWith('local://')
+    ) {
+        return src;
+    }
+
+    if (src.startsWith('file://')) {
+        return src.replace(/^file:\/\//, 'local://');
+    }
+
+    if (src.match(/^[A-Za-z]:\\/)) {
+        return `local:///${src.replace(/\\/g, '/')}`;
+    }
+
+    if (src.startsWith('/')) {
+        return `local://${src}`;
+    }
+
+    return `local://${src.replace(/\\/g, '/')}`;
+};
+
+const isSameScraperChapter = (
+    left?: ScraperRuntimeChapterResult | null,
+    right?: ScraperRuntimeChapterResult | null,
+): boolean => {
+    if (!left || !right) {
+        return false;
+    }
+
+    return left.url === right.url || left.label === right.label;
+};
+
 const getOcrBoxCenter = (box: ReaderOcrBox) => ({
     x: box.bbox.x + (box.bbox.w / 2),
     y: box.bbox.y + (box.bbox.h / 2),
@@ -561,7 +621,9 @@ const findDirectionalOcrBox = (
     return bestCandidate;
 };
 
-const isScraperReaderManga = (manga: Manga | null): boolean => manga?.sourceKind === 'scraper';
+const isScraperReaderManga = (manga: Manga | null): boolean => (
+    manga?.sourceKind === 'scraper' && !manga?.path
+);
 
 // We'll read location once and derive query params from it
 
@@ -569,6 +631,7 @@ const Reader: React.FC = () => {
     const [images, setImages] = useState<string[]>([]);
     const [currentIndex, setCurrentIndex] = useState<number>(0);
     const [manga, setManga] = useState<Manga | null>(null);
+    const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
     const [bookmarkExcludedFields, setBookmarkExcludedFields] = useState<ScraperBookmarkMetadataField[]>([]);
     const [ocrEnabled, setOcrEnabled] = useState<boolean>(false);
     const [copyFeedback, setCopyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -585,6 +648,9 @@ const Reader: React.FC = () => {
     });
     const [manualSelectionEnabled, setManualSelectionEnabled] = useState<boolean>(false);
     const [manualSelectionLoading, setManualSelectionLoading] = useState<boolean>(false);
+    const [transitionDirection, setTransitionDirection] = useState<'previous' | 'next' | null>(null);
+    const [continuationLoading, setContinuationLoading] = useState<boolean>(false);
+    const [continuationError, setContinuationError] = useState<string | null>(null);
     const imgRef = useRef<HTMLImageElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = useRef<boolean>(false);
@@ -604,6 +670,109 @@ const Reader: React.FC = () => {
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
     const allOcrBoxes = [...detectedBoxes, ...manualBoxes];
     const ocrAvailable = !isScraperReaderManga(manga);
+    const previousLocalManga = React.useMemo(
+        () => (manga?.path ? findPreviousSeriesManga(manga, libraryMangas) : null),
+        [libraryMangas, manga],
+    );
+    const nextLocalManga = React.useMemo(
+        () => (manga?.path ? findNextSeriesManga(manga, libraryMangas) : null),
+        [libraryMangas, manga],
+    );
+    const previousTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
+        if (manga?.path && previousLocalManga) {
+            return {
+                kind: 'library',
+                title: previousLocalManga.title,
+                chapterLabel: previousLocalManga.chapters,
+                cover: previousLocalManga.thumbnailPath || null,
+                adjacentManga: previousLocalManga,
+            };
+        }
+
+        const scraperReaderState = locationState?.scraperReader;
+        const scraperBrowserReturn = locationState?.scraperBrowserReturn;
+        const currentChapter = scraperReaderState?.chapter;
+        const chaptersResult = scraperBrowserReturn?.chaptersResult;
+
+        if (!scraperReaderState || !scraperBrowserReturn || !currentChapter || !Array.isArray(chaptersResult) || chaptersResult.length === 0) {
+            return null;
+        }
+
+        const currentChapterIndex = chaptersResult.findIndex((chapter) => isSameScraperChapter(chapter, currentChapter));
+        if (currentChapterIndex <= 0) {
+            return null;
+        }
+
+        const previousChapter = chaptersResult[currentChapterIndex - 1];
+        if (!previousChapter) {
+            return null;
+        }
+
+        return {
+            kind: 'scraper',
+            title: scraperBrowserReturn.detailsResult.title || scraperReaderState.title || manga?.title || 'manga',
+            chapterLabel: previousChapter.label,
+            cover: previousChapter.image || scraperBrowserReturn.detailsResult.cover || scraperReaderState.cover || manga?.thumbnailPath || null,
+            adjacentChapter: previousChapter,
+            detailsResult: scraperBrowserReturn.detailsResult,
+            scraperId: scraperReaderState.scraperId,
+        };
+    }, [libraryMangas, locationState, manga, previousLocalManga]);
+    const nextTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
+        if (manga?.path && nextLocalManga) {
+            return {
+                kind: 'library',
+                title: nextLocalManga.title,
+                chapterLabel: nextLocalManga.chapters,
+                cover: nextLocalManga.thumbnailPath || null,
+                adjacentManga: nextLocalManga,
+            };
+        }
+
+        const scraperReaderState = locationState?.scraperReader;
+        const scraperBrowserReturn = locationState?.scraperBrowserReturn;
+        const currentChapter = scraperReaderState?.chapter;
+        const chaptersResult = scraperBrowserReturn?.chaptersResult;
+
+        if (!scraperReaderState || !scraperBrowserReturn || !currentChapter || !Array.isArray(chaptersResult) || chaptersResult.length === 0) {
+            return null;
+        }
+
+        const currentChapterIndex = chaptersResult.findIndex((chapter) => isSameScraperChapter(chapter, currentChapter));
+        if (currentChapterIndex < 0) {
+            return null;
+        }
+
+        const nextChapter = chaptersResult[currentChapterIndex + 1];
+        if (!nextChapter) {
+            return null;
+        }
+
+        return {
+            kind: 'scraper',
+            title: scraperBrowserReturn.detailsResult.title || scraperReaderState.title || manga?.title || 'manga',
+            chapterLabel: nextChapter.label,
+            cover: nextChapter.image || scraperBrowserReturn.detailsResult.cover || scraperReaderState.cover || manga?.thumbnailPath || null,
+            adjacentChapter: nextChapter,
+            detailsResult: scraperBrowserReturn.detailsResult,
+            scraperId: scraperReaderState.scraperId,
+        };
+    }, [libraryMangas, locationState, manga, nextLocalManga]);
+    const activeTransitionTarget = transitionDirection === 'previous' ? previousTarget : transitionDirection === 'next' ? nextTarget : null;
+    const isTransitionPage = Boolean(transitionDirection && activeTransitionTarget);
+    const currentImageSrc = !isTransitionPage && currentIndex >= 0 && currentIndex < images.length
+        ? images[currentIndex]
+        : null;
+    const activeOcrEnabled = ocrEnabled && !isTransitionPage;
+    const continuationCoverSrc = React.useMemo(
+        () => normalizeReaderAssetSrc(activeTransitionTarget?.cover ?? null),
+        [activeTransitionTarget],
+    );
+    const pageCounterLabel = isTransitionPage
+        ? (transitionDirection === 'previous' ? 'Précédent' : 'Suite')
+        : images.length > 0
+            ? `${currentIndex + 1} / ${images.length}`
+            : '0 / 0';
 
     const handleBack = useCallback(() => {
         if (locationState?.scraperBrowserReturn) {
@@ -647,6 +816,9 @@ const Reader: React.FC = () => {
 
     useEffect(() => {
         const init = async () => {
+            setTransitionDirection(null);
+            setContinuationLoading(false);
+            setContinuationError(null);
             // params: id (manga id) and page (1-based)
             const id = query.get('id');
             const pageParam = query.get('page');
@@ -666,6 +838,7 @@ const Reader: React.FC = () => {
                 && Array.isArray(scraperReaderState.pageUrls)
                 && scraperReaderState.pageUrls.length > 0
             ) {
+                const ignoreSavedProgress = Boolean(scraperReaderState.ignoreSavedProgress);
                 let savedProgress: ScraperReaderProgressRecord | null = null;
                 if (window.api && typeof window.api.getScraperReaderProgress === 'function') {
                     try {
@@ -681,7 +854,9 @@ const Reader: React.FC = () => {
                     path: '',
                     thumbnailPath: scraperReaderState.cover || null,
                     createdAt: new Date().toISOString(),
-                    currentPage: typeof savedProgress?.currentPage === 'number' ? savedProgress.currentPage : null,
+                    currentPage: !ignoreSavedProgress && typeof savedProgress?.currentPage === 'number'
+                        ? savedProgress.currentPage
+                        : null,
                     pages: scraperReaderState.pageUrls.length,
                     authorIds: [],
                     tagIds: [],
@@ -691,15 +866,17 @@ const Reader: React.FC = () => {
                     chapters: scraperReaderState.chapter?.label,
                 };
 
+                setLibraryMangas([]);
                 setManga(remoteManga);
                 setBookmarkExcludedFields(Array.isArray(scraperReaderState.bookmarkExcludedFields)
                     ? scraperReaderState.bookmarkExcludedFields
                     : []);
-                openedCompletedRef.current = scraperReaderState.pageUrls.length > 0
+                openedCompletedRef.current = !ignoreSavedProgress
+                    && scraperReaderState.pageUrls.length > 0
                     && typeof remoteManga.currentPage === 'number'
                     && remoteManga.currentPage >= scraperReaderState.pageUrls.length;
                 setImages(scraperReaderState.pageUrls);
-                const initialPage = typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
+                const initialPage = !ignoreSavedProgress && typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
                     ? savedProgress.currentPage
                     : startPage;
                 const idx = Math.max(0, Math.min(scraperReaderState.pageUrls.length - 1, initialPage - 1));
@@ -710,10 +887,12 @@ const Reader: React.FC = () => {
             // get mangas list from backend and find the one with this id
             if (!window.api || typeof window.api.getMangas !== 'function') {
                 console.error('window.api.getMangas is not available');
+                setLibraryMangas([]);
                 return;
             }
 
             const mangas: Manga[] = await window.api.getMangas();
+            setLibraryMangas(Array.isArray(mangas) ? mangas : []);
             console.debug('Reader: fetched mangas', mangas);
             const found = id ? mangas.find(m => String(m.id) === String(id)) || null : null;
             console.debug('Reader: found manga', found);
@@ -760,6 +939,17 @@ const Reader: React.FC = () => {
         }
     }, [ocrAvailable, ocrEnabled]);
 
+    useEffect(() => {
+        if (transitionDirection === 'previous' && !previousTarget) {
+            setTransitionDirection(null);
+            return;
+        }
+
+        if (transitionDirection === 'next' && !nextTarget) {
+            setTransitionDirection(null);
+        }
+    }, [nextTarget, previousTarget, transitionDirection]);
+
     // Navigation helpers
     // Ensure view is scrolled to top immediately before changing page
     const scrollToTopImmediate = () => {
@@ -781,17 +971,202 @@ const Reader: React.FC = () => {
         }
     };
 
-    const goTo = (index: number) => {
+    const goTo = useCallback((index: number) => {
         // scroll to top before changing the page so the new page starts at top
         scrollToTopImmediate();
-        setCurrentIndex(prev => {
-            const next = Math.max(0, Math.min(images.length - 1, index));
-            return next;
+        setTransitionDirection(null);
+        setContinuationError(null);
+        setCurrentIndex(() => {
+            if (images.length === 0) {
+                return 0;
+            }
+            return Math.max(0, Math.min(images.length - 1, index));
         });
-    };
+    }, [images.length]);
 
-    const next = () => goTo(currentIndex + 1);
-    const prev = () => goTo(currentIndex - 1);
+    const continueToAdjacentChapter = useCallback(async (direction: 'previous' | 'next') => {
+        const target = direction === 'previous' ? previousTarget : nextTarget;
+        if (!target || continuationLoading) {
+            return;
+        }
+
+        setContinuationLoading(true);
+        setContinuationError(null);
+
+        try {
+            const targetPageForLocalManga = async (adjacentManga: Manga): Promise<number> => {
+                if (direction === 'next') {
+                    return 1;
+                }
+
+                if (typeof adjacentManga.pages === 'number' && adjacentManga.pages > 0) {
+                    return adjacentManga.pages;
+                }
+
+                if (adjacentManga.path && window.api && typeof window.api.countPages === 'function') {
+                    try {
+                        const pageCount = await window.api.countPages(adjacentManga.path);
+                        if (typeof pageCount === 'number' && pageCount > 0) {
+                            return pageCount;
+                        }
+                    } catch (error) {
+                        console.warn('Reader: failed to count pages for adjacent chapter', error);
+                    }
+                }
+
+                return 1;
+            };
+
+            if (target.kind === 'library' && target.adjacentManga) {
+                const targetPage = await targetPageForLocalManga(target.adjacentManga);
+                navigate(
+                    `/reader?id=${encodeURIComponent(target.adjacentManga.id)}&page=${encodeURIComponent(String(targetPage))}`,
+                    {
+                        replace: true,
+                        state: {
+                            from: locationState?.from,
+                            mangaId: target.adjacentManga.id,
+                        },
+                    },
+                );
+                return;
+            }
+
+            if (
+                target.kind !== 'scraper'
+                || !target.adjacentChapter
+                || !target.detailsResult
+                || !target.scraperId
+            ) {
+                throw new Error(direction === 'previous'
+                    ? 'Aucun chapitre précédent disponible.'
+                    : 'Aucun chapitre suivant disponible.');
+            }
+
+            if (
+                !window.api
+                || typeof window.api.getScrapers !== 'function'
+                || typeof window.api.fetchScraperDocument !== 'function'
+            ) {
+                throw new Error('Les APIs du scrapper sont indisponibles.');
+            }
+
+            const scrapers: ScraperRecord[] = await window.api.getScrapers();
+            const scraper = Array.isArray(scrapers)
+                ? scrapers.find((candidate) => candidate.id === target.scraperId) || null
+                : null;
+
+            if (!scraper) {
+                throw new Error('Le scrapper source est introuvable.');
+            }
+
+            const pagesFeature = getScraperFeature(scraper, 'pages');
+            const pagesConfig = getScraperPagesFeatureConfig(pagesFeature);
+            if (!pagesConfig) {
+                throw new Error('La configuration Pages du scrapper est introuvable.');
+            }
+
+            const pageUrls = await resolveScraperPageUrls(
+                scraper,
+                target.detailsResult,
+                pagesConfig,
+                async (request) => window.api.fetchScraperDocument(request),
+                {
+                    chapter: target.adjacentChapter,
+                },
+            );
+
+            const targetPage = direction === 'previous' ? pageUrls.length : 1;
+            const sourceUrl = target.detailsResult.finalUrl || target.detailsResult.requestedUrl;
+            const readerMangaId = createScraperMangaId(
+                scraper.id,
+                sourceUrl,
+                target.adjacentChapter.url,
+            );
+
+            navigate(
+                `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(targetPage))}`,
+                {
+                    replace: true,
+                    state: {
+                        from: locationState?.from,
+                        mangaId: readerMangaId,
+                        scraperBrowserReturn: locationState?.scraperBrowserReturn,
+                        scraperReader: {
+                            id: readerMangaId,
+                            scraperId: scraper.id,
+                            title: target.title,
+                            sourceUrl,
+                            cover: target.adjacentChapter.image || target.detailsResult.cover,
+                            pageUrls,
+                            chapter: target.adjacentChapter,
+                            bookmarkExcludedFields,
+                            ignoreSavedProgress: true,
+                        },
+                    },
+                },
+            );
+        } catch (error) {
+            setContinuationError(error instanceof Error
+                ? error.message
+                : direction === 'previous'
+                    ? 'Impossible d\'ouvrir le chapitre précédent.'
+                    : 'Impossible d\'ouvrir le chapitre suivant.'
+            );
+        } finally {
+            setContinuationLoading(false);
+        }
+    }, [bookmarkExcludedFields, continuationLoading, locationState, navigate, nextTarget, previousTarget]);
+
+    const next = useCallback(() => {
+        if (continuationLoading) {
+            return;
+        }
+
+        if (isTransitionPage) {
+            if (transitionDirection === 'next') {
+                void continueToAdjacentChapter('next');
+                return;
+            }
+
+            scrollToTopImmediate();
+            setTransitionDirection(null);
+            setContinuationError(null);
+            return;
+        }
+
+        if (images.length > 0 && currentIndex >= images.length - 1 && nextTarget) {
+            scrollToTopImmediate();
+            setTransitionDirection('next');
+            setContinuationError(null);
+            return;
+        }
+
+        goTo(currentIndex + 1);
+    }, [continuationLoading, continueToAdjacentChapter, currentIndex, goTo, images.length, isTransitionPage, nextTarget, transitionDirection]);
+
+    const prev = useCallback(() => {
+        if (isTransitionPage) {
+            if (transitionDirection === 'previous') {
+                void continueToAdjacentChapter('previous');
+                return;
+            }
+
+            scrollToTopImmediate();
+            setTransitionDirection(null);
+            setContinuationError(null);
+            return;
+        }
+
+        if (currentIndex === 0 && previousTarget) {
+            scrollToTopImmediate();
+            setTransitionDirection('previous');
+            setContinuationError(null);
+            return;
+        }
+
+        goTo(currentIndex - 1);
+    }, [continueToAdjacentChapter, currentIndex, goTo, isTransitionPage, previousTarget, transitionDirection]);
 
     const showCopyFeedback = useCallback((type: 'success' | 'error', message: string) => {
         setCopyFeedback({ type, message });
@@ -825,7 +1200,7 @@ const Reader: React.FC = () => {
     }, [detectedBoxes, manualBoxes]);
 
     const navigateOcrBox = useCallback((direction: OcrNavigationDirection): boolean => {
-        if (!ocrEnabled || allOcrBoxes.length === 0) {
+        if (!activeOcrEnabled || allOcrBoxes.length === 0) {
             return false;
         }
 
@@ -846,9 +1221,14 @@ const Reader: React.FC = () => {
         setSelectedBoxes((prev) => (prev.length === 1 && prev[0] === nextBox.id ? prev : [nextBox.id]));
         focusOcrBox(nextBox.id);
         return true;
-    }, [allOcrBoxes, focusOcrBox, ocrEnabled, selectedBoxes]);
+    }, [activeOcrEnabled, allOcrBoxes, focusOcrBox, selectedBoxes]);
 
     const copyCurrentImage = useCallback(async () => {
+        if (isTransitionPage) {
+            showCopyFeedback('error', 'Aucune image');
+            return;
+        }
+
         const currentImage = images[currentIndex];
         if (!currentImage) {
             showCopyFeedback('error', 'Aucune image');
@@ -880,7 +1260,7 @@ const Reader: React.FC = () => {
             const fallbackError = err && err.message ? err.message : null;
             showCopyFeedback('error', fallbackError || electronError || 'Echec de copie');
         }
-    }, [currentIndex, images, showCopyFeedback]);
+    }, [currentIndex, images, isTransitionPage, showCopyFeedback]);
 
     // When page changes, ensure the image is scrolled to the top of the container/view
     useEffect(() => {
@@ -893,7 +1273,7 @@ const Reader: React.FC = () => {
         } catch (err) {
             // ignore
         }
-    }, [currentIndex]);
+    }, [currentIndex, isTransitionPage]);
 
     useEffect(() => {
         if (preloadPageCount === null || images.length === 0 || preloadPageCount <= 0) {
@@ -1106,10 +1486,14 @@ const Reader: React.FC = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [copyCurrentImage, currentIndex, images, navigateOcrBox]);
+    }, [copyCurrentImage, navigateOcrBox, next, prev, selectedBoxes]);
 
     // Mouse click on image: left -> next, right -> prev
     useEffect(() => {
+        if (isTransitionPage) {
+            return;
+        }
+
         const img = imgRef.current;
         if (!img) return;
         const onClick = (e: MouseEvent) => {
@@ -1124,7 +1508,7 @@ const Reader: React.FC = () => {
         return () => {
             img.removeEventListener('click', onClick);
         };
-    }, [images, currentIndex]);
+    }, [isTransitionPage, next, prev]);
 
     // Debug helpers when no images
     const [debugList, setDebugList] = useState<string[] | null>(null);
@@ -1139,6 +1523,21 @@ const Reader: React.FC = () => {
         ? Math.max(0, Math.min(100, (currentPage / totalPages) * 100))
         : 0;
     const isLastPage = totalPages > 0 && currentPage >= totalPages;
+    const progressAriaText = isTransitionPage
+        ? (transitionDirection === 'previous'
+            ? 'Début du chapitre, précédent disponible'
+            : 'Chapitre termine, suite disponible')
+        : `Page ${currentPage} sur ${totalPages}`;
+    const canGoPrev = images.length > 0 && !continuationLoading && (
+        isTransitionPage
+        || currentIndex > 0
+        || Boolean(previousTarget)
+    );
+    const canGoNext = images.length > 0 && !continuationLoading && (
+        isTransitionPage
+        || currentIndex < images.length - 1
+        || Boolean(nextTarget)
+    );
 
     const runDebugListPages = async () => {
         setDebugError(null);
@@ -1450,7 +1849,7 @@ const Reader: React.FC = () => {
     ]);
 
     useEffect(() => {
-        if (!ocrEnabled) {
+        if (!activeOcrEnabled) {
             applyCurrentPageOcrBoxes([]);
             setSelectedBoxes([]);
             setOcrError(null);
@@ -1461,7 +1860,7 @@ const Reader: React.FC = () => {
             return;
         }
 
-        const src = images[currentIndex];
+        const src = currentImageSrc;
         if (!src) {
             applyCurrentPageOcrBoxes([]);
             setSelectedBoxes([]);
@@ -1525,10 +1924,10 @@ const Reader: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [applyCurrentPageOcrBoxes, currentIndex, images, loadOcrBoxesForPage, ocrEnabled]);
+    }, [activeOcrEnabled, applyCurrentPageOcrBoxes, currentImageSrc, currentIndex, loadOcrBoxesForPage]);
 
     useEffect(() => {
-        if (!ocrEnabled || preloadPageCount === null || images.length === 0) {
+        if (!activeOcrEnabled || preloadPageCount === null || images.length === 0) {
             return;
         }
 
@@ -1568,18 +1967,17 @@ const Reader: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [ocrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
+    }, [activeOcrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
 
     return (
         <div className="reader">
             <ReaderHeader
                 manga={manga}
                 bookmarkExcludedFields={bookmarkExcludedFields}
-                imagesLength={images.length}
-                currentIndex={currentIndex}
+                pageCounterLabel={pageCounterLabel}
                 ocrEnabled={ocrEnabled}
                 ocrAvailable={ocrAvailable}
-                canCopyImage={images.length > 0}
+                canCopyImage={images.length > 0 && !isTransitionPage}
                 copyFeedback={copyFeedback}
                 onBack={handleBack}
                 onCopyImage={() => {
@@ -1588,7 +1986,7 @@ const Reader: React.FC = () => {
                 onToggleOcr={() => setOcrEnabled(v => !v)}
             />
 
-            <div className={"reader-body" + (ocrEnabled ? ' ocr-on' : '')} ref={containerRef}>
+            <div className={"reader-body" + (activeOcrEnabled ? ' ocr-on' : '')} ref={containerRef}>
                 <div className="reader-view">
                     <div className="reader-stage">
                         {totalPages > 0 && (
@@ -1598,9 +1996,9 @@ const Reader: React.FC = () => {
                                 aria-label="Progression de lecture"
                                 aria-valuemin={1}
                                 aria-valuemax={totalPages}
-                                aria-valuenow={currentPage}
-                                aria-valuetext={`Page ${currentPage} sur ${totalPages}`}
-                                title={`Page ${currentPage} sur ${totalPages}`}
+                                aria-valuenow={Math.min(currentPage, totalPages)}
+                                aria-valuetext={progressAriaText}
+                                title={progressAriaText}
                             >
                                 <span className="reader-progress-track">
                                     <span
@@ -1612,11 +2010,25 @@ const Reader: React.FC = () => {
                         )}
 
                         <div className="reader-stage-content">
-                            {images.length > 0 ? (
+                            {isTransitionPage && activeTransitionTarget ? (
+                                <ReaderChapterTransition
+                                    direction={transitionDirection === 'previous' ? 'previous' : 'next'}
+                                    title={activeTransitionTarget.title}
+                                    chapterLabel={activeTransitionTarget.chapterLabel}
+                                    coverSrc={continuationCoverSrc}
+                                    loading={continuationLoading}
+                                    error={continuationError}
+                                    onContinue={() => {
+                                        void continueToAdjacentChapter(
+                                            transitionDirection === 'previous' ? 'previous' : 'next',
+                                        );
+                                    }}
+                                />
+                            ) : images.length > 0 && currentImageSrc ? (
                                 <ImageViewer
-                                    src={images[currentIndex]}
+                                    src={currentImageSrc}
                                     imgRef={imgRef as any}
-                                    ocrEnabled={ocrEnabled}
+                                    ocrEnabled={activeOcrEnabled}
                                     showBoxes={showBoxes}
                                     detectedBoxes={allOcrBoxes}
                                     selectedBoxes={selectedBoxes}
@@ -1664,7 +2076,7 @@ const Reader: React.FC = () => {
                     </div>
                 </div>
 
-                {ocrEnabled && (
+                {activeOcrEnabled && (
                     <OcrPanel
                         detectedBoxes={detectedBoxes}
                         manualBoxes={manualBoxes}
@@ -1750,11 +2162,19 @@ const Reader: React.FC = () => {
             </div>
 
             <div className="reader-controls">
-                <button onClick={prev} disabled={currentIndex === 0}>
+                <button onClick={prev} disabled={!canGoPrev}>
                     Précédent
                 </button>
-                <button onClick={next} disabled={currentIndex >= images.length - 1}>
-                    Suivant
+                <button onClick={next} disabled={!canGoNext}>
+                    {isTransitionPage
+                        ? (
+                            continuationLoading
+                                ? 'Chargement...'
+                                : transitionDirection === 'previous'
+                                    ? 'Revenir au chapitre'
+                                    : 'Lancer la suite'
+                        )
+                        : 'Suivant'}
                 </button>
             </div>
         </div>

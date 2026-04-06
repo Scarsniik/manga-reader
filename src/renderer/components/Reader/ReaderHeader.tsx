@@ -6,8 +6,7 @@ import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/S
 type Props = {
     manga: Manga | null;
     bookmarkExcludedFields?: ScraperBookmarkMetadataField[];
-    imagesLength: number;
-    currentIndex: number;
+    pageCounterLabel: string;
     ocrEnabled: boolean;
     ocrAvailable?: boolean;
     canCopyImage: boolean;
@@ -20,8 +19,7 @@ type Props = {
 const ReaderHeader: React.FC<Props> = ({
     manga,
     bookmarkExcludedFields,
-    imagesLength,
-    currentIndex,
+    pageCounterLabel,
     ocrEnabled,
     ocrAvailable = true,
     canCopyImage,
@@ -38,9 +36,7 @@ const ReaderHeader: React.FC<Props> = ({
                     {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}
                     {manga?.chapters ? <span className="reader-info__subtitle">{manga.chapters}</span> : null}
                 </div>
-                <span className="page-counter">
-                    {imagesLength > 0 ? `${currentIndex + 1} / ${imagesLength}` : '0 / 0'}
-                </span>
+                <span className="page-counter">{pageCounterLabel}</span>
             </div>
 
             <div className="reader-actions">

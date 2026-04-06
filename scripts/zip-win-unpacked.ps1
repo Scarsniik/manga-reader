@@ -8,14 +8,25 @@ if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgno
 }
 
 $winUnpacked = Join-Path $buildDir 'win-unpacked'
-$zipPath = Join-Path $buildDir 'win-unpacked.zip'
+$archiveFolderName = 'manga reader'
+$archiveDir = Join-Path $buildDir $archiveFolderName
+$zipPath = Join-Path $archiveDir 'win-unpacked.zip'
+$legacyZipPath = Join-Path $buildDir 'win-unpacked.zip'
 
 if (-not (Test-Path -LiteralPath $winUnpacked)) {
     throw "Dossier win-unpacked introuvable : $winUnpacked"
 }
 
+if (-not (Test-Path -LiteralPath $archiveDir)) {
+    New-Item -ItemType Directory -Path $archiveDir | Out-Null
+}
+
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
+}
+
+if (Test-Path -LiteralPath $legacyZipPath) {
+    Remove-Item -LiteralPath $legacyZipPath -Force
 }
 
 $tar = Get-Command tar.exe -ErrorAction SilentlyContinue

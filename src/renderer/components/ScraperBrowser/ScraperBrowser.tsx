@@ -1130,7 +1130,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
         seriesTitle: detailsResult?.title || query.trim() || 'manga',
         chapterLabel: chapter?.label,
-        thumbnailUrl: chapter?.image,
+        thumbnailUrl: chapter
+          ? (detailsResult?.cover || chapter.image)
+          : undefined,
       });
       const activeJobs = Number(queueResult?.status?.counts?.active || 0);
       const isChapterDownload = Boolean(chapter?.label);

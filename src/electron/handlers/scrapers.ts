@@ -44,6 +44,7 @@ import {
   scrapersFilePath,
 } from '../utils';
 import { addManga, createStoredThumbnailForMangaFromBuffer, patchMangaById } from './mangas';
+import { ocrQueueImportManga } from './ocr';
 import { getSettings } from './params';
 import { ensureSeriesByTitle } from './series';
 import { getTags } from './tags';
@@ -81,6 +82,7 @@ type NormalizedScraperDownloadRequest = {
 type CompletedScraperDownload = {
   result: DownloadScraperMangaResult;
   notifySeriesUpdated: boolean;
+  insertedManga: any;
 };
 
 const scraperDownloadJobs = new Map<string, InternalScraperDownloadJob>();
@@ -1074,7 +1076,7 @@ const executeScraperDownloadJob = async (
     language: job.defaultLanguage,
     seriesId: linkedSeries?.id ?? null,
     chapters: linkedSeries ? (chapterValue || job.chapterLabel) : undefined,
-    sourceKind: job.scraperId ? 'scraper' : undefined,
+    sourceKind: 'library',
     scraperId: job.scraperId ?? null,
     sourceUrl: job.sourceUrl ?? job.refererUrl ?? null,
   });
@@ -1104,7 +1106,7 @@ const executeScraperDownloadJob = async (
         }
       }
     } catch (error) {
-      console.warn('Failed to override scraper download thumbnail from chapter image', {
+      console.warn('Failed to override scraper download thumbnail from scraper cover', {
         mangaId: inserted.id,
         thumbnailUrl: job.thumbnailUrl,
         error,
@@ -1121,6 +1123,7 @@ const executeScraperDownloadJob = async (
       downloadedCount: job.pageUrls.length,
     },
     notifySeriesUpdated: Boolean(linkedSeries),
+    insertedManga: inserted,
   };
 };
 
@@ -1156,6 +1159,23 @@ async function runQueuedScraperDownloadJob(job: InternalScraperDownloadJob): Pro
     if (completed.notifySeriesUpdated) {
       notifyScraperDownloadChannel('series-updated');
     }
+
+    // Mirror local imports: queue OCR in the background only when auto-import OCR is enabled.
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const queueResult = await ocrQueueImportManga(completed.insertedManga);
+          if (queueResult?.queued) {
+            notifyScraperDownloadChannel('mangas-updated');
+          }
+        } catch (ocrError) {
+          console.warn('Failed to auto-queue OCR after scraper download import', {
+            mangaId: completed.result.mangaId,
+            error: ocrError,
+          });
+        }
+      })();
+    }, 0);
   } catch (error) {
     if (isScraperDownloadAbortError(error) || job.cancelRequested) {
       finalizeScraperDownloadJob(job, {

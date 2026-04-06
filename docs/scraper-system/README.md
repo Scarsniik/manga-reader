@@ -19,6 +19,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - modeliser chaque fonctionnalite comme un bloc autonome
 - rendre un scraper configure directement utilisable dans l'application
 - centraliser aussi les regles de bookmarks dans la config globale du scraper
+- pour un telechargement de chapitre, prioriser la couverture issue de `Fiche`, puis fallback sur l'image du chapitre si besoin
 
 ## Site de reference
 
