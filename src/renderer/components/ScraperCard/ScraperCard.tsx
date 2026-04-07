@@ -1,6 +1,30 @@
 import React from 'react';
 import './style.scss';
 
+export type ScraperCardAction = (
+  | {
+    id: string;
+    type: 'primary' | 'secondary' | 'icon-primary' | 'icon-secondary';
+    label: string;
+    icon?: React.ReactNode;
+    onClick: () => void;
+    ariaLabel?: string;
+    disabled?: boolean;
+  }
+  | {
+    id: string;
+    type: 'hint';
+    label: string;
+    icon?: React.ReactNode;
+  }
+  | {
+    id: string;
+    type: 'custom';
+    label: string;
+    render: () => React.ReactNode;
+  }
+);
+
 type Props = {
   title: string;
   coverUrl?: string | null;
@@ -9,7 +33,7 @@ type Props = {
   summary?: string | null;
   emptySummary?: string | null;
   metadata?: React.ReactNode;
-  actions?: React.ReactNode;
+  actions?: ScraperCardAction[];
   className?: string;
   isActionable?: boolean;
   onClick?: () => void;
@@ -21,6 +45,8 @@ const normalizeOptionalText = (value: string | null | undefined): string | null 
   if (value === null || value === undefined) return null;
   return typeof value === 'string' ? value.trim() : '';
 };
+
+const isVisibleAction = (action: ScraperCardAction | null | undefined): action is ScraperCardAction => Boolean(action);
 
 export default function ScraperCard({
   title,
@@ -40,6 +66,66 @@ export default function ScraperCard({
   const normalizedSummary = normalizeOptionalText(summary);
   const normalizedEmptySummary = normalizeOptionalText(emptySummary);
   const resolvedCoverAlt = normalizeOptionalText(coverAlt) || title;
+  const visibleActions = actions?.filter(isVisibleAction) ?? [];
+
+  const renderAction = (action: ScraperCardAction) => {
+    if (action.type === 'custom') {
+      return <React.Fragment key={action.id}>{action.render()}</React.Fragment>;
+    }
+
+    if (action.type === 'hint') {
+      return (
+        <span key={action.id} className="scraper-card__action-hint is-muted">
+          {action.icon ? <span className="scraper-card__action-icon">{action.icon}</span> : null}
+          <span className="scraper-card__action-label">{action.label}</span>
+        </span>
+      );
+    }
+
+    const isIconOnly = action.type === 'icon-primary' || action.type === 'icon-secondary';
+    const toneClassName = action.type.endsWith('primary') ? 'is-primary' : 'is-secondary';
+
+    const handleActionClick = () => {
+      if (action.disabled) {
+        return;
+      }
+
+      action.onClick();
+    };
+
+    return (
+      <button
+        key={action.id}
+        type="button"
+        className={[
+          'scraper-card__action-button',
+          toneClassName,
+          isIconOnly ? 'is-icon-only' : '',
+        ].join(' ').trim()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          handleActionClick();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            handleActionClick();
+            return;
+          }
+
+          event.stopPropagation();
+        }}
+        aria-label={action.ariaLabel || action.label}
+        title={action.label}
+        disabled={action.disabled}
+      >
+        {action.icon ? <span className="scraper-card__action-icon">{action.icon}</span> : null}
+        {!isIconOnly ? <span className="scraper-card__action-label">{action.label}</span> : null}
+      </button>
+    );
+  };
 
   return (
     <article
@@ -73,9 +159,9 @@ export default function ScraperCard({
         {metadata}
       </div>
 
-      {actions ? (
+      {visibleActions.length ? (
         <div className="scraper-card__actions">
-          {actions}
+          {visibleActions.map(renderAction)}
         </div>
       ) : null}
     </article>

@@ -1,6 +1,7 @@
 import React from 'react';
-import ScraperCard from '@/renderer/components/ScraperCard/ScraperCard';
+import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import { DetailsCardIcon } from '@/renderer/components/icons';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 
 type Props = {
@@ -29,44 +30,41 @@ export default function ScraperBookmarkCard({
   onOpenBookmark,
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
-  const actions = (
-    <>
-      <ScraperBookmarkButton
-        scraperId={bookmark.scraperId}
-        sourceUrl={bookmark.sourceUrl}
-        title={bookmark.title}
-        cover={bookmark.cover}
-        summary={bookmark.summary}
-        description={bookmark.description}
-        authors={bookmark.authors}
-        tags={bookmark.tags}
-        mangaStatus={bookmark.mangaStatus}
-        excludedFields={scraper?.globalConfig.bookmark.excludedFields}
-        size="sm"
-      />
-
-      {canOpenBookmark ? (
-        <button
-          type="button"
-          className="scraper-card__action-button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onOpenBookmark(bookmark);
-          }}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
-        >
-          Ouvrir la fiche
-        </button>
-      ) : (
-        <span className="scraper-card__action-hint is-muted">
-          Scrapper indisponible
-        </span>
-      )}
-    </>
-  );
+  const actions: ScraperCardAction[] = [
+    {
+      id: 'bookmark-toggle',
+      type: 'custom',
+      label: 'Basculer le bookmark',
+      render: () => (
+        <ScraperBookmarkButton
+          scraperId={bookmark.scraperId}
+          sourceUrl={bookmark.sourceUrl}
+          title={bookmark.title}
+          cover={bookmark.cover}
+          summary={bookmark.summary}
+          description={bookmark.description}
+          authors={bookmark.authors}
+          tags={bookmark.tags}
+          mangaStatus={bookmark.mangaStatus}
+          excludedFields={scraper?.globalConfig.bookmark.excludedFields}
+          size="sm"
+        />
+      ),
+    },
+    canOpenBookmark
+      ? {
+        id: 'open-details',
+        type: 'icon-primary',
+        label: 'Ouvrir la fiche',
+        icon: <DetailsCardIcon aria-hidden="true" focusable="false" />,
+        onClick: () => onOpenBookmark(bookmark),
+      }
+      : {
+        id: 'scraper-unavailable',
+        type: 'hint',
+        label: 'Scrapper indisponible',
+      },
+  ];
 
   return (
     <ScraperCard

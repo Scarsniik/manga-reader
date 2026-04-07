@@ -1,86 +1,60 @@
 import React from 'react';
-import ScraperCard from '@/renderer/components/ScraperCard/ScraperCard';
+import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import { ScraperSearchResultItem } from '@/shared/scraper';
+import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
 
 type Props = {
   result: ScraperSearchResultItem;
   canOpenResult: boolean;
   canOpenSearchResultsAsDetails: boolean;
-  bookmarkButton?: React.ReactNode;
+  bookmarkAction?: ScraperCardAction | null;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
-  onOpenResultAction: (
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
-    result: ScraperSearchResultItem,
-  ) => void;
-  onOpenResultImage: (
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
-    result: ScraperSearchResultItem,
-  ) => void;
+  onOpenResultAction: (result: ScraperSearchResultItem) => void;
+  onOpenResultImage: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultCard({
   result,
   canOpenResult,
   canOpenSearchResultsAsDetails,
-  bookmarkButton,
+  bookmarkAction,
   onOpenResult,
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
 }: Props) {
-  const previewAction = result.thumbnailUrl ? (
-    <button
-      type="button"
-      className="scraper-card__preview-button"
-      onClick={(event) => onOpenResultImage(event, result)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          onOpenResultImage(event, result);
-        } else {
-          event.stopPropagation();
-        }
-      }}
-      aria-label={`Agrandir l'image de ${result.title}`}
-    >
-      Agrandir image
-    </button>
-  ) : null;
+  const actions: ScraperCardAction[] = [];
 
-  const contentActions = canOpenResult ? (
-    <>
-      <button
-        type="button"
-        className="scraper-card__action-button"
-        onClick={(event) => onOpenResultAction(event, result)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            onOpenResultAction(event, result);
-          } else {
-            event.stopPropagation();
-          }
-        }}
-        aria-label={`Ouvrir la fiche ${result.title}`}
-      >
-        Ouvrir la fiche
-      </button>
-      {previewAction}
-    </>
-  ) : result.detailUrl && !canOpenSearchResultsAsDetails ? (
-    <>
-      <span className="scraper-card__action-hint is-muted">
-        Configure `Fiche` pour ouvrir
-      </span>
-      {previewAction}
-    </>
-  ) : previewAction;
+  if (bookmarkAction) {
+    actions.push(bookmarkAction);
+  }
 
-  const actions = bookmarkButton || contentActions ? (
-    <>
-      {bookmarkButton}
-      {contentActions}
-    </>
-  ) : null;
+  if (canOpenResult) {
+    actions.push({
+      id: 'open-details',
+      type: 'icon-primary',
+      label: 'Ouvrir la fiche',
+      icon: <DetailsCardIcon aria-hidden="true" focusable="false" />,
+      onClick: () => onOpenResultAction(result),
+    });
+  } else if (result.detailUrl && !canOpenSearchResultsAsDetails) {
+    actions.push({
+      id: 'details-disabled',
+      type: 'hint',
+      label: 'Configure `Fiche` pour ouvrir',
+    });
+  }
+
+  if (result.thumbnailUrl) {
+    actions.push({
+      id: 'preview-image',
+      type: 'icon-secondary',
+      label: 'Agrandir l\'image',
+      icon: <ImageExpandIcon aria-hidden="true" focusable="false" />,
+      onClick: () => onOpenResultImage(result),
+    });
+  }
 
   return (
     <ScraperCard

@@ -95,8 +95,7 @@
   flex: 0 0 auto;
 }
 
-.scraper-card__action-button,
-.scraper-card__preview-button {
+.scraper-card__action-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -111,42 +110,72 @@
   white-space: nowrap;
   flex: 0 0 auto;
   vertical-align: middle;
+  gap: 8px;
 }
 
-.scraper-card__action-button {
+.scraper-card__action-button.is-primary {
   border: 1px solid rgba(93, 156, 255, 0.24);
   background: rgba(93, 156, 255, 0.12);
   color: #dcebff;
 }
 
-.scraper-card__action-button:hover {
+.scraper-card__action-button.is-primary:hover {
   border-color: rgba(93, 156, 255, 0.45);
   background: rgba(93, 156, 255, 0.18);
   color: #eef6ff;
 }
 
-.scraper-card__action-button:focus-visible {
+.scraper-card__action-button.is-primary:focus-visible {
   outline: none;
   border-color: #5d9cff;
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
 }
 
-.scraper-card__preview-button {
+.scraper-card__action-button.is-secondary {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: #ededed;
 }
 
-.scraper-card__preview-button:hover {
+.scraper-card__action-button.is-secondary:hover {
   border-color: rgba(93, 156, 255, 0.45);
   background: rgba(93, 156, 255, 0.1);
   color: #d7e8ff;
 }
 
-.scraper-card__preview-button:focus-visible {
+.scraper-card__action-button.is-secondary:focus-visible {
   outline: none;
   border-color: #5d9cff;
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-card__action-button.is-icon-only {
+  width: 34px;
+  padding: 0;
+  gap: 0;
+}
+
+.scraper-card__action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scraper-card__action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.scraper-card__action-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.scraper-card__action-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .scraper-card__chips {

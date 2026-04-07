@@ -6,6 +6,7 @@ export interface CardOverlayItem {
     label: string;
     onClick: (e: React.MouseEvent) => void;
     disabled?: boolean;
+    icon?: React.ReactNode;
     compact?: boolean;
 }
 

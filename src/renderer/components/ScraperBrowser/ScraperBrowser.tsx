@@ -9,6 +9,7 @@ import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/compone
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
 import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components/ScraperDetailsPanel';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
+import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import {
@@ -734,21 +735,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [handleOpenSearchResult]);
 
   const handleOpenSearchResultAction = useCallback((
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
     result: ScraperSearchResultItem,
   ) => {
-    event.preventDefault();
-    event.stopPropagation();
     void handleOpenSearchResult(result);
   }, [handleOpenSearchResult]);
 
   const handleOpenSearchResultImage = useCallback((
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
     result: ScraperSearchResultItem,
   ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
     if (!result.thumbnailUrl) {
       return;
     }
@@ -1325,22 +1319,27 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       },
     });
   }, [location.pathname, location.search, navigate, scraper.id]);
-  const renderSearchResultBookmarkButton = useCallback((result: ScraperSearchResultItem) => {
+  const renderSearchResultBookmarkAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
     if (!result.detailUrl) {
       return null;
     }
 
-    return (
-      <ScraperBookmarkButton
-        scraperId={scraper.id}
-        sourceUrl={result.detailUrl}
-        title={result.title}
-        cover={result.thumbnailUrl}
-        summary={result.summary}
-        excludedFields={scraper.globalConfig.bookmark.excludedFields}
-        size="sm"
-      />
-    );
+    return {
+      id: `bookmark-${result.detailUrl}`,
+      type: 'custom',
+      label: `Basculer le bookmark de ${result.title}`,
+      render: () => (
+        <ScraperBookmarkButton
+          scraperId={scraper.id}
+          sourceUrl={result.detailUrl}
+          title={result.title}
+          cover={result.thumbnailUrl}
+          summary={result.summary}
+          excludedFields={scraper.globalConfig.bookmark.excludedFields}
+          size="sm"
+        />
+      ),
+    };
   }, [scraper.globalConfig.bookmark.excludedFields, scraper.id]);
 
   return (
@@ -1395,7 +1394,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         loading={loading}
         usesSearchTemplatePaging={usesSearchTemplatePaging}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
-        renderBookmarkButton={renderSearchResultBookmarkButton}
+        renderBookmarkAction={renderSearchResultBookmarkAction}
         onPreviousPage={() => void handleSearchPreviousPage()}
         onNextPage={() => void handleSearchNextPage()}
         onOpenResult={(result) => void handleOpenSearchResult(result)}

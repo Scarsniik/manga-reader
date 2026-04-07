@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
 import { ScraperSearchResultItem } from '@/shared/scraper';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
@@ -16,19 +17,13 @@ type Props = {
   loading: boolean;
   usesSearchTemplatePaging: boolean;
   canOpenSearchResultsAsDetails: boolean;
-  renderBookmarkButton?: (result: ScraperSearchResultItem) => React.ReactNode;
+  renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
-  onOpenResultAction: (
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
-    result: ScraperSearchResultItem,
-  ) => void;
-  onOpenResultImage: (
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
-    result: ScraperSearchResultItem,
-  ) => void;
+  onOpenResultAction: (result: ScraperSearchResultItem) => void;
+  onOpenResultImage: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultsSection({
@@ -43,7 +38,7 @@ export default function ScraperSearchResultsSection({
   loading,
   usesSearchTemplatePaging,
   canOpenSearchResultsAsDetails,
-  renderBookmarkButton,
+  renderBookmarkAction,
   onPreviousPage,
   onNextPage,
   onOpenResult,
@@ -110,7 +105,7 @@ export default function ScraperSearchResultsSection({
               result={result}
               canOpenResult={canOpenResult}
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
-              bookmarkButton={renderBookmarkButton ? renderBookmarkButton(result) : null}
+              bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               onOpenResult={onOpenResult}
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}
