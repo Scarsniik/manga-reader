@@ -7,6 +7,7 @@
 - les fonctions doivent être courtes
 - eviter au maximum les enormes fichiers. D'une manière générale, un fichier de plus de 400 lignes est mauvais signe. Sauf cas exceptionnel il ne faut pas en arriver là. Mais on évite aussi de découper pour faire jolie. Il faut garder une logique dans les fichiers.
 - pas d'import relatif. On utilise des alias pour les imports.
+- Quand c'est possible, adopter une structure qui évite les différences de merge inutiles. Exemple : mettre une virgule à la fin de chaque ligne d'un objet, même pour la dernière ligne. Comme ça, quand on ajoute une ligne à l'objet, on n'a pas de diff sur la ligne précédente.
 
 ## Structure
 
