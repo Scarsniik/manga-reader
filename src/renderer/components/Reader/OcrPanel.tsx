@@ -1,11 +1,9 @@
 import React, { useMemo } from 'react';
-import JapaneseAnalyse, { Box as JBox } from '../JapaneseAnalyse/JapaneseAnalyse';
+import JapaneseAnalyse from '../JapaneseAnalyse/JapaneseAnalyse';
 import './ocr-panel.scss';
+import { ReaderOcrBox } from './types';
 
-type Box = JBox & {
-    manual?: boolean;
-    vertical?: boolean;
-};
+type Box = ReaderOcrBox;
 
 type Props = {
     detectedBoxes: Box[];

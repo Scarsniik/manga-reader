@@ -1,14 +1,11 @@
 import { clipboard, nativeImage } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
+import { resolveLocalProtocolPath } from "../utils/localProtocol";
 
 const resolveImagePath = (imagePathOrUrl: string): string => {
     if (imagePathOrUrl.startsWith("local://")) {
-        let localPath = imagePathOrUrl.replace(/^local:\/\//, "");
-        if (localPath.startsWith("/")) {
-            localPath = localPath.slice(1);
-        }
-        return path.normalize(decodeURI(localPath));
+        return resolveLocalProtocolPath(imagePathOrUrl);
     }
 
     if (imagePathOrUrl.startsWith("file://")) {

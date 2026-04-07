@@ -1,15 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
+import {
+    ManualSelection,
+    ReaderOcrBox,
+} from './types';
 
-type Box = { id: string; text: string; bbox: { x: number; y: number; w: number; h: number } };
 const BOX_VISUAL_PADDING_PX = 4;
 const MIN_SELECTION_SIZE_PX = 12;
-
-type ManualSelection = {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-};
 
 type Props = {
     src: string;
@@ -17,7 +13,7 @@ type Props = {
     imgRef: React.RefObject<HTMLImageElement> | React.MutableRefObject<HTMLImageElement | null>;
     ocrEnabled: boolean;
     showBoxes?: boolean;
-    detectedBoxes: Box[];
+    detectedBoxes: ReaderOcrBox[];
     selectedBoxes: string[];
     onSelectBox: (id: string | null, additive?: boolean) => void;
     manualSelectionEnabled?: boolean;

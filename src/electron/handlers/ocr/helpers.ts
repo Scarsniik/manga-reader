@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { ensureDataDir } from "../../utils";
+import { resolveLocalProtocolPath } from "../../utils/localProtocol";
 import {
   MANGA_OCR_FILE_NAME,
   MANGA_OCR_PROFILE_FILE_NAME,
@@ -156,11 +157,7 @@ export const resolveImagePath = (imagePathOrDataUrl: string): string => {
   }
 
   if (imagePathOrDataUrl.startsWith("local://")) {
-    let localPath = imagePathOrDataUrl.replace(/^local:\/\//, "");
-    if (localPath.startsWith("/")) {
-      localPath = localPath.slice(1);
-    }
-    return path.normalize(decodeURI(localPath));
+    return resolveLocalProtocolPath(imagePathOrDataUrl);
   }
 
   if (imagePathOrDataUrl.startsWith("file://")) {

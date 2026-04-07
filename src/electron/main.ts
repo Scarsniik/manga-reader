@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { prewarmOcrEngine } from './handlers/ocr/index';
+import { resolveLocalProtocolPath } from './utils/localProtocol';
 
 // Ensure IPC handlers (links, mangas, count-pages...) are registered
 import './ipc';
@@ -87,13 +88,7 @@ app.whenReady().then(() => {
 
     protocol.registerFileProtocol('local', (request, callback) => {
         try {
-            // request.url will be like 'local://D:/path/to/file.jpg' or
-            // 'local:///D:/path/to/file.jpg' depending on usage. Strip the scheme
-            // and decode the path.
-            let url = request.url.replace(/^local:\/\//, '');
-            // If there is a leading slash on Windows (e.g. /D:/...), remove it.
-            if (url.startsWith('/')) url = url.slice(1);
-            const filePath = path.normalize(decodeURI(url));
+            const filePath = resolveLocalProtocolPath(request.url);
             callback({ path: filePath });
         } catch (e) {
             console.error('registerFileProtocol(local) error:', e);

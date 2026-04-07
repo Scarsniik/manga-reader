@@ -2,6 +2,7 @@ import React from 'react';
 import { Manga } from '@/renderer/types';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import { ReaderCopyFeedback } from './types';
 
 type Props = {
     manga: Manga | null;
@@ -10,7 +11,7 @@ type Props = {
     ocrEnabled: boolean;
     ocrAvailable?: boolean;
     canCopyImage: boolean;
-    copyFeedback: { type: 'success' | 'error'; message: string } | null;
+    copyFeedback: ReaderCopyFeedback | null;
     onBack: () => void;
     onCopyImage: () => void;
     onToggleOcr: () => void;
