@@ -6,6 +6,7 @@ import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaMo
 import buildMangaOcrModal from '@/renderer/components/Modal/modales/MangaOcrModal';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
+import { OpenBookIcon, EditPencilIcon, TrashCanIcon } from '@/renderer/components/icons';
 
 interface Props {
     manga: Manga;
@@ -257,37 +258,48 @@ const MangaCard: React.FC<Props> = ({
 
     const overlayContent: CardOverlayItem[] = useMemo(() => ([
         {
-            label: 'Lire',
-            onClick: onCardClick
+            icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
+            ariaLabel: 'Lire',
+            onClick: onCardClick,
+            itemsPerRow: 3,
         },
         {
-            label: 'Modifier',
-            onClick: onEditClick
+            icon: <EditPencilIcon aria-hidden="true" focusable="false" />,
+            ariaLabel: 'Modifier',
+            onClick: onEditClick,
+            itemsPerRow: 3,
         },
         {
-            label: 'OCR / Vocabulaire',
-            onClick: onOcrClick
-        },
-        {
-            label: 'Même auteur',
-            onClick: onFilterByAuthor,
-            disabled: !primaryAuthorId,
-            compact: true,
-        },
-        {
-            label: 'Même série',
-            onClick: onFilterBySeries,
-            disabled: !seriesId,
-            compact: true,
+            icon: <TrashCanIcon aria-hidden="true" focusable="false" />,
+            ariaLabel: 'Supprimer',
+            onClick: onDeleteClick,
+            itemsPerRow: 3,
+            color: 'danger',
         },
         {
             label: pages === currentPage ? 'Marquer comme non lu' : 'Marquer comme lu',
             onClick: onToggleRead
         },
         {
-            label: 'Supprimer',
-            onClick: onDeleteClick
-        }
+            label: 'OCR / Vocabulaire',
+            onClick: onOcrClick,
+        },
+        {
+            type: "title",
+            label: 'Filtrer par :',
+        },
+        {
+            label: 'Auteur',
+            onClick: onFilterByAuthor,
+            disabled: !primaryAuthorId,
+            itemsPerRow: 2,
+        },
+        {
+            label: 'Série',
+            onClick: onFilterBySeries,
+            disabled: !seriesId,
+            itemsPerRow: 2,
+        },
     ]), [currentPage, onCardClick, onDeleteClick, onEditClick, onFilterByAuthor, onFilterBySeries, onOcrClick, onToggleRead, pages, primaryAuthorId, seriesId]);
 
     return (
