@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronLeftIcon } from '@/renderer/components/icons';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
@@ -100,9 +101,7 @@ export default function ScraperBookmarksView({
                 aria-label="Retour"
                 title="Retour"
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M14.75 5.75 8.5 12l6.25 6.25" />
-                </svg>
+                <ChevronLeftIcon aria-hidden="true" focusable="false" />
               </button>
             ) : null}
             <h2>

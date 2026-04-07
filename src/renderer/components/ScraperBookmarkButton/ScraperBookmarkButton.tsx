@@ -18,6 +18,7 @@ import {
   isScraperFeatureConfigured,
   resolveScraperDetailsTargetUrl,
 } from '@/renderer/utils/scraperRuntime';
+import { BookmarkRibbonIcon, LoadingSpinnerIcon } from '@/renderer/components/icons';
 import './style.scss';
 
 type Props = {
@@ -422,18 +423,13 @@ export default function ScraperBookmarkButton({
       aria-busy={pending}
       disabled={disabled || pending}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6.75 3.75h10.5A1.75 1.75 0 0 1 19 5.5v14.629a.75.75 0 0 1-1.196.604L12 16.45l-5.804 4.283A.75.75 0 0 1 5 20.129V5.5a1.75 1.75 0 0 1 1.75-1.75Z" />
-      </svg>
+      <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
       {pending ? (
-        <svg
+        <LoadingSpinnerIcon
           className="scraper-bookmark-button__spinner"
-          viewBox="0 0 24 24"
           aria-hidden="true"
-        >
-          <circle className="scraper-bookmark-button__spinner-track" cx="12" cy="12" r="7" />
-          <path className="scraper-bookmark-button__spinner-head" d="M12 5a7 7 0 0 1 7 7" />
-        </svg>
+          focusable="false"
+        />
       ) : null}
     </button>
   );

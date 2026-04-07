@@ -4,6 +4,7 @@ import { Manga } from '@/renderer/types';
 import useTags from '@/renderer/hooks/useTags';
 import { Field } from '@/renderer/components/utils/Form/types';
 import useParams from '@/renderer/hooks/useParams';
+import { ChevronDownIcon, MagnifyingGlassIcon } from '@/renderer/components/icons';
 import './styles.scss';
 import SeriesField from '@/renderer/components/utils/Form/fields/SeriesField';
 import AuthorField from '@/renderer/components/utils/Form/fields/AuthorField';
@@ -809,10 +810,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             <div className="search-row">
                 <div className="search-input-wrap">
                     <span className="search-input-icon" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none">
-                            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.7" />
-                            <path d="M12.5 12.5L17 17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                        </svg>
+                        <MagnifyingGlassIcon focusable="false" />
                     </span>
                     <input
                         className="search-input"
@@ -835,9 +833,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                         <span className="toggle-filters__count" aria-label={activeAdvancedFilterLabel}>{activeAdvancedFilterCount}</span>
                     ) : null}
                     <span className="toggle-filters__icon" aria-hidden="true">
-                        <svg viewBox="0 0 18 18" fill="none">
-                            <path d="M4 7L9 12L14 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                        <ChevronDownIcon focusable="false" />
                     </span>
                 </button>
             </div>

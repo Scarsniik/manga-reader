@@ -76,11 +76,11 @@
   stroke-width: 2.2;
 }
 
-.scraper-bookmark-button__spinner-track {
+.scraper-bookmark-button__spinner .icon-loading-spinner__track {
   stroke: rgba(255, 255, 255, 0.14);
 }
 
-.scraper-bookmark-button__spinner-head {
+.scraper-bookmark-button__spinner .icon-loading-spinner__head {
   stroke: currentColor;
 }
 
