@@ -6,12 +6,14 @@
 - les noms de variables et de fonctions doivent être explicites
 - les fonctions doivent être courtes
 - eviter au maximum les enormes fichiers. D'une manière générale, un fichier de plus de 400 lignes est mauvais signe. Sauf cas exceptionnel il ne faut pas en arriver là. Mais on évite aussi de découper pour faire jolie. Il faut garder une logique dans les fichiers.
+- pas d'import relatif. On utilise des alias pour les imports.
 
 ## React
 
 - les components doivent être atomiques. Pas de component qui fait tout. On a un component principal qui est la pour faire le lien entre les autres components. Les autres components sont là pour faire une tâche précise.
 - les components doivent être réutilisables. Si on a un component qui peut être réutilisé, il faut le faire. Par exemple, un component de bouton qui peut être utilisé partout dans l'application.
 - Pas d'écriture de SVG directement dans les components. Il faut utiliser des fichiers SVG et les importer dans les components.
+- Les scrings sont faites avec des "" et pas des ''. Utilisation de `` autorisée pour les template string.
 
 ## Commit
 
