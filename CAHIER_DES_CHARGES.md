@@ -1,5 +1,7 @@
 # Cahier des charges — Manga Helper (version initiale)
 
+ATTENTION : CECI N'EST PAS A JOUR. NE PAS UTILISER TEL QUEL.
+
 ## But
 
 Créer une application de bureau légère, portable (sans installation requise), permettant d'apprendre le japonais en lisant des mangas.
