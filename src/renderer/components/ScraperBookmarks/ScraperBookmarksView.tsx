@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeftIcon } from '@/renderer/components/icons';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
-import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import ScraperBookmarkCard from '@/renderer/components/ScraperBookmarks/ScraperBookmarkCard';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
 import './style.scss';
@@ -146,102 +146,14 @@ export default function ScraperBookmarksView({
         <div className="scraper-browser__results-grid">
           {bookmarks.map((bookmark) => {
             const scraper = scrapersById.get(bookmark.scraperId) ?? null;
-            const canOpenBookmark = Boolean(scraper);
 
             return (
-              <article
+              <ScraperBookmarkCard
                 key={`${bookmark.scraperId}-${bookmark.sourceUrl}`}
-                className={[
-                  'scraper-browser__result-card',
-                  'scraper-bookmarks-view__card',
-                  canOpenBookmark ? 'is-actionable' : '',
-                ].join(' ').trim()}
-                onClick={canOpenBookmark ? () => handleOpenBookmark(bookmark) : undefined}
-                onKeyDown={canOpenBookmark ? (event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  handleOpenBookmark(bookmark);
-                } : undefined}
-                role={canOpenBookmark ? 'button' : undefined}
-                tabIndex={canOpenBookmark ? 0 : undefined}
-                aria-label={canOpenBookmark ? `Ouvrir la fiche ${bookmark.title}` : undefined}
-              >
-                <div className="scraper-browser__result-media">
-                  {bookmark.cover ? (
-                    <img src={bookmark.cover} alt={bookmark.title} />
-                  ) : (
-                    <div className="scraper-browser__result-placeholder">Pas d&apos;image</div>
-                  )}
-                </div>
-
-                <div className="scraper-browser__result-body">
-                  <span className="scraper-bookmarks-view__scraper-label">
-                    {scraper?.name || `Scrapper indisponible (${bookmark.scraperId})`}
-                  </span>
-                  <h4>{bookmark.title}</h4>
-                  {bookmark.description || bookmark.summary ? (
-                    <p className="scraper-browser__result-summary">
-                      {bookmark.description || bookmark.summary}
-                    </p>
-                  ) : null}
-
-                  {bookmark.authors.length ? (
-                    <div className="scraper-browser__chips">
-                      {bookmark.authors.map((author) => (
-                        <span key={author} className="scraper-browser__chip is-author">{author}</span>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {bookmark.tags.length ? (
-                    <div className="scraper-browser__chips">
-                      {bookmark.tags.map((tag) => (
-                        <span key={tag} className="scraper-browser__chip is-tag">{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="scraper-browser__result-actions">
-                  <ScraperBookmarkButton
-                    scraperId={bookmark.scraperId}
-                    sourceUrl={bookmark.sourceUrl}
-                    title={bookmark.title}
-                    cover={bookmark.cover}
-                    summary={bookmark.summary}
-                    description={bookmark.description}
-                    authors={bookmark.authors}
-                    tags={bookmark.tags}
-                    mangaStatus={bookmark.mangaStatus}
-                    excludedFields={scraper?.globalConfig.bookmark.excludedFields}
-                    size="sm"
-                  />
-
-                  {canOpenBookmark ? (
-                    <button
-                      type="button"
-                      className="scraper-browser__result-action-button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleOpenBookmark(bookmark);
-                      }}
-                      onKeyDown={(event) => {
-                        event.stopPropagation();
-                      }}
-                    >
-                      Ouvrir la fiche
-                    </button>
-                  ) : (
-                    <span className="scraper-browser__result-action-hint is-muted">
-                      Scrapper indisponible
-                    </span>
-                  )}
-                </div>
-              </article>
+                bookmark={bookmark}
+                scraper={scraper}
+                onOpenBookmark={handleOpenBookmark}
+              />
             );
           })}
         </div>

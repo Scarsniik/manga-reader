@@ -105,17 +105,17 @@ export default function ScraperDetailsPanel({
           </div>
 
           {detailsResult.authors.length ? (
-            <div className="scraper-browser__chips">
+            <div className="scraper-card__chips">
               {detailsResult.authors.map((author) => (
-                <span key={author} className="scraper-browser__chip is-author">{author}</span>
+                <span key={author} className="scraper-card__chip is-author">{author}</span>
               ))}
             </div>
           ) : null}
 
           {detailsResult.tags.length ? (
-            <div className="scraper-browser__chips">
+            <div className="scraper-card__chips">
               {detailsResult.tags.map((tag) => (
-                <span key={tag} className="scraper-browser__chip is-tag">{tag}</span>
+                <span key={tag} className="scraper-card__chip is-tag">{tag}</span>
               ))}
             </div>
           ) : null}

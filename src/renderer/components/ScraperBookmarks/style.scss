@@ -105,17 +105,17 @@
   flex-direction: column;
 }
 
-.scraper-bookmarks-view__card .scraper-browser__result-media {
+.scraper-bookmarks-view__card .scraper-card__media {
   flex: 0 0 auto;
 }
 
-.scraper-bookmarks-view__card .scraper-browser__result-body {
+.scraper-bookmarks-view__card .scraper-card__body {
   flex: 1 1 auto;
   min-height: 0;
   justify-content: flex-start;
 }
 
-.scraper-bookmarks-view__card .scraper-browser__result-actions {
+.scraper-bookmarks-view__card .scraper-card__actions {
   flex: 0 0 auto;
   margin-top: auto;
 }
