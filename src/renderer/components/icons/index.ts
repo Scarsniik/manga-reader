@@ -1,10 +1,12 @@
 export { default as BookmarkRibbonIcon } from './bookmark-ribbon.svg?react';
 export { default as ChevronDownIcon } from './chevron-down.svg?react';
 export { default as ChevronLeftIcon } from './chevron-left.svg?react';
+export { default as DetailsCardIcon } from './details-card.svg?react';
 export { default as DownloadArrowIcon } from './download-arrow.svg?react';
 export { default as EditPencilIcon } from './edit-pencil.svg?react';
 export { default as FileSelectionIcon } from './file-selection.svg?react';
 export { default as FolderExternalLinkIcon } from './folder-external-link.svg?react';
+export { default as ImageExpandIcon } from './image-expand.svg?react';
 export { default as LoadingSpinnerIcon } from './loading-spinner.svg?react';
 export { default as MagnifyingGlassIcon } from './magnifying-glass.svg?react';
 export { default as OpenBookIcon } from './open-book.svg?react';
