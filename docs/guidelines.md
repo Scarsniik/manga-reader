@@ -8,6 +8,16 @@
 - eviter au maximum les enormes fichiers. D'une manière générale, un fichier de plus de 400 lignes est mauvais signe. Sauf cas exceptionnel il ne faut pas en arriver là. Mais on évite aussi de découper pour faire jolie. Il faut garder une logique dans les fichiers.
 - pas d'import relatif. On utilise des alias pour les imports.
 
+## Structure
+
+- On sépare bien les logique de code:
+
+  - Components
+  - Hooks
+  - Utils
+  - Styles
+  - Types
+
 ## React
 
 - les components doivent être atomiques. Pas de component qui fait tout. On a un component principal qui est la pour faire le lien entre les autres components. Les autres components sont là pour faire une tâche précise.
