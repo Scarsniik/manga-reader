@@ -6,3 +6,4 @@ Ce fichier est un composant React qui affiche une carte pour un manga individuel
 - Avec le path, on va chercher l'image de couverture dans le dossier du manga. (premiere image du dossier)
 - Affiche le titre du manga.
 - Affiche le nombre de pages (nombre d'images dans le dossier)
+- Quand la bibliothèque est filtrée sur une série, affiche aussi le numéro de chapitre au-dessus du compteur de pages.

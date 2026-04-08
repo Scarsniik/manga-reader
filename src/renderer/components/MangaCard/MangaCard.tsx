@@ -6,6 +6,7 @@ import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaMo
 import buildMangaOcrModal from '@/renderer/components/Modal/modales/MangaOcrModal';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
+import { extractChapterSortValue } from '@/renderer/utils/seriesChapters';
 import { OpenBookIcon, EditPencilIcon, TrashCanIcon } from '@/renderer/components/icons';
 
 interface Props {
@@ -40,6 +41,17 @@ const MangaCard: React.FC<Props> = ({
     const seriesId = typeof manga.seriesId === 'string' && manga.seriesId.trim().length > 0
         ? manga.seriesId
         : null;
+    const selectedSeriesId = useMemo(() => {
+        const queryString = location.search.startsWith('?')
+            ? location.search.slice(1)
+            : location.search;
+        const searchParams = new URLSearchParams(queryString);
+        const normalizedSeriesId = searchParams.get('series');
+
+        return typeof normalizedSeriesId === 'string' && normalizedSeriesId.trim().length > 0
+            ? normalizedSeriesId.trim()
+            : null;
+    }, [location.search]);
     const rememberReaderReturnPoint = useCallback(() => {
         const content = document.querySelector('.mangaManager-content');
         const elementScrollTop = content instanceof HTMLElement ? content.scrollTop : 0;
@@ -141,6 +153,27 @@ const MangaCard: React.FC<Props> = ({
 
         return src;
     }, [manga.thumbnailPath]);
+
+    const chapterLabel = useMemo(() => {
+        if (!seriesId || selectedSeriesId !== seriesId) {
+            return null;
+        }
+
+        const rawChapterLabel = typeof manga.chapters === 'string'
+            ? manga.chapters.trim()
+            : '';
+
+        if (!rawChapterLabel) {
+            return null;
+        }
+
+        const chapterNumber = extractChapterSortValue(rawChapterLabel);
+        if (chapterNumber !== null) {
+            return `Chapitre ${chapterNumber}`;
+        }
+
+        return rawChapterLabel;
+    }, [manga.chapters, selectedSeriesId, seriesId]);
 
     const onCardClick = useCallback((e: React.MouseEvent) => {
         // If ctrlKey or selectionMode, toggle selection instead of navigation
@@ -307,6 +340,7 @@ const MangaCard: React.FC<Props> = ({
             key={manga.id}
             coverPath={coverSrc}
             title={manga.title}
+            metaLabel={chapterLabel}
             dataMangaId={manga.id}
             current={currentPage}
             countLabel="pages"

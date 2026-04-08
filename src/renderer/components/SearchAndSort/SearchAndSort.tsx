@@ -10,6 +10,8 @@ import SeriesField from '@/renderer/components/utils/Form/fields/SeriesField';
 import AuthorField from '@/renderer/components/utils/Form/fields/AuthorField';
 import EntityPickerField, { EntityOption } from '@/renderer/components/utils/Form/fields/EntityPickerField';
 import { languages } from '@/renderer/consts/languages';
+import { compareSeriesMangasByChapter } from '@/renderer/utils/seriesChapters';
+import { CloseXIcon } from "@/renderer/components/icons";
 
 type Props = {
     mangaList: Manga[];
@@ -534,6 +536,12 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         ? `${activeAdvancedFilterCount} filtre${activeAdvancedFilterCount > 1 ? 's' : ''} actif${activeAdvancedFilterCount > 1 ? 's' : ''}`
         : 'Aucun filtre avance';
 
+    // Remove all the filters
+    const resetFilters = useCallback(() => {
+        const defaultFilters = buildDefaultFilters(defaultSort, defaultSearch);
+        applyFilterState(defaultFilters);
+    }, [applyFilterState, defaultSearch, defaultSort]);
+
     const applyFilters = useCallback(() => {
         const searchLower = (query || '').trim().toLowerCase();
 
@@ -607,25 +615,29 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             return true;
         });
 
-        // sort
+        // A focused series view should always follow chapter order.
         result = result.slice();
-        switch (sortBy) {
-            case 'title-asc':
-                result.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-                break;
-            case 'title-desc':
-                result.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
-                break;
-            case 'date-asc':
-                result.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-                break;
-            case 'date-desc':
-            default:
-                result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-                break;
+        if (selectedSeriesId) {
+            result.sort(compareSeriesMangasByChapter);
+        } else {
+            switch (sortBy) {
+                case 'title-asc':
+                    result.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+                    break;
+                case 'title-desc':
+                    result.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+                    break;
+                case 'date-asc':
+                    result.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+                    break;
+                case 'date-desc':
+                default:
+                    result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+                    break;
+            }
         }
 
-        if (unfinishedFirst) {
+        if (unfinishedFirst && !selectedSeriesId) {
             // Promote mangas that are actually "En cours" using the same status logic as filters.
             result = result.slice().sort((a, b) => {
                 const aPagesRaw = a.pages;
@@ -801,7 +813,14 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                     <div className="searchAndSort__eyebrow">Bibliotheque</div>
                     <div className="searchAndSort__titleRow">
                         <h2 className="searchAndSort__title">Recherche et filtres</h2>
-                        <span className="searchAndSort__badge">{activeAdvancedFilterLabel}</span>
+                        <span className="searchAndSort__badge">
+                            {activeAdvancedFilterLabel}
+                            { activeAdvancedFilterCount > 0 &&
+                                <button onClick={resetFilters}>
+                                    <CloseXIcon focusable="false" />
+                                </button>
+                            }
+                        </span>
                     </div>
                     <div className="tag-summary">{tagSummary}</div>
                 </div>

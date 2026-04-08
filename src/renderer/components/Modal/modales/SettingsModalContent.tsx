@@ -94,10 +94,16 @@ export default function SettingsModalContent() {
       label: 'Conserver les filtres de la liste au redémarrage',
       type: 'checkbox',
     },
+    {
+      name: 'stackMangaInSeries',
+      label: 'Empiler les mangas dans une série dans la bibliothèque',
+      type: 'checkbox',
+    },
   ]
 
   const onSubmit = async (values: Record<string, any>) => {
     const persistMangaFilters = values.persistMangaFilters !== false
+    const stackMangaInSeries = values.stackMangaInSeries !== false
     const readerPreloadPageCount = normalizeReaderPreloadPageCount(values.readerPreloadPageCount)
 
     // convert types
@@ -115,6 +121,7 @@ export default function SettingsModalContent() {
       ocrAutoRunOnImport: !!values.ocrAutoRunOnImport,
       ocrAutoAssignJapaneseLanguage: values.ocrAutoAssignJapaneseLanguage !== false,
       persistMangaFilters,
+      stackMangaInSeries,
       mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
     }
     await setParams(toSave)

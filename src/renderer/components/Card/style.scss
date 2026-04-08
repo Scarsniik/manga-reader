@@ -65,6 +65,13 @@
   min-height: 1.2em;
 }
 
+.manga-card .manga-card-meta {
+  font-size: 12px;
+  color: #d4c7a1;
+  min-height: 1.2em;
+  margin-bottom: 2px;
+}
+
 /* Progress bar shown when currentPage is available */
 .manga-card .manga-card-progress {
   display: flex;
@@ -215,6 +222,19 @@
     span {
       margin-top: -11px;
       display: block;
+    }
+
+    &.compact {
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 22px;
+      border-radius: 8px;
+      font-size: 20px;
+
+      span {
+        margin-top: -10px;
+      }
     }
   }
 

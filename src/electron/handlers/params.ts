@@ -32,6 +32,7 @@ const defaultSettings = {
     ocrAutoRunOnImport: false,
     ocrAutoAssignJapaneseLanguage: true,
     persistMangaFilters: true,
+    stackMangaInSeries: true,
     mangaListFilters: null,
 };
 

@@ -76,6 +76,22 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+
+  button {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #9dc2ef;
+    cursor: pointer;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
 }
 
 .searchAndSort .tag-summary {

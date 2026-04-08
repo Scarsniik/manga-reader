@@ -673,6 +673,7 @@ const MangaManager: React.FC = () => {
                         ) : (
                             <CardList
                                 mangas={displayedMangas}
+                                allMangas={mangas}
                                 onRemove={handleRemove}
                                 onCardUpdated={handleCardUpdated}
                                 selectedIds={selectedIds}

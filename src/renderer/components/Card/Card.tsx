@@ -38,6 +38,7 @@ export type CardOverlayItem = CardOverlayTitle | CardOverlayButton;
 
 interface Props {
     title?: string;
+    metaLabel?: string | null;
     countLabel: string;
     coverPath: string | null;
     dataMangaId?: string;
@@ -53,6 +54,8 @@ interface Props {
     selected?: boolean;
     titleLineCount?: number;
     showPageNumbers?: boolean;
+    countValue?: number | null;
+    overlayTriggerSize?: "default" | "compact";
 }
 
 const normalizeOverlayItemLabel = (label?: string): string | null => {
@@ -89,6 +92,7 @@ function Card(props: Props): JSX.Element {
         coverPath: defaultCoverPath,
         dataMangaId,
         title,
+        metaLabel,
         onClick,
         onKeyDown,
         countLabel,
@@ -96,6 +100,8 @@ function Card(props: Props): JSX.Element {
         selected = false,
         titleLineCount = 2,
         showPageNumbers = true,
+        countValue = total,
+        overlayTriggerSize = "default",
     } = props;
 
     const [coverPath, setCoverPath] = useState<string | null>(defaultCoverPath ?? null);
@@ -215,7 +221,10 @@ function Card(props: Props): JSX.Element {
                     </div>
                 ) : overlayContent?.length ? (
                     <button
-                        className="manga-card-overlay-open"
+                        className={[
+                            "manga-card-overlay-open",
+                            overlayTriggerSize === "compact" ? "compact" : "",
+                        ].join(" ").trim()}
                         onClick={handleToggleOverlay}
                         type="button"
                         aria-haspopup="true"
@@ -243,8 +252,11 @@ function Card(props: Props): JSX.Element {
             <div className={`manga-card-title title-lines-${titleLineCount}`}>
                 {title}
             </div>
+        {metaLabel ? (
+            <div className="manga-card-meta">{metaLabel}</div>
+        ) : null}
         {showPageNumbers ? (
-            <div className="manga-card-pages">{total === undefined ? '...' : total === null ? 'N/A' : `${total} ${countLabel}`}</div>
+            <div className="manga-card-pages">{countValue === undefined ? '...' : countValue === null ? 'N/A' : `${countValue} ${countLabel}`}</div>
         ) : null}
         </div>
     );
