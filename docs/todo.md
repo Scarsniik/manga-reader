@@ -21,6 +21,8 @@
 - [ ] Mode hors-ligne explicite pour n’afficher que le contenu local.
 - [ ] Selection de page dans les resultat de recherche
 - [ ] Détction de derniere page de resultat de recherche
+- [ ] Gerer le systeme de téléchargement natif du site avec le scrapper (nouveau module)
+- [ ] Gerer les apis (nouveau module)
 
 ### Fixes
 
