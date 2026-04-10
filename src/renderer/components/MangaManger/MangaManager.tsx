@@ -16,11 +16,7 @@ import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
 import ScraperBookmarksView from '@/renderer/components/ScraperBookmarks/ScraperBookmarksView';
-import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
-import {
-    ScraperRuntimeChapterResult,
-    ScraperRuntimeDetailsResult,
-} from '@/renderer/utils/scraperRuntime';
+import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 import {
     clearScraperRouteState,
     parseScraperRouteState,
@@ -49,13 +45,7 @@ const MangaManager: React.FC = () => {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
     const [activeDownloadJobCount, setActiveDownloadJobCount] = useState(0);
-    const [scraperBrowserSeed, setScraperBrowserSeed] = useState<{
-        scraperId: string;
-        query: string;
-        detailsResult: ScraperRuntimeDetailsResult;
-        chaptersResult?: ScraperRuntimeChapterResult[];
-        searchReturnState?: ScraperSearchReturnState | null;
-    } | null>(null);
+    const [scraperBrowserSeed, setScraperBrowserSeed] = useState<ScraperBrowserReturnState | null>(null);
     const { tags } = useTags();
     const { params, loading: paramsLoading, setParams } = useParams();
     const { openModal } = useModal();
@@ -427,13 +417,7 @@ const MangaManager: React.FC = () => {
 
     useEffect(() => {
         const nextState = location.state as {
-            scraperBrowserReturn?: {
-                scraperId: string;
-                query: string;
-                detailsResult: ScraperRuntimeDetailsResult;
-                chaptersResult?: ScraperRuntimeChapterResult[];
-                searchReturnState?: ScraperSearchReturnState | null;
-            };
+            scraperBrowserReturn?: ScraperBrowserReturnState;
         } | null;
 
         const scraperBrowserReturn = nextState?.scraperBrowserReturn;

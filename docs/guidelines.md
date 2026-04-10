@@ -6,6 +6,7 @@
 - les noms de variables et de fonctions doivent être explicites
 - les fonctions doivent être courtes
 - eviter au maximum les enormes fichiers. D'une manière générale, un fichier de plus de 400 lignes est mauvais signe. Sauf cas exceptionnel il ne faut pas en arriver là. Mais on évite aussi de découper pour faire jolie. Il faut garder une logique dans les fichiers.
+- quand on decoupe un fichier, il faut aussi penser au cout de contexte. Trop de micro-fichiers, de hooks tres fins ou de fonctions qui se passent beaucoup de parametres peuvent rendre la maintenance plus chere pour les humains comme pour les outils bases sur les tokens. Il faut preferer quelques fichiers coherents plutot qu'un decoupage trop fin.
 - pas d'import relatif. On utilise des alias pour les imports.
 - Quand c'est possible, adopter une structure qui évite les différences de merge inutiles. Exemple : mettre une virgule à la fin de chaque ligne d'un objet, même pour la dernière ligne. Comme ça, quand on ajoute une ligne à l'objet, on n'a pas de diff sur la ligne précédente.
 

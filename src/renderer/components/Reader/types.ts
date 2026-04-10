@@ -4,7 +4,7 @@ import {
     ScraperRuntimeChapterResult,
     ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
-import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
+import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 
 export type ReaderLocationState = {
     from?: {
@@ -12,13 +12,7 @@ export type ReaderLocationState = {
         search?: string;
     };
     mangaId?: string;
-    scraperBrowserReturn?: {
-        scraperId: string;
-        query: string;
-        detailsResult: ScraperRuntimeDetailsResult;
-        chaptersResult?: ScraperRuntimeChapterResult[];
-        searchReturnState?: ScraperSearchReturnState | null;
-    };
+    scraperBrowserReturn?: ScraperBrowserReturnState;
     scraperReader?: {
         id: string;
         scraperId: string;

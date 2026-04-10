@@ -182,7 +182,12 @@ const truncateValue = (value: string, max = 160): string => (
 
 const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-export const isFieldKey = (value: unknown): value is ScraperFeatureValidationCheck['key'] => (
+export type DetailsFieldKey = Extract<
+  ScraperFeatureValidationCheck['key'],
+  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status'
+>;
+
+export const isFieldKey = (value: unknown): value is DetailsFieldKey => (
   ['title', 'cover', 'description', 'authors', 'tags', 'status'].includes(String(value))
 );
 

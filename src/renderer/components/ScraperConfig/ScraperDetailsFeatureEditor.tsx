@@ -280,7 +280,9 @@ export default function ScraperDetailsFeatureEditor({
         try {
           const values = extractSelectorValues(doc, selector);
           if (values.length > 0) {
-            extractedValuesByKey[key] = values;
+            if (isFieldKey(key)) {
+              extractedValuesByKey[key] = values;
+            }
             checks.push({
               key,
               selector,
