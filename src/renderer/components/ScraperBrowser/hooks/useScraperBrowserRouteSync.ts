@@ -1,11 +1,12 @@
-import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavigateFunction } from 'react-router-dom';
 import {
   ScraperBrowseMode,
   ScraperBrowserInitialState,
-  ScraperSearchReturnState,
+  ScraperBrowserLocationState,
+  ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
-import { buildSearchReturnStateFromRoute } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
+import { buildListingReturnStateFromRoute } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   parseScraperRouteState,
   writeScraperRouteState,
@@ -16,9 +17,9 @@ import {
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 
-type SearchLookupOptions = {
+type ListingLookupOptions = {
   pageIndex?: number;
-  preserveSearchReturnState?: boolean;
+  preserveListingReturnState?: boolean;
 };
 
 type UseScraperBrowserRouteSyncOptions = {
@@ -26,30 +27,33 @@ type UseScraperBrowserRouteSyncOptions = {
   initialState: ScraperBrowserInitialState | null;
   locationPathname: string;
   locationSearch: string;
+  locationState: ScraperBrowserLocationState | null;
   navigate: NavigateFunction;
   availableModes: ScraperBrowseMode[];
   defaultMode: ScraperBrowseMode;
   hasSearch: boolean;
+  hasAuthor: boolean;
   hasDetails: boolean;
   hasConfiguredHomeSearch: boolean;
   homeSearchQuery: string;
   mode: ScraperBrowseMode;
   query: string;
-  hasExecutedSearch: boolean;
-  searchPageIndex: number;
-  searchReturnState: ScraperSearchReturnState | null;
+  hasExecutedListing: boolean;
+  listingPageIndex: number;
+  listingReturnState: ScraperListingReturnState | null;
   currentDetailsUrl: string;
   clearFeedback: () => void;
-  resetSearchState: () => void;
+  resetListingState: () => void;
   resetDetailsState: () => void;
   resetAsyncState: () => void;
   cancelScheduledScrollRestore: () => void;
   setMode: Dispatch<SetStateAction<ScraperBrowseMode>>;
   setQuery: Dispatch<SetStateAction<string>>;
-  setSearchReturnState: Dispatch<SetStateAction<ScraperSearchReturnState | null>>;
+  setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
-  runSearchLookup: (query: string, options?: SearchLookupOptions) => Promise<void>;
+  runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
+  runAuthorLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runDetailsLookup: (query: string) => Promise<void>;
   loadDetailsFromTargetUrl: (targetUrl: string) => Promise<void>;
 };
@@ -59,36 +63,40 @@ export function useScraperBrowserRouteSync({
   initialState,
   locationPathname,
   locationSearch,
+  locationState,
   navigate,
   availableModes,
   defaultMode,
   hasSearch,
+  hasAuthor,
   hasDetails,
   hasConfiguredHomeSearch,
   homeSearchQuery,
   mode,
   query,
-  hasExecutedSearch,
-  searchPageIndex,
-  searchReturnState,
+  hasExecutedListing,
+  listingPageIndex,
+  listingReturnState,
   currentDetailsUrl,
   clearFeedback,
-  resetSearchState,
+  resetListingState,
   resetDetailsState,
   resetAsyncState,
   cancelScheduledScrollRestore,
   setMode,
   setQuery,
-  setSearchReturnState,
+  setListingReturnState,
   setDetailsResult,
   setChaptersResult,
   runSearchLookup,
+  runAuthorLookup,
   runDetailsLookup,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserRouteSyncOptions) {
   const [urlRestoreReady, setUrlRestoreReady] = useState(false);
   const lastInternalSearchRef = useRef<string | null>(null);
   const lastRestoredRouteSignatureRef = useRef<string | null>(null);
+  const isRestoringRouteRef = useRef(false);
 
   const routeState = useMemo(
     () => parseScraperRouteState(locationSearch),
@@ -105,14 +113,15 @@ export function useScraperBrowserRouteSync({
 
   useEffect(() => {
     setQuery(formatScraperValueForDisplay(initialState?.query ?? ''));
-    resetSearchState();
-    setSearchReturnState(initialState?.searchReturnState ?? null);
+    resetListingState();
+    setListingReturnState(initialState?.listingReturnState ?? null);
     setDetailsResult(initialState?.detailsResult ?? null);
     setChaptersResult(initialState?.chaptersResult ?? []);
     clearFeedback();
     resetAsyncState();
     setUrlRestoreReady(false);
     cancelScheduledScrollRestore();
+    isRestoringRouteRef.current = false;
     lastInternalSearchRef.current = null;
     lastRestoredRouteSignatureRef.current = null;
   }, [
@@ -120,159 +129,207 @@ export function useScraperBrowserRouteSync({
     clearFeedback,
     initialState,
     resetAsyncState,
-    resetSearchState,
+    resetListingState,
     scraperId,
     setChaptersResult,
     setDetailsResult,
+    setListingReturnState,
     setQuery,
-    setSearchReturnState,
   ]);
 
-  useEffect(() => {
-    if (urlRestoreReady) {
-      return;
-    }
+  const restoreFromRoute = useCallback(async (allowInitialState: boolean) => {
+    const restoredListingReturnState = initialState?.listingReturnState
+      ?? buildListingReturnStateFromRoute(routeState);
 
-    if (lastRestoredRouteSignatureRef.current === routeStateSignature) {
-      return;
-    }
-
-    lastRestoredRouteSignatureRef.current = routeStateSignature;
-
-    const restoredSearchReturnState = initialState?.searchReturnState
-      ?? buildSearchReturnStateFromRoute(routeState);
-
-    if (initialState?.detailsResult) {
+    if (allowInitialState && initialState?.detailsResult) {
       setMode('manga');
       setQuery(formatScraperValueForDisplay(
         routeState.mangaQuery || routeState.mangaUrl || initialState.query || '',
       ));
-      setSearchReturnState(restoredSearchReturnState);
-      setUrlRestoreReady(true);
+      setListingReturnState(restoredListingReturnState);
       return;
     }
 
     if (routeState.scraperId !== scraperId) {
-      setUrlRestoreReady(true);
       return;
     }
 
     const nextMode = availableModes.includes(routeState.mode)
       ? routeState.mode
       : defaultMode;
-    let cancelled = false;
+    setMode(nextMode);
 
-    const finalizeRestore = () => {
-      if (!cancelled) {
-        setUrlRestoreReady(true);
-      }
-    };
+    if (nextMode === 'search') {
+      setQuery(routeState.searchQuery);
 
-    const restoreFromRoute = async () => {
-      setMode(nextMode);
-
-      if (nextMode === 'search') {
-        setQuery(routeState.searchQuery);
-
-        if (routeState.searchActive && hasSearch) {
-          await runSearchLookup(routeState.searchQuery, {
-            pageIndex: Math.max(0, routeState.searchPage - 1),
-          });
-          finalizeRestore();
-          return;
-        }
-
-        if (
-          hasConfiguredHomeSearch
-          && !routeState.searchActive
-          && !routeState.mangaQuery
-          && !routeState.mangaUrl
-        ) {
-          setQuery(homeSearchQuery);
-          await runSearchLookup(homeSearchQuery);
-          finalizeRestore();
-          return;
-        }
-
-        setSearchReturnState(null);
-        resetDetailsState();
-        resetSearchState();
-        clearFeedback();
-        finalizeRestore();
+      if (routeState.searchActive && hasSearch) {
+        await runSearchLookup(routeState.searchQuery, {
+          pageIndex: Math.max(0, routeState.searchPage - 1),
+        });
         return;
       }
 
-      setQuery(formatScraperValueForDisplay(routeState.mangaQuery || routeState.mangaUrl || ''));
-      setSearchReturnState(restoredSearchReturnState);
-
-      if (hasDetails && routeState.mangaUrl) {
-        await loadDetailsFromTargetUrl(routeState.mangaUrl);
-        if (!cancelled) {
-          setSearchReturnState(restoredSearchReturnState);
-        }
-        finalizeRestore();
+      if (
+        hasConfiguredHomeSearch
+        && !routeState.searchActive
+        && !routeState.authorActive
+        && !routeState.mangaQuery
+        && !routeState.mangaUrl
+      ) {
+        setQuery(homeSearchQuery);
+        await runSearchLookup(homeSearchQuery);
         return;
       }
 
-      if (hasDetails && routeState.mangaQuery) {
-        await runDetailsLookup(routeState.mangaQuery);
-        if (!cancelled) {
-          setSearchReturnState(restoredSearchReturnState);
-        }
-        finalizeRestore();
-        return;
-      }
-
+      setListingReturnState(null);
       resetDetailsState();
-      resetSearchState();
+      resetListingState();
       clearFeedback();
-      finalizeRestore();
-    };
+      return;
+    }
 
-    void restoreFromRoute();
+    if (nextMode === 'author') {
+      setQuery(routeState.authorQuery);
 
-    return () => {
-      cancelled = true;
-    };
+      if (routeState.authorActive && hasAuthor) {
+        await runAuthorLookup(routeState.authorQuery, {
+          pageIndex: Math.max(0, routeState.authorPage - 1),
+        });
+        return;
+      }
+
+      setListingReturnState(null);
+      resetDetailsState();
+      resetListingState();
+      clearFeedback();
+      return;
+    }
+
+    setQuery(formatScraperValueForDisplay(routeState.mangaQuery || routeState.mangaUrl || ''));
+    setListingReturnState(restoredListingReturnState);
+
+    if (hasDetails && routeState.mangaUrl) {
+      await loadDetailsFromTargetUrl(routeState.mangaUrl);
+      setListingReturnState(restoredListingReturnState);
+      return;
+    }
+
+    if (hasDetails && routeState.mangaQuery) {
+      await runDetailsLookup(routeState.mangaQuery);
+      setListingReturnState(restoredListingReturnState);
+      return;
+    }
+
+    resetDetailsState();
+    resetListingState();
+    clearFeedback();
   }, [
     availableModes,
     clearFeedback,
     defaultMode,
-    hasDetails,
+    hasAuthor,
     hasConfiguredHomeSearch,
+    hasDetails,
     hasSearch,
     homeSearchQuery,
     initialState,
     loadDetailsFromTargetUrl,
     resetDetailsState,
-    resetSearchState,
+    resetListingState,
     routeState,
     routeStateSignature,
+    runAuthorLookup,
     runDetailsLookup,
     runSearchLookup,
     scraperId,
+    setListingReturnState,
     setMode,
     setQuery,
-    setSearchReturnState,
+  ]);
+
+  useEffect(() => {
+    const isInternalRouteWrite = lastInternalSearchRef.current === locationSearch;
+    if (isInternalRouteWrite) {
+      lastInternalSearchRef.current = null;
+      lastRestoredRouteSignatureRef.current = routeStateSignature;
+      if (!urlRestoreReady) {
+        setUrlRestoreReady(true);
+      }
+      return;
+    }
+
+    const shouldRestoreInitialRoute = !urlRestoreReady;
+    const shouldRestoreExternalRoute = urlRestoreReady
+      && lastRestoredRouteSignatureRef.current !== routeStateSignature;
+
+    if (!shouldRestoreInitialRoute && !shouldRestoreExternalRoute) {
+      return;
+    }
+
+    let cancelled = false;
+    isRestoringRouteRef.current = true;
+
+    const runRestore = async () => {
+      try {
+        await restoreFromRoute(shouldRestoreInitialRoute);
+      } finally {
+        if (cancelled) {
+          return;
+        }
+
+        isRestoringRouteRef.current = false;
+        lastRestoredRouteSignatureRef.current = routeStateSignature;
+        setUrlRestoreReady(true);
+      }
+    };
+
+    void runRestore();
+
+    return () => {
+      cancelled = true;
+      isRestoringRouteRef.current = false;
+    };
+  }, [
+    locationSearch,
+    restoreFromRoute,
+    routeStateSignature,
     urlRestoreReady,
   ]);
 
   useEffect(() => {
-    if (!urlRestoreReady) {
+    if (!urlRestoreReady || isRestoringRouteRef.current) {
       return;
     }
 
     const persistedSearchState = mode === 'search'
       ? {
-        active: hasExecutedSearch,
+        active: hasExecutedListing,
         query,
-        page: searchPageIndex + 1,
+        page: listingPageIndex + 1,
       }
-      : searchReturnState?.hasExecutedSearch
+      : listingReturnState?.mode === 'search' && listingReturnState.hasExecutedListing
         ? {
           active: true,
-          query: searchReturnState.query,
-          page: searchReturnState.pageIndex + 1,
+          query: listingReturnState.query,
+          page: listingReturnState.pageIndex + 1,
+        }
+        : {
+          active: false,
+          query: '',
+          page: 1,
+        };
+
+    const persistedAuthorState = mode === 'author'
+      ? {
+        active: hasExecutedListing,
+        query,
+        page: listingPageIndex + 1,
+      }
+      : listingReturnState?.mode === 'author' && listingReturnState.hasExecutedListing
+        ? {
+          active: true,
+          query: listingReturnState.query,
+          page: listingReturnState.pageIndex + 1,
         }
         : {
           active: false,
@@ -286,6 +343,9 @@ export function useScraperBrowserRouteSync({
       searchActive: persistedSearchState.active,
       searchQuery: persistedSearchState.query,
       searchPage: persistedSearchState.page,
+      authorActive: persistedAuthorState.active,
+      authorQuery: persistedAuthorState.query,
+      authorPage: persistedAuthorState.page,
       mangaQuery: mode === 'manga' ? query : '',
       mangaUrl: mode === 'manga'
         ? formatScraperValueForDisplay(currentDetailsUrl) || undefined
@@ -307,19 +367,23 @@ export function useScraperBrowserRouteSync({
         pathname: locationPathname,
         search: nextSearch,
       },
-      { replace: true },
+      {
+        replace: true,
+        state: locationState ?? null,
+      },
     );
   }, [
     currentDetailsUrl,
-    hasExecutedSearch,
+    hasExecutedListing,
+    listingPageIndex,
+    listingReturnState,
     locationPathname,
     locationSearch,
+    locationState,
     mode,
     navigate,
     query,
     scraperId,
-    searchPageIndex,
-    searchReturnState,
     urlRestoreReady,
   ]);
 }

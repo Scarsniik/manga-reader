@@ -12,12 +12,15 @@ type Props = {
   bookmarkExcludedFields: ScraperBookmarkMetadataField[];
   detailsResult: ScraperRuntimeDetailsResult | null;
   chapters: ScraperRuntimeChapterResult[];
+  hasAuthor: boolean;
+  backLabel?: string | null;
+  canResolveAuthorName: boolean;
   hasPages: boolean;
   usesChapters: boolean;
-  canReturnToSearch: boolean;
   openingReader: boolean;
   downloading: boolean;
-  onBackToSearch: () => void;
+  onBack?: () => void;
+  onOpenAuthor: (value: string) => void;
   onOpenReader: (chapter?: ScraperRuntimeChapterResult) => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
 };
@@ -27,12 +30,15 @@ export default function ScraperDetailsPanel({
   bookmarkExcludedFields,
   detailsResult,
   chapters,
+  hasAuthor,
+  backLabel = null,
+  canResolveAuthorName,
   hasPages,
   usesChapters,
-  canReturnToSearch,
   openingReader,
   downloading,
-  onBackToSearch,
+  onBack,
+  onOpenAuthor,
   onOpenReader,
   onDownload,
 }: Props) {
@@ -42,14 +48,14 @@ export default function ScraperDetailsPanel({
 
   return (
     <>
-      {canReturnToSearch ? (
+      {backLabel && onBack ? (
         <div className="scraper-browser__details-return">
           <button
             type="button"
             className="scraper-browser__back-to-search"
-            onClick={onBackToSearch}
+            onClick={onBack}
           >
-            Retour a la recherche
+            {backLabel}
           </button>
         </div>
       ) : null}
@@ -106,9 +112,29 @@ export default function ScraperDetailsPanel({
 
           {detailsResult.authors.length ? (
             <div className="scraper-card__chips">
-              {detailsResult.authors.map((author) => (
-                <span key={author} className="scraper-card__chip is-author">{author}</span>
-              ))}
+              {detailsResult.authors.map((author, index) => {
+                const authorUrl = detailsResult.authorUrls[index];
+                const canOpenAuthor = hasAuthor && Boolean(authorUrl || (canResolveAuthorName && author));
+                const authorTarget = authorUrl || author;
+
+                if (!canOpenAuthor || !authorTarget) {
+                  return (
+                    <span key={`${author}-${index}`} className="scraper-card__chip is-author">{author}</span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={`${author}-${index}`}
+                    type="button"
+                    className="scraper-card__chip is-author is-clickable"
+                    onClick={() => onOpenAuthor(authorTarget)}
+                    title={`Ouvrir la page auteur pour ${author}`}
+                  >
+                    {author}
+                  </button>
+                );
+              })}
             </div>
           ) : null}
 

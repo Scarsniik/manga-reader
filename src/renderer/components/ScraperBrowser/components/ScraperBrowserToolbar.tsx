@@ -24,6 +24,12 @@ export default function ScraperBrowserToolbar({
   onModeChange,
   onQueryChange,
 }: Props) {
+  const modeLabels: Record<ScraperBrowseMode, string> = {
+    search: 'Recherche',
+    manga: 'Manga',
+    author: 'Auteur',
+  };
+
   return (
     <div className="scraper-browser__panel">
       <form className="scraper-browser__toolbar" onSubmit={onSubmit}>
@@ -33,8 +39,9 @@ export default function ScraperBrowserToolbar({
             value={mode}
             onChange={(event) => onModeChange(event.target.value as ScraperBrowseMode)}
           >
-            <option value="search">Recherche</option>
-            <option value="manga">Manga</option>
+            {availableModes.map((availableMode) => (
+              <option key={availableMode} value={availableMode}>{modeLabels[availableMode]}</option>
+            ))}
           </select>
         ) : null}
 

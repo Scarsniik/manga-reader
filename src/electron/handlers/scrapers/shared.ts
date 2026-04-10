@@ -70,7 +70,7 @@ export const sanitizeAccessValidation = (
 const sanitizeFeatureValidationCheck = (
   check: Partial<ScraperFeatureValidationCheck>,
 ): ScraperFeatureValidationCheck | null => {
-  const allowedKeys = ["title", "cover", "description", "authors", "tags", "status", "chapters", "pages"];
+  const allowedKeys = ["title", "cover", "description", "authors", "authorUrl", "tags", "status", "chapters", "pages"];
   if (!allowedKeys.includes(String(check.key))) {
     return null;
   }

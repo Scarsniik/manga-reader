@@ -14,6 +14,7 @@ import {
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import { Field } from '@/renderer/components/utils/Form/types';
 
 export type SearchRequestFieldFormItem = ScraperRequestField & {
@@ -115,6 +116,12 @@ export const SCRAPING_FIELDS: Field[] = [
     placeholder: 'Optionnel : a@href',
   },
   {
+    name: 'authorUrlSelector',
+    label: 'Selecteur du lien auteur',
+    type: 'text',
+    placeholder: 'Optionnel : .author a@href',
+  },
+  {
     name: 'thumbnailSelector',
     label: 'Selecteur de miniature',
     type: 'text',
@@ -150,6 +157,7 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   resultItemSelector: '',
   titleSelector: '',
   detailUrlSelector: '',
+  authorUrlSelector: '',
   thumbnailSelector: '',
   summarySelector: '',
   nextPageSelector: '',
@@ -237,6 +245,7 @@ export const buildSearchConfig = (
   resultItemSelector: normalizeSelectorInput(String(values.resultItemSelector ?? '')),
   titleSelector: normalizeSelectorInput(String(values.titleSelector ?? '')),
   detailUrlSelector: trimOptionalSelector(values.detailUrlSelector),
+  authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   thumbnailSelector: trimOptionalSelector(values.thumbnailSelector),
   summarySelector: trimOptionalSelector(values.summarySelector),
   nextPageSelector: trimOptionalSelector(values.nextPageSelector),
@@ -265,6 +274,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatu
     resultItemSelector: normalizeSelectorInput(String(raw.resultItemSelector ?? '')),
     titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
     detailUrlSelector: trimOptionalSelector(raw.detailUrlSelector),
+    authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
     summarySelector: trimOptionalSelector(raw.summarySelector),
     nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
@@ -331,13 +341,14 @@ export const buildValidationPresentation = (
   const titleCheck = validationResult.checks.find((check) => check.key === 'title');
   const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
+  const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
 
   if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
+    details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
   }
 
   if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
+    details.push(`URL finale : ${formatDisplayUrl(validationResult.finalUrl)}`);
   }
 
   if (typeof validationResult.status === 'number') {
@@ -356,7 +367,11 @@ export const buildValidationPresentation = (
   }
 
   if (previewResults[0]?.detailUrl) {
-    details.push(`Premier lien detecte : ${previewResults[0].detailUrl}`);
+    details.push(`Premier lien detecte : ${formatDisplayUrl(previewResults[0].detailUrl)}`);
+  }
+
+  if (authorUrlCheck?.matchedCount) {
+    details.push(`Liens auteur detectes : ${authorUrlCheck.matchedCount}`);
   }
 
   if (coverCheck?.matchedCount) {
@@ -368,7 +383,7 @@ export const buildValidationPresentation = (
   }
 
   if (previewPage?.nextPageUrl) {
-    details.push(`Page suivante detectee : ${previewPage.nextPageUrl}`);
+    details.push(`Page suivante detectee : ${formatDisplayUrl(previewPage.nextPageUrl)}`);
   }
 
   return {

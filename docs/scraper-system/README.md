@@ -1,6 +1,6 @@
 # Systeme de scraper site/API
 
-Date : 2026-04-05
+Date : 2026-04-10
 
 Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`.
 
@@ -32,5 +32,6 @@ Il sert a verifier en priorite :
 - le flux de creation d'un `site scraper`
 - la configuration de `Recherche`
 - la configuration de `Fiche`
+- la configuration de `Auteur`
 - la configuration de `Chapitres`
 - la configuration de `Pages`

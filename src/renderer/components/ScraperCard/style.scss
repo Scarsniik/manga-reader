@@ -192,10 +192,34 @@
   font-weight: 600;
 }
 
+.scraper-card__chip.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+button.scraper-card__chip {
+  appearance: none;
+  border: none;
+  font: inherit;
+}
+
 .scraper-card__chip.is-author {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #e0e0e0;
+}
+
+.scraper-card__chip.is-author.is-clickable:hover {
+  border-color: rgba(93, 156, 255, 0.45);
+  background: rgba(93, 156, 255, 0.12);
+  color: #eef6ff;
+  transform: translateY(-1px);
+}
+
+.scraper-card__chip.is-author.is-clickable:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
 }
 
 .scraper-card__chip.is-tag {

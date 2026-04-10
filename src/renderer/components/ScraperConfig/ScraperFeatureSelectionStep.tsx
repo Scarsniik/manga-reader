@@ -4,6 +4,7 @@ import {
   ScraperFeatureKind,
   ScraperRecord,
 } from '@/shared/scraper';
+import ScraperAuthorFeatureEditor from './ScraperAuthorFeatureEditor';
 import ScraperChaptersFeatureEditor from './ScraperChaptersFeatureEditor';
 import ScraperDetailsFeatureEditor from './ScraperDetailsFeatureEditor';
 import ScraperGlobalSettingsEditor from './ScraperGlobalSettingsEditor';
@@ -84,6 +85,17 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'details') {
       return (
         <ScraperDetailsFeatureEditor
+          scraper={scraper}
+          feature={activeFeature}
+          onBack={() => setActiveFeatureKind(null)}
+          onScraperChange={onScraperChange}
+        />
+      );
+    }
+
+    if (activeFeature.kind === 'author') {
+      return (
+        <ScraperAuthorFeatureEditor
           scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScraperAccessValidationResult, ScraperIdentityDraft } from '@/shared/scraper';
+import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 
 type Props = {
   draft: ScraperIdentityDraft;
@@ -91,12 +92,12 @@ export default function ScraperValidationStep({
           <div className="scraper-validation-result__grid">
             <div>
               <span>URL testee</span>
-              <strong>{validationResult.normalizedUrl}</strong>
+              <strong>{formatDisplayUrl(validationResult.normalizedUrl)}</strong>
             </div>
             {validationResult.finalUrl ? (
               <div>
                 <span>URL finale</span>
-                <strong>{validationResult.finalUrl}</strong>
+                <strong>{formatDisplayUrl(validationResult.finalUrl)}</strong>
               </div>
             ) : null}
             {typeof validationResult.status === 'number' ? (

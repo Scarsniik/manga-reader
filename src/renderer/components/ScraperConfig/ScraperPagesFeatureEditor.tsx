@@ -12,6 +12,7 @@ import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shar
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
 import {
   buildDocumentFailure,
@@ -652,7 +653,7 @@ export default function ScraperPagesFeatureEditor({
 
           <div className="scraper-config-preview">
             <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl || 'Valide d\'abord la fiche ou complete le template pour voir l\'aperçu.'}</strong>
+            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Valide d\'abord la fiche ou complete le template pour voir l\'aperçu.'}</strong>
           </div>
 
           <div className="scraper-config-step__actions">

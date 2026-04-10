@@ -1,6 +1,6 @@
 # Systeme de scraper site/API - etat d'implementation V1
 
-Date : 2026-04-05
+Date : 2026-04-10
 
 ## Perimetre effectivement branche
 
@@ -19,13 +19,16 @@ La V1 actuellement branchee couvre :
 11. une etape `Composants`
 12. la configuration reelle de `Recherche`
 13. la configuration reelle de `Fiche`
-14. la configuration reelle de `Chapitres`
-15. la configuration reelle de `Pages`
-16. l'ouverture temporaire d'un scraper depuis le header principal
-17. l'execution runtime reelle de `Recherche`
-18. l'ouverture runtime de `Fiche` depuis `Recherche` quand le lien est disponible
-19. l'execution runtime de `Chapitres` et `Pages`
-20. le telechargement et la lecture en ligne branches sur `Pages`
+14. la configuration reelle de `Auteur`
+15. la configuration reelle de `Chapitres`
+16. la configuration reelle de `Pages`
+17. l'ouverture temporaire d'un scraper depuis le header principal
+18. l'execution runtime reelle de `Recherche`
+19. l'execution runtime reelle de `Auteur`
+20. l'ouverture runtime de `Fiche` depuis `Recherche` ou `Auteur` quand le lien est disponible
+21. les liens auteur optionnels recuperes depuis `Recherche` et `Fiche`
+22. l'execution runtime de `Chapitres` et `Pages`
+23. le telechargement et la lecture en ligne branches sur `Pages`
 
 Pas encore branche :
 
@@ -77,6 +80,7 @@ Structure actuelle :
 - `src/renderer/components/ScraperConfig/shared` pour les briques communes
 - `src/renderer/components/ScraperConfig/search` pour les blocs lies a `Recherche`
 - `src/renderer/components/ScraperConfig/details` pour les blocs lies a `Fiche`
+- `src/renderer/components/ScraperConfig/author` pour les blocs lies a `Auteur`
 - `src/renderer/components/ScraperConfig/chapters` pour les blocs lies a `Chapitres`
 - `src/renderer/components/ScraperConfig/pages` pour les blocs lies a `Pages`
 - `src/renderer/components/ScraperBrowser/components` pour les vues du runtime
@@ -136,6 +140,7 @@ L'etape `Composants` expose pour le moment :
 
 - `Recherche`
 - `Fiche`
+- `Auteur`
 - `Chapitres`
 - `Pages`
 
@@ -184,6 +189,7 @@ Le composant permet :
 - ou un acces par template d'URL
 - un selecteur de titre obligatoire
 - des selecteurs optionnels pour couverture, description, auteurs, tags et statut
+- un selecteur optionnel de lien auteur, pour rendre les tags auteur cliquables
 - une liste de variables derivees reutilisables par d'autres composants
 
 Pour chaque variable extraite, on peut definir :
@@ -229,6 +235,41 @@ Regles pratiques :
 - le titre sert de verification principale
 - les selecteurs optionnels absents remontent en warning
 - le mode `template` supporte deja `{{id}}`, `{{slug}}`, `{{value}}` et leurs variantes `raw`
+- pour les champs URL, un selecteur place sur un lien HTML utilise `href` par defaut meme sans `@href`
+
+## Configuration actuelle de `Auteur`
+
+La configuration de `Auteur` repose sur :
+
+- une section `Construction de l'URL`
+- une section `Scraping`
+- une section `Test`
+
+Le composant permet :
+
+- un acces par URL auteur connue
+- ou un acces par template d'URL auteur
+- de recopier en un clic les selecteurs de `Recherche` vers `Auteur` quand `Recherche` est deja configuree
+- un selecteur de titre obligatoire
+- des selecteurs optionnels pour lien fiche, lien auteur, miniature, resume et page suivante
+- un rendu de previsualisation identique a une liste de `Recherche`
+
+Regles actuelles :
+
+- le mode `template` accepte `{{value}}`, `{{rawValue}}`, `{{query}}`, `{{rawQuery}}`
+- la pagination auteur peut venir de `{{page}}` dans le template
+- ou d'un lien HTML de page suivante
+- pour les champs URL, un selecteur place sur un lien HTML utilise `href` par defaut meme sans `@href`
+- le composant `Recherche` peut stocker un lien auteur optionnel par card
+- le composant `Fiche` peut stocker un lien auteur optionnel pour ses tags auteur
+
+Validation actuelle de `Auteur` :
+
+- resolution de l'URL de test
+- recuperation HTML via Electron
+- parsing cote renderer
+- extraction de la liste de cards
+- affichage d'un apercu pagine si besoin
 
 ## Configuration actuelle de `Chapitres`
 
@@ -251,6 +292,7 @@ Regles actuelles :
 - le mode URL supporte les variables derivees de `Fiche`
 - `{{chapterPage}}` peut etre utilise dans l'URL des chapitres pour paginer automatiquement
 - `templateBase = scraper_base` ou `details_page` controle la resolution des URLs relatives
+- pour `URL du chapitre`, un selecteur place sur un lien HTML utilise `href` par defaut meme sans `@href`
 - `Bloc chapitre` est obligatoire
 - `URL du chapitre` est obligatoire
 - `Label du chapitre` est obligatoire
@@ -338,14 +380,15 @@ Elements conserves hors `Bibliotheque` :
 La vue temporaire du scraper affiche :
 
 - son identite
-- l'etat de `Recherche`, `Fiche`, `Chapitres` et `Pages`
+- l'etat de `Recherche`, `Fiche`, `Auteur`, `Chapitres` et `Pages`
 - une barre de saisie runtime
-- un select `Recherche / Manga` seulement si les deux composants sont utilisables
+- un select `Recherche / Manga / Auteur` selon les composants utilisables
 
 Dans la V1 actuelle, le runtime reel branche est surtout :
 
 - `Recherche`
 - `Manga` via `Fiche`
+- `Auteur`
 
 Le mode `Recherche` permet deja :
 
@@ -353,6 +396,14 @@ Le mode `Recherche` permet deja :
 - d'extraire les cartes de resultats
 - de naviguer entre les pages de recherche
 - d'ouvrir `Fiche` depuis un resultat quand un lien detail est disponible
+- d'ouvrir `Auteur` depuis un resultat quand un lien auteur est disponible
+
+Le mode `Auteur` permet deja :
+
+- d'ouvrir une page auteur par URL complete, chemin relatif ou valeur libre
+- d'extraire les cartes de la page auteur
+- de naviguer entre les pages auteur
+- d'ouvrir `Fiche` depuis les cartes retournees
 
 Le rendu temporaire affiche :
 
@@ -362,9 +413,22 @@ Le rendu temporaire affiche :
 - auteurs
 - tags
 - statut
+- tags auteur cliquables vers le mode `Auteur` quand la configuration le permet
 - la liste des chapitres extraits sous la fiche manga
 - URL demandee / URL finale
 - variables derivees resolues
+
+### Navigation produit actuelle dans le navigateur de scraper
+
+Le navigateur de scraper s'appuie maintenant sur le vrai historique du routeur pour les transitions produit.
+
+Cela couvre deja :
+
+- `Recherche -> Fiche -> retour` avec le bouton retour interne ou un retour navigateur / souris
+- `Recherche -> Fiche -> Auteur -> Fiche -> retours successifs` en revenant bien jusqu'a la recherche d'origine
+- `Bookmarks -> Fiche -> retour` avec le meme comportement
+
+Les boutons retour affiches dans les vues `Fiche` et `Auteur` suivent la meme logique que l'historique reel.
 
 ## Telechargement et lecture en ligne temporaires
 

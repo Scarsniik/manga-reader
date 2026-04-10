@@ -1,6 +1,6 @@
 # Systeme de scraper site/API - design technique
 
-Date : 2026-04-05
+Date : 2026-04-10
 
 ## Modele commun
 
@@ -105,6 +105,7 @@ Champs minimum proposes :
 - `resultItemSelector`
 - `titleSelector`
 - `detailUrlSelector`
+- `authorUrlSelector` optionnel
 - `thumbnailSelector`
 - `summarySelector`
 - `nextPageSelector` optionnel
@@ -117,6 +118,27 @@ Exemple conceptuel :
 - `detailUrlSelector = a@href`
 - `thumbnailSelector = img@src`
 
+### Page auteur
+
+Champs minimum proposes :
+
+- `urlStrategy`
+- `urlTemplate` optionnel en mode `template`
+- `resultListSelector`
+- `resultItemSelector`
+- `titleSelector`
+- `detailUrlSelector` optionnel
+- `thumbnailSelector` optionnel
+- `summarySelector` optionnel
+- `nextPageSelector` optionnel
+
+Direction retenue :
+
+- accepter soit une URL auteur deja connue
+- soit une valeur auteur libre, par exemple un nom ou un slug
+- reutiliser un rendu de liste de cards proche de `Recherche`
+- permettre l'ouverture depuis `Recherche` ou `Fiche` quand un lien auteur est disponible
+
 ### Fiche manga
 
 Champs minimum proposes :
@@ -126,6 +148,7 @@ Champs minimum proposes :
 - `coverSelector`
 - `descriptionSelector`
 - `authorsSelector`
+- `authorUrlSelector` optionnel
 - `tagsSelector`
 - `statusSelector`
 - `metadataMap`
@@ -236,6 +259,7 @@ type SourceKind = 'site' | 'api';
 
 type FeatureKind =
   | 'search'
+  | 'author'
   | 'categories'
   | 'mangaDetails'
   | 'chapters'

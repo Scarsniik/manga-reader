@@ -242,6 +242,11 @@
   gap: 12px;
 }
 
+.scraper-config-section__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .scraper-config-hint {
   padding: 12px 14px;
   border-radius: 10px;

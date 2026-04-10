@@ -11,6 +11,7 @@ import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/Scrap
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import DetailsDerivedValuesSection from '@/renderer/components/ScraperConfig/details/DetailsDerivedValuesSection';
 import FakeDetailsPreview from '@/renderer/components/ScraperConfig/details/FakeDetailsPreview';
 import {
@@ -37,6 +38,7 @@ import {
   URL_TEMPLATE_FIELD,
 } from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
 import {
+  extractScraperAuthorUrlsFromDocument,
   extractScraperDetailsDerivedValueResults,
   extractScraperDetailsFieldValues,
 } from '@/renderer/utils/scraperRuntime';
@@ -323,6 +325,39 @@ export default function ScraperDetailsFeatureEditor({
       testSelector('cover', config.coverSelector, false);
       testSelector('description', config.descriptionSelector, false);
       testSelector('authors', config.authorsSelector, false);
+      if (config.authorUrlSelector) {
+        try {
+          const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, {
+            requestedUrl: typedDocumentResult.requestedUrl,
+            finalUrl: typedDocumentResult.finalUrl,
+          });
+          if (authorUrls.length > 0) {
+            checks.push({
+              key: 'authorUrl',
+              selector: config.authorUrlSelector,
+              required: false,
+              matchedCount: authorUrls.length,
+              sample: authorUrls[0],
+            });
+          } else {
+            checks.push({
+              key: 'authorUrl',
+              selector: config.authorUrlSelector,
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match',
+            });
+          }
+        } catch {
+          checks.push({
+            key: 'authorUrl',
+            selector: config.authorUrlSelector,
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
       testSelector('tags', config.tagsSelector, false);
       testSelector('status', config.statusSelector, false);
 
@@ -542,7 +577,7 @@ export default function ScraperDetailsFeatureEditor({
 
           <div className="scraper-config-preview">
             <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl || 'Complete d\'abord la section URL pour voir l\'aperçu.'}</strong>
+            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Complete d\'abord la section URL pour voir l\'aperçu.'}</strong>
           </div>
 
           <div className="scraper-config-step__actions">

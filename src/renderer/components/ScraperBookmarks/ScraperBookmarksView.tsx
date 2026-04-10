@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeftIcon } from '@/renderer/components/icons';
+import { ScraperBrowserLocationState } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 import ScraperBookmarkCard from '@/renderer/components/ScraperBookmarks/ScraperBookmarkCard';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
@@ -12,7 +13,7 @@ type Props = {
   filterScraperId?: string | null;
 };
 
-type ScraperBookmarksLocationState = {
+type ScraperBookmarksLocationState = ScraperBrowserLocationState & {
   bookmarksReturn?: {
     pathname: string;
     search?: string;
@@ -36,6 +37,14 @@ export default function ScraperBookmarksView({
   const bookmarksReturn = locationState?.bookmarksReturn ?? null;
 
   const handleBack = useCallback(() => {
+    const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
+      ? window.history.state.idx
+      : null;
+    if (historyIndex !== null && historyIndex > 0) {
+      navigate(-1);
+      return;
+    }
+
     if (!bookmarksReturn) {
       return;
     }
@@ -58,6 +67,9 @@ export default function ScraperBookmarksView({
         searchActive: false,
         searchQuery: '',
         searchPage: 1,
+        authorActive: false,
+        authorQuery: '',
+        authorPage: 1,
         mangaQuery: '',
         bookmarksFilterScraperId: null,
       }),
@@ -81,11 +93,21 @@ export default function ScraperBookmarksView({
         searchActive: false,
         searchQuery: '',
         searchPage: 1,
+        authorActive: false,
+        authorQuery: '',
+        authorPage: 1,
         mangaQuery: '',
         mangaUrl: bookmark.sourceUrl,
       }),
+    }, {
+      state: {
+        ...(locationState ?? {}),
+        scraperBrowserHistorySource: {
+          kind: 'bookmarks',
+        },
+      },
     });
-  }, [location.pathname, location.search, navigate, scrapersById]);
+  }, [location.pathname, location.search, locationState, navigate, scrapersById]);
 
   return (
     <section className="scraper-bookmarks-view scraper-browser__panel">

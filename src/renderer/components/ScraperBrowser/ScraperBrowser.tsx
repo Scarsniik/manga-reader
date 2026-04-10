@@ -15,9 +15,11 @@ import type { ScraperCardAction } from '@/renderer/components/ScraperCard/Scrape
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import {
   ScraperBrowseMode,
+  ScraperBrowserHistorySourceKind,
   ScraperBrowserInitialState,
+  ScraperBrowserLocationState,
   ScraperCapability,
-  ScraperSearchReturnState,
+  ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
 import {
   buildPaginationInfoLabel,
@@ -28,15 +30,20 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
-import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
+import {
+  parseScraperRouteState,
+  writeScraperRouteState,
+} from '@/renderer/utils/scraperBrowserNavigation';
 import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
 import {
   formatScraperValueForDisplay,
+  getScraperAuthorFeatureConfig,
   getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
   getScraperSearchFeatureConfig,
+  hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   isScraperFeatureConfigured,
   ScraperRuntimeChapterResult,
@@ -50,21 +57,56 @@ type Props = {
   initialState?: ScraperBrowserInitialState | null;
 };
 
+const buildBackLabel = (
+  sourceKind: ScraperBrowserHistorySourceKind | null,
+  fallbackListingMode: ScraperListingReturnState['mode'] | null,
+): string | null => {
+  if (sourceKind === 'manga') {
+    return 'Retour a la fiche';
+  }
+
+  if (sourceKind === 'author') {
+    return 'Retour a la page auteur';
+  }
+
+  if (sourceKind === 'bookmarks') {
+    return 'Retour aux bookmarks';
+  }
+
+  if (sourceKind === 'search') {
+    return 'Retour a la recherche';
+  }
+
+  if (fallbackListingMode === 'author') {
+    return 'Retour a la page auteur';
+  }
+
+  if (fallbackListingMode === 'search') {
+    return 'Retour a la recherche';
+  }
+
+  return null;
+};
+
 export default function ScraperBrowser({ scraper, initialState = null }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
+  const locationState = location.state as ScraperBrowserLocationState | null;
   const { openModal } = useModal();
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
+  const authorFeature = useMemo(() => getScraperFeature(scraper, 'author'), [scraper]);
   const chaptersFeature = useMemo(() => getScraperFeature(scraper, 'chapters'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
   const searchConfig = useMemo(() => getScraperSearchFeatureConfig(searchFeature), [searchFeature]);
   const detailsConfig = useMemo(() => getScraperDetailsFeatureConfig(detailsFeature), [detailsFeature]);
+  const authorConfig = useMemo(() => getScraperAuthorFeatureConfig(authorFeature), [authorFeature]);
   const chaptersConfig = useMemo(() => getScraperChaptersFeatureConfig(chaptersFeature), [chaptersFeature]);
   const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
 
   const hasSearch = isScraperFeatureConfigured(searchFeature);
   const hasDetails = isScraperFeatureConfigured(detailsFeature);
+  const hasAuthor = isScraperFeatureConfigured(authorFeature);
   const hasChapters = isScraperFeatureConfigured(chaptersFeature);
   const hasPages = isScraperFeatureConfigured(pagesFeature);
   const usesChaptersForPages = usesScraperPagesChapters(pagesConfig);
@@ -76,8 +118,11 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     if (hasDetails) {
       nextModes.push('manga');
     }
+    if (hasAuthor) {
+      nextModes.push('author');
+    }
     return nextModes;
-  }, [hasDetails, hasSearch]);
+  }, [hasAuthor, hasDetails, hasSearch]);
 
   const defaultMode = useMemo<ScraperBrowseMode>(() => {
     if (initialState?.detailsResult && availableModes.includes('manga')) {
@@ -88,11 +133,17 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return 'search';
     }
 
+    if (availableModes.includes('author')) {
+      return 'author';
+    }
+
     return availableModes[0] ?? 'manga';
   }, [availableModes, initialState?.detailsResult]);
 
   const canOpenSearchResultsAsDetails = Boolean(hasDetails && detailsConfig?.titleSelector);
+  const canOpenSearchResultsAsAuthor = Boolean(hasAuthor && authorConfig?.titleSelector && authorConfig?.resultItemSelector);
   const usesSearchTemplatePaging = hasSearchPagePlaceholder(searchConfig);
+  const usesAuthorTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
   const hasConfiguredHomeSearch = useMemo(
     () => Boolean(scraper.globalConfig.homeSearch.enabled && hasSearch),
     [hasSearch, scraper.globalConfig.homeSearch.enabled],
@@ -105,12 +156,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
   const [query, setQuery] = useState('');
-  const [searchPage, setSearchPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
-  const [searchVisitedPageUrls, setSearchVisitedPageUrls] = useState<string[]>([]);
-  const [searchPageIndex, setSearchPageIndex] = useState(0);
-  const [searchResults, setSearchResults] = useState<ScraperSearchResultItem[]>([]);
-  const [hasExecutedSearch, setHasExecutedSearch] = useState(false);
-  const [searchReturnState, setSearchReturnState] = useState<ScraperSearchReturnState | null>(null);
+  const [listingPage, setListingPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
+  const [listingVisitedPageUrls, setListingVisitedPageUrls] = useState<string[]>([]);
+  const [listingPageIndex, setListingPageIndex] = useState(0);
+  const [listingResults, setListingResults] = useState<ScraperSearchResultItem[]>([]);
+  const [hasExecutedListing, setHasExecutedListing] = useState(false);
+  const [listingReturnState, setListingReturnState] = useState<ScraperListingReturnState | null>(null);
   const [detailsResult, setDetailsResult] = useState<ScraperRuntimeDetailsResult | null>(null);
   const [chaptersResult, setChaptersResult] = useState<ScraperRuntimeChapterResult[]>([]);
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
@@ -123,6 +174,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const browserRootRef = useRef<HTMLElement | null>(null);
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
+  const historySourceKind = locationState?.scraperBrowserHistorySource?.kind ?? null;
 
   const clearFeedback = useCallback(() => {
     setRuntimeMessage(null);
@@ -131,12 +183,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage(null);
   }, []);
 
-  const resetSearchState = useCallback(() => {
-    setSearchPage(null);
-    setSearchVisitedPageUrls([]);
-    setSearchPageIndex(0);
-    setSearchResults([]);
-    setHasExecutedSearch(false);
+  const resetListingState = useCallback(() => {
+    setListingPage(null);
+    setListingVisitedPageUrls([]);
+    setListingPageIndex(0);
+    setListingResults([]);
+    setHasExecutedListing(false);
   }, []);
 
   const resetDetailsState = useCallback(() => {
@@ -243,13 +295,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     locationPathname: location.pathname,
     locationSearch: location.search,
     navigate,
-    searchReturnState,
+    listingReturnState,
     detailsResult,
     chaptersResult,
     clearFeedback,
-    resetSearchState,
+    resetListingState,
     resetDetailsState,
-    setSearchReturnState,
+    setListingReturnState,
     setLoading,
     setRuntimeError,
     setDownloadError,
@@ -262,34 +314,42 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
   const {
     runSearchLookup,
-    handleSearchNextPage,
-    handleSearchPreviousPage,
-    handleOpenSearchResult,
-    handleSearchResultKeyDown,
-    handleBackToSearch,
+    runAuthorLookup,
+    handleListingNextPage,
+    handleListingPreviousPage,
+    handleOpenResult,
+    handleOpenAuthorResult,
+    handleResultKeyDown,
+    handleBackToListing,
     handleGoToHome,
     handleModeChange,
   } = useScraperBrowserSearch({
     scraper,
+    locationPathname: location.pathname,
+    locationSearch: location.search,
+    locationState,
+    navigate,
     query,
     mode,
     defaultMode,
     hasSearch,
+    hasAuthor,
     hasConfiguredHomeSearch,
     homeSearchQuery,
     searchConfig,
+    authorConfig,
     detailsConfig,
     canOpenSearchResultsAsDetails,
-    usesSearchTemplatePaging,
-    searchPage,
-    searchVisitedPageUrls,
-    searchPageIndex,
-    searchResults,
-    hasExecutedSearch,
-    searchReturnState,
+    canOpenSearchResultsAsAuthor,
+    listingPage,
+    listingVisitedPageUrls,
+    listingPageIndex,
+    listingResults,
+    hasExecutedListing,
+    listingReturnState,
     detailsResult,
     clearFeedback,
-    resetSearchState,
+    resetListingState,
     resetDetailsState,
     resetAsyncState,
     getCurrentScrollTop,
@@ -297,12 +357,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     scrollToBrowserTop,
     setMode,
     setQuery,
-    setSearchPage,
-    setSearchVisitedPageUrls,
-    setSearchPageIndex,
-    setSearchResults,
-    setHasExecutedSearch,
-    setSearchReturnState,
+    setListingPage,
+    setListingVisitedPageUrls,
+    setListingPageIndex,
+    setListingResults,
+    setHasExecutedListing,
+    setListingReturnState,
     setRuntimeMessage,
     setRuntimeError,
     setLoading,
@@ -314,30 +374,33 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     initialState,
     locationPathname: location.pathname,
     locationSearch: location.search,
+    locationState,
     navigate,
     availableModes,
     defaultMode,
     hasSearch,
+    hasAuthor,
     hasDetails,
     hasConfiguredHomeSearch,
     homeSearchQuery,
     mode,
     query,
-    hasExecutedSearch,
-    searchPageIndex,
-    searchReturnState,
+    hasExecutedListing,
+    listingPageIndex,
+    listingReturnState,
     currentDetailsUrl,
     clearFeedback,
-    resetSearchState,
+    resetListingState,
     resetDetailsState,
     resetAsyncState,
     cancelScheduledScrollRestore,
     setMode,
     setQuery,
-    setSearchReturnState,
+    setListingReturnState,
     setDetailsResult,
     setChaptersResult,
     runSearchLookup,
+    runAuthorLookup,
     runDetailsLookup,
     loadDetailsFromTargetUrl,
   });
@@ -351,31 +414,46 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return;
     }
 
+    if (mode === 'author') {
+      await runAuthorLookup(trimmedQuery);
+      return;
+    }
+
     if (!trimmedQuery) {
       setRuntimeError('Saisis une valeur avant de lancer le scrapper.');
       return;
     }
 
     await runDetailsLookup(trimmedQuery);
-  }, [mode, query, runDetailsLookup, runSearchLookup]);
+  }, [mode, query, runAuthorLookup, runDetailsLookup, runSearchLookup]);
 
   const activePlaceholder = useMemo(
-    () => buildQueryPlaceholder(mode, hasDetails, detailsConfig?.urlStrategy ?? null),
-    [detailsConfig?.urlStrategy, hasDetails, mode],
+    () => buildQueryPlaceholder(
+      mode,
+      hasDetails,
+      detailsConfig?.urlStrategy ?? null,
+      hasAuthor,
+      authorConfig?.urlStrategy ?? null,
+    ),
+    [authorConfig?.urlStrategy, detailsConfig?.urlStrategy, hasAuthor, hasDetails, mode],
   );
 
   const capabilities = useMemo<ScraperCapability[]>(() => buildScraperCapabilities({
     searchFeature,
     detailsFeature,
+    authorFeature,
     chaptersFeature,
     pagesFeature,
     hasSearch,
     hasDetails,
+    hasAuthor,
     hasChapters,
     hasPages,
   }), [
+    authorFeature,
     chaptersFeature,
     detailsFeature,
+    hasAuthor,
     hasChapters,
     hasDetails,
     hasPages,
@@ -387,34 +465,100 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const helperText = useMemo(() => buildScraperBrowserHelperText({
     mode,
     usesSearchTemplatePaging,
+    usesAuthorTemplatePaging,
     hasSearchNextPageSelector: Boolean(searchConfig?.nextPageSelector),
+    hasAuthorNextPageSelector: Boolean(authorConfig?.nextPageSelector),
     canOpenSearchResultsAsDetails,
+    canOpenSearchResultsAsAuthor,
     hasDetails,
+    hasAuthor,
   }), [
+    authorConfig?.nextPageSelector,
+    canOpenSearchResultsAsAuthor,
     canOpenSearchResultsAsDetails,
+    hasAuthor,
     hasDetails,
     mode,
     searchConfig?.nextPageSelector,
+    usesAuthorTemplatePaging,
     usesSearchTemplatePaging,
   ]);
 
   const visibleSearchResults = useMemo(
-    () => searchResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
-    [searchResults],
+    () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
+    [listingResults],
   );
   const scraperBookmarkCount = scraperBookmarks.length;
-  const canReturnToSearch = Boolean(searchReturnState?.hasExecutedSearch);
+  const canReturnToListing = Boolean(listingReturnState?.hasExecutedListing);
+  const historyIndex = typeof window !== 'undefined'
+    && window.history.state
+    && typeof window.history.state.idx === 'number'
+    ? window.history.state.idx
+    : null;
+  const canNavigateBack = Boolean(historySourceKind) && historyIndex !== null && historyIndex > 0;
+  const detailsBackLabel = buildBackLabel(
+    canNavigateBack ? historySourceKind : null,
+    canReturnToListing ? listingReturnState?.mode ?? null : null,
+  );
+  const authorResultsBackLabel = mode === 'author' && canNavigateBack
+    ? buildBackLabel(historySourceKind, null)
+    : null;
+  const usesActiveTemplatePaging = mode === 'author' ? usesAuthorTemplatePaging : usesSearchTemplatePaging;
   const shouldShowSearchPagination = Boolean(
-    searchPage && (searchPageIndex > 0 || searchPage.nextPageUrl || usesSearchTemplatePaging),
+    listingPage && (listingPageIndex > 0 || listingPage.nextPageUrl || usesActiveTemplatePaging),
   );
   const paginationInfoLabel = useMemo(
-    () => buildPaginationInfoLabel(searchPage, usesSearchTemplatePaging),
-    [searchPage, usesSearchTemplatePaging],
+    () => buildPaginationInfoLabel(
+      listingPage,
+      usesActiveTemplatePaging,
+      mode === 'author' ? 'page auteur' : 'recherche',
+    ),
+    [listingPage, mode, usesActiveTemplatePaging],
   );
   const currentSearchPageLabel = useMemo(
-    () => `Page ${searchPageIndex + 1}`,
-    [searchPageIndex],
+    () => `Page ${listingPageIndex + 1}`,
+    [listingPageIndex],
   );
+
+  const handleNavigateBack = useCallback(() => {
+    if (!canNavigateBack) {
+      return;
+    }
+
+    navigate(-1);
+  }, [canNavigateBack, navigate]);
+
+  const handleOpenAuthorFromDetails = useCallback((value: string) => {
+    const nextAuthorQuery = formatScraperValueForDisplay(value);
+    const routeState = parseScraperRouteState(location.search);
+    const nextSearch = writeScraperRouteState(location.search, {
+      scraperId: scraper.id,
+      mode: 'author',
+      searchActive: routeState.searchActive,
+      searchQuery: routeState.searchQuery,
+      searchPage: routeState.searchPage,
+      authorActive: true,
+      authorQuery: nextAuthorQuery,
+      authorPage: 1,
+      mangaQuery: '',
+      bookmarksFilterScraperId: routeState.bookmarksFilterScraperId,
+    });
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch,
+      },
+      {
+        state: {
+          ...(locationState ?? {}),
+          scraperBrowserHistorySource: {
+            kind: 'manga',
+          },
+        },
+      },
+    );
+  }, [location.pathname, location.search, locationState, navigate, scraper.id]);
 
   const handleOpenScraperBookmarks = useCallback(() => {
     navigate({
@@ -425,6 +569,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         searchActive: false,
         searchQuery: '',
         searchPage: 1,
+        authorActive: false,
+        authorQuery: '',
+        authorPage: 1,
         mangaQuery: '',
         bookmarksFilterScraperId: scraper.id,
       }),
@@ -438,9 +585,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     });
   }, [location.pathname, location.search, navigate, scraper.id]);
 
-  const handleOpenSearchResultAction = useCallback((result: ScraperSearchResultItem) => {
-    void handleOpenSearchResult(result);
-  }, [handleOpenSearchResult]);
+  const handleOpenResultAction = useCallback((result: ScraperSearchResultItem) => {
+    void handleOpenResult(result);
+  }, [handleOpenResult]);
+
+  const handleOpenAuthorResultAction = useCallback((result: ScraperSearchResultItem) => {
+    void handleOpenAuthorResult(result);
+  }, [handleOpenAuthorResult]);
 
   const handleOpenSearchResultImage = useCallback((result: ScraperSearchResultItem) => {
     if (!result.thumbnailUrl) {
@@ -492,8 +643,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
       {availableModes.length === 0 ? (
         <div className="scraper-browser__panel scraper-browser__message is-warning">
-          Aucun composant executable n&apos;est encore configure sur ce scrapper. Configure au moins `Fiche`
-          ou `Recherche` pour afficher une vue temporaire ici.
+          Aucun composant executable n&apos;est encore configure sur ce scrapper. Configure au moins `Fiche`,
+          `Recherche` ou `Auteur` pour afficher une vue temporaire ici.
         </div>
       ) : (
         <ScraperBrowserToolbar
@@ -517,23 +668,28 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       />
 
       <ScraperSearchResultsSection
+        mode={mode === 'author' ? 'author' : 'search'}
+        backLabel={authorResultsBackLabel}
         visibleSearchResults={visibleSearchResults}
-        searchResultsCount={searchResults.length}
+        searchResultsCount={listingResults.length}
         query={query}
-        searchPage={searchPage}
-        searchPageIndex={searchPageIndex}
+        searchPage={listingPage}
+        searchPageIndex={listingPageIndex}
         shouldShowSearchPagination={shouldShowSearchPagination}
         currentSearchPageLabel={currentSearchPageLabel}
         paginationInfoLabel={paginationInfoLabel}
         loading={loading}
-        usesSearchTemplatePaging={usesSearchTemplatePaging}
+        usesSearchTemplatePaging={usesActiveTemplatePaging}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+        canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
         renderBookmarkAction={renderSearchResultBookmarkAction}
-        onPreviousPage={() => void handleSearchPreviousPage()}
-        onNextPage={() => void handleSearchNextPage()}
-        onOpenResult={(result) => void handleOpenSearchResult(result)}
-        onResultKeyDown={handleSearchResultKeyDown}
-        onOpenResultAction={handleOpenSearchResultAction}
+        onPreviousPage={() => void handleListingPreviousPage()}
+        onNextPage={() => void handleListingNextPage()}
+        onBack={handleNavigateBack}
+        onOpenResult={(result) => void handleOpenResult(result)}
+        onOpenAuthorResultAction={handleOpenAuthorResultAction}
+        onResultKeyDown={handleResultKeyDown}
+        onOpenResultAction={handleOpenResultAction}
         onOpenResultImage={handleOpenSearchResultImage}
       />
 
@@ -542,12 +698,17 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         bookmarkExcludedFields={scraper.globalConfig.bookmark.excludedFields}
         detailsResult={detailsResult}
         chapters={chaptersResult}
+        hasAuthor={hasAuthor}
+        backLabel={detailsBackLabel}
+        canResolveAuthorName={authorConfig?.urlStrategy === 'template'}
         hasPages={hasPages}
         usesChapters={usesChaptersForPages}
-        canReturnToSearch={canReturnToSearch}
         openingReader={openingReader}
         downloading={downloading}
-        onBackToSearch={() => void handleBackToSearch()}
+        onBack={canNavigateBack ? handleNavigateBack : () => void handleBackToListing()}
+        onOpenAuthor={(value) => {
+          handleOpenAuthorFromDetails(value);
+        }}
         onOpenReader={(chapter) => void handleOpenReader(chapter)}
         onDownload={(chapter) => void handleDownload(chapter)}
       />

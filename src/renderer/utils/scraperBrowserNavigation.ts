@@ -1,4 +1,4 @@
-export type ScraperRouteMode = 'search' | 'manga';
+export type ScraperRouteMode = 'search' | 'manga' | 'author';
 
 export type ScraperRouteState = {
   scraperId: string | null;
@@ -6,6 +6,9 @@ export type ScraperRouteState = {
   searchActive: boolean;
   searchQuery: string;
   searchPage: number;
+  authorActive: boolean;
+  authorQuery: string;
+  authorPage: number;
   mangaQuery: string;
   mangaUrl?: string;
   bookmarksFilterScraperId?: string | null;
@@ -16,6 +19,9 @@ const SCRAPER_MODE_PARAM = 'scraperMode';
 const SCRAPER_SEARCH_ACTIVE_PARAM = 'scraperSearchActive';
 const SCRAPER_SEARCH_QUERY_PARAM = 'scraperSearchQuery';
 const SCRAPER_SEARCH_PAGE_PARAM = 'scraperSearchPage';
+const SCRAPER_AUTHOR_ACTIVE_PARAM = 'scraperAuthorActive';
+const SCRAPER_AUTHOR_QUERY_PARAM = 'scraperAuthorQuery';
+const SCRAPER_AUTHOR_PAGE_PARAM = 'scraperAuthorPage';
 const SCRAPER_MANGA_QUERY_PARAM = 'scraperMangaQuery';
 const SCRAPER_MANGA_URL_PARAM = 'scraperMangaUrl';
 const SCRAPER_BOOKMARK_FILTER_PARAM = 'scraperBookmarkFilter';
@@ -40,7 +46,12 @@ const normalizePage = (value: string | null): number => {
 export const parseScraperRouteState = (search: string): ScraperRouteState => {
   const params = normalizeSearch(search);
   const scraperId = params.get(SCRAPER_PARAM) || null;
-  const mode = params.get(SCRAPER_MODE_PARAM) === 'manga' ? 'manga' : 'search';
+  const rawMode = params.get(SCRAPER_MODE_PARAM);
+  const mode = rawMode === 'manga'
+    ? 'manga'
+    : rawMode === 'author'
+      ? 'author'
+      : 'search';
 
   return {
     scraperId,
@@ -48,6 +59,9 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     searchActive: params.get(SCRAPER_SEARCH_ACTIVE_PARAM) === '1',
     searchQuery: params.get(SCRAPER_SEARCH_QUERY_PARAM) ?? '',
     searchPage: normalizePage(params.get(SCRAPER_SEARCH_PAGE_PARAM)),
+    authorActive: params.get(SCRAPER_AUTHOR_ACTIVE_PARAM) === '1',
+    authorQuery: params.get(SCRAPER_AUTHOR_QUERY_PARAM) ?? '',
+    authorPage: normalizePage(params.get(SCRAPER_AUTHOR_PAGE_PARAM)),
     mangaQuery: params.get(SCRAPER_MANGA_QUERY_PARAM) ?? '',
     mangaUrl: params.get(SCRAPER_MANGA_URL_PARAM) || undefined,
     bookmarksFilterScraperId: params.get(SCRAPER_BOOKMARK_FILTER_PARAM) || null,
@@ -65,6 +79,9 @@ export const writeScraperRouteState = (
   params.delete(SCRAPER_SEARCH_ACTIVE_PARAM);
   params.delete(SCRAPER_SEARCH_QUERY_PARAM);
   params.delete(SCRAPER_SEARCH_PAGE_PARAM);
+  params.delete(SCRAPER_AUTHOR_ACTIVE_PARAM);
+  params.delete(SCRAPER_AUTHOR_QUERY_PARAM);
+  params.delete(SCRAPER_AUTHOR_PAGE_PARAM);
   params.delete(SCRAPER_MANGA_QUERY_PARAM);
   params.delete(SCRAPER_MANGA_URL_PARAM);
   params.delete(SCRAPER_BOOKMARK_FILTER_PARAM);
@@ -83,6 +100,15 @@ export const writeScraperRouteState = (
 
     if (state.searchQuery) {
       params.set(SCRAPER_SEARCH_QUERY_PARAM, state.searchQuery);
+    }
+  }
+
+  if (state.authorActive) {
+    params.set(SCRAPER_AUTHOR_ACTIVE_PARAM, '1');
+    params.set(SCRAPER_AUTHOR_PAGE_PARAM, String(Math.max(1, state.authorPage)));
+
+    if (state.authorQuery) {
+      params.set(SCRAPER_AUTHOR_QUERY_PARAM, state.authorQuery);
     }
   }
 
@@ -111,6 +137,9 @@ export const clearScraperRouteState = (search: string): string => (
     searchActive: false,
     searchQuery: '',
     searchPage: 1,
+    authorActive: false,
+    authorQuery: '',
+    authorPage: 1,
     mangaQuery: '',
     bookmarksFilterScraperId: null,
   })

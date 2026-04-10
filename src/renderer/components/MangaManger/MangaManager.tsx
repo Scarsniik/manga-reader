@@ -509,6 +509,9 @@ const MangaManager: React.FC = () => {
                 searchActive: false,
                 searchQuery: '',
                 searchPage: 1,
+                authorActive: false,
+                authorQuery: '',
+                authorPage: 1,
                 mangaQuery: '',
                 bookmarksFilterScraperId: nextViewId === 'bookmarks' ? null : undefined,
             });

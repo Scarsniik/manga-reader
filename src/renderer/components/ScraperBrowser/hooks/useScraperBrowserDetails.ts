@@ -6,7 +6,7 @@ import {
   ScraperPagesFeatureConfig,
   ScraperRecord,
 } from '@/shared/scraper';
-import { ScraperSearchReturnState } from '@/renderer/components/ScraperBrowser/types';
+import { ScraperListingReturnState } from '@/renderer/components/ScraperBrowser/types';
 import { isScraperRuntimeChapterResult } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraperTemplateContext';
 import {
@@ -30,13 +30,13 @@ type UseScraperBrowserDetailsOptions = {
   locationPathname: string;
   locationSearch: string;
   navigate: NavigateFunction;
-  searchReturnState: ScraperSearchReturnState | null;
+  listingReturnState: ScraperListingReturnState | null;
   detailsResult: ScraperRuntimeDetailsResult | null;
   chaptersResult: ScraperRuntimeChapterResult[];
   clearFeedback: () => void;
-  resetSearchState: () => void;
+  resetListingState: () => void;
   resetDetailsState: () => void;
-  setSearchReturnState: Dispatch<SetStateAction<ScraperSearchReturnState | null>>;
+  setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
   setLoading: Dispatch<SetStateAction<boolean>>;
   setRuntimeError: Dispatch<SetStateAction<string | null>>;
   setDownloadError: Dispatch<SetStateAction<string | null>>;
@@ -57,13 +57,13 @@ export function useScraperBrowserDetails({
   locationPathname,
   locationSearch,
   navigate,
-  searchReturnState,
+  listingReturnState,
   detailsResult,
   chaptersResult,
   clearFeedback,
-  resetSearchState,
+  resetListingState,
   resetDetailsState,
-  setSearchReturnState,
+  setListingReturnState,
   setLoading,
   setRuntimeError,
   setDownloadError,
@@ -80,7 +80,7 @@ export function useScraperBrowserDetails({
 
   const loadDetailsFromTargetUrl = useCallback(async (targetUrl: string) => {
     clearFeedback();
-    resetSearchState();
+    resetListingState();
     resetDetailsState();
 
     if (!detailsConfig || !detailsConfig.titleSelector) {
@@ -162,7 +162,7 @@ export function useScraperBrowserDetails({
     clearFeedback,
     detailsConfig,
     resetDetailsState,
-    resetSearchState,
+    resetListingState,
     scraper.baseUrl,
     setChaptersResult,
     setDetailsResult,
@@ -171,7 +171,7 @@ export function useScraperBrowserDetails({
   ]);
 
   const runDetailsLookup = useCallback(async (nextQuery: string) => {
-    setSearchReturnState(null);
+    setListingReturnState(null);
 
     if (!detailsConfig || !detailsConfig.titleSelector) {
       setRuntimeError('Le composant Fiche n\'est pas encore suffisamment configure pour etre execute.');
@@ -187,7 +187,7 @@ export function useScraperBrowserDetails({
     }
 
     await loadDetailsFromTargetUrl(targetUrl);
-  }, [detailsConfig, loadDetailsFromTargetUrl, scraper.baseUrl, setRuntimeError, setSearchReturnState]);
+  }, [detailsConfig, loadDetailsFromTargetUrl, scraper.baseUrl, setListingReturnState, setRuntimeError]);
 
   const resolveCurrentPageUrls = useCallback(async (
     chapter?: ScraperRuntimeChapterResult | null,
@@ -328,7 +328,7 @@ export function useScraperBrowserDetails({
               query,
               detailsResult,
               chaptersResult,
-              searchReturnState,
+              listingReturnState,
             },
             scraperReader: {
               id: readerMangaId,
@@ -360,7 +360,7 @@ export function useScraperBrowserDetails({
     resolveCurrentPageUrls,
     scraper.globalConfig.bookmark.excludedFields,
     scraper.id,
-    searchReturnState,
+    listingReturnState,
     setOpeningReader,
     setRuntimeError,
     usesChaptersForPages,

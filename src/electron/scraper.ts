@@ -1,5 +1,5 @@
 export type ScraperSourceKind = 'site' | 'api';
-export type ScraperFeatureKind = 'search' | 'details' | 'chapters' | 'pages';
+export type ScraperFeatureKind = 'search' | 'details' | 'author' | 'chapters' | 'pages';
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
 export type ScraperRequestMethod = 'GET' | 'POST';
 export type ScraperRequestBodyMode = 'form' | 'raw';
@@ -75,6 +75,7 @@ export type ScraperFeatureValidationCheckKey =
   | 'cover'
   | 'description'
   | 'authors'
+  | 'authorUrl'
   | 'tags'
   | 'status'
   | 'chapters'
@@ -141,22 +142,34 @@ export interface ScraperFeatureValidationResult {
   chapters?: ScraperChapterItem[];
 }
 
-export interface ScraperSearchFeatureConfig {
-  urlTemplate: string;
-  testQuery?: string;
-  request?: ScraperRequestConfig;
+export interface ScraperCardListConfig {
   resultListSelector?: string;
   resultItemSelector: string;
   titleSelector: string;
   detailUrlSelector?: string;
+  authorUrlSelector?: string;
   thumbnailSelector?: string;
   summarySelector?: string;
   nextPageSelector?: string;
 }
 
+export interface ScraperSearchFeatureConfig extends ScraperCardListConfig {
+  urlTemplate: string;
+  testQuery?: string;
+  request?: ScraperRequestConfig;
+}
+
+export interface ScraperAuthorFeatureConfig extends ScraperCardListConfig {
+  urlStrategy: ScraperDetailsUrlStrategy;
+  urlTemplate?: string;
+  testUrl?: string;
+  testValue?: string;
+}
+
 export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
+  authorUrl?: string;
   thumbnailUrl?: string;
   summary?: string;
 }
@@ -170,6 +183,7 @@ export interface ScraperDetailsFeatureConfig {
   coverSelector?: string;
   descriptionSelector?: string;
   authorsSelector?: string;
+  authorUrlSelector?: string;
   tagsSelector?: string;
   statusSelector?: string;
   derivedValues: ScraperDetailsDerivedValueConfig[];
@@ -391,6 +405,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     kind: 'details',
     label: 'Fiche',
     description: 'Definir comment ouvrir une fiche manga et recuperer ses metadonnees.',
+  },
+  {
+    kind: 'author',
+    label: 'Auteur',
+    description: 'Definir comment ouvrir une page auteur et extraire la liste de cards retournee.',
   },
   {
     kind: 'chapters',

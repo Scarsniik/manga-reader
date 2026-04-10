@@ -6,6 +6,8 @@ import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/Scrape
 import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultCard';
 
 type Props = {
+  mode: 'search' | 'author';
+  backLabel?: string | null;
   visibleSearchResults: ScraperSearchResultItem[];
   searchResultsCount: number;
   query: string;
@@ -17,16 +19,21 @@ type Props = {
   loading: boolean;
   usesSearchTemplatePaging: boolean;
   canOpenSearchResultsAsDetails: boolean;
+  canOpenSearchResultsAsAuthor: boolean;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   onPreviousPage: () => void;
   onNextPage: () => void;
+  onBack?: () => void;
   onOpenResult: (result: ScraperSearchResultItem) => void;
+  onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultsSection({
+  mode,
+  backLabel = null,
   visibleSearchResults,
   searchResultsCount,
   query,
@@ -38,23 +45,39 @@ export default function ScraperSearchResultsSection({
   loading,
   usesSearchTemplatePaging,
   canOpenSearchResultsAsDetails,
+  canOpenSearchResultsAsAuthor,
   renderBookmarkAction,
   onPreviousPage,
   onNextPage,
+  onBack,
   onOpenResult,
+  onOpenAuthorResultAction,
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
 }: Props) {
-  if (!visibleSearchResults.length) {
+  if (!visibleSearchResults.length && !backLabel) {
     return null;
   }
+
+  const isAuthorMode = mode === 'author';
 
   return (
     <section className="scraper-browser__results">
       <div className="scraper-browser__results-head">
         <div>
-          <h3>Resultats de recherche</h3>
+          {backLabel && onBack ? (
+            <div className="scraper-browser__results-back">
+              <button
+                type="button"
+                className="scraper-browser__back-to-search"
+                onClick={onBack}
+              >
+                {backLabel}
+              </button>
+            </div>
+          ) : null}
+          <h3>{isAuthorMode ? 'Resultats auteur' : 'Resultats de recherche'}</h3>
           <p>
             {query.trim()
               ? (
@@ -62,11 +85,17 @@ export default function ScraperSearchResultsSection({
                   {searchResultsCount} resultat(s) extrait(s) pour <strong>{query.trim()}</strong>.
                 </>
               )
-              : (
+              : isAuthorMode
+                ? (
+                  <>
+                    {searchResultsCount} resultat(s) extrait(s) depuis la page auteur courante.
+                  </>
+                )
+                : (
                 <>
                   {searchResultsCount} resultat(s) extrait(s) sans terme de recherche.
                 </>
-              )}
+                )}
           </p>
         </div>
 
@@ -98,6 +127,7 @@ export default function ScraperSearchResultsSection({
       <div className="scraper-browser__results-grid">
         {visibleSearchResults.map((result) => {
           const canOpenResult = Boolean(result.detailUrl && canOpenSearchResultsAsDetails);
+          const canOpenAuthorResult = Boolean(result.authorUrl && canOpenSearchResultsAsAuthor);
 
           return (
             <ScraperSearchResultCard
@@ -105,8 +135,11 @@ export default function ScraperSearchResultsSection({
               result={result}
               canOpenResult={canOpenResult}
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+              canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
+              canOpenAuthorResult={canOpenAuthorResult}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               onOpenResult={onOpenResult}
+              onOpenAuthorResultAction={onOpenAuthorResultAction}
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}
               onOpenResultImage={onOpenResultImage}

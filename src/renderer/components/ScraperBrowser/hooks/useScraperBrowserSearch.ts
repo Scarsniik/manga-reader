@@ -1,5 +1,7 @@
 import React, { Dispatch, SetStateAction, useCallback } from 'react';
+import { NavigateFunction } from 'react-router-dom';
 import {
+  ScraperAuthorFeatureConfig,
   ScraperDetailsFeatureConfig,
   ScraperRecord,
   ScraperSearchFeatureConfig,
@@ -7,7 +9,9 @@ import {
 } from '@/shared/scraper';
 import {
   ScraperBrowseMode,
-  ScraperSearchReturnState,
+  ScraperBrowserLocationState,
+  ScraperListingMode,
+  ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
 import {
   buildSearchPageLoadedMessage,
@@ -16,38 +20,51 @@ import {
 import {
   extractScraperSearchPageFromDocument,
   formatScraperValueForDisplay,
+  hasAuthorPagePlaceholder,
+  hasSearchPagePlaceholder,
+  resolveScraperAuthorTargetUrl,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import {
+  parseScraperRouteState,
+  writeScraperRouteState,
+} from '@/renderer/utils/scraperBrowserNavigation';
 
-export type SearchLookupOptions = {
+export type ListingLookupOptions = {
   pageIndex?: number;
-  preserveSearchReturnState?: boolean;
+  preserveListingReturnState?: boolean;
 };
 
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
+  locationPathname: string;
+  locationSearch: string;
+  locationState: ScraperBrowserLocationState | null;
+  navigate: NavigateFunction;
   query: string;
   mode: ScraperBrowseMode;
   defaultMode: ScraperBrowseMode;
   hasSearch: boolean;
+  hasAuthor: boolean;
   hasConfiguredHomeSearch: boolean;
   homeSearchQuery: string;
   searchConfig: ScraperSearchFeatureConfig | null;
+  authorConfig: ScraperAuthorFeatureConfig | null;
   detailsConfig: ScraperDetailsFeatureConfig | null;
   canOpenSearchResultsAsDetails: boolean;
-  usesSearchTemplatePaging: boolean;
-  searchPage: ScraperRuntimeSearchPageResult | null;
-  searchVisitedPageUrls: string[];
-  searchPageIndex: number;
-  searchResults: ScraperSearchResultItem[];
-  hasExecutedSearch: boolean;
-  searchReturnState: ScraperSearchReturnState | null;
+  canOpenSearchResultsAsAuthor: boolean;
+  listingPage: ScraperRuntimeSearchPageResult | null;
+  listingVisitedPageUrls: string[];
+  listingPageIndex: number;
+  listingResults: ScraperSearchResultItem[];
+  hasExecutedListing: boolean;
+  listingReturnState: ScraperListingReturnState | null;
   detailsResult: ScraperRuntimeDetailsResult | null;
   clearFeedback: () => void;
-  resetSearchState: () => void;
+  resetListingState: () => void;
   resetDetailsState: () => void;
   resetAsyncState: () => void;
   getCurrentScrollTop: () => number;
@@ -55,39 +72,120 @@ type UseScraperBrowserSearchOptions = {
   scrollToBrowserTop: () => void;
   setMode: Dispatch<SetStateAction<ScraperBrowseMode>>;
   setQuery: Dispatch<SetStateAction<string>>;
-  setSearchPage: Dispatch<SetStateAction<ScraperRuntimeSearchPageResult | null>>;
-  setSearchVisitedPageUrls: Dispatch<SetStateAction<string[]>>;
-  setSearchPageIndex: Dispatch<SetStateAction<number>>;
-  setSearchResults: Dispatch<SetStateAction<ScraperSearchResultItem[]>>;
-  setHasExecutedSearch: Dispatch<SetStateAction<boolean>>;
-  setSearchReturnState: Dispatch<SetStateAction<ScraperSearchReturnState | null>>;
+  setListingPage: Dispatch<SetStateAction<ScraperRuntimeSearchPageResult | null>>;
+  setListingVisitedPageUrls: Dispatch<SetStateAction<string[]>>;
+  setListingPageIndex: Dispatch<SetStateAction<number>>;
+  setListingResults: Dispatch<SetStateAction<ScraperSearchResultItem[]>>;
+  setHasExecutedListing: Dispatch<SetStateAction<boolean>>;
+  setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
   setRuntimeMessage: Dispatch<SetStateAction<string | null>>;
   setRuntimeError: Dispatch<SetStateAction<string | null>>;
   setLoading: Dispatch<SetStateAction<boolean>>;
   loadDetailsFromTargetUrl: (targetUrl: string) => Promise<void>;
 };
 
+const isListingMode = (value: ScraperBrowseMode): value is ScraperListingMode => (
+  value === 'search' || value === 'author'
+);
+
+const getListingModeLabel = (mode: ScraperListingMode): string => (
+  mode === 'author' ? 'page auteur' : 'recherche'
+);
+
+const getRouteStateForNavigation = (options: {
+  routeSearch: string;
+  scraperId: string;
+  nextMode: ScraperBrowseMode;
+  sourceMode: ScraperBrowseMode;
+  sourceQuery: string;
+  sourcePageIndex: number;
+  hasExecutedSourceListing: boolean;
+  nextAuthorQuery?: string;
+  mangaUrl?: string;
+}): string => {
+  const {
+    routeSearch,
+    scraperId,
+    nextMode,
+    sourceMode,
+    sourceQuery,
+    sourcePageIndex,
+    hasExecutedSourceListing,
+    nextAuthorQuery,
+    mangaUrl,
+  } = options;
+  const currentRouteState = parseScraperRouteState(routeSearch);
+  const currentPage = Math.max(1, sourcePageIndex + 1);
+  const persistedSearchState = sourceMode === 'search'
+    ? {
+      active: hasExecutedSourceListing,
+      query: sourceQuery,
+      page: currentPage,
+    }
+    : {
+      active: currentRouteState.searchActive,
+      query: currentRouteState.searchQuery,
+      page: currentRouteState.searchPage,
+    };
+  const persistedAuthorState = sourceMode === 'author'
+    ? {
+      active: hasExecutedSourceListing,
+      query: sourceQuery,
+      page: currentPage,
+    }
+    : {
+      active: currentRouteState.authorActive,
+      query: currentRouteState.authorQuery,
+      page: currentRouteState.authorPage,
+    };
+
+  return writeScraperRouteState(routeSearch, {
+    scraperId,
+    mode: nextMode,
+    searchActive: persistedSearchState.active,
+    searchQuery: persistedSearchState.query,
+    searchPage: persistedSearchState.page,
+    authorActive: nextMode === 'author'
+      ? true
+      : persistedAuthorState.active,
+    authorQuery: nextMode === 'author'
+      ? (nextAuthorQuery ?? '')
+      : persistedAuthorState.query,
+    authorPage: nextMode === 'author'
+      ? 1
+      : persistedAuthorState.page,
+    mangaQuery: '',
+    mangaUrl,
+  });
+};
+
 export function useScraperBrowserSearch({
   scraper,
+  locationPathname,
+  locationSearch,
+  locationState,
+  navigate,
   query,
   mode,
   defaultMode,
   hasSearch,
+  hasAuthor,
   hasConfiguredHomeSearch,
   homeSearchQuery,
   searchConfig,
+  authorConfig,
   detailsConfig,
   canOpenSearchResultsAsDetails,
-  usesSearchTemplatePaging,
-  searchPage,
-  searchVisitedPageUrls,
-  searchPageIndex,
-  searchResults,
-  hasExecutedSearch,
-  searchReturnState,
+  canOpenSearchResultsAsAuthor,
+  listingPage,
+  listingVisitedPageUrls,
+  listingPageIndex,
+  listingResults,
+  hasExecutedListing,
+  listingReturnState,
   detailsResult,
   clearFeedback,
-  resetSearchState,
+  resetListingState,
   resetDetailsState,
   resetAsyncState,
   getCurrentScrollTop,
@@ -95,12 +193,12 @@ export function useScraperBrowserSearch({
   scrollToBrowserTop,
   setMode,
   setQuery,
-  setSearchPage,
-  setSearchVisitedPageUrls,
-  setSearchPageIndex,
-  setSearchResults,
-  setHasExecutedSearch,
-  setSearchReturnState,
+  setListingPage,
+  setListingVisitedPageUrls,
+  setListingPageIndex,
+  setListingResults,
+  setHasExecutedListing,
+  setListingReturnState,
   setRuntimeMessage,
   setRuntimeError,
   setLoading,
@@ -147,7 +245,48 @@ export function useScraperBrowserSearch({
     });
   }, [scraper.baseUrl, searchConfig]);
 
-  const loadSearchResultsPage = useCallback(async (
+  const fetchAuthorPage = useCallback(async (
+    targetUrl: string,
+  ): Promise<ScraperRuntimeSearchPageResult> => {
+    if (!authorConfig?.resultItemSelector || !authorConfig.titleSelector) {
+      throw new Error('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
+    }
+
+    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+    if (typeof fetchScraperDocument !== 'function') {
+      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
+    }
+
+    const documentResult = await fetchScraperDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+    });
+
+    if (!documentResult?.ok || !documentResult.html) {
+      throw new Error(
+        documentResult?.error
+          || (typeof documentResult?.status === 'number'
+            ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
+            : 'Impossible de charger la page auteur.'),
+      );
+    }
+
+    const parser = new DOMParser();
+    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
+    return extractScraperSearchPageFromDocument(documentNode, authorConfig, {
+      requestedUrl: documentResult.requestedUrl,
+      finalUrl: documentResult.finalUrl,
+    });
+  }, [authorConfig, scraper.baseUrl]);
+
+  const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
+    listingMode === 'author'
+      ? hasAuthorPagePlaceholder(authorConfig)
+      : hasSearchPagePlaceholder(searchConfig)
+  ), [authorConfig, searchConfig]);
+
+  const loadListingResultsPage = useCallback(async (
+    listingMode: ScraperListingMode,
     nextQuery: string,
     targetPageIndex = 0,
   ): Promise<{
@@ -157,17 +296,31 @@ export function useScraperBrowserSearch({
     items: ScraperSearchResultItem[];
   }> => {
     const normalizedTargetPageIndex = Math.max(0, targetPageIndex);
+    const usesTemplatePaging = getUsesTemplatePaging(listingMode);
 
-    if (usesSearchTemplatePaging) {
-      const targetUrl = resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, {
-        pageIndex: normalizedTargetPageIndex,
-      });
-      const page = await fetchSearchPage(targetUrl, {
-        query: nextQuery,
-        pageIndex: normalizedTargetPageIndex,
-      });
+    const fetchPage = async (
+      targetUrl: string,
+      pageIndex: number,
+    ): Promise<ScraperRuntimeSearchPageResult> => (
+      listingMode === 'author'
+        ? fetchAuthorPage(targetUrl)
+        : fetchSearchPage(targetUrl, {
+          query: nextQuery,
+          pageIndex,
+        })
+    );
+
+    const resolveTargetUrl = (pageIndex: number): string => (
+      listingMode === 'author'
+        ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig!, nextQuery, { pageIndex })
+        : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex })
+    );
+
+    if (usesTemplatePaging) {
+      const targetUrl = resolveTargetUrl(normalizedTargetPageIndex);
+      const page = await fetchPage(targetUrl, normalizedTargetPageIndex);
       const visitedPageUrls = Array.from({ length: normalizedTargetPageIndex + 1 }, (_, index) => (
-        resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex: index })
+        resolveTargetUrl(index)
       ));
 
       return {
@@ -178,22 +331,13 @@ export function useScraperBrowserSearch({
       };
     }
 
-    const firstPage = await fetchSearchPage(
-      resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery),
-      {
-        query: nextQuery,
-        pageIndex: 0,
-      },
-    );
+    const firstPage = await fetchPage(resolveTargetUrl(0), 0);
     const visitedPageUrls = [firstPage.currentPageUrl];
     let currentPage = firstPage;
     let currentPageIndex = 0;
 
     while (currentPageIndex < normalizedTargetPageIndex && currentPage.nextPageUrl) {
-      const nextPage = await fetchSearchPage(currentPage.nextPageUrl, {
-        query: nextQuery,
-        pageIndex: currentPageIndex + 1,
-      });
+      const nextPage = await fetchPage(currentPage.nextPageUrl, currentPageIndex + 1);
       if (!nextPage.items.length) {
         break;
       }
@@ -209,75 +353,116 @@ export function useScraperBrowserSearch({
       pageIndex: currentPageIndex,
       items: currentPage.items,
     };
-  }, [fetchSearchPage, scraper.baseUrl, searchConfig, usesSearchTemplatePaging]);
+  }, [authorConfig, fetchAuthorPage, fetchSearchPage, getUsesTemplatePaging, scraper.baseUrl, searchConfig]);
 
-  const runSearchLookup = useCallback(async (
+  const runListingLookup = useCallback(async (
+    listingMode: ScraperListingMode,
     nextQuery: string,
-    options?: SearchLookupOptions,
+    options?: ListingLookupOptions,
   ) => {
     clearFeedback();
     resetDetailsState();
-    resetSearchState();
+    resetListingState();
 
-    if (!options?.preserveSearchReturnState) {
-      setSearchReturnState(null);
+    if (!options?.preserveListingReturnState) {
+      setListingReturnState(null);
     }
 
-    if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
-      setRuntimeError('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
+    if (listingMode === 'search') {
+      if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
+        setRuntimeError('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
+        return;
+      }
+    } else if (!authorConfig?.resultItemSelector || !authorConfig.titleSelector) {
+      setRuntimeError('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
       return;
     }
 
     setLoading(true);
 
     try {
-      const extractedSearchState = await loadSearchResultsPage(nextQuery, options?.pageIndex ?? 0);
-      const extractedPage = extractedSearchState.page;
-      const extractedResults = extractedSearchState.items;
-      setHasExecutedSearch(true);
+      const extractedListingState = await loadListingResultsPage(listingMode, nextQuery, options?.pageIndex ?? 0);
+      const extractedPage = extractedListingState.page;
+      const extractedResults = extractedListingState.items;
+      setHasExecutedListing(true);
 
       if (!extractedResults.length) {
-        setRuntimeMessage('La recherche a bien ete lancee, mais aucun resultat exploitable n\'a ete extrait avec la configuration actuelle.');
+        setRuntimeMessage(
+          listingMode === 'author'
+            ? 'La page auteur a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
+            : 'La recherche a bien ete lancee, mais aucun resultat exploitable n\'a ete extrait avec la configuration actuelle.',
+        );
         return;
       }
 
-      setSearchPage(extractedPage);
-      setSearchVisitedPageUrls(extractedSearchState.visitedPageUrls);
-      setSearchPageIndex(extractedSearchState.pageIndex);
-      setSearchResults(extractedResults);
+      setListingPage(extractedPage);
+      setListingVisitedPageUrls(extractedListingState.visitedPageUrls);
+      setListingPageIndex(extractedListingState.pageIndex);
+      setListingResults(extractedResults);
       setRuntimeMessage(buildSearchResultsMessage({
         resultsCount: extractedResults.length,
-        pageIndex: extractedSearchState.pageIndex,
-        usesSearchTemplatePaging,
+        pageIndex: extractedListingState.pageIndex,
+        usesSearchTemplatePaging: getUsesTemplatePaging(listingMode),
         hasNextPage: Boolean(extractedPage.nextPageUrl),
         canOpenSearchResultsAsDetails,
       }));
     } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire de la recherche.');
+      setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du chargement.');
     } finally {
       setLoading(false);
     }
   }, [
+    authorConfig,
     canOpenSearchResultsAsDetails,
     clearFeedback,
-    loadSearchResultsPage,
+    getUsesTemplatePaging,
+    loadListingResultsPage,
     resetDetailsState,
-    resetSearchState,
+    resetListingState,
     searchConfig,
-    setHasExecutedSearch,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
+    setListingReturnState,
+    setListingVisitedPageUrls,
     setLoading,
     setRuntimeError,
     setRuntimeMessage,
-    setSearchPage,
-    setSearchPageIndex,
-    setSearchResults,
-    setSearchReturnState,
-    setSearchVisitedPageUrls,
-    usesSearchTemplatePaging,
   ]);
 
-  const handleSearchNextPage = useCallback(async () => {
-    if (!searchPage) {
+  const runSearchLookup = useCallback(async (
+    nextQuery: string,
+    options?: ListingLookupOptions,
+  ) => {
+    await runListingLookup('search', nextQuery, options);
+  }, [runListingLookup]);
+
+  const runAuthorLookup = useCallback(async (
+    nextQuery: string,
+    options?: ListingLookupOptions,
+  ) => {
+    await runListingLookup('author', nextQuery, options);
+  }, [runListingLookup]);
+
+  const handleListingNextPage = useCallback(async () => {
+    if (!listingPage || !isListingMode(mode)) {
+      return;
+    }
+
+    const usesTemplatePaging = getUsesTemplatePaging(mode);
+    const nextPageIndex = listingPageIndex + 1;
+    const nextPageTargetUrl = usesTemplatePaging
+      ? mode === 'author'
+        ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig!, query, {
+          pageIndex: nextPageIndex,
+        })
+        : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, query, {
+          pageIndex: nextPageIndex,
+        })
+      : listingPage.nextPageUrl;
+
+    if (!nextPageTargetUrl) {
       return;
     }
 
@@ -286,36 +471,32 @@ export function useScraperBrowserSearch({
     setRuntimeError(null);
 
     try {
-      const nextPageTargetUrl = usesSearchTemplatePaging
-        ? resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, query, {
-          pageIndex: searchPageIndex + 1,
-        })
-        : searchPage.nextPageUrl;
-
-      if (!nextPageTargetUrl) {
-        return;
-      }
-
-      const nextPage = await fetchSearchPage(nextPageTargetUrl, {
-        query,
-        pageIndex: searchPageIndex + 1,
-      });
+      const nextPage = mode === 'author'
+        ? await fetchAuthorPage(nextPageTargetUrl)
+        : await fetchSearchPage(nextPageTargetUrl, {
+          query,
+          pageIndex: nextPageIndex,
+        });
       if (!nextPage.items.length) {
-        setRuntimeMessage('Aucun resultat exploitable n\'a ete trouve sur la page suivante.');
+        setRuntimeMessage(
+          mode === 'author'
+            ? 'Aucune card exploitable n\'a ete trouvee sur la page auteur suivante.'
+            : 'Aucun resultat exploitable n\'a ete trouve sur la page suivante.',
+        );
         return;
       }
 
-      setSearchPage(nextPage);
-      setSearchResults(nextPage.items);
-      setHasExecutedSearch(true);
-      setSearchVisitedPageUrls((previous) => {
-        const trimmedHistory = previous.slice(0, searchPageIndex + 1);
+      setListingPage(nextPage);
+      setListingResults(nextPage.items);
+      setHasExecutedListing(true);
+      setListingVisitedPageUrls((previous) => {
+        const trimmedHistory = previous.slice(0, listingPageIndex + 1);
         return [...trimmedHistory, nextPage.currentPageUrl];
       });
-      setSearchPageIndex((previous) => previous + 1);
+      setListingPageIndex((previous) => previous + 1);
       setRuntimeMessage(buildSearchPageLoadedMessage(
-        searchPageIndex + 1,
-        usesSearchTemplatePaging,
+        nextPageIndex,
+        usesTemplatePaging,
         Boolean(nextPage.nextPageUrl),
       ));
       scrollToBrowserTop();
@@ -325,30 +506,33 @@ export function useScraperBrowserSearch({
       setLoading(false);
     }
   }, [
+    authorConfig,
+    fetchAuthorPage,
     fetchSearchPage,
+    getUsesTemplatePaging,
+    listingPage,
+    listingPageIndex,
+    mode,
     query,
     scraper.baseUrl,
     scrollToBrowserTop,
     searchConfig,
-    searchPage,
-    searchPageIndex,
-    setHasExecutedSearch,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
+    setListingVisitedPageUrls,
     setLoading,
     setRuntimeError,
     setRuntimeMessage,
-    setSearchPage,
-    setSearchPageIndex,
-    setSearchResults,
-    setSearchVisitedPageUrls,
-    usesSearchTemplatePaging,
   ]);
 
-  const handleSearchPreviousPage = useCallback(async () => {
-    if (searchPageIndex <= 0) {
+  const handleListingPreviousPage = useCallback(async () => {
+    if (listingPageIndex <= 0 || !isListingMode(mode)) {
       return;
     }
 
-    const previousPageUrl = searchVisitedPageUrls[searchPageIndex - 1];
+    const previousPageUrl = listingVisitedPageUrls[listingPageIndex - 1];
     if (!previousPageUrl) {
       return;
     }
@@ -358,20 +542,22 @@ export function useScraperBrowserSearch({
     setRuntimeError(null);
 
     try {
-      const previousPage = await fetchSearchPage(previousPageUrl, {
-        query,
-        pageIndex: Math.max(0, searchPageIndex - 1),
-      });
-      setSearchPage(previousPage);
-      setSearchResults(previousPage.items);
-      setHasExecutedSearch(true);
-      setSearchPageIndex((current) => Math.max(0, current - 1));
-      setSearchVisitedPageUrls((currentHistory) => {
+      const previousPage = mode === 'author'
+        ? await fetchAuthorPage(previousPageUrl)
+        : await fetchSearchPage(previousPageUrl, {
+          query,
+          pageIndex: Math.max(0, listingPageIndex - 1),
+        });
+      setListingPage(previousPage);
+      setListingResults(previousPage.items);
+      setHasExecutedListing(true);
+      setListingPageIndex((current) => Math.max(0, current - 1));
+      setListingVisitedPageUrls((currentHistory) => {
         const nextHistory = [...currentHistory];
-        nextHistory[searchPageIndex - 1] = previousPage.currentPageUrl;
+        nextHistory[listingPageIndex - 1] = previousPage.currentPageUrl;
         return nextHistory;
       });
-      setRuntimeMessage(`Retour a la page ${searchPageIndex}.`);
+      setRuntimeMessage(`Retour a la page ${listingPageIndex}.`);
       scrollToBrowserTop();
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de revenir a la page precedente.');
@@ -379,22 +565,24 @@ export function useScraperBrowserSearch({
       setLoading(false);
     }
   }, [
+    fetchAuthorPage,
     fetchSearchPage,
+    listingPageIndex,
+    listingVisitedPageUrls,
+    mode,
     query,
     scrollToBrowserTop,
-    searchPageIndex,
-    searchVisitedPageUrls,
-    setHasExecutedSearch,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
+    setListingVisitedPageUrls,
     setLoading,
     setRuntimeError,
     setRuntimeMessage,
-    setSearchPage,
-    setSearchPageIndex,
-    setSearchResults,
-    setSearchVisitedPageUrls,
   ]);
 
-  const handleOpenSearchResult = useCallback(async (result: ScraperSearchResultItem) => {
+  const handleOpenResult = useCallback((result: ScraperSearchResultItem) => {
     setRuntimeMessage(null);
     setRuntimeError(null);
 
@@ -404,40 +592,110 @@ export function useScraperBrowserSearch({
     }
 
     if (!detailsConfig || !detailsConfig.titleSelector) {
-      setRuntimeMessage('Pour ouvrir un resultat depuis la recherche, configure d\'abord le composant `Fiche`.');
+      setRuntimeMessage('Pour ouvrir un resultat, configure d\'abord le composant `Fiche`.');
       return;
     }
 
-    setSearchReturnState({
-      hasExecutedSearch,
-      query,
-      page: searchPage,
-      visitedPageUrls: searchVisitedPageUrls,
-      pageIndex: searchPageIndex,
-      results: searchResults,
-      scrollTop: getCurrentScrollTop(),
+    if (!isListingMode(mode)) {
+      setRuntimeError('Aucune liste active n\'est disponible pour ouvrir cette fiche.');
+      return;
+    }
+
+    const nextSearch = getRouteStateForNavigation({
+      routeSearch: locationSearch,
+      scraperId: scraper.id,
+      nextMode: 'manga',
+      sourceMode: mode,
+      sourceQuery: query,
+      sourcePageIndex: listingPageIndex,
+      hasExecutedSourceListing: hasExecutedListing,
+      mangaUrl: result.detailUrl,
     });
-    setMode('manga');
-    setQuery(formatScraperValueForDisplay(result.detailUrl));
-    await loadDetailsFromTargetUrl(result.detailUrl);
+
+    navigate(
+      {
+        pathname: locationPathname,
+        search: nextSearch,
+      },
+      {
+        state: {
+          ...(locationState ?? {}),
+          scraperBrowserHistorySource: {
+            kind: mode,
+          },
+        },
+      },
+    );
   }, [
     detailsConfig,
-    getCurrentScrollTop,
-    hasExecutedSearch,
-    loadDetailsFromTargetUrl,
+    hasExecutedListing,
+    listingPageIndex,
+    locationPathname,
+    locationSearch,
+    locationState,
+    mode,
+    navigate,
     query,
-    searchPage,
-    searchPageIndex,
-    searchResults,
-    searchVisitedPageUrls,
-    setMode,
-    setQuery,
+    scraper.id,
     setRuntimeError,
     setRuntimeMessage,
-    setSearchReturnState,
   ]);
 
-  const handleSearchResultKeyDown = useCallback((
+  const handleOpenAuthorResult = useCallback((result: ScraperSearchResultItem) => {
+    setRuntimeMessage(null);
+    setRuntimeError(null);
+
+    if (!result.authorUrl) {
+      setRuntimeError('Ce resultat n\'expose pas de lien auteur exploitable.');
+      return;
+    }
+
+    if (!authorConfig || !authorConfig.titleSelector || !authorConfig.resultItemSelector) {
+      setRuntimeMessage('Pour ouvrir une page auteur, configure d\'abord le composant `Auteur`.');
+      return;
+    }
+
+    const nextSearch = getRouteStateForNavigation({
+      routeSearch: locationSearch,
+      scraperId: scraper.id,
+      nextMode: 'author',
+      sourceMode: mode,
+      sourceQuery: query,
+      sourcePageIndex: listingPageIndex,
+      hasExecutedSourceListing: hasExecutedListing,
+      nextAuthorQuery: formatScraperValueForDisplay(result.authorUrl),
+    });
+
+    navigate(
+      {
+        pathname: locationPathname,
+        search: nextSearch,
+      },
+      {
+        state: {
+          ...(locationState ?? {}),
+          scraperBrowserHistorySource: {
+            kind: mode,
+          },
+        },
+      },
+    );
+  }, [
+    authorConfig,
+    hasExecutedListing,
+    listingPageIndex,
+    locationPathname,
+    locationSearch,
+    locationState,
+    mode,
+    navigate,
+    query,
+    scraper.id,
+    setRuntimeError,
+    setRuntimeMessage,
+  ]);
+
+  const handleResultKeyDown = useCallback((
     event: React.KeyboardEvent<HTMLElement>,
     result: ScraperSearchResultItem,
   ) => {
@@ -446,70 +704,74 @@ export function useScraperBrowserSearch({
     }
 
     event.preventDefault();
-    void handleOpenSearchResult(result);
-  }, [handleOpenSearchResult]);
+    void handleOpenResult(result);
+  }, [handleOpenResult]);
 
-  const handleBackToSearch = useCallback(async () => {
-    if (!searchReturnState) {
+  const handleBackToListing = useCallback(async () => {
+    if (!listingReturnState) {
       return;
     }
 
-    setMode('search');
-    setQuery(searchReturnState.query);
+    setMode(listingReturnState.mode);
+    setQuery(listingReturnState.query);
     resetDetailsState();
     clearFeedback();
     resetAsyncState();
 
-    if (searchReturnState.page && searchReturnState.results.length > 0) {
-      setSearchPage(searchReturnState.page);
-      setSearchVisitedPageUrls(searchReturnState.visitedPageUrls);
-      setSearchPageIndex(searchReturnState.pageIndex);
-      setSearchResults(searchReturnState.results);
-      setHasExecutedSearch(searchReturnState.hasExecutedSearch);
-      setRuntimeMessage('Retour a la derniere recherche.');
-      restoreSearchScrollPosition(searchReturnState.scrollTop);
+    if (listingReturnState.page && listingReturnState.results.length > 0) {
+      setListingPage(listingReturnState.page);
+      setListingVisitedPageUrls(listingReturnState.visitedPageUrls);
+      setListingPageIndex(listingReturnState.pageIndex);
+      setListingResults(listingReturnState.results);
+      setHasExecutedListing(listingReturnState.hasExecutedListing);
+      setRuntimeMessage(`Retour a la ${getListingModeLabel(listingReturnState.mode)} precedente.`);
+      restoreSearchScrollPosition(listingReturnState.scrollTop);
       return;
     }
 
-    if (searchReturnState.hasExecutedSearch) {
-      await runSearchLookup(searchReturnState.query, {
-        pageIndex: searchReturnState.pageIndex,
-        preserveSearchReturnState: true,
+    if (listingReturnState.hasExecutedListing) {
+      const rerunLookup = listingReturnState.mode === 'author'
+        ? runAuthorLookup
+        : runSearchLookup;
+      await rerunLookup(listingReturnState.query, {
+        pageIndex: listingReturnState.pageIndex,
+        preserveListingReturnState: true,
       });
-      restoreSearchScrollPosition(searchReturnState.scrollTop);
+      restoreSearchScrollPosition(listingReturnState.scrollTop);
       return;
     }
 
-    resetSearchState();
+    resetListingState();
     setRuntimeMessage(null);
   }, [
     clearFeedback,
+    listingReturnState,
     resetAsyncState,
     resetDetailsState,
-    resetSearchState,
+    resetListingState,
     restoreSearchScrollPosition,
+    runAuthorLookup,
     runSearchLookup,
-    searchReturnState,
-    setHasExecutedSearch,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
+    setListingVisitedPageUrls,
     setMode,
     setQuery,
     setRuntimeMessage,
-    setSearchPage,
-    setSearchPageIndex,
-    setSearchResults,
-    setSearchVisitedPageUrls,
   ]);
 
   const handleGoToHome = useCallback(async () => {
     clearFeedback();
     resetAsyncState();
-    setSearchReturnState(null);
+    setListingReturnState(null);
 
     if (!hasSearch) {
       setMode(defaultMode);
       setQuery('');
       resetDetailsState();
-      resetSearchState();
+      resetListingState();
       setRuntimeMessage(null);
       return;
     }
@@ -524,7 +786,7 @@ export function useScraperBrowserSearch({
     }
 
     setQuery('');
-    resetSearchState();
+    resetListingState();
     setRuntimeMessage(null);
   }, [
     clearFeedback,
@@ -534,12 +796,12 @@ export function useScraperBrowserSearch({
     homeSearchQuery,
     resetAsyncState,
     resetDetailsState,
-    resetSearchState,
+    resetListingState,
     runSearchLookup,
+    setListingReturnState,
     setMode,
     setQuery,
     setRuntimeMessage,
-    setSearchReturnState,
   ]);
 
   const handleModeChange = useCallback(async (nextMode: ScraperBrowseMode) => {
@@ -547,9 +809,9 @@ export function useScraperBrowserSearch({
       return;
     }
 
-    if (nextMode === 'search' && detailsResult) {
-      if (searchReturnState?.hasExecutedSearch) {
-        await handleBackToSearch();
+    if (nextMode === 'search') {
+      if (detailsResult && listingReturnState?.mode === 'search') {
+        await handleBackToListing();
         return;
       }
 
@@ -557,23 +819,47 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    if (nextMode === 'author') {
+      if (detailsResult && listingReturnState?.mode === 'author') {
+        await handleBackToListing();
+        return;
+      }
+
+      clearFeedback();
+      resetAsyncState();
+      resetDetailsState();
+      resetListingState();
+      setListingReturnState(null);
+      setMode('author');
+      setQuery('');
+      return;
+    }
+
     setMode(nextMode);
   }, [
+    clearFeedback,
     detailsResult,
-    handleBackToSearch,
+    handleBackToListing,
     handleGoToHome,
+    listingReturnState,
     mode,
-    searchReturnState,
+    resetAsyncState,
+    resetDetailsState,
+    resetListingState,
+    setListingReturnState,
     setMode,
+    setQuery,
   ]);
 
   return {
     runSearchLookup,
-    handleSearchNextPage,
-    handleSearchPreviousPage,
-    handleOpenSearchResult,
-    handleSearchResultKeyDown,
-    handleBackToSearch,
+    runAuthorLookup,
+    handleListingNextPage,
+    handleListingPreviousPage,
+    handleOpenResult,
+    handleOpenAuthorResult,
+    handleResultKeyDown,
+    handleBackToListing,
     handleGoToHome,
     handleModeChange,
   };

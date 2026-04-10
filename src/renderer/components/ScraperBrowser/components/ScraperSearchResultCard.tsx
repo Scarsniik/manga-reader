@@ -7,8 +7,11 @@ type Props = {
   result: ScraperSearchResultItem;
   canOpenResult: boolean;
   canOpenSearchResultsAsDetails: boolean;
+  canOpenSearchResultsAsAuthor: boolean;
+  canOpenAuthorResult: boolean;
   bookmarkAction?: ScraperCardAction | null;
   onOpenResult: (result: ScraperSearchResultItem) => void;
+  onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
@@ -18,8 +21,11 @@ export default function ScraperSearchResultCard({
   result,
   canOpenResult,
   canOpenSearchResultsAsDetails,
+  canOpenSearchResultsAsAuthor,
+  canOpenAuthorResult,
   bookmarkAction,
   onOpenResult,
+  onOpenAuthorResultAction,
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
@@ -43,6 +49,21 @@ export default function ScraperSearchResultCard({
       id: 'details-disabled',
       type: 'hint',
       label: 'Configure `Fiche` pour ouvrir',
+    });
+  }
+
+  if (canOpenAuthorResult) {
+    actions.push({
+      id: 'open-author',
+      type: 'secondary',
+      label: 'Auteur',
+      onClick: () => onOpenAuthorResultAction(result),
+    });
+  } else if (result.authorUrl && !canOpenSearchResultsAsAuthor) {
+    actions.push({
+      id: 'author-disabled',
+      type: 'hint',
+      label: 'Configure `Auteur` pour ouvrir',
     });
   }
 

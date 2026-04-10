@@ -9,6 +9,7 @@ import {
 } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import { usesScraperPagesSelectorSource } from '@/renderer/utils/scraperPages';
 import { resolveScraperTemplateBaseUrl } from '@/renderer/utils/scraperTemplateContext';
 
@@ -96,6 +97,7 @@ const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
   cover: 'Couverture',
   description: 'Description',
   authors: 'Auteurs',
+  authorUrl: 'Lien auteur',
   tags: 'Tags',
   status: 'Statut',
   chapters: 'Chapitres',
@@ -273,11 +275,11 @@ export const buildValidationPresentation = (
   const pagesCheck = validationResult.checks.find((check) => check.key === 'pages');
 
   if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
+    details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
   }
 
   if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
+    details.push(`URL finale : ${formatDisplayUrl(validationResult.finalUrl)}`);
   }
 
   if (typeof validationResult.status === 'number') {

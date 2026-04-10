@@ -5,21 +5,30 @@ import {
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
 
-export type ScraperBrowseMode = 'search' | 'manga';
+export type ScraperListingMode = 'search' | 'author';
+export type ScraperBrowseMode = ScraperListingMode | 'manga';
+export type ScraperBrowserHistorySourceKind = ScraperBrowseMode | 'bookmarks';
+
+export type ScraperBrowserLocationState = {
+  scraperBrowserHistorySource?: {
+    kind: ScraperBrowserHistorySourceKind;
+  };
+};
 
 export type ScraperBrowserInitialState = {
   query: string;
   detailsResult: ScraperRuntimeDetailsResult;
   chaptersResult?: ScraperRuntimeChapterResult[];
-  searchReturnState?: ScraperSearchReturnState | null;
+  listingReturnState?: ScraperListingReturnState | null;
 };
 
 export type ScraperBrowserReturnState = {
   scraperId: string;
 } & ScraperBrowserInitialState;
 
-export type ScraperSearchReturnState = {
-  hasExecutedSearch: boolean;
+export type ScraperListingReturnState = {
+  mode: ScraperListingMode;
+  hasExecutedListing: boolean;
   query: string;
   page: ScraperRuntimeSearchPageResult | null;
   visitedPageUrls: string[];

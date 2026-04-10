@@ -10,6 +10,7 @@ import {
 } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
+import { formatDisplayUrl, formatValidationDisplayValue } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 
 export type DerivedValueFormItem = ScraperDetailsDerivedValueConfig & {
   draftId: string;
@@ -97,6 +98,12 @@ export const SELECTOR_FIELDS: Field[] = [
     placeholder: 'Exemple : .meta .author a',
   },
   {
+    name: 'authorUrlSelector',
+    label: 'Selecteur du lien auteur',
+    type: 'text',
+    placeholder: 'Optionnel : .meta .author a@href',
+  },
+  {
     name: 'tagsSelector',
     label: 'Selecteur des tags',
     type: 'text',
@@ -121,6 +128,7 @@ const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
   cover: 'Couverture',
   description: 'Description',
   authors: 'Auteurs',
+  authorUrl: 'Lien auteur',
   tags: 'Tags',
   status: 'Statut',
   chapters: 'Chapitres',
@@ -153,6 +161,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   coverSelector: '',
   descriptionSelector: '',
   authorsSelector: '',
+  authorUrlSelector: '',
   tagsSelector: '',
   statusSelector: '',
   derivedValues: [],
@@ -175,10 +184,6 @@ const trimOptionalSelector = (value: unknown): string | undefined => {
   const normalized = normalizeSelectorInput(String(value ?? ''));
   return normalized ? normalized : undefined;
 };
-
-const truncateValue = (value: string, max = 160): string => (
-  value.length > max ? `${value.slice(0, max - 3)}...` : value
-);
 
 const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -244,6 +249,7 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   coverSelector: trimOptionalSelector(values.coverSelector),
   descriptionSelector: trimOptionalSelector(values.descriptionSelector),
   authorsSelector: trimOptionalSelector(values.authorsSelector),
+  authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   tagsSelector: trimOptionalSelector(values.tagsSelector),
   statusSelector: trimOptionalSelector(values.statusSelector),
   derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
@@ -269,6 +275,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     coverSelector: trimOptionalSelector(raw.coverSelector),
     descriptionSelector: trimOptionalSelector(raw.descriptionSelector),
     authorsSelector: trimOptionalSelector(raw.authorsSelector),
+    authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalSelector(raw.tagsSelector),
     statusSelector: trimOptionalSelector(raw.statusSelector),
     derivedValues: Array.isArray(raw.derivedValues)
@@ -342,11 +349,11 @@ export const buildValidationPresentation = (
   const errors: string[] = [];
 
   if (validationResult.requestedUrl) {
-    details.push(`URL demandee : ${validationResult.requestedUrl}`);
+    details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
   }
 
   if (validationResult.finalUrl && validationResult.finalUrl !== validationResult.requestedUrl) {
-    details.push(`URL finale : ${validationResult.finalUrl}`);
+    details.push(`URL finale : ${formatDisplayUrl(validationResult.finalUrl)}`);
   }
 
   if (typeof validationResult.status === 'number') {
@@ -376,7 +383,12 @@ export const buildValidationPresentation = (
     const label = CHECK_LABELS[check.key];
 
     if (check.matchedCount > 0) {
-      const sample = check.sample ? truncateValue(check.sample) : `${check.matchedCount} resultat(s)`;
+      const sample = check.sample
+        ? formatValidationDisplayValue(check.sample, {
+          truncate: 160,
+          treatAsUrl: check.key === 'cover' || check.key === 'authorUrl',
+        })
+        : `${check.matchedCount} resultat(s)`;
       details.push(`${label} : ${sample}`);
       return;
     }
@@ -402,7 +414,9 @@ export const buildValidationPresentation = (
   });
   validationResult.derivedValues.forEach((derivedValue) => {
     if (derivedValue.value) {
-      details.push(`Variable {{${derivedValue.key}}} : ${truncateValue(derivedValue.value)}`);
+      details.push(
+        `Variable {{${derivedValue.key}}} : ${formatValidationDisplayValue(derivedValue.value, { truncate: 160 })}`,
+      );
       return;
     }
 
