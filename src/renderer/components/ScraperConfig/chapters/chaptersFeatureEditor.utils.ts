@@ -1,14 +1,28 @@
 import {
-  FetchScraperDocumentResult,
   ScraperChapterItem,
   ScraperChaptersFeatureConfig,
   ScraperFeatureDefinition,
-  ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
 } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  buildDocumentFailure,
+  CHECK_LABELS,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  trimOptional,
+  trimOptionalSelector,
+} from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
+
+export {
+  buildDocumentFailure,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+};
 
 export const URL_STRATEGY_FIELD: Field = {
   name: 'urlStrategy',
@@ -113,42 +127,8 @@ export const DEFAULT_CHAPTERS_CONFIG: ScraperChaptersFeatureConfig = {
   reverseOrder: false,
 };
 
-export const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
-  title: 'Titre',
-  cover: 'Couverture',
-  description: 'Description',
-  authors: 'Auteurs',
-  authorUrl: 'Lien auteur',
-  tags: 'Tags',
-  status: 'Statut',
-  chapters: 'Chapitres',
-  pages: 'Pages',
-};
-
 export type FakeChaptersPreview = {
   chapters: ScraperChapterItem[];
-};
-
-export const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
 };
 
 export const buildChaptersConfig = (
@@ -183,8 +163,6 @@ export const getInitialConfig = (
   };
 };
 
-export const getConfigSignature = (config: ScraperChaptersFeatureConfig): string => JSON.stringify(config);
-
 export const getSaveFieldErrors = (
   config: ScraperChaptersFeatureConfig,
 ): Record<string, string> => {
@@ -208,21 +186,6 @@ export const getSaveFieldErrors = (
 
   return errors;
 };
-
-export const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-  chapters: [],
-});
 
 export const buildValidationPresentation = (
   validationResult: ScraperFeatureValidationResult,

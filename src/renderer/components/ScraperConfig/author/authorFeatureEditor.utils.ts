@@ -1,18 +1,28 @@
 import {
-  FetchScraperDocumentResult,
   ScraperAuthorFeatureConfig,
   ScraperCardListConfig,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
-import {
-  normalizeSelectorInput,
-  ScraperRuntimeSearchPageResult,
-} from '@/renderer/utils/scraperRuntime';
+import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import { Field } from '@/renderer/components/utils/Form/types';
+import {
+  buildDocumentFailure,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  trimOptional,
+  trimOptionalSelector,
+} from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
+
+export {
+  buildDocumentFailure,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+};
 
 export type AuthorFeatureFormState = ScraperAuthorFeatureConfig;
 
@@ -138,22 +148,6 @@ export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   nextPageSelector: '',
 };
 
-export const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
-};
-
 export const buildAuthorScrapingFields = (
   values: Partial<ScraperCardListConfig>,
 ): Pick<AuthorFeatureFormState, AuthorScrapingFieldName> => ({
@@ -188,22 +182,6 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): AuthorFeatu
     ...buildAuthorScrapingFields(raw),
   };
 };
-
-export const getConfigSignature = (config: ScraperAuthorFeatureConfig): string => JSON.stringify(config);
-
-export const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-});
 
 export const getSaveFieldErrors = (
   config: ScraperAuthorFeatureConfig,

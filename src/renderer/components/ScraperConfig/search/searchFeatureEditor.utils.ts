@@ -1,5 +1,4 @@
 import {
-  FetchScraperDocumentResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperRequestBodyMode,
@@ -9,13 +8,24 @@ import {
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
-import {
-  normalizeSelectorInput,
-  ScraperRuntimeSearchPageResult,
-} from '@/renderer/utils/scraperRuntime';
+import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import { Field } from '@/renderer/components/utils/Form/types';
+import {
+  buildDocumentFailure,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  trimOptional,
+  trimOptionalSelector,
+} from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
+
+export {
+  buildDocumentFailure,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+};
 
 export type SearchRequestFieldFormItem = ScraperRequestField & {
   draftId: string;
@@ -163,22 +173,6 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   nextPageSelector: '',
 };
 
-export const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
-};
-
 const createDraftId = (): string => `search-request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export const createSearchRequestFieldFormItem = (
@@ -280,22 +274,6 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatu
     nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
   };
 };
-
-export const getConfigSignature = (config: ScraperSearchFeatureConfig): string => JSON.stringify(config);
-
-export const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-});
 
 export const getSaveFieldErrors = (
   formValues: SearchFeatureFormState,

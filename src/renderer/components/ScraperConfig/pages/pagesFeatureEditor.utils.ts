@@ -1,8 +1,6 @@
 import {
   buildScraperContextTemplateUrl,
-  FetchScraperDocumentResult,
   ScraperFeatureDefinition,
-  ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperPagesFeatureConfig,
   ScraperPagesTemplateBase,
@@ -12,6 +10,25 @@ import { ScraperValidationPresentation } from '@/renderer/components/ScraperConf
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import { usesScraperPagesSelectorSource } from '@/renderer/utils/scraperPages';
 import { resolveScraperTemplateBaseUrl } from '@/renderer/utils/scraperTemplateContext';
+import {
+  buildDocumentFailure,
+  CHECK_LABELS,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  parseSelectorExpression,
+  trimOptional,
+} from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
+
+export {
+  buildDocumentFailure,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  parseSelectorExpression,
+};
 
 export const URL_STRATEGY_FIELD: Field = {
   name: 'urlStrategy',
@@ -86,35 +103,6 @@ export const DEFAULT_PAGES_CONFIG: ScraperPagesFeatureConfig = {
   linkedToChapters: false,
 };
 
-export const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
-  title: 'Titre',
-  cover: 'Couverture',
-  description: 'Description',
-  authors: 'Auteurs',
-  authorUrl: 'Lien auteur',
-  tags: 'Tags',
-  status: 'Statut',
-  chapters: 'Chapitres',
-  pages: 'Pages',
-};
-
-export const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
 const normalizeTemplateBase = (value: unknown): ScraperPagesTemplateBase => (
   value === 'details_page' ? 'details_page' : 'scraper_base'
 );
@@ -169,41 +157,6 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPage
   };
 };
 
-export const parseSelectorExpression = (input: string): { selector: string; attribute?: string } => {
-  const trimmed = normalizeSelectorInput(input);
-  const atIndex = trimmed.lastIndexOf('@');
-
-  if (atIndex <= 0 || atIndex === trimmed.length - 1) {
-    return { selector: trimmed };
-  }
-
-  return {
-    selector: trimmed.slice(0, atIndex).trim(),
-    attribute: trimmed.slice(atIndex + 1).trim(),
-  };
-};
-
-export const extractSelectorValues = (doc: Document, input: string): string[] => {
-  const { selector, attribute } = parseSelectorExpression(input);
-  if (!selector) {
-    return [];
-  }
-
-  return Array.from(doc.querySelectorAll(selector))
-    .map((element) => {
-      if (attribute) {
-        return element.getAttribute(attribute)?.trim() || '';
-      }
-
-      if (element.tagName === 'IMG') {
-        return element.getAttribute('src')?.trim() || '';
-      }
-
-      return element.textContent?.trim() || '';
-    })
-    .filter(Boolean);
-};
-
 export const toAbsoluteUrl = (value: string, baseUrl: string): string => {
   try {
     return new URL(value, baseUrl).toString();
@@ -211,8 +164,6 @@ export const toAbsoluteUrl = (value: string, baseUrl: string): string => {
     return value;
   }
 };
-
-export const getConfigSignature = (config: ScraperPagesFeatureConfig): string => JSON.stringify(config);
 
 export const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<string, string> => {
   const errors: Record<string, string> = {};
@@ -227,20 +178,6 @@ export const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<st
 
   return errors;
 };
-
-export const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
-});
 
 export const isImageLikeContentType = (contentType: string | undefined): boolean => (
   typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')

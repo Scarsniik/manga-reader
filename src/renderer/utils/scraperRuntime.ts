@@ -52,6 +52,7 @@ export type ScraperRuntimeDetailsResult = {
   authors: string[];
   authorUrls: string[];
   tags: string[];
+  thumbnails?: string[];
   mangaStatus?: string;
   derivedValues: Record<string, string>;
 };

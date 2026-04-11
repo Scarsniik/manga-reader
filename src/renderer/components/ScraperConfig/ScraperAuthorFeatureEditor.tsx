@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FetchScraperDocumentResult,
   ScraperCardListConfig,
@@ -12,7 +12,14 @@ import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shar
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
-import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  ScraperConfigFieldGrid,
+  ScraperFeatureActions,
+  ScraperResolvedUrlPreview,
+  ScraperUrlTemplateFields,
+} from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
+import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import {
   extractScraperSearchPageFromDocument,
@@ -62,37 +69,44 @@ export default function ScraperAuthorFeatureEditor({
     () => scraper.features.find((candidate) => candidate.kind === 'search') || null,
     [scraper.features],
   );
-  const [formValues, setFormValues] = useState<AuthorFeatureFormState>(initialConfig);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [validationResult, setValidationResult] = useState<ScraperFeatureValidationResult | null>(
-    feature.validation,
-  );
   const [previewPage, setPreviewPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
   const [previewVisitedPageUrls, setPreviewVisitedPageUrls] = useState<string[]>([]);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewResults, setPreviewResults] = useState<ScraperSearchResultItem[]>([]);
-  const [lastValidatedSignature, setLastValidatedSignature] = useState<string | null>(
-    feature.validation?.ok ? getConfigSignature(buildAuthorConfig(initialConfig)) : null,
-  );
-  const [validationUiError, setValidationUiError] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const {
+    formValues,
+    setFormValues,
+    fieldErrors,
+    setFieldErrors,
+    validationResult,
+    setValidationResult,
+    lastValidatedSignature,
+    setLastValidatedSignature,
+    validationUiError,
+    setValidationUiError,
+    validating,
+    setValidating,
+    saving,
+    setSaving,
+    saveError,
+    setSaveError,
+    saveMessage,
+    setSaveMessage,
+    createTextFieldChangeHandler,
+    resetEditorState,
+  } = useScraperFeatureEditorState<AuthorFeatureFormState>({
+    initialFormValues: initialConfig,
+    initialValidationResult: feature.validation,
+    initialValidatedSignature: feature.validation?.ok ? getConfigSignature(buildAuthorConfig(initialConfig)) : null,
+  });
 
   useEffect(() => {
-    setFormValues(initialConfig);
-    setFieldErrors({});
-    setValidationResult(feature.validation);
+    resetEditorState();
     setPreviewPage(null);
     setPreviewVisitedPageUrls([]);
     setPreviewPageIndex(0);
     setPreviewResults([]);
-    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(buildAuthorConfig(initialConfig)) : null);
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, [feature, initialConfig]);
+  }, [feature, resetEditorState]);
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildAuthorConfig(formValues), [formValues]);
@@ -170,27 +184,8 @@ export default function ScraperAuthorFeatureEditor({
   }, [currentConfig, scraper.baseUrl]);
 
   const handleFieldChange = useCallback((fieldName: keyof AuthorFeatureFormState) => (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const nextValue = event.target.value;
-    setFormValues((previous) => ({
-      ...previous,
-      [fieldName]: nextValue,
-    }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      if (!previous[fieldName]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[fieldName];
-      return next;
-    });
-  }, []);
+    createTextFieldChangeHandler(fieldName)
+  ), [createTextFieldChangeHandler]);
 
   const handleCopySearchSelectors = useCallback(() => {
     if (!copiedSearchScrapingFields) {
@@ -464,50 +459,27 @@ export default function ScraperAuthorFeatureEditor({
     }
   }, [currentConfig, fetchPreviewPage, previewPageIndex, previewVisitedPageUrls]);
 
-  const handleSave = useCallback(async () => {
+  const buildSaveConfig = useCallback(() => {
     const config = buildAuthorConfig(formValues);
-    const errors = getSaveFieldErrors(config);
-    setFieldErrors(errors);
+    return {
+      config,
+      errors: getSaveFieldErrors(config),
+      signature: getConfigSignature(config),
+    };
+  }, [formValues]);
 
-    if (Object.keys(errors).length > 0) {
-      setSaveError('Complete les champs requis avant d\'enregistrer.');
-      return;
-    }
-
-    const matchingValidation = validationResult?.ok
-      && lastValidatedSignature === getConfigSignature(config)
-      ? validationResult
-      : null;
-
-    if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
-      setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
-      return;
-    }
-
-    setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    try {
-      const updatedScraper = await (window as any).api.saveScraperFeatureConfig({
-        scraperId: scraper.id,
-        featureKind: feature.kind,
-        config,
-        validation: matchingValidation,
-      });
-
-      onScraperChange(updatedScraper as ScraperRecord);
-      setSaveMessage(
-        matchingValidation?.ok
-          ? 'Configuration enregistree et validee.'
-          : 'Configuration enregistree. Le composant reste a valider.',
-      );
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Echec de l\'enregistrement.');
-    } finally {
-      setSaving(false);
-    }
-  }, [feature.kind, formValues, lastValidatedSignature, onScraperChange, scraper.id, validationResult]);
+  const handleSave = useSaveScraperFeatureConfig({
+    scraperId: scraper.id,
+    featureKind: feature.kind,
+    validationResult,
+    lastValidatedSignature,
+    onScraperChange,
+    buildSaveConfig,
+    setFieldErrors,
+    setSaving,
+    setSaveError,
+    setSaveMessage,
+  });
 
   return (
     <section className="scraper-config-step">
@@ -539,31 +511,26 @@ export default function ScraperAuthorFeatureEditor({
             </p>
           </div>
 
-          <ScraperConfigField
-            field={URL_STRATEGY_FIELD}
-            value={formValues.urlStrategy}
-            error={fieldErrors.urlStrategy}
-            onChange={handleFieldChange('urlStrategy')}
-          />
-
-          {currentConfig.urlStrategy === 'template' ? (
-            <>
-              <ScraperConfigField
-                field={URL_TEMPLATE_FIELD}
-                value={formValues.urlTemplate}
-                error={fieldErrors.urlTemplate}
-                onChange={handleFieldChange('urlTemplate')}
-              />
-              <div className="scraper-config-hint">
-                Placeholders supportes : <code>{'{{value}}'}</code>, <code>{'{{rawValue}}'}</code>,
-                <code>{' {{query}}'}</code>, <code>{'{{rawQuery}}'}</code>, ainsi que les variantes
-                de pagination <code>{'{{page}}'}</code>, <code>{'{{page3}}'}</code> et
-                <code>{' {{pageIndex}}'}</code>. Si `Fiche` est validee, tu peux aussi utiliser
-                <code>{' {{requestedUrl}}'}</code>, <code>{'{{finalUrl}}'}</code> et les variables
-                extraites via <code>{'{{nomVariable}}'}</code> ou <code>{'{{raw:nomVariable}}'}</code>.
-              </div>
-            </>
-          ) : null}
+          <ScraperUrlTemplateFields
+            strategyField={URL_STRATEGY_FIELD}
+            strategyValue={formValues.urlStrategy}
+            strategyError={fieldErrors.urlStrategy}
+            onStrategyChange={handleFieldChange('urlStrategy')}
+            showTemplateFields={currentConfig.urlStrategy === 'template'}
+            templateField={URL_TEMPLATE_FIELD}
+            templateValue={formValues.urlTemplate}
+            templateError={fieldErrors.urlTemplate}
+            onTemplateChange={handleFieldChange('urlTemplate')}
+          >
+            <div className="scraper-config-hint">
+              Placeholders supportes : <code>{'{{value}}'}</code>, <code>{'{{rawValue}}'}</code>,
+              <code>{' {{query}}'}</code>, <code>{'{{rawQuery}}'}</code>, ainsi que les variantes
+              de pagination <code>{'{{page}}'}</code>, <code>{'{{page3}}'}</code> et
+              <code>{' {{pageIndex}}'}</code>. Si `Fiche` est validee, tu peux aussi utiliser
+              <code>{' {{requestedUrl}}'}</code>, <code>{'{{finalUrl}}'}</code> et les variables
+              extraites via <code>{'{{nomVariable}}'}</code> ou <code>{'{{raw:nomVariable}}'}</code>.
+            </div>
+          </ScraperUrlTemplateFields>
 
           {currentConfig.urlStrategy === 'template' ? (
             <ScraperTemplateContext
@@ -600,17 +567,12 @@ export default function ScraperAuthorFeatureEditor({
             </div>
           ) : null}
 
-          <div className="scraper-config-section__grid">
-            {SCRAPING_FIELDS.map((field) => (
-              <ScraperConfigField
-                key={field.name}
-                field={field}
-                value={formValues[field.name as keyof AuthorFeatureFormState] ?? ''}
-                error={fieldErrors[field.name]}
-                onChange={handleFieldChange(field.name as keyof AuthorFeatureFormState)}
-              />
-            ))}
-          </div>
+          <ScraperConfigFieldGrid
+            fields={SCRAPING_FIELDS}
+            getValue={(fieldName) => formValues[fieldName as keyof AuthorFeatureFormState] ?? ''}
+            getError={(fieldName) => fieldErrors[fieldName]}
+            onFieldChange={(fieldName) => handleFieldChange(fieldName as keyof AuthorFeatureFormState)}
+          />
         </div>
 
         <div className="scraper-config-section">
@@ -637,22 +599,19 @@ export default function ScraperAuthorFeatureEditor({
             />
           )}
 
-          <div className="scraper-config-preview">
-            <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Complete d\'abord la section URL pour voir l\'aperçu.'}</strong>
-          </div>
+          <ScraperResolvedUrlPreview
+            url={resolvedTestUrl}
+            emptyMessage="Complete d'abord la section URL pour voir l'aperçu."
+          />
 
-          <div className="scraper-config-step__actions">
-            <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>
-              Retour
-            </button>
-            <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
-              {validating ? 'Validation en cours...' : 'Valider la page auteur'}
-            </button>
-            <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
-              {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
-            </button>
-          </div>
+          <ScraperFeatureActions
+            validating={validating}
+            saving={saving}
+            validateLabel="Valider la page auteur"
+            onBack={onBack}
+            onValidate={() => void handleValidate()}
+            onSave={() => void handleSave()}
+          />
 
           <ScraperValidationSummary
             validationResult={validationResult}

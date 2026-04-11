@@ -17,7 +17,13 @@ import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/Scrap
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
-import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  ScraperConfigFieldGrid,
+  ScraperFeatureActions,
+  ScraperResolvedUrlPreview,
+} from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
+import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import SearchRequestSection from '@/renderer/components/ScraperConfig/search/SearchRequestSection';
 import {
@@ -50,37 +56,47 @@ export default function ScraperSearchFeatureEditor({
   onScraperChange,
 }: Props) {
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
-  const [formValues, setFormValues] = useState<SearchFeatureFormState>(initialConfig);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [validationResult, setValidationResult] = useState<ScraperFeatureValidationResult | null>(
-    feature.validation,
-  );
   const [previewPage, setPreviewPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
   const [previewVisitedPageUrls, setPreviewVisitedPageUrls] = useState<string[]>([]);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewResults, setPreviewResults] = useState<ScraperSearchResultItem[]>([]);
-  const [lastValidatedSignature, setLastValidatedSignature] = useState<string | null>(
-    feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null,
-  );
-  const [validationUiError, setValidationUiError] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const {
+    formValues,
+    setFormValues,
+    fieldErrors,
+    setFieldErrors,
+    validationResult,
+    setValidationResult,
+    lastValidatedSignature,
+    setLastValidatedSignature,
+    validationUiError,
+    setValidationUiError,
+    validating,
+    setValidating,
+    saving,
+    setSaving,
+    saveError,
+    setSaveError,
+    saveMessage,
+    setSaveMessage,
+    clearFeedback,
+    clearFieldError,
+    clearFieldErrorsByPrefix,
+    createTextFieldChangeHandler,
+    resetEditorState,
+  } = useScraperFeatureEditorState<SearchFeatureFormState>({
+    initialFormValues: initialConfig,
+    initialValidationResult: feature.validation,
+    initialValidatedSignature: feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null,
+  });
 
   useEffect(() => {
-    setFormValues(initialConfig);
-    setFieldErrors({});
-    setValidationResult(feature.validation);
+    resetEditorState();
     setPreviewPage(null);
     setPreviewVisitedPageUrls([]);
     setPreviewPageIndex(0);
     setPreviewResults([]);
-    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null);
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, [feature, initialConfig]);
+  }, [feature, resetEditorState]);
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildSearchConfig(formValues), [formValues]);
@@ -147,27 +163,8 @@ export default function ScraperSearchFeatureEditor({
   }, [scraper.baseUrl]);
 
   const handleFieldChange = useCallback((fieldName: Exclude<keyof SearchFeatureFormState, 'request'>) => (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const nextValue = event.target.value;
-    setFormValues((previous) => ({
-      ...previous,
-      [fieldName]: nextValue,
-    }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      if (!previous[fieldName]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[fieldName];
-      return next;
-    });
-  }, []);
+    createTextFieldChangeHandler(fieldName)
+  ), [createTextFieldChangeHandler]);
 
   const handleRequestMethodChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMethod = event.target.value === 'POST' ? 'POST' : 'GET';
@@ -178,20 +175,9 @@ export default function ScraperSearchFeatureEditor({
         method: nextMethod,
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      Object.keys(next)
-        .filter((key) => key.startsWith('request.'))
-        .forEach((key) => {
-          delete next[key];
-        });
-      return next;
-    });
-  }, []);
+    clearFeedback();
+    clearFieldErrorsByPrefix('request.');
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleRequestBodyModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextBodyMode = event.target.value === 'raw' ? 'raw' : 'form';
@@ -202,20 +188,9 @@ export default function ScraperSearchFeatureEditor({
         bodyMode: nextBodyMode,
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      Object.keys(next)
-        .filter((key) => key.startsWith('request.'))
-        .forEach((key) => {
-          delete next[key];
-        });
-      return next;
-    });
-  }, []);
+    clearFeedback();
+    clearFieldErrorsByPrefix('request.');
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleAddRequestField = useCallback(() => {
     setFormValues((previous) => ({
@@ -228,10 +203,8 @@ export default function ScraperSearchFeatureEditor({
         ],
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, []);
+    clearFeedback();
+  }, [clearFeedback, setFormValues]);
 
   const handleRemoveRequestField = useCallback((draftId: string) => {
     setFormValues((previous) => ({
@@ -241,20 +214,9 @@ export default function ScraperSearchFeatureEditor({
         bodyFields: previous.request.bodyFields.filter((field) => field.draftId !== draftId),
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      Object.keys(next)
-        .filter((key) => key.startsWith(`request.bodyFields.${draftId}.`))
-        .forEach((key) => {
-          delete next[key];
-        });
-      return next;
-    });
-  }, []);
+    clearFeedback();
+    clearFieldErrorsByPrefix(`request.bodyFields.${draftId}.`);
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleUpdateRequestField = useCallback((
     draftId: string,
@@ -275,16 +237,9 @@ export default function ScraperSearchFeatureEditor({
         )),
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      delete next[`request.bodyFields.${draftId}.${fieldName}`];
-      return next;
-    });
-  }, []);
+    clearFeedback();
+    clearFieldError(`request.bodyFields.${draftId}.${fieldName}`);
+  }, [clearFeedback, clearFieldError, setFormValues]);
 
   const handleRequestBodyChange = useCallback((nextValue: string) => {
     setFormValues((previous) => ({
@@ -294,10 +249,8 @@ export default function ScraperSearchFeatureEditor({
         body: nextValue,
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, []);
+    clearFeedback();
+  }, [clearFeedback, setFormValues]);
 
   const handleRequestContentTypeChange = useCallback((nextValue: string) => {
     setFormValues((previous) => ({
@@ -307,10 +260,8 @@ export default function ScraperSearchFeatureEditor({
         contentType: nextValue,
       },
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, []);
+    clearFeedback();
+  }, [clearFeedback, setFormValues]);
 
   const handleValidate = useCallback(async () => {
     const config = buildSearchConfig(formValues);
@@ -554,50 +505,27 @@ export default function ScraperSearchFeatureEditor({
     }
   }, [fetchPreviewPage, formValues, previewPageIndex, previewVisitedPageUrls]);
 
-  const handleSave = useCallback(async () => {
+  const buildSaveConfig = useCallback(() => {
     const config = buildSearchConfig(formValues);
-    const errors = getSaveFieldErrors(formValues, config);
-    setFieldErrors(errors);
+    return {
+      config,
+      errors: getSaveFieldErrors(formValues, config),
+      signature: getConfigSignature(config),
+    };
+  }, [formValues]);
 
-    if (Object.keys(errors).length > 0) {
-      setSaveError('Complete les champs requis avant d\'enregistrer.');
-      return;
-    }
-
-    const matchingValidation = validationResult?.ok
-      && lastValidatedSignature === getConfigSignature(config)
-      ? validationResult
-      : null;
-
-    if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
-      setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
-      return;
-    }
-
-    setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    try {
-      const updatedScraper = await (window as any).api.saveScraperFeatureConfig({
-        scraperId: scraper.id,
-        featureKind: feature.kind,
-        config,
-        validation: matchingValidation,
-      });
-
-      onScraperChange(updatedScraper as ScraperRecord);
-      setSaveMessage(
-        matchingValidation?.ok
-          ? 'Configuration enregistree et validee.'
-          : 'Configuration enregistree. Le composant reste a valider.',
-      );
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Echec de l\'enregistrement.');
-    } finally {
-      setSaving(false);
-    }
-  }, [feature.kind, formValues, lastValidatedSignature, onScraperChange, scraper.id, validationResult]);
+  const handleSave = useSaveScraperFeatureConfig({
+    scraperId: scraper.id,
+    featureKind: feature.kind,
+    validationResult,
+    lastValidatedSignature,
+    onScraperChange,
+    buildSaveConfig,
+    setFieldErrors,
+    setSaving,
+    setSaveError,
+    setSaveMessage,
+  });
 
   return (
     <section className="scraper-config-step">
@@ -684,17 +612,16 @@ export default function ScraperSearchFeatureEditor({
             le selecteur de page suivante, soit combiner les deux.
           </div>
 
-          <div className="scraper-config-section__grid">
-            {SCRAPING_FIELDS.map((field) => (
-              <ScraperConfigField
-                key={field.name}
-                field={field}
-                value={formValues[field.name as Exclude<keyof SearchFeatureFormState, 'request'>] ?? ''}
-                error={fieldErrors[field.name]}
-                onChange={handleFieldChange(field.name as Exclude<keyof SearchFeatureFormState, 'request'>)}
-              />
-            ))}
-          </div>
+          <ScraperConfigFieldGrid
+            fields={SCRAPING_FIELDS}
+            getValue={(fieldName) => (
+              formValues[fieldName as Exclude<keyof SearchFeatureFormState, 'request'>] ?? ''
+            )}
+            getError={(fieldName) => fieldErrors[fieldName]}
+            onFieldChange={(fieldName) => (
+              handleFieldChange(fieldName as Exclude<keyof SearchFeatureFormState, 'request'>)
+            )}
+          />
         </div>
 
         <div className="scraper-config-section">
@@ -712,10 +639,10 @@ export default function ScraperSearchFeatureEditor({
             onChange={handleFieldChange('testQuery')}
           />
 
-          <div className="scraper-config-preview">
-            <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Complete le template pour voir l\'apercu. La requete de test est optionnelle.'}</strong>
-          </div>
+          <ScraperResolvedUrlPreview
+            url={resolvedTestUrl}
+            emptyMessage="Complete le template pour voir l'apercu. La requete de test est optionnelle."
+          />
 
           {resolvedTestRequestConfig?.method === 'POST' ? (
             <div className="scraper-config-preview">
@@ -739,17 +666,14 @@ export default function ScraperSearchFeatureEditor({
             </div>
           ) : null}
 
-          <div className="scraper-config-step__actions">
-            <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>
-              Retour
-            </button>
-            <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
-              {validating ? 'Validation en cours...' : 'Valider la recherche'}
-            </button>
-            <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
-              {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
-            </button>
-          </div>
+          <ScraperFeatureActions
+            validating={validating}
+            saving={saving}
+            validateLabel="Valider la recherche"
+            onBack={onBack}
+            onValidate={() => void handleValidate()}
+            onSave={() => void handleSave()}
+          />
 
           <ScraperValidationSummary
             validationResult={validationResult}

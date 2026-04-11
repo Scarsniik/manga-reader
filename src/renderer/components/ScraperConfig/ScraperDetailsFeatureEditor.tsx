@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   FetchScraperDocumentResult,
   ScraperDetailsDerivedValueResult,
@@ -11,7 +11,14 @@ import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/Scrap
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
-import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  ScraperConfigFieldGrid,
+  ScraperFeatureActions,
+  ScraperResolvedUrlPreview,
+  ScraperUrlTemplateFields,
+} from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
+import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import DetailsDerivedValuesSection from '@/renderer/components/ScraperConfig/details/DetailsDerivedValuesSection';
 import FakeDetailsPreview from '@/renderer/components/ScraperConfig/details/FakeDetailsPreview';
 import {
@@ -61,29 +68,40 @@ export default function ScraperDetailsFeatureEditor({
     () => createFormStateFromConfig(initialConfig),
     [initialConfig],
   );
-  const [formValues, setFormValues] = useState<DetailsFormState>(initialFormState);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [validationResult, setValidationResult] = useState<ScraperFeatureValidationResult | null>(
-    feature.validation,
-  );
-  const [lastValidatedSignature, setLastValidatedSignature] = useState<string | null>(
-    feature.validation?.ok ? getConfigSignature(initialConfig) : null,
-  );
-  const [validationUiError, setValidationUiError] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const {
+    formValues,
+    setFormValues,
+    fieldErrors,
+    setFieldErrors,
+    validationResult,
+    setValidationResult,
+    lastValidatedSignature,
+    setLastValidatedSignature,
+    validationUiError,
+    setValidationUiError,
+    validating,
+    setValidating,
+    saving,
+    setSaving,
+    saveError,
+    setSaveError,
+    saveMessage,
+    setSaveMessage,
+    clearFeedback,
+    clearFieldError,
+    clearFieldErrorsByPrefix,
+    clearFieldErrorsWhere,
+    createTextFieldChangeHandler,
+    resetEditorState,
+  } = useScraperFeatureEditorState<DetailsFormState>({
+    initialFormValues: initialFormState,
+    initialValidationResult: feature.validation,
+    initialValidatedSignature: feature.validation?.ok ? getConfigSignature(initialConfig) : null,
+  });
 
   useEffect(() => {
-    setFormValues(initialFormState);
-    setFieldErrors({});
-    setValidationResult(feature.validation);
-    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(initialConfig) : null);
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, [feature, initialConfig, initialFormState]);
+    resetEditorState();
+  }, [feature, resetEditorState]);
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildDetailsConfig(formValues), [formValues]);
@@ -107,27 +125,8 @@ export default function ScraperDetailsFeatureEditor({
   );
 
   const handleFieldChange = useCallback((fieldName: Exclude<keyof DetailsFormState, 'derivedValues'>) => (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const nextValue = event.target.value;
-    setFormValues((previous) => ({
-      ...previous,
-      [fieldName]: nextValue,
-    }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      if (!previous[fieldName]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[fieldName];
-      return next;
-    });
-  }, []);
+    createTextFieldChangeHandler(fieldName)
+  ), [createTextFieldChangeHandler]);
 
   const updateDerivedValue = useCallback((
     draftId: string,
@@ -171,22 +170,16 @@ export default function ScraperDetailsFeatureEditor({
       }),
     }));
 
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
+    clearFeedback();
+    clearFieldError(`derivedValues.${draftId}.${field}`);
 
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      delete next[`derivedValues.${draftId}.${field}`];
-
-      if (field === 'sourceType') {
-        delete next[`derivedValues.${draftId}.sourceField`];
-        delete next[`derivedValues.${draftId}.selector`];
-      }
-
-      return next;
-    });
-  }, []);
+    if (field === 'sourceType') {
+      clearFieldErrorsWhere((fieldName) => (
+        fieldName === `derivedValues.${draftId}.sourceField`
+        || fieldName === `derivedValues.${draftId}.selector`
+      ));
+    }
+  }, [clearFeedback, clearFieldError, clearFieldErrorsWhere, setFormValues]);
 
   const handleAddDerivedValue = useCallback(() => {
     setFormValues((previous) => ({
@@ -196,30 +189,17 @@ export default function ScraperDetailsFeatureEditor({
         createDerivedValueFormItem(),
       ],
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, []);
+    clearFeedback();
+  }, [clearFeedback, setFormValues]);
 
   const handleRemoveDerivedValue = useCallback((draftId: string) => {
     setFormValues((previous) => ({
       ...previous,
       derivedValues: previous.derivedValues.filter((item) => item.draftId !== draftId),
     }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      const next = { ...previous };
-      Object.keys(next)
-        .filter((key) => key.startsWith(`derivedValues.${draftId}.`))
-        .forEach((key) => {
-          delete next[key];
-        });
-      return next;
-    });
-  }, []);
+    clearFeedback();
+    clearFieldErrorsByPrefix(`derivedValues.${draftId}.`);
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleValidate = useCallback(async () => {
     const config = buildDetailsConfig(formValues);
@@ -402,50 +382,27 @@ export default function ScraperDetailsFeatureEditor({
     }
   }, [formValues, scraper.baseUrl]);
 
-  const handleSave = useCallback(async () => {
+  const buildSaveConfig = useCallback(() => {
     const config = buildDetailsConfig(formValues);
-    const errors = getSaveFieldErrors(formValues, config);
-    setFieldErrors(errors);
+    return {
+      config,
+      errors: getSaveFieldErrors(formValues, config),
+      signature: getConfigSignature(config),
+    };
+  }, [formValues]);
 
-    if (Object.keys(errors).length > 0) {
-      setSaveError('Complete les champs requis avant d\'enregistrer.');
-      return;
-    }
-
-    const matchingValidation = validationResult?.ok
-      && lastValidatedSignature === getConfigSignature(config)
-      ? validationResult
-      : null;
-
-    if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
-      setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
-      return;
-    }
-
-    setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    try {
-      const updatedScraper = await (window as any).api.saveScraperFeatureConfig({
-        scraperId: scraper.id,
-        featureKind: feature.kind,
-        config,
-        validation: matchingValidation,
-      });
-
-      onScraperChange(updatedScraper as ScraperRecord);
-      setSaveMessage(
-        matchingValidation?.ok
-          ? 'Configuration enregistree et validee.'
-          : 'Configuration enregistree. Le composant reste a valider.',
-      );
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Echec de l\'enregistrement.');
-    } finally {
-      setSaving(false);
-    }
-  }, [feature.kind, formValues, lastValidatedSignature, onScraperChange, scraper.id, validationResult]);
+  const handleSave = useSaveScraperFeatureConfig({
+    scraperId: scraper.id,
+    featureKind: feature.kind,
+    validationResult,
+    lastValidatedSignature,
+    onScraperChange,
+    buildSaveConfig,
+    setFieldErrors,
+    setSaving,
+    setSaveError,
+    setSaveMessage,
+  });
 
   return (
     <section className="scraper-config-step">
@@ -474,28 +431,23 @@ export default function ScraperDetailsFeatureEditor({
             </p>
           </div>
 
-          <ScraperConfigField
-            field={URL_STRATEGY_FIELD}
-            value={formValues.urlStrategy}
-            error={fieldErrors.urlStrategy}
-            onChange={handleFieldChange('urlStrategy')}
-          />
-
-          {currentConfig.urlStrategy === 'template' ? (
-            <>
-              <ScraperConfigField
-                field={URL_TEMPLATE_FIELD}
-                value={formValues.urlTemplate}
-                error={fieldErrors.urlTemplate}
-                onChange={handleFieldChange('urlTemplate')}
-              />
-              <div className="scraper-config-hint">
-                Placeholders supportes : <code>{'{{id}}'}</code>, <code>{'{{slug}}'}</code>,
-                <code>{' {{value}}'}</code>, ainsi que leurs variantes brutes
-                <code>{' {{rawId}}'}</code>, <code>{'{{rawSlug}}'}</code> et <code>{'{{rawValue}}'}</code>.
-              </div>
-            </>
-          ) : null}
+          <ScraperUrlTemplateFields
+            strategyField={URL_STRATEGY_FIELD}
+            strategyValue={formValues.urlStrategy}
+            strategyError={fieldErrors.urlStrategy}
+            onStrategyChange={handleFieldChange('urlStrategy')}
+            showTemplateFields={currentConfig.urlStrategy === 'template'}
+            templateField={URL_TEMPLATE_FIELD}
+            templateValue={formValues.urlTemplate}
+            templateError={fieldErrors.urlTemplate}
+            onTemplateChange={handleFieldChange('urlTemplate')}
+          >
+            <div className="scraper-config-hint">
+              Placeholders supportes : <code>{'{{id}}'}</code>, <code>{'{{slug}}'}</code>,
+              <code>{' {{value}}'}</code>, ainsi que leurs variantes brutes
+              <code>{' {{rawId}}'}</code>, <code>{'{{rawSlug}}'}</code> et <code>{'{{rawValue}}'}</code>.
+            </div>
+          </ScraperUrlTemplateFields>
         </div>
 
         <div className="scraper-config-section">
@@ -506,21 +458,16 @@ export default function ScraperDetailsFeatureEditor({
             </p>
           </div>
 
-          <div className="scraper-config-section__grid">
-            {SELECTOR_FIELDS.map((field) => {
-              const fieldName = field.name as Exclude<keyof DetailsFormState, 'derivedValues'>;
-
-              return (
-                <ScraperConfigField
-                  key={field.name}
-                  field={field}
-                  value={formValues[fieldName] ?? ''}
-                  error={fieldErrors[field.name]}
-                  onChange={handleFieldChange(fieldName)}
-                />
-              );
-            })}
-          </div>
+          <ScraperConfigFieldGrid
+            fields={SELECTOR_FIELDS}
+            getValue={(fieldName) => (
+              formValues[fieldName as Exclude<keyof DetailsFormState, 'derivedValues'>] ?? ''
+            )}
+            getError={(fieldName) => fieldErrors[fieldName]}
+            onFieldChange={(fieldName) => (
+              handleFieldChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues'>)
+            )}
+          />
         </div>
 
         <div className="scraper-config-section">
@@ -575,22 +522,19 @@ export default function ScraperDetailsFeatureEditor({
             />
           )}
 
-          <div className="scraper-config-preview">
-            <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Complete d\'abord la section URL pour voir l\'aperçu.'}</strong>
-          </div>
+          <ScraperResolvedUrlPreview
+            url={resolvedTestUrl}
+            emptyMessage="Complete d'abord la section URL pour voir l'aperçu."
+          />
 
-          <div className="scraper-config-step__actions">
-            <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>
-              Retour
-            </button>
-            <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
-              {validating ? 'Validation en cours...' : 'Valider la fiche'}
-            </button>
-            <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
-              {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
-            </button>
-          </div>
+          <ScraperFeatureActions
+            validating={validating}
+            saving={saving}
+            validateLabel="Valider la fiche"
+            onBack={onBack}
+            onValidate={() => void handleValidate()}
+            onSave={() => void handleSave()}
+          />
 
           <ScraperValidationSummary
             validationResult={validationResult}

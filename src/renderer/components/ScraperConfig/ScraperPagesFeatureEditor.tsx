@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FetchScraperDocumentResult,
   ScraperFeatureDefinition,
@@ -12,7 +12,13 @@ import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shar
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
-import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  ScraperFeatureActions,
+  ScraperResolvedUrlPreview,
+  ScraperUrlTemplateFields,
+} from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
+import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
 import {
   buildDocumentFailure,
@@ -56,28 +62,37 @@ export default function ScraperPagesFeatureEditor({
   onScraperChange,
 }: Props) {
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
-  const [formValues, setFormValues] = useState<ScraperPagesFeatureConfig>(initialConfig);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [validationResult, setValidationResult] = useState<ScraperFeatureValidationResult | null>(feature.validation);
-  const [lastValidatedSignature, setLastValidatedSignature] = useState<string | null>(
-    feature.validation?.ok ? getConfigSignature(initialConfig) : null,
-  );
-  const [validationUiError, setValidationUiError] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const {
+    formValues,
+    fieldErrors,
+    setFieldErrors,
+    validationResult,
+    setValidationResult,
+    lastValidatedSignature,
+    setLastValidatedSignature,
+    validationUiError,
+    setValidationUiError,
+    validating,
+    setValidating,
+    saving,
+    setSaving,
+    saveError,
+    setSaveError,
+    saveMessage,
+    setSaveMessage,
+    createTextFieldChangeHandler,
+    createCheckboxChangeHandler,
+    resetEditorState,
+  } = useScraperFeatureEditorState<ScraperPagesFeatureConfig>({
+    initialFormValues: initialConfig,
+    initialValidationResult: feature.validation,
+    initialValidatedSignature: feature.validation?.ok ? getConfigSignature(initialConfig) : null,
+  });
   const [previewIndex, setPreviewIndex] = useState(0);
 
   useEffect(() => {
-    setFormValues(initialConfig);
-    setFieldErrors({});
-    setValidationResult(feature.validation);
-    setLastValidatedSignature(feature.validation?.ok ? getConfigSignature(initialConfig) : null);
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-  }, [feature, initialConfig]);
+    resetEditorState();
+  }, [feature, resetEditorState]);
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildPagesConfig(formValues), [formValues]);
@@ -201,50 +216,12 @@ export default function ScraperPagesFeatureEditor({
   );
 
   const handleFieldChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const nextValue = event.target.value;
-    setFormValues((previous) => ({
-      ...previous,
-      [fieldName]: nextValue,
-    }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      if (!previous[fieldName]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[fieldName];
-      return next;
-    });
-  }, []);
+    createTextFieldChangeHandler(fieldName)
+  ), [createTextFieldChangeHandler]);
 
   const handleCheckboxChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const nextValue = event.target.checked;
-    setFormValues((previous) => ({
-      ...previous,
-      [fieldName]: nextValue,
-    }));
-    setValidationUiError(null);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    setFieldErrors((previous) => {
-      if (!previous[fieldName]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[fieldName];
-      return next;
-    });
-  }, []);
+    createCheckboxChangeHandler(fieldName)
+  ), [createCheckboxChangeHandler]);
 
   const handleValidate = useCallback(async () => {
     const config = buildPagesConfig(formValues);
@@ -464,50 +441,27 @@ export default function ScraperPagesFeatureEditor({
     }
   }, [buildTemplateContextForPage, chaptersFeature, detailsFeature, formValues, scraper.baseUrl, selectedValidationChapter]);
 
-  const handleSave = useCallback(async () => {
+  const buildSaveConfig = useCallback(() => {
     const config = buildPagesConfig(formValues);
-    const errors = getSaveFieldErrors(config);
-    setFieldErrors(errors);
+    return {
+      config,
+      errors: getSaveFieldErrors(config),
+      signature: getConfigSignature(config),
+    };
+  }, [formValues]);
 
-    if (Object.keys(errors).length > 0) {
-      setSaveError('Complete les champs requis avant d\'enregistrer.');
-      return;
-    }
-
-    const matchingValidation = validationResult?.ok
-      && lastValidatedSignature === getConfigSignature(config)
-      ? validationResult
-      : null;
-
-    if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
-      setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
-      return;
-    }
-
-    setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
-
-    try {
-      const updatedScraper = await (window as any).api.saveScraperFeatureConfig({
-        scraperId: scraper.id,
-        featureKind: feature.kind,
-        config,
-        validation: matchingValidation,
-      });
-
-      onScraperChange(updatedScraper as ScraperRecord);
-      setSaveMessage(
-        matchingValidation?.ok
-          ? 'Configuration enregistree et validee.'
-          : 'Configuration enregistree. Le composant reste a valider.',
-      );
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Echec de l\'enregistrement.');
-    } finally {
-      setSaving(false);
-    }
-  }, [feature.kind, formValues, lastValidatedSignature, onScraperChange, scraper.id, validationResult]);
+  const handleSave = useSaveScraperFeatureConfig({
+    scraperId: scraper.id,
+    featureKind: feature.kind,
+    validationResult,
+    lastValidatedSignature,
+    onScraperChange,
+    buildSaveConfig,
+    setFieldErrors,
+    setSaving,
+    setSaveError,
+    setSaveMessage,
+  });
 
   const currentPreviewUrl = previewUrls[previewIndex] || null;
 
@@ -536,42 +490,35 @@ export default function ScraperPagesFeatureEditor({
             <p>Choisis ou l&apos;application doit aller chercher les pages du manga.</p>
           </div>
 
-          <ScraperConfigField
-            field={URL_STRATEGY_FIELD}
-            value={formValues.urlStrategy}
-            error={fieldErrors.urlStrategy}
-            onChange={handleFieldChange('urlStrategy')}
-          />
-
-          {currentConfig.urlStrategy === 'template' ? (
-            <>
-              <ScraperConfigField
-                field={URL_TEMPLATE_FIELD}
-                value={formValues.urlTemplate}
-                error={fieldErrors.urlTemplate}
-                onChange={handleFieldChange('urlTemplate')}
-              />
-              <ScraperConfigField
-                field={TEMPLATE_BASE_FIELD}
-                value={formValues.templateBase || 'scraper_base'}
-                error={fieldErrors.templateBase}
-                onChange={handleFieldChange('templateBase')}
-              />
-              <div className="scraper-config-hint">
-                Variables disponibles depuis `Fiche` : <code>{'{{requestedUrl}}'}</code>,
-                <code>{' {{finalUrl}}'}</code> et les variables extraites. Utilise
-                <code>{' {{raw:nomVariable}}'}</code> pour inserer une valeur brute sans encodage.
-                Les variables URL sont encodees par defaut, et la base relative du template peut
-                partir soit du scraper, soit de la fiche validee ou du chapitre courant. Pour les pages directes, tu peux
-                aussi utiliser <code>{'{{page}}'}</code>,
-                <code>{' {{page3}}'}</code>, <code>{'{{pageIndex}}'}</code> ou
-                <code>{' {{pageIndex3}}'}</code>.
-                {usesTemplateChapterContext ? (
-                  <> La variable <code>{'{{chapter}}'}</code> contient l&apos;URL du premier chapitre valide detecte.</>
-                ) : null}
-              </div>
-            </>
-          ) : null}
+          <ScraperUrlTemplateFields
+            strategyField={URL_STRATEGY_FIELD}
+            strategyValue={formValues.urlStrategy}
+            strategyError={fieldErrors.urlStrategy}
+            onStrategyChange={handleFieldChange('urlStrategy')}
+            showTemplateFields={currentConfig.urlStrategy === 'template'}
+            templateField={URL_TEMPLATE_FIELD}
+            templateValue={formValues.urlTemplate}
+            templateError={fieldErrors.urlTemplate}
+            onTemplateChange={handleFieldChange('urlTemplate')}
+            templateBaseField={TEMPLATE_BASE_FIELD}
+            templateBaseValue={formValues.templateBase || 'scraper_base'}
+            templateBaseError={fieldErrors.templateBase}
+            onTemplateBaseChange={handleFieldChange('templateBase')}
+          >
+            <div className="scraper-config-hint">
+              Variables disponibles depuis `Fiche` : <code>{'{{requestedUrl}}'}</code>,
+              <code>{' {{finalUrl}}'}</code> et les variables extraites. Utilise
+              <code>{' {{raw:nomVariable}}'}</code> pour inserer une valeur brute sans encodage.
+              Les variables URL sont encodees par defaut, et la base relative du template peut
+              partir soit du scraper, soit de la fiche validee ou du chapitre courant. Pour les pages directes, tu peux
+              aussi utiliser <code>{'{{page}}'}</code>,
+              <code>{' {{page3}}'}</code>, <code>{'{{pageIndex}}'}</code> ou
+              <code>{' {{pageIndex3}}'}</code>.
+              {usesTemplateChapterContext ? (
+                <> La variable <code>{'{{chapter}}'}</code> contient l&apos;URL du premier chapitre valide detecte.</>
+              ) : null}
+            </div>
+          </ScraperUrlTemplateFields>
 
           <ScraperTemplateContext
             templateContext={templateContext}
@@ -651,22 +598,19 @@ export default function ScraperPagesFeatureEditor({
             </p>
           </div>
 
-          <div className="scraper-config-preview">
-            <span>URL de test resolue</span>
-            <strong>{resolvedTestUrl ? formatDisplayUrl(resolvedTestUrl) : 'Valide d\'abord la fiche ou complete le template pour voir l\'aperçu.'}</strong>
-          </div>
+          <ScraperResolvedUrlPreview
+            url={resolvedTestUrl}
+            emptyMessage="Valide d'abord la fiche ou complete le template pour voir l'aperçu."
+          />
 
-          <div className="scraper-config-step__actions">
-            <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>
-              Retour
-            </button>
-            <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
-              {validating ? 'Validation en cours...' : 'Valider les pages'}
-            </button>
-            <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
-              {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
-            </button>
-          </div>
+          <ScraperFeatureActions
+            validating={validating}
+            saving={saving}
+            validateLabel="Valider les pages"
+            onBack={onBack}
+            onValidate={() => void handleValidate()}
+            onSave={() => void handleSave()}
+          />
 
           <ScraperValidationSummary
             validationResult={validationResult}

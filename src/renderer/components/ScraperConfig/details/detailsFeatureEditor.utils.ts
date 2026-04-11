@@ -1,6 +1,5 @@
 import {
   buildScraperTemplateUrl,
-  FetchScraperDocumentResult,
   resolveScraperUrl,
   ScraperDetailsDerivedValueConfig,
   ScraperDetailsFeatureConfig,
@@ -11,6 +10,24 @@ import {
 import { Field } from '@/renderer/components/utils/Form/types';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import { formatDisplayUrl, formatValidationDisplayValue } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import {
+  buildDocumentFailure,
+  CHECK_LABELS,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+  trimOptional,
+  trimOptionalSelector,
+} from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
+
+export {
+  buildDocumentFailure,
+  extractSelectorValues,
+  FEATURE_STATUS_META,
+  getConfigSignature,
+  normalizeSelectorInput,
+};
 
 export type DerivedValueFormItem = ScraperDetailsDerivedValueConfig & {
   draftId: string;
@@ -117,24 +134,6 @@ export const SELECTOR_FIELDS: Field[] = [
   },
 ];
 
-export const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
-
-const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> = {
-  title: 'Titre',
-  cover: 'Couverture',
-  description: 'Description',
-  authors: 'Auteurs',
-  authorUrl: 'Lien auteur',
-  tags: 'Tags',
-  status: 'Statut',
-  chapters: 'Chapitres',
-  pages: 'Pages',
-};
-
 export const DERIVED_VALUE_SOURCE_OPTIONS = [
   { value: 'field', label: 'Champ deja extrait' },
   { value: 'selector', label: 'Selecteur personnalise' },
@@ -168,22 +167,6 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
 };
 
 export const DERIVED_VALUE_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-const trimOptional = (value: unknown): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : undefined;
-};
-
-export const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-const trimOptionalSelector = (value: unknown): string | undefined => {
-  const normalized = normalizeSelectorInput(String(value ?? ''));
-  return normalized ? normalized : undefined;
-};
 
 const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -255,8 +238,6 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
 });
 
-export const getConfigSignature = (config: ScraperDetailsFeatureConfig): string => JSON.stringify(config);
-
 export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDetailsFeatureConfig => {
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
@@ -289,56 +270,6 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
 export const createFormStateFromConfig = (config: ScraperDetailsFeatureConfig): DetailsFormState => ({
   ...config,
   derivedValues: config.derivedValues.map((value) => createDerivedValueFormItem(value)),
-});
-
-export const parseSelectorExpression = (input: string): { selector: string; attribute?: string } => {
-  const trimmed = normalizeSelectorInput(input);
-  const atIndex = trimmed.lastIndexOf('@');
-
-  if (atIndex <= 0 || atIndex === trimmed.length - 1) {
-    return { selector: trimmed };
-  }
-
-  return {
-    selector: trimmed.slice(0, atIndex).trim(),
-    attribute: trimmed.slice(atIndex + 1).trim(),
-  };
-};
-
-export const extractSelectorValues = (doc: Document, input: string): string[] => {
-  const { selector, attribute } = parseSelectorExpression(input);
-  if (!selector) {
-    return [];
-  }
-
-  const elements = Array.from(doc.querySelectorAll(selector));
-  return elements
-    .map((element) => {
-      if (attribute) {
-        return element.getAttribute(attribute)?.trim() || '';
-      }
-
-      if (element.tagName === 'IMG') {
-        return element.getAttribute('src')?.trim() || '';
-      }
-
-      return element.textContent?.trim() || '';
-    })
-    .filter(Boolean);
-};
-
-export const buildDocumentFailure = (
-  result: FetchScraperDocumentResult,
-): ScraperFeatureValidationResult => ({
-  ok: false,
-  checkedAt: result.checkedAt,
-  requestedUrl: result.requestedUrl,
-  finalUrl: result.finalUrl,
-  status: result.status,
-  contentType: result.contentType,
-  failureCode: typeof result.status === 'number' ? 'http_error' : 'request_failed',
-  checks: [],
-  derivedValues: [],
 });
 
 export const buildValidationPresentation = (

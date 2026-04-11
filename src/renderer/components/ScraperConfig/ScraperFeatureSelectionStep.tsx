@@ -11,18 +11,13 @@ import ScraperGlobalSettingsEditor from './ScraperGlobalSettingsEditor';
 import ScraperPagesFeatureEditor from './ScraperPagesFeatureEditor';
 import ScraperSearchFeatureEditor from './ScraperSearchFeatureEditor';
 import ScraperFeaturePlaceholderEditor from './ScraperFeaturePlaceholderEditor';
+import { FEATURE_STATUS_META } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
 type Props = {
   scraper: ScraperRecord;
   onScraperChange: (scraper: ScraperRecord) => void;
   onEditSource?: () => void;
 };
-
-const FEATURE_STATUS_META = {
-  not_configured: { label: 'Non configure', className: 'is-not-configured' },
-  configured: { label: 'Configure non valide', className: 'is-configured' },
-  validated: { label: 'Valide', className: 'is-validated' },
-} as const;
 
 export default function ScraperFeatureSelectionStep({
   scraper,
