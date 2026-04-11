@@ -54,6 +54,7 @@ export default function ScraperDetailsPanel({
     && displaysThumbnails
     && Array.isArray(detailsResult.thumbnails);
   const canOpenThumbnailReader = hasPages && !usesChapters;
+  const hasStandaloneActions = hasPages && !usesChapters;
 
   return (
     <>
@@ -96,28 +97,28 @@ export default function ScraperDetailsPanel({
                 mangaStatus={detailsResult.mangaStatus}
                 excludedFields={bookmarkExcludedFields}
               />
-              {hasPages && !usesChapters ? (
-                <button
-                  type="button"
-                  className="scraper-browser__read"
-                  onClick={() => onOpenReader()}
-                  disabled={openingReader}
-                >
-                  {openingReader ? 'Ouverture...' : 'Lecteur'}
-                </button>
-              ) : null}
-              {hasPages && !usesChapters ? (
-                <button
-                  type="button"
-                  className="scraper-browser__download"
-                  onClick={() => onDownload()}
-                  disabled={downloading}
-                >
-                  {downloading ? 'Telechargement...' : 'Telecharger'}
-                </button>
-              ) : null}
             </div>
           </div>
+          {hasStandaloneActions ? (
+            <div className="scraper-browser__details-head-actions">
+              <button
+                type="button"
+                className="scraper-browser__read"
+                onClick={() => onOpenReader()}
+                disabled={openingReader}
+              >
+                {openingReader ? 'Ouverture...' : 'Lecteur'}
+              </button>
+              <button
+                type="button"
+                className="scraper-browser__download"
+                onClick={() => onDownload()}
+                disabled={downloading}
+              >
+                {downloading ? 'Telechargement...' : 'Telecharger'}
+              </button>
+            </div>
+          ) : null}
 
           {detailsResult.authors.length ? (
             <div className="scraper-card__chips">

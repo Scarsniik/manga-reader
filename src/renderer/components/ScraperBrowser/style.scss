@@ -417,6 +417,13 @@
   gap: 10px;
 }
 
+.scraper-browser__details-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 .scraper-browser__details-head h3 {
   margin: 0;
   font-size: 24px;
