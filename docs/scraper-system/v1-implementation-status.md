@@ -190,6 +190,7 @@ Le composant permet :
 - un selecteur de titre obligatoire
 - des selecteurs optionnels pour couverture, description, auteurs, tags et statut
 - un selecteur optionnel de lien auteur, pour rendre les tags auteur cliquables
+- des selecteurs optionnels pour extraire une liste ordonnee de vignettes depuis la fiche
 - une liste de variables derivees reutilisables par d'autres composants
 
 Pour chaque variable extraite, on peut definir :
@@ -226,6 +227,7 @@ Validation actuelle de `Fiche` :
 - recuperation HTML via Electron
 - parsing cote renderer
 - verification des selecteurs
+- verification du selecteur de vignettes quand il est configure
 - extraction des variables derivees
 - affichage d'une previsualisation de fiche
 
@@ -438,6 +440,8 @@ Quand `Pages` est configure, la vue `Manga` expose :
 
 - un bouton `Telecharger` et un bouton `Lecteur` au niveau manga
 - ou ces actions au niveau de chaque chapitre si `Pages` est lie a des chapitres
+
+Quand `Fiche` extrait des vignettes, la vue `Manga` les affiche dans leur ordre d'apparition. Si `Pages` est configure, un clic sur une vignette ouvre le lecteur directement sur la page correspondante.
 
 ### Telechargement
 

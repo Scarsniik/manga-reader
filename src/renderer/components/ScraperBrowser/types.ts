@@ -43,4 +43,9 @@ export type ScraperCapability = {
   enabled: boolean;
 };
 
+export type ScraperOpenReaderOptions = {
+  chapter?: ScraperRuntimeChapterResult;
+  page?: number;
+};
+
 export type ScraperDetailsPanelState = ScraperRuntimeDetailsResult | null;

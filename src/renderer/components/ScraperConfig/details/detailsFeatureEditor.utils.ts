@@ -132,6 +132,18 @@ export const SELECTOR_FIELDS: Field[] = [
     type: 'text',
     placeholder: 'Exemple : .status',
   },
+  {
+    name: 'thumbnailsListSelector',
+    label: 'Selecteur du conteneur vignettes',
+    type: 'text',
+    placeholder: 'Exemple : .thumbnails',
+  },
+  {
+    name: 'thumbnailsSelector',
+    label: 'Selecteur des vignettes',
+    type: 'text',
+    placeholder: 'Exemple : img@src ou .thumbnails img@src',
+  },
 ];
 
 export const DERIVED_VALUE_SOURCE_OPTIONS = [
@@ -163,6 +175,8 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   authorUrlSelector: '',
   tagsSelector: '',
   statusSelector: '',
+  thumbnailsListSelector: '',
+  thumbnailsSelector: '',
   derivedValues: [],
 };
 
@@ -235,6 +249,8 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   tagsSelector: trimOptionalSelector(values.tagsSelector),
   statusSelector: trimOptionalSelector(values.statusSelector),
+  thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
+  thumbnailsSelector: trimOptionalSelector(values.thumbnailsSelector),
   derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
 });
 
@@ -259,6 +275,8 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalSelector(raw.tagsSelector),
     statusSelector: trimOptionalSelector(raw.statusSelector),
+    thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
+    thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => buildDerivedValueConfig(value as Partial<ScraperDetailsDerivedValueConfig>))
@@ -317,10 +335,14 @@ export const buildValidationPresentation = (
       const sample = check.sample
         ? formatValidationDisplayValue(check.sample, {
           truncate: 160,
-          treatAsUrl: check.key === 'cover' || check.key === 'authorUrl',
+          treatAsUrl: check.key === 'cover' || check.key === 'authorUrl' || check.key === 'thumbnails',
         })
         : `${check.matchedCount} resultat(s)`;
-      details.push(`${label} : ${sample}`);
+      details.push(
+        check.key === 'thumbnails' && check.matchedCount > 1
+          ? `${label} : ${check.matchedCount} resultat(s), premier : ${sample}`
+          : `${label} : ${sample}`,
+      );
       return;
     }
 
@@ -429,6 +451,10 @@ export const getSaveFieldErrors = (
 
   if (config.urlStrategy === 'template' && !config.urlTemplate) {
     errors.urlTemplate = 'Le template d\'URL est requis pour ce mode.';
+  }
+
+  if (config.thumbnailsListSelector && !config.thumbnailsSelector) {
+    errors.thumbnailsSelector = 'Le selecteur des vignettes est requis quand un conteneur est defini.';
   }
 
   configuredDerivedValues.forEach(({ draftId, config: derivedValue }) => {

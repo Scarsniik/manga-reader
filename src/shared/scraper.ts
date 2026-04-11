@@ -78,6 +78,7 @@ export type ScraperFeatureValidationCheckKey =
   | 'authorUrl'
   | 'tags'
   | 'status'
+  | 'thumbnails'
   | 'chapters'
   | 'pages';
 
@@ -186,6 +187,8 @@ export interface ScraperDetailsFeatureConfig {
   authorUrlSelector?: string;
   tagsSelector?: string;
   statusSelector?: string;
+  thumbnailsListSelector?: string;
+  thumbnailsSelector?: string;
   derivedValues: ScraperDetailsDerivedValueConfig[];
 }
 

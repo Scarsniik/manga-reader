@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
 import {
   formatScraperValueForDisplay,
   ScraperRuntimeChapterResult,
@@ -17,11 +18,12 @@ type Props = {
   canResolveAuthorName: boolean;
   hasPages: boolean;
   usesChapters: boolean;
+  displaysThumbnails?: boolean;
   openingReader: boolean;
   downloading: boolean;
   onBack?: () => void;
   onOpenAuthor: (value: string) => void;
-  onOpenReader: (chapter?: ScraperRuntimeChapterResult) => void;
+  onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
 };
 
@@ -33,6 +35,7 @@ export default function ScraperDetailsPanel({
   hasAuthor,
   backLabel = null,
   canResolveAuthorName,
+  displaysThumbnails = true,
   hasPages,
   usesChapters,
   openingReader,
@@ -45,6 +48,12 @@ export default function ScraperDetailsPanel({
   if (!detailsResult) {
     return null;
   }
+
+  const thumbnailUrls = detailsResult.thumbnails ?? [];
+  const shouldDisplayThumbnails = !usesChapters
+    && displaysThumbnails
+    && Array.isArray(detailsResult.thumbnails);
+  const canOpenThumbnailReader = hasPages && !usesChapters;
 
   return (
     <>
@@ -214,7 +223,7 @@ export default function ScraperDetailsPanel({
                           <button
                             type="button"
                             className="scraper-browser__read"
-                            onClick={() => onOpenReader(chapter)}
+                            onClick={() => onOpenReader({ chapter })}
                             disabled={openingReader}
                           >
                             {openingReader ? 'Ouverture...' : 'Lecteur'}
@@ -240,6 +249,53 @@ export default function ScraperDetailsPanel({
             <div className="scraper-browser__chapters-empty">
               Aucun chapitre n&apos;a ete extrait pour cette fiche. Configure et valide le composant
               `Chapitres` pour ouvrir le lecteur depuis un chapitre.
+            </div>
+          ) : null}
+
+          {shouldDisplayThumbnails ? (
+            <div className="scraper-browser__thumbnails">
+              <div className="scraper-browser__thumbnails-head">
+                <strong>Pages</strong>
+                <span>{thumbnailUrls.length}</span>
+              </div>
+              <div className="scraper-browser__thumbnails-list">
+                {thumbnailUrls.length ? (
+                  thumbnailUrls.map((thumbnailUrl, index) => {
+                    const page = index + 1;
+                    const image = (
+                      <img
+                        src={thumbnailUrl}
+                        alt={`${detailsResult.title || 'Manga'} - Page ${page}`}
+                        className="scraper-browser__thumbnail"
+                      />
+                    );
+
+                    if (!canOpenThumbnailReader) {
+                      return (
+                        <div key={`${thumbnailUrl}-${index}`} className="scraper-browser__thumbnail-frame">
+                          {image}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={`${thumbnailUrl}-${index}`}
+                        type="button"
+                        className="scraper-browser__thumbnail-button"
+                        onClick={() => onOpenReader({ page })}
+                        disabled={openingReader}
+                        aria-label={`Ouvrir le lecteur a la page ${page}`}
+                        title={`Ouvrir le lecteur a la page ${page}`}
+                      >
+                        {image}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <span>Aucune page extraite pour cette fiche.</span>
+                )}
+              </div>
             </div>
           ) : null}
         </div>

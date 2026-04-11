@@ -37,7 +37,10 @@ import {
   usesScraperPagesTemplateChapterContext,
 } from '@/renderer/utils/scraperPages';
 
-type DetailsFieldKey = Exclude<ScraperFeatureValidationCheckKey, 'pages' | 'chapters'>;
+type DetailsFieldKey = Extract<
+  ScraperFeatureValidationCheckKey,
+  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status'
+>;
 
 export type ScraperRuntimeChapterResult = ScraperChapterItem;
 
@@ -321,6 +324,8 @@ export const getScraperDetailsFeatureConfig = (
     authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalSelector(raw.tagsSelector),
     statusSelector: trimOptionalSelector(raw.statusSelector),
+    thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
+    thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => normalizeDerivedValueConfig(value))
@@ -830,6 +835,27 @@ export const extractScraperAuthorUrlsFromDocument = (
   );
 };
 
+export const extractScraperDetailsThumbnailsFromDocument = (
+  doc: Document,
+  config: Pick<ScraperDetailsFeatureConfig, 'thumbnailsListSelector' | 'thumbnailsSelector'>,
+  requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, 'requestedUrl' | 'finalUrl'>,
+): string[] => {
+  if (!config.thumbnailsSelector) {
+    return [];
+  }
+
+  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const thumbnailsSelector = config.thumbnailsSelector;
+  const thumbnailRoots = config.thumbnailsListSelector
+    ? Array.from(doc.querySelectorAll(config.thumbnailsListSelector))
+    : [doc];
+
+  return thumbnailRoots.flatMap((root) => (
+    extractSelectorValuesFromRoot(root, thumbnailsSelector)
+      .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+  ));
+};
+
 export const extractScraperDetailsFieldValues = (
   doc: Document,
   config: ScraperDetailsFeatureConfig,
@@ -971,6 +997,7 @@ export const extractScraperDetailsFromDocument = (
   const fieldValuesByKey = extractScraperDetailsFieldValues(doc, config, requestMeta);
   const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
   const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta);
+  const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, config, requestMeta);
   const derivedValues = derivedValueResults.reduce<Record<string, string>>((accumulator, derivedValue) => {
     if (derivedValue.value) {
       accumulator[derivedValue.key] = derivedValue.value;
@@ -990,6 +1017,7 @@ export const extractScraperDetailsFromDocument = (
     authors: uniqueValues(fieldValuesByKey.authors ?? []),
     authorUrls,
     tags: uniqueValues(fieldValuesByKey.tags ?? []),
+    thumbnails: config.thumbnailsSelector ? thumbnails : undefined,
     mangaStatus: fieldValuesByKey.status?.[0],
     derivedValues,
   };
@@ -1141,6 +1169,7 @@ export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): bool
     || details.description
     || details.authors.length
     || details.tags.length
+    || (details.thumbnails?.length ?? 0) > 0
     || details.mangaStatus
   )
 );

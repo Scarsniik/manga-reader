@@ -152,6 +152,8 @@ Champs minimum proposes :
 - `authorUrlSelector` optionnel
 - `tagsSelector`
 - `statusSelector`
+- `thumbnailsListSelector` optionnel
+- `thumbnailsSelector` optionnel
 - `metadataMap`
 
 `urlSource` peut venir :

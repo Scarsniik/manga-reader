@@ -48,6 +48,7 @@ import {
   extractScraperAuthorUrlsFromDocument,
   extractScraperDetailsDerivedValueResults,
   extractScraperDetailsFieldValues,
+  extractScraperDetailsThumbnailsFromDocument,
 } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
@@ -340,6 +341,36 @@ export default function ScraperDetailsFeatureEditor({
       }
       testSelector('tags', config.tagsSelector, false);
       testSelector('status', config.statusSelector, false);
+      if (config.thumbnailsSelector) {
+        const selectorLabel = config.thumbnailsListSelector
+          ? `${config.thumbnailsListSelector} -> ${config.thumbnailsSelector}`
+          : config.thumbnailsSelector;
+
+        try {
+          const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, config, {
+            requestedUrl: typedDocumentResult.requestedUrl,
+            finalUrl: typedDocumentResult.finalUrl,
+          });
+
+          checks.push({
+            key: 'thumbnails',
+            selector: selectorLabel,
+            required: false,
+            matchedCount: thumbnails.length,
+            sample: thumbnails[0],
+            samples: thumbnails.slice(0, 12),
+            issueCode: thumbnails.length > 0 ? undefined : 'no_match',
+          });
+        } catch {
+          checks.push({
+            key: 'thumbnails',
+            selector: selectorLabel,
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
 
       const derivedValues: ScraperDetailsDerivedValueResult[] = extractScraperDetailsDerivedValueResults(
         doc,

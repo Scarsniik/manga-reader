@@ -715,7 +715,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onOpenAuthor={(value) => {
           handleOpenAuthorFromDetails(value);
         }}
-        onOpenReader={(chapter) => void handleOpenReader(chapter)}
+        onOpenReader={(options) => void handleOpenReader(options)}
         onDownload={(chapter) => void handleDownload(chapter)}
       />
     </section>

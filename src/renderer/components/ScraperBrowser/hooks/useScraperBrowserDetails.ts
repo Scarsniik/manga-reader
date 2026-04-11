@@ -6,7 +6,10 @@ import {
   ScraperPagesFeatureConfig,
   ScraperRecord,
 } from '@/shared/scraper';
-import { ScraperListingReturnState } from '@/renderer/components/ScraperBrowser/types';
+import type {
+  ScraperListingReturnState,
+  ScraperOpenReaderOptions,
+} from '@/renderer/components/ScraperBrowser/types';
 import { isScraperRuntimeChapterResult } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraperTemplateContext';
 import {
@@ -45,6 +48,17 @@ type UseScraperBrowserDetailsOptions = {
   setOpeningReader: Dispatch<SetStateAction<boolean>>;
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
+};
+
+const normalizeRequestedReaderPage = (
+  value: number | undefined,
+  totalPages: number,
+): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || totalPages <= 0) {
+    return null;
+  }
+
+  return Math.max(1, Math.min(totalPages, Math.floor(value)));
 };
 
 export function useScraperBrowserDetails({
@@ -282,13 +296,13 @@ export function useScraperBrowserDetails({
     setDownloading,
   ]);
 
-  const handleOpenReader = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
+  const handleOpenReader = useCallback(async (options?: ScraperOpenReaderOptions) => {
     if (!detailsResult) {
       setRuntimeError('Charge d\'abord une fiche avant d\'ouvrir le lecteur.');
       return;
     }
 
-    const normalizedChapter = isScraperRuntimeChapterResult(chapter) ? chapter : undefined;
+    const normalizedChapter = isScraperRuntimeChapterResult(options?.chapter) ? options?.chapter : undefined;
 
     if (!pagesConfig) {
       setRuntimeError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
@@ -306,16 +320,19 @@ export function useScraperBrowserDetails({
         sourceUrl,
         usesChaptersForPages ? normalizedChapter?.url : null,
       );
-      const savedProgress = (window as any).api
+      const requestedPage = normalizeRequestedReaderPage(options?.page, pageUrls.length);
+      const savedProgress = requestedPage === null
+        && (window as any).api
         && typeof (window as any).api.getScraperReaderProgress === 'function'
         ? await (window as any).api.getScraperReaderProgress(readerMangaId)
         : null;
-      const savedPage = typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
-        ? savedProgress.currentPage
-        : 1;
+      const initialPage = requestedPage
+        ?? (typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
+          ? savedProgress.currentPage
+          : 1);
 
       navigate(
-        `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(savedPage))}`,
+        `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(initialPage))}`,
         {
           state: {
             from: {
@@ -339,6 +356,7 @@ export function useScraperBrowserDetails({
               pageUrls,
               chapter: normalizedChapter,
               bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+              ignoreSavedProgress: requestedPage !== null,
             },
           },
         },
