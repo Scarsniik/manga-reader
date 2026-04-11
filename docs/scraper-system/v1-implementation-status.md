@@ -259,6 +259,7 @@ Regles actuelles :
 - le mode `template` accepte `{{value}}`, `{{rawValue}}`, `{{query}}`, `{{rawQuery}}`
 - la pagination auteur peut venir de `{{page}}` dans le template
 - ou d'un lien HTML de page suivante
+- le template auteur peut aussi reutiliser `{{requestedUrl}}`, `{{finalUrl}}` et les variables extraites de `Fiche`
 - pour les champs URL, un selecteur place sur un lien HTML utilise `href` par defaut meme sans `@href`
 - le composant `Recherche` peut stocker un lien auteur optionnel par card
 - le composant `Fiche` peut stocker un lien auteur optionnel pour ses tags auteur
@@ -401,6 +402,7 @@ Le mode `Recherche` permet deja :
 Le mode `Auteur` permet deja :
 
 - d'ouvrir une page auteur par URL complete, chemin relatif ou valeur libre
+- d'ouvrir une page auteur via un template qui peut reutiliser les variables derivees de `Fiche`
 - d'extraire les cartes de la page auteur
 - de naviguer entre les pages auteur
 - d'ouvrir `Fiche` depuis les cartes retournees

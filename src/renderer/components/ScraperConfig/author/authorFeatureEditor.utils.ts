@@ -229,12 +229,14 @@ export const getValidationFieldErrors = (
   config: ScraperAuthorFeatureConfig,
 ): Record<string, string> => {
   const errors = getSaveFieldErrors(config);
+  const requiresTemplateValue = typeof config.urlTemplate === 'string'
+    && /{{\s*(?:rawValue|rawQuery|value|query)\s*}}/.test(config.urlTemplate);
 
   if (config.urlStrategy === 'result_url' && !config.testUrl) {
     errors.testUrl = 'Une URL ou un chemin de test est requis pour valider.';
   }
 
-  if (config.urlStrategy === 'template' && !config.testValue) {
+  if (config.urlStrategy === 'template' && requiresTemplateValue && !config.testValue) {
     errors.testValue = 'Une valeur auteur de test est requise pour valider.';
   }
 

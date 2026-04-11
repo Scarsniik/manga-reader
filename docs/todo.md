@@ -10,7 +10,7 @@
 - [ ] Pourvoir cliquer sur les tags et auteurs pour voir les autres scrappers associés
 - [ ] Ajouter un système de notification pour les mises à jour des scrappers favoris
 - [ ] OCR dispo en lecteur en ligne sur scrapper
-- [ ] Ajout de nouveaux types de scrappers modules : auteur, tag, homepage, etc
+- [ ] Ajout de nouveaux types de scrappers modules : tag, homepage, etc
 - [ ] Recherche sur tous les scrappers en même temps
 - [ ] Ajout de la source quand on dl un manga depuis un scrapper
 - [ ] Log d'erreur des scrappers pour pouvoir les corriger plus facilement dans l'appli

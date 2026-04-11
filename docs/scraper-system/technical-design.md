@@ -136,6 +136,7 @@ Direction retenue :
 
 - accepter soit une URL auteur deja connue
 - soit une valeur auteur libre, par exemple un nom ou un slug
+- permettre aussi l'usage des variables extraites de `Fiche` dans le template auteur
 - reutiliser un rendu de liste de cards proche de `Recherche`
 - permettre l'ouverture depuis `Recherche` ou `Fiche` quand un lien auteur est disponible
 

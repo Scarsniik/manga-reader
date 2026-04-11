@@ -32,10 +32,12 @@ import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
+import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 
 export type ListingLookupOptions = {
   pageIndex?: number;
   preserveListingReturnState?: boolean;
+  templateContext?: ScraperTemplateContext | null;
 };
 
 type UseScraperBrowserSearchOptions = {
@@ -63,6 +65,7 @@ type UseScraperBrowserSearchOptions = {
   hasExecutedListing: boolean;
   listingReturnState: ScraperListingReturnState | null;
   detailsResult: ScraperRuntimeDetailsResult | null;
+  authorTemplateContext: ScraperTemplateContext | null;
   clearFeedback: () => void;
   resetListingState: () => void;
   resetDetailsState: () => void;
@@ -78,6 +81,7 @@ type UseScraperBrowserSearchOptions = {
   setListingResults: Dispatch<SetStateAction<ScraperSearchResultItem[]>>;
   setHasExecutedListing: Dispatch<SetStateAction<boolean>>;
   setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
+  setAuthorTemplateContext: Dispatch<SetStateAction<ScraperTemplateContext | null>>;
   setRuntimeMessage: Dispatch<SetStateAction<string | null>>;
   setRuntimeError: Dispatch<SetStateAction<string | null>>;
   setLoading: Dispatch<SetStateAction<boolean>>;
@@ -184,6 +188,7 @@ export function useScraperBrowserSearch({
   hasExecutedListing,
   listingReturnState,
   detailsResult,
+  authorTemplateContext,
   clearFeedback,
   resetListingState,
   resetDetailsState,
@@ -199,6 +204,7 @@ export function useScraperBrowserSearch({
   setListingResults,
   setHasExecutedListing,
   setListingReturnState,
+  setAuthorTemplateContext,
   setRuntimeMessage,
   setRuntimeError,
   setLoading,
@@ -289,6 +295,7 @@ export function useScraperBrowserSearch({
     listingMode: ScraperListingMode,
     nextQuery: string,
     targetPageIndex = 0,
+    templateContextOverride?: ScraperTemplateContext | null,
   ): Promise<{
     page: ScraperRuntimeSearchPageResult;
     visitedPageUrls: string[];
@@ -312,7 +319,10 @@ export function useScraperBrowserSearch({
 
     const resolveTargetUrl = (pageIndex: number): string => (
       listingMode === 'author'
-        ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig!, nextQuery, { pageIndex })
+        ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig!, nextQuery, {
+          pageIndex,
+          templateContext: templateContextOverride ?? authorTemplateContext ?? undefined,
+        })
         : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex })
     );
 
@@ -353,7 +363,7 @@ export function useScraperBrowserSearch({
       pageIndex: currentPageIndex,
       items: currentPage.items,
     };
-  }, [authorConfig, fetchAuthorPage, fetchSearchPage, getUsesTemplatePaging, scraper.baseUrl, searchConfig]);
+  }, [authorConfig, authorTemplateContext, fetchAuthorPage, fetchSearchPage, getUsesTemplatePaging, scraper.baseUrl, searchConfig]);
 
   const runListingLookup = useCallback(async (
     listingMode: ScraperListingMode,
@@ -363,6 +373,14 @@ export function useScraperBrowserSearch({
     clearFeedback();
     resetDetailsState();
     resetListingState();
+    const effectiveAuthorTemplateContext = listingMode === 'author'
+      && Object.prototype.hasOwnProperty.call(options ?? {}, 'templateContext')
+      ? options?.templateContext ?? null
+      : authorTemplateContext;
+
+    if (listingMode === 'author' && Object.prototype.hasOwnProperty.call(options ?? {}, 'templateContext')) {
+      setAuthorTemplateContext(options?.templateContext ?? null);
+    }
 
     if (!options?.preserveListingReturnState) {
       setListingReturnState(null);
@@ -381,7 +399,12 @@ export function useScraperBrowserSearch({
     setLoading(true);
 
     try {
-      const extractedListingState = await loadListingResultsPage(listingMode, nextQuery, options?.pageIndex ?? 0);
+      const extractedListingState = await loadListingResultsPage(
+        listingMode,
+        nextQuery,
+        options?.pageIndex ?? 0,
+        effectiveAuthorTemplateContext,
+      );
       const extractedPage = extractedListingState.page;
       const extractedResults = extractedListingState.items;
       setHasExecutedListing(true);
@@ -413,6 +436,8 @@ export function useScraperBrowserSearch({
     }
   }, [
     authorConfig,
+    authorTemplateContext,
+    setAuthorTemplateContext,
     canOpenSearchResultsAsDetails,
     clearFeedback,
     getUsesTemplatePaging,
@@ -456,6 +481,7 @@ export function useScraperBrowserSearch({
       ? mode === 'author'
         ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig!, query, {
           pageIndex: nextPageIndex,
+          templateContext: authorTemplateContext ?? undefined,
         })
         : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, query, {
           pageIndex: nextPageIndex,
@@ -507,6 +533,7 @@ export function useScraperBrowserSearch({
     }
   }, [
     authorConfig,
+    authorTemplateContext,
     fetchAuthorPage,
     fetchSearchPage,
     getUsesTemplatePaging,
@@ -655,6 +682,8 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    setAuthorTemplateContext(null);
+
     const nextSearch = getRouteStateForNavigation({
       routeSearch: locationSearch,
       scraperId: scraper.id,
@@ -691,6 +720,7 @@ export function useScraperBrowserSearch({
     navigate,
     query,
     scraper.id,
+    setAuthorTemplateContext,
     setRuntimeError,
     setRuntimeMessage,
   ]);
@@ -830,6 +860,7 @@ export function useScraperBrowserSearch({
       resetDetailsState();
       resetListingState();
       setListingReturnState(null);
+      setAuthorTemplateContext(null);
       setMode('author');
       setQuery('');
       return;
@@ -846,6 +877,7 @@ export function useScraperBrowserSearch({
     resetAsyncState,
     resetDetailsState,
     resetListingState,
+    setAuthorTemplateContext,
     setListingReturnState,
     setMode,
     setQuery,

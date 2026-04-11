@@ -10,6 +10,7 @@ import {
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
@@ -19,6 +20,7 @@ import {
   resolveScraperAuthorTargetUrl,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import { buildScraperTemplateContextFromValidation } from '@/renderer/utils/scraperTemplateContext';
 import {
   AUTHOR_SCRAPING_FIELD_NAMES,
   AuthorFeatureFormState,
@@ -52,6 +54,10 @@ export default function ScraperAuthorFeatureEditor({
   onScraperChange,
 }: Props) {
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
+  const detailsFeature = useMemo(
+    () => scraper.features.find((candidate) => candidate.kind === 'details') || null,
+    [scraper.features],
+  );
   const searchFeature = useMemo(
     () => scraper.features.find((candidate) => candidate.kind === 'search') || null,
     [scraper.features],
@@ -91,6 +97,9 @@ export default function ScraperAuthorFeatureEditor({
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildAuthorConfig(formValues), [formValues]);
   const usesTemplatePaging = hasAuthorPagePlaceholder(currentConfig);
+  const templateContext = useMemo<Record<string, string | undefined>>(() => (
+    buildScraperTemplateContextFromValidation(detailsFeature?.validation)
+  ), [detailsFeature?.validation]);
   const copiedSearchScrapingFields = useMemo(() => {
     if (!searchFeature?.config || searchFeature.status === 'not_configured') {
       return null;
@@ -115,12 +124,13 @@ export default function ScraperAuthorFeatureEditor({
           : currentConfig.testUrl || '',
         {
           pageIndex: 0,
+          templateContext,
         },
       );
     } catch {
       return null;
     }
-  }, [currentConfig, scraper.baseUrl]);
+  }, [currentConfig, scraper.baseUrl, templateContext]);
 
   const validationPresentation = useMemo(
     () => (validationResult ? buildValidationPresentation(validationResult, previewResults, previewPage) : null),
@@ -227,6 +237,7 @@ export default function ScraperAuthorFeatureEditor({
         config.urlStrategy === 'template' ? config.testValue || '' : config.testUrl || '',
         {
           pageIndex: 0,
+          templateContext,
         },
       );
     } catch (error) {
@@ -369,7 +380,7 @@ export default function ScraperAuthorFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [formValues, scraper.baseUrl]);
+  }, [formValues, scraper.baseUrl, templateContext]);
 
   const handlePreviewNextPage = useCallback(async () => {
     if (!previewPage) {
@@ -384,6 +395,7 @@ export default function ScraperAuthorFeatureEditor({
         currentConfig.urlStrategy === 'template' ? currentConfig.testValue || '' : currentConfig.testUrl || '',
         {
           pageIndex: nextPageIndex,
+          templateContext,
         },
       )
       : previewPage.nextPageUrl;
@@ -417,7 +429,7 @@ export default function ScraperAuthorFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [currentConfig, fetchPreviewPage, previewPage, previewPageIndex, scraper.baseUrl, usesTemplatePaging]);
+  }, [currentConfig, fetchPreviewPage, previewPage, previewPageIndex, scraper.baseUrl, templateContext, usesTemplatePaging]);
 
   const handlePreviewPreviousPage = useCallback(async () => {
     if (previewPageIndex <= 0) {
@@ -509,7 +521,8 @@ export default function ScraperAuthorFeatureEditor({
         noteText={
           'Les composants `Recherche` et `Fiche` peuvent remonter une URL auteur optionnelle. '
           + 'Quand elle existe, le runtime ouvrira directement cette page. Sinon, il utilisera le nom '
-          + 'de l\'auteur avec le template configure ici.'
+          + 'de l\'auteur avec le template configure ici, et pourra aussi reutiliser les variables '
+          + 'extraites de `Fiche`.'
         }
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
@@ -545,9 +558,24 @@ export default function ScraperAuthorFeatureEditor({
                 Placeholders supportes : <code>{'{{value}}'}</code>, <code>{'{{rawValue}}'}</code>,
                 <code>{' {{query}}'}</code>, <code>{'{{rawQuery}}'}</code>, ainsi que les variantes
                 de pagination <code>{'{{page}}'}</code>, <code>{'{{page3}}'}</code> et
-                <code>{' {{pageIndex}}'}</code>.
+                <code>{' {{pageIndex}}'}</code>. Si `Fiche` est validee, tu peux aussi utiliser
+                <code>{' {{requestedUrl}}'}</code>, <code>{'{{finalUrl}}'}</code> et les variables
+                extraites via <code>{'{{nomVariable}}'}</code> ou <code>{'{{raw:nomVariable}}'}</code>.
               </div>
             </>
+          ) : null}
+
+          {currentConfig.urlStrategy === 'template' ? (
+            <ScraperTemplateContext
+              templateContext={templateContext}
+              emptyMessage={(
+                <>
+                  Aucune fiche validee n&apos;est disponible pour le moment. Le template `Auteur`
+                  peut deja fonctionner avec <code>{'{{value}}'}</code>, mais les variables de
+                  `Fiche` ne seront utilisables qu&apos;apres validation de ce composant.
+                </>
+              )}
+            />
           ) : null}
         </div>
 

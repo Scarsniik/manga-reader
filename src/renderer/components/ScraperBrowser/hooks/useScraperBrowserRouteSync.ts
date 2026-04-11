@@ -11,6 +11,7 @@ import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
+import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import {
   formatScraperValueForDisplay,
   ScraperRuntimeChapterResult,
@@ -50,6 +51,7 @@ type UseScraperBrowserRouteSyncOptions = {
   setMode: Dispatch<SetStateAction<ScraperBrowseMode>>;
   setQuery: Dispatch<SetStateAction<string>>;
   setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
+  setAuthorTemplateContext: Dispatch<SetStateAction<ScraperTemplateContext | null>>;
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
   runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
@@ -86,6 +88,7 @@ export function useScraperBrowserRouteSync({
   setMode,
   setQuery,
   setListingReturnState,
+  setAuthorTemplateContext,
   setDetailsResult,
   setChaptersResult,
   runSearchLookup,
@@ -115,6 +118,7 @@ export function useScraperBrowserRouteSync({
     setQuery(formatScraperValueForDisplay(initialState?.query ?? ''));
     resetListingState();
     setListingReturnState(initialState?.listingReturnState ?? null);
+    setAuthorTemplateContext(null);
     setDetailsResult(initialState?.detailsResult ?? null);
     setChaptersResult(initialState?.chaptersResult ?? []);
     clearFeedback();
@@ -134,6 +138,7 @@ export function useScraperBrowserRouteSync({
     setChaptersResult,
     setDetailsResult,
     setListingReturnState,
+    setAuthorTemplateContext,
     setQuery,
   ]);
 

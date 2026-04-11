@@ -1,6 +1,5 @@
 import {
   applyScraperSearchTemplate,
-  resolveScraperSearchTemplateString,
   buildScraperSearchUrl,
   ScraperChapterItem,
   ScraperAuthorFeatureConfig,
@@ -414,6 +413,7 @@ export const resolveScraperAuthorTargetUrl = (
   query: string,
   options?: {
     pageIndex?: number;
+    templateContext?: ScraperTemplateContext;
   },
 ): string => {
   const trimmedQuery = query.trim();
@@ -426,9 +426,16 @@ export const resolveScraperAuthorTargetUrl = (
     || trimmedQuery.startsWith('#');
 
   if (config.urlStrategy === 'template' && !looksLikeDirectUrlInput) {
-    return resolveScraperUrl(
+    const searchResolvedTemplate = applyScraperSearchTemplate(
+      config.urlTemplate || '',
+      trimmedQuery,
+      options,
+    );
+
+    return buildScraperContextTemplateUrl(
       baseUrl,
-      resolveScraperSearchTemplateString(config.urlTemplate || '', trimmedQuery, options),
+      searchResolvedTemplate,
+      options?.templateContext ?? {},
     );
   }
 

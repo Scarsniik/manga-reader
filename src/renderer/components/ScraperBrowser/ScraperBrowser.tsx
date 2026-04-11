@@ -50,6 +50,7 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import './style.scss';
 
 type Props = {
@@ -164,6 +165,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [listingReturnState, setListingReturnState] = useState<ScraperListingReturnState | null>(null);
   const [detailsResult, setDetailsResult] = useState<ScraperRuntimeDetailsResult | null>(null);
   const [chaptersResult, setChaptersResult] = useState<ScraperRuntimeChapterResult[]>([]);
+  const [authorTemplateContext, setAuthorTemplateContext] = useState<ScraperTemplateContext | null>(null);
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -348,6 +350,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     hasExecutedListing,
     listingReturnState,
     detailsResult,
+    authorTemplateContext,
     clearFeedback,
     resetListingState,
     resetDetailsState,
@@ -363,6 +366,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setListingResults,
     setHasExecutedListing,
     setListingReturnState,
+    setAuthorTemplateContext,
     setRuntimeMessage,
     setRuntimeError,
     setLoading,
@@ -397,6 +401,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setMode,
     setQuery,
     setListingReturnState,
+    setAuthorTemplateContext,
     setDetailsResult,
     setChaptersResult,
     runSearchLookup,
@@ -529,6 +534,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [canNavigateBack, navigate]);
 
   const handleOpenAuthorFromDetails = useCallback((value: string) => {
+    setAuthorTemplateContext(detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : null);
     const nextAuthorQuery = formatScraperValueForDisplay(value);
     const routeState = parseScraperRouteState(location.search);
     const nextSearch = writeScraperRouteState(location.search, {
@@ -558,7 +564,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         },
       },
     );
-  }, [location.pathname, location.search, locationState, navigate, scraper.id]);
+  }, [detailsResult, location.pathname, location.search, locationState, navigate, scraper.id]);
 
   const handleOpenScraperBookmarks = useCallback(() => {
     navigate({
