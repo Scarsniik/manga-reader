@@ -154,6 +154,7 @@ Champs minimum proposes :
 - `statusSelector`
 - `thumbnailsListSelector` optionnel
 - `thumbnailsSelector` optionnel
+- `thumbnailsNextPageSelector` optionnel
 - `metadataMap`
 
 `urlSource` peut venir :

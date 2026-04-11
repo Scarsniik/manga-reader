@@ -79,6 +79,7 @@ export type ScraperFeatureValidationCheckKey =
   | 'tags'
   | 'status'
   | 'thumbnails'
+  | 'thumbnailsNextPage'
   | 'chapters'
   | 'pages';
 
@@ -189,6 +190,7 @@ export interface ScraperDetailsFeatureConfig {
   statusSelector?: string;
   thumbnailsListSelector?: string;
   thumbnailsSelector?: string;
+  thumbnailsNextPageSelector?: string;
   derivedValues: ScraperDetailsDerivedValueConfig[];
 }
 

@@ -56,6 +56,7 @@ export type ScraperRuntimeDetailsResult = {
   authorUrls: string[];
   tags: string[];
   thumbnails?: string[];
+  thumbnailsNextPageUrl?: string;
   mangaStatus?: string;
   derivedValues: Record<string, string>;
 };
@@ -326,6 +327,7 @@ export const getScraperDetailsFeatureConfig = (
     statusSelector: trimOptionalSelector(raw.statusSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
+    thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => normalizeDerivedValueConfig(value))
@@ -820,6 +822,11 @@ export type ScraperRuntimeDetailsRequestMeta = {
 
 export type ScraperRuntimeDetailsFieldValues = Partial<Record<DetailsFieldKey, string[]>>;
 
+export type ScraperRuntimeDetailsThumbnailsPageResult = {
+  thumbnails: string[];
+  nextPageUrl?: string;
+};
+
 export const extractScraperAuthorUrlsFromDocument = (
   doc: Document,
   selector: string | undefined,
@@ -837,23 +844,44 @@ export const extractScraperAuthorUrlsFromDocument = (
 
 export const extractScraperDetailsThumbnailsFromDocument = (
   doc: Document,
-  config: Pick<ScraperDetailsFeatureConfig, 'thumbnailsListSelector' | 'thumbnailsSelector'>,
+  config: Pick<ScraperDetailsFeatureConfig, 'thumbnailsListSelector' | 'thumbnailsSelector' | 'thumbnailsNextPageSelector'>,
   requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, 'requestedUrl' | 'finalUrl'>,
-): string[] => {
+): string[] => (
+  extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta).thumbnails
+);
+
+export const extractScraperDetailsThumbnailsPageFromDocument = (
+  doc: Document,
+  config: Pick<ScraperDetailsFeatureConfig, 'thumbnailsListSelector' | 'thumbnailsSelector' | 'thumbnailsNextPageSelector'>,
+  requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, 'requestedUrl' | 'finalUrl'>,
+): ScraperRuntimeDetailsThumbnailsPageResult => {
+  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const nextPageValue = config.thumbnailsNextPageSelector
+    ? extractUrlSelectorValuesFromRoot(doc, config.thumbnailsNextPageSelector)[0]
+    : undefined;
+  const nextPageUrl = nextPageValue
+    ? toAbsoluteScraperUrl(nextPageValue, documentUrl)
+    : undefined;
+
   if (!config.thumbnailsSelector) {
-    return [];
+    return {
+      thumbnails: [],
+      nextPageUrl,
+    };
   }
 
-  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   const thumbnailsSelector = config.thumbnailsSelector;
   const thumbnailRoots = config.thumbnailsListSelector
     ? Array.from(doc.querySelectorAll(config.thumbnailsListSelector))
     : [doc];
 
-  return thumbnailRoots.flatMap((root) => (
-    extractSelectorValuesFromRoot(root, thumbnailsSelector)
-      .map((value) => toAbsoluteScraperUrl(value, documentUrl))
-  ));
+  return {
+    thumbnails: thumbnailRoots.flatMap((root) => (
+      extractSelectorValuesFromRoot(root, thumbnailsSelector)
+        .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+    )),
+    nextPageUrl,
+  };
 };
 
 export const extractScraperDetailsFieldValues = (
@@ -997,7 +1025,7 @@ export const extractScraperDetailsFromDocument = (
   const fieldValuesByKey = extractScraperDetailsFieldValues(doc, config, requestMeta);
   const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
   const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta);
-  const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, config, requestMeta);
+  const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta);
   const derivedValues = derivedValueResults.reduce<Record<string, string>>((accumulator, derivedValue) => {
     if (derivedValue.value) {
       accumulator[derivedValue.key] = derivedValue.value;
@@ -1017,7 +1045,8 @@ export const extractScraperDetailsFromDocument = (
     authors: uniqueValues(fieldValuesByKey.authors ?? []),
     authorUrls,
     tags: uniqueValues(fieldValuesByKey.tags ?? []),
-    thumbnails: config.thumbnailsSelector ? thumbnails : undefined,
+    thumbnails: config.thumbnailsSelector ? thumbnailsPage.thumbnails : undefined,
+    thumbnailsNextPageUrl: thumbnailsPage.nextPageUrl,
     mangaStatus: fieldValuesByKey.status?.[0],
     derivedValues,
   };

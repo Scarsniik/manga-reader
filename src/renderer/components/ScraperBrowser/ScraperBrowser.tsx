@@ -173,6 +173,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [openingReader, setOpeningReader] = useState(false);
+  const [loadingMoreThumbnails, setLoadingMoreThumbnails] = useState(false);
   const browserRootRef = useRef<HTMLElement | null>(null);
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
@@ -202,6 +203,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setLoading(false);
     setDownloading(false);
     setOpeningReader(false);
+    setLoadingMoreThumbnails(false);
   }, []);
 
   const cancelScheduledScrollRestore = useCallback(() => {
@@ -286,6 +288,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     loadDetailsFromTargetUrl,
     runDetailsLookup,
     handleDownload,
+    handleLoadMoreThumbnails,
     handleOpenReader,
   } = useScraperBrowserDetails({
     scraper,
@@ -310,6 +313,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDownloadMessage,
     setDownloading,
     setOpeningReader,
+    setLoadingMoreThumbnails,
     setDetailsResult,
     setChaptersResult,
   });
@@ -711,11 +715,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         usesChapters={usesChaptersForPages}
         openingReader={openingReader}
         downloading={downloading}
+        loadingMoreThumbnails={loadingMoreThumbnails}
         onBack={canNavigateBack ? handleNavigateBack : () => void handleBackToListing()}
         onOpenAuthor={(value) => {
           handleOpenAuthorFromDetails(value);
         }}
         onOpenReader={(options) => void handleOpenReader(options)}
+        onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}
         onDownload={(chapter) => void handleDownload(chapter)}
       />
     </section>

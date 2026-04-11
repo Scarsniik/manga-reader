@@ -144,6 +144,12 @@ export const SELECTOR_FIELDS: Field[] = [
     type: 'text',
     placeholder: 'Exemple : img@src ou .thumbnails img@src',
   },
+  {
+    name: 'thumbnailsNextPageSelector',
+    label: 'Selecteur du lien vignettes suivant',
+    type: 'text',
+    placeholder: 'Exemple : .pagination .next@href',
+  },
 ];
 
 export const DERIVED_VALUE_SOURCE_OPTIONS = [
@@ -177,6 +183,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   statusSelector: '',
   thumbnailsListSelector: '',
   thumbnailsSelector: '',
+  thumbnailsNextPageSelector: '',
   derivedValues: [],
 };
 
@@ -251,6 +258,7 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   statusSelector: trimOptionalSelector(values.statusSelector),
   thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
   thumbnailsSelector: trimOptionalSelector(values.thumbnailsSelector),
+  thumbnailsNextPageSelector: trimOptionalSelector(values.thumbnailsNextPageSelector),
   derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
 });
 
@@ -277,6 +285,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     statusSelector: trimOptionalSelector(raw.statusSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
+    thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => buildDerivedValueConfig(value as Partial<ScraperDetailsDerivedValueConfig>))
@@ -335,7 +344,10 @@ export const buildValidationPresentation = (
       const sample = check.sample
         ? formatValidationDisplayValue(check.sample, {
           truncate: 160,
-          treatAsUrl: check.key === 'cover' || check.key === 'authorUrl' || check.key === 'thumbnails',
+          treatAsUrl: check.key === 'cover'
+            || check.key === 'authorUrl'
+            || check.key === 'thumbnails'
+            || check.key === 'thumbnailsNextPage',
         })
         : `${check.matchedCount} resultat(s)`;
       details.push(
@@ -455,6 +467,10 @@ export const getSaveFieldErrors = (
 
   if (config.thumbnailsListSelector && !config.thumbnailsSelector) {
     errors.thumbnailsSelector = 'Le selecteur des vignettes est requis quand un conteneur est defini.';
+  }
+
+  if (config.thumbnailsNextPageSelector && !config.thumbnailsSelector) {
+    errors.thumbnailsSelector = 'Le selecteur des vignettes est requis quand une page suivante est definie.';
   }
 
   configuredDerivedValues.forEach(({ draftId, config: derivedValue }) => {

@@ -38,6 +38,7 @@ export type ListingLookupOptions = {
   pageIndex?: number;
   preserveListingReturnState?: boolean;
   templateContext?: ScraperTemplateContext | null;
+  canCommit?: () => boolean;
 };
 
 type UseScraperBrowserSearchOptions = {
@@ -370,6 +371,11 @@ export function useScraperBrowserSearch({
     nextQuery: string,
     options?: ListingLookupOptions,
   ) => {
+    const canCommit = options?.canCommit ?? (() => true);
+    if (!canCommit()) {
+      return;
+    }
+
     clearFeedback();
     resetDetailsState();
     resetListingState();
@@ -405,6 +411,10 @@ export function useScraperBrowserSearch({
         options?.pageIndex ?? 0,
         effectiveAuthorTemplateContext,
       );
+      if (!canCommit()) {
+        return;
+      }
+
       const extractedPage = extractedListingState.page;
       const extractedResults = extractedListingState.items;
       setHasExecutedListing(true);
@@ -430,9 +440,13 @@ export function useScraperBrowserSearch({
         canOpenSearchResultsAsDetails,
       }));
     } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du chargement.');
+      if (canCommit()) {
+        setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du chargement.');
+      }
     } finally {
-      setLoading(false);
+      if (canCommit()) {
+        setLoading(false);
+      }
     }
   }, [
     authorConfig,

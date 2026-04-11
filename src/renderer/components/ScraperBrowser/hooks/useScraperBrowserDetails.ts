@@ -15,6 +15,7 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import {
   createScraperMangaId,
   extractScraperDetailsFromDocument,
+  extractScraperDetailsThumbnailsPageFromDocument,
   hasRenderableDetails,
   resolveScraperChapters,
   resolveScraperDetailsTargetUrl,
@@ -46,8 +47,13 @@ type UseScraperBrowserDetailsOptions = {
   setDownloadMessage: Dispatch<SetStateAction<string | null>>;
   setDownloading: Dispatch<SetStateAction<boolean>>;
   setOpeningReader: Dispatch<SetStateAction<boolean>>;
+  setLoadingMoreThumbnails: Dispatch<SetStateAction<boolean>>;
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
+};
+
+type DetailsLookupOptions = {
+  canCommit?: () => boolean;
 };
 
 const normalizeRequestedReaderPage = (
@@ -59,6 +65,19 @@ const normalizeRequestedReaderPage = (
   }
 
   return Math.max(1, Math.min(totalPages, Math.floor(value)));
+};
+
+const mergeUniqueValues = (values: string[]): string[] => {
+  const seen = new Set<string>();
+
+  return values.filter((value) => {
+    if (seen.has(value)) {
+      return false;
+    }
+
+    seen.add(value);
+    return true;
+  });
 };
 
 export function useScraperBrowserDetails({
@@ -84,6 +103,7 @@ export function useScraperBrowserDetails({
   setDownloadMessage,
   setDownloading,
   setOpeningReader,
+  setLoadingMoreThumbnails,
   setDetailsResult,
   setChaptersResult,
 }: UseScraperBrowserDetailsOptions) {
@@ -92,7 +112,15 @@ export function useScraperBrowserDetails({
     [detailsResult],
   );
 
-  const loadDetailsFromTargetUrl = useCallback(async (targetUrl: string) => {
+  const loadDetailsFromTargetUrl = useCallback(async (
+    targetUrl: string,
+    options?: DetailsLookupOptions,
+  ) => {
+    const canCommit = options?.canCommit ?? (() => true);
+    if (!canCommit()) {
+      return;
+    }
+
     clearFeedback();
     resetListingState();
     resetDetailsState();
@@ -115,6 +143,10 @@ export function useScraperBrowserDetails({
         baseUrl: scraper.baseUrl,
         targetUrl,
       });
+
+      if (!canCommit()) {
+        return;
+      }
 
       if (!documentResult?.ok || !documentResult.html) {
         setRuntimeError(
@@ -159,6 +191,10 @@ export function useScraperBrowserDetails({
         })()
         : [];
 
+      if (!canCommit()) {
+        return;
+      }
+
       if (!hasRenderableDetails(extractedDetails)) {
         setRuntimeError('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');
         return;
@@ -167,9 +203,13 @@ export function useScraperBrowserDetails({
       setDetailsResult(extractedDetails);
       setChaptersResult(extractedChapters);
     } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du scrapper.');
+      if (canCommit()) {
+        setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du scrapper.');
+      }
     } finally {
-      setLoading(false);
+      if (canCommit()) {
+        setLoading(false);
+      }
     }
   }, [
     chaptersConfig,
@@ -184,7 +224,15 @@ export function useScraperBrowserDetails({
     setRuntimeError,
   ]);
 
-  const runDetailsLookup = useCallback(async (nextQuery: string) => {
+  const runDetailsLookup = useCallback(async (
+    nextQuery: string,
+    options?: DetailsLookupOptions,
+  ) => {
+    const canCommit = options?.canCommit ?? (() => true);
+    if (!canCommit()) {
+      return;
+    }
+
     setListingReturnState(null);
 
     if (!detailsConfig || !detailsConfig.titleSelector) {
@@ -196,11 +244,13 @@ export function useScraperBrowserDetails({
     try {
       targetUrl = resolveScraperDetailsTargetUrl(scraper.baseUrl, detailsConfig, nextQuery);
     } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : 'Impossible de construire l\'URL de la fiche.');
+      if (canCommit()) {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible de construire l\'URL de la fiche.');
+      }
       return;
     }
 
-    await loadDetailsFromTargetUrl(targetUrl);
+    await loadDetailsFromTargetUrl(targetUrl, options);
   }, [detailsConfig, loadDetailsFromTargetUrl, scraper.baseUrl, setListingReturnState, setRuntimeError]);
 
   const resolveCurrentPageUrls = useCallback(async (
@@ -296,6 +346,88 @@ export function useScraperBrowserDetails({
     setDownloading,
   ]);
 
+  const handleLoadMoreThumbnails = useCallback(async () => {
+    if (!detailsResult?.thumbnailsNextPageUrl) {
+      return;
+    }
+
+    if (!detailsConfig?.thumbnailsSelector) {
+      setRuntimeError('Le selecteur des vignettes est requis pour charger la suite.');
+      return;
+    }
+
+    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+    if (typeof fetchScraperDocument !== 'function') {
+      setRuntimeError('Le runtime du scrapper n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    setLoadingMoreThumbnails(true);
+    clearFeedback();
+
+    try {
+      const documentResult = await fetchScraperDocument({
+        baseUrl: scraper.baseUrl,
+        targetUrl: detailsResult.thumbnailsNextPageUrl,
+      });
+
+      if (!documentResult?.ok || !documentResult.html) {
+        setRuntimeError(
+          documentResult?.error
+            || (typeof documentResult?.status === 'number'
+              ? `La page de vignettes a repondu avec le code HTTP ${documentResult.status}.`
+              : 'Impossible de charger la page de vignettes suivante.'),
+        );
+        return;
+      }
+
+      const parser = new DOMParser();
+      const documentNode = parser.parseFromString(documentResult.html, 'text/html');
+      const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(documentNode, detailsConfig, {
+        requestedUrl: documentResult.requestedUrl,
+        finalUrl: documentResult.finalUrl,
+      });
+
+      if (!thumbnailsPage.thumbnails.length && !thumbnailsPage.nextPageUrl) {
+        setRuntimeError('Aucune vignette supplementaire n\'a ete trouvee.');
+        return;
+      }
+
+      setDetailsResult((previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const currentThumbnails = previous.thumbnails ?? [];
+        const nextThumbnails = mergeUniqueValues([
+          ...currentThumbnails,
+          ...thumbnailsPage.thumbnails,
+        ]);
+        const nextPageUrl = thumbnailsPage.nextPageUrl === previous.thumbnailsNextPageUrl
+          ? undefined
+          : thumbnailsPage.nextPageUrl;
+
+        return {
+          ...previous,
+          thumbnails: nextThumbnails,
+          thumbnailsNextPageUrl: nextPageUrl,
+        };
+      });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Impossible de charger la suite des vignettes.');
+    } finally {
+      setLoadingMoreThumbnails(false);
+    }
+  }, [
+    clearFeedback,
+    detailsConfig,
+    detailsResult?.thumbnailsNextPageUrl,
+    scraper.baseUrl,
+    setDetailsResult,
+    setLoadingMoreThumbnails,
+    setRuntimeError,
+  ]);
+
   const handleOpenReader = useCallback(async (options?: ScraperOpenReaderOptions) => {
     if (!detailsResult) {
       setRuntimeError('Charge d\'abord une fiche avant d\'ouvrir le lecteur.');
@@ -389,6 +521,7 @@ export function useScraperBrowserDetails({
     loadDetailsFromTargetUrl,
     runDetailsLookup,
     handleDownload,
+    handleLoadMoreThumbnails,
     handleOpenReader,
   };
 }

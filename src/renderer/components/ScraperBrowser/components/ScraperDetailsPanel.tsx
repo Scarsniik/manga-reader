@@ -21,9 +21,11 @@ type Props = {
   displaysThumbnails?: boolean;
   openingReader: boolean;
   downloading: boolean;
+  loadingMoreThumbnails: boolean;
   onBack?: () => void;
   onOpenAuthor: (value: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
+  onLoadMoreThumbnails: () => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
 };
 
@@ -40,9 +42,11 @@ export default function ScraperDetailsPanel({
   usesChapters,
   openingReader,
   downloading,
+  loadingMoreThumbnails,
   onBack,
   onOpenAuthor,
   onOpenReader,
+  onLoadMoreThumbnails,
   onDownload,
 }: Props) {
   if (!detailsResult) {
@@ -55,6 +59,7 @@ export default function ScraperDetailsPanel({
     && Array.isArray(detailsResult.thumbnails);
   const canOpenThumbnailReader = hasPages && !usesChapters;
   const hasStandaloneActions = hasPages && !usesChapters;
+  const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl);
 
   return (
     <>
@@ -297,6 +302,16 @@ export default function ScraperDetailsPanel({
                   <span>Aucune page extraite pour cette fiche.</span>
                 )}
               </div>
+              {canLoadMoreThumbnails ? (
+                <button
+                  type="button"
+                  className="scraper-browser__thumbnails-more"
+                  onClick={onLoadMoreThumbnails}
+                  disabled={loadingMoreThumbnails}
+                >
+                  {loadingMoreThumbnails ? 'Chargement...' : 'Voir plus'}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

@@ -30,6 +30,7 @@ export const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> 
   tags: 'Tags',
   status: 'Statut',
   thumbnails: 'Vignettes',
+  thumbnailsNextPage: 'Page suivante des vignettes',
   chapters: 'Chapitres',
   pages: 'Pages',
 };

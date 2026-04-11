@@ -49,6 +49,7 @@ import {
   extractScraperDetailsDerivedValueResults,
   extractScraperDetailsFieldValues,
   extractScraperDetailsThumbnailsFromDocument,
+  extractScraperDetailsThumbnailsPageFromDocument,
 } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
@@ -347,7 +348,10 @@ export default function ScraperDetailsFeatureEditor({
           : config.thumbnailsSelector;
 
         try {
-          const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, config, {
+          const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, {
+            thumbnailsListSelector: config.thumbnailsListSelector,
+            thumbnailsSelector: config.thumbnailsSelector,
+          }, {
             requestedUrl: typedDocumentResult.requestedUrl,
             finalUrl: typedDocumentResult.finalUrl,
           });
@@ -365,6 +369,33 @@ export default function ScraperDetailsFeatureEditor({
           checks.push({
             key: 'thumbnails',
             selector: selectorLabel,
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
+      if (config.thumbnailsNextPageSelector) {
+        try {
+          const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, {
+            thumbnailsNextPageSelector: config.thumbnailsNextPageSelector,
+          }, {
+            requestedUrl: typedDocumentResult.requestedUrl,
+            finalUrl: typedDocumentResult.finalUrl,
+          });
+
+          checks.push({
+            key: 'thumbnailsNextPage',
+            selector: config.thumbnailsNextPageSelector,
+            required: false,
+            matchedCount: thumbnailsPage.nextPageUrl ? 1 : 0,
+            sample: thumbnailsPage.nextPageUrl,
+            issueCode: thumbnailsPage.nextPageUrl ? undefined : 'no_match',
+          });
+        } catch {
+          checks.push({
+            key: 'thumbnailsNextPage',
+            selector: config.thumbnailsNextPageSelector,
             required: false,
             matchedCount: 0,
             issueCode: 'invalid_selector',

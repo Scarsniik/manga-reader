@@ -18,9 +18,16 @@ import {
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 
+type AsyncCommitGuard = () => boolean;
+
 type ListingLookupOptions = {
   pageIndex?: number;
   preserveListingReturnState?: boolean;
+  canCommit?: AsyncCommitGuard;
+};
+
+type DetailsLookupOptions = {
+  canCommit?: AsyncCommitGuard;
 };
 
 type UseScraperBrowserRouteSyncOptions = {
@@ -56,8 +63,8 @@ type UseScraperBrowserRouteSyncOptions = {
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
   runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runAuthorLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
-  runDetailsLookup: (query: string) => Promise<void>;
-  loadDetailsFromTargetUrl: (targetUrl: string) => Promise<void>;
+  runDetailsLookup: (query: string, options?: DetailsLookupOptions) => Promise<void>;
+  loadDetailsFromTargetUrl: (targetUrl: string, options?: DetailsLookupOptions) => Promise<void>;
 };
 
 export function useScraperBrowserRouteSync({
@@ -142,7 +149,16 @@ export function useScraperBrowserRouteSync({
     setQuery,
   ]);
 
-  const restoreFromRoute = useCallback(async (allowInitialState: boolean) => {
+  const restoreFromRoute = useCallback(async (
+    allowInitialState: boolean,
+    canCommit: AsyncCommitGuard = () => true,
+  ) => {
+    if (!canCommit()) {
+      return;
+    }
+
+    resetAsyncState();
+
     const restoredListingReturnState = initialState?.listingReturnState
       ?? buildListingReturnStateFromRoute(routeState);
 
@@ -170,6 +186,7 @@ export function useScraperBrowserRouteSync({
       if (routeState.searchActive && hasSearch) {
         await runSearchLookup(routeState.searchQuery, {
           pageIndex: Math.max(0, routeState.searchPage - 1),
+          canCommit,
         });
         return;
       }
@@ -182,7 +199,9 @@ export function useScraperBrowserRouteSync({
         && !routeState.mangaUrl
       ) {
         setQuery(homeSearchQuery);
-        await runSearchLookup(homeSearchQuery);
+        await runSearchLookup(homeSearchQuery, {
+          canCommit,
+        });
         return;
       }
 
@@ -199,6 +218,7 @@ export function useScraperBrowserRouteSync({
       if (routeState.authorActive && hasAuthor) {
         await runAuthorLookup(routeState.authorQuery, {
           pageIndex: Math.max(0, routeState.authorPage - 1),
+          canCommit,
         });
         return;
       }
@@ -214,13 +234,23 @@ export function useScraperBrowserRouteSync({
     setListingReturnState(restoredListingReturnState);
 
     if (hasDetails && routeState.mangaUrl) {
-      await loadDetailsFromTargetUrl(routeState.mangaUrl);
+      await loadDetailsFromTargetUrl(routeState.mangaUrl, {
+        canCommit,
+      });
+      if (!canCommit()) {
+        return;
+      }
       setListingReturnState(restoredListingReturnState);
       return;
     }
 
     if (hasDetails && routeState.mangaQuery) {
-      await runDetailsLookup(routeState.mangaQuery);
+      await runDetailsLookup(routeState.mangaQuery, {
+        canCommit,
+      });
+      if (!canCommit()) {
+        return;
+      }
       setListingReturnState(restoredListingReturnState);
       return;
     }
@@ -241,6 +271,7 @@ export function useScraperBrowserRouteSync({
     loadDetailsFromTargetUrl,
     resetDetailsState,
     resetListingState,
+    resetAsyncState,
     routeState,
     routeStateSignature,
     runAuthorLookup,
@@ -251,6 +282,8 @@ export function useScraperBrowserRouteSync({
     setMode,
     setQuery,
   ]);
+  const restoreFromRouteRef = useRef(restoreFromRoute);
+  restoreFromRouteRef.current = restoreFromRoute;
 
   useEffect(() => {
     const isInternalRouteWrite = lastInternalSearchRef.current === locationSearch;
@@ -276,7 +309,7 @@ export function useScraperBrowserRouteSync({
 
     const runRestore = async () => {
       try {
-        await restoreFromRoute(shouldRestoreInitialRoute);
+        await restoreFromRouteRef.current(shouldRestoreInitialRoute, () => !cancelled);
       } finally {
         if (cancelled) {
           return;
@@ -296,7 +329,6 @@ export function useScraperBrowserRouteSync({
     };
   }, [
     locationSearch,
-    restoreFromRoute,
     routeStateSignature,
     urlRestoreReady,
   ]);
