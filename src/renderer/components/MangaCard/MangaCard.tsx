@@ -1,16 +1,20 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
+import { ScraperRecord } from '@/shared/scraper';
 import useModal from '@/renderer/hooks/useModal';
 import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaModal';
 import buildMangaOcrModal from '@/renderer/components/Modal/modales/MangaOcrModal';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
+import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
+import { getMangaSourceUrl } from '@/renderer/utils/mangaSource';
 import { extractChapterSortValue } from '@/renderer/utils/seriesChapters';
 import { OpenBookIcon, EditPencilIcon, TrashCanIcon } from '@/renderer/components/icons';
 
 interface Props {
     manga: Manga;
+    scrapers?: ScraperRecord[];
     onRemove?: (id: string) => void;
     onCardUpdated?: (id: string) => void;
     selected?: boolean;
@@ -22,6 +26,7 @@ interface Props {
 
 const MangaCard: React.FC<Props> = ({
     manga,
+    scrapers = [],
     onRemove,
     onCardUpdated,
     selected = false,
@@ -41,6 +46,15 @@ const MangaCard: React.FC<Props> = ({
     const seriesId = typeof manga.seriesId === 'string' && manga.seriesId.trim().length > 0
         ? manga.seriesId
         : null;
+    const sourceUrl = useMemo(() => getMangaSourceUrl(manga), [manga]);
+    const sourceScraper = useMemo(() => {
+        const scraperId = typeof manga.scraperId === 'string' ? manga.scraperId.trim() : '';
+        if (!scraperId) {
+            return null;
+        }
+
+        return scrapers.find((scraper) => scraper.id === scraperId) ?? null;
+    }, [manga.scraperId, scrapers]);
     const selectedSeriesId = useMemo(() => {
         const queryString = location.search.startsWith('?')
             ? location.search.slice(1)
@@ -202,6 +216,52 @@ const MangaCard: React.FC<Props> = ({
         }
     }, [manga, openModal]);
 
+    const onSourceClick = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+
+        if (!sourceUrl) {
+            alert('Aucune source enregistrée pour ce manga.');
+            return;
+        }
+
+        if (sourceScraper) {
+            navigate({
+                pathname: location.pathname,
+                search: writeScraperRouteState(location.search, {
+                    scraperId: sourceScraper.id,
+                    mode: 'manga',
+                    searchActive: false,
+                    searchQuery: '',
+                    searchPage: 1,
+                    authorActive: false,
+                    authorQuery: '',
+                    authorPage: 1,
+                    mangaQuery: '',
+                    mangaUrl: sourceUrl,
+                }),
+            }, {
+                state: {
+                    scraperBrowserHistorySource: {
+                        kind: 'manga',
+                    },
+                },
+            });
+            return;
+        }
+
+        try {
+            if (window.api && typeof window.api.openExternalUrl === 'function') {
+                await window.api.openExternalUrl(sourceUrl);
+                return;
+            }
+
+            window.open(sourceUrl, '_blank', 'noopener,noreferrer');
+        } catch (err) {
+            console.error('Failed to open manga source', err);
+            alert('Impossible d\'ouvrir la source.');
+        }
+    }, [location.pathname, location.search, navigate, sourceScraper, sourceUrl]);
+
     const onCardKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
             openReader();
@@ -318,6 +378,11 @@ const MangaCard: React.FC<Props> = ({
             onClick: onOcrClick,
         },
         {
+            label: 'Voir source',
+            onClick: onSourceClick,
+            disabled: !sourceUrl,
+        },
+        {
             type: "title",
             label: 'Filtrer par :',
         },
@@ -333,7 +398,7 @@ const MangaCard: React.FC<Props> = ({
             disabled: !seriesId,
             itemsPerRow: 2,
         },
-    ]), [currentPage, onCardClick, onDeleteClick, onEditClick, onFilterByAuthor, onFilterBySeries, onOcrClick, onToggleRead, pages, primaryAuthorId, seriesId]);
+    ]), [currentPage, onCardClick, onDeleteClick, onEditClick, onFilterByAuthor, onFilterBySeries, onOcrClick, onSourceClick, onToggleRead, pages, primaryAuthorId, seriesId, sourceUrl]);
 
     return (
         <Card

@@ -39,6 +39,7 @@ const notifySeriesUpdated = () => {
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
 ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => links.removeLink(event, url));
+ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
 
 // Mangas
 ipcMain.handle("get-mangas", async () => mangas.getMangas());

@@ -279,6 +279,9 @@ export interface DownloadScraperMangaRequest {
   scraperId?: string;
   scraperName?: string;
   sourceUrl?: string;
+  sourceChapterUrl?: string;
+  sourceChapterLabel?: string;
+  replaceMangaId?: string;
   defaultTagIds?: string[];
   defaultLanguage?: string;
   autoAssignSeriesOnChapterDownload?: boolean;
@@ -306,6 +309,9 @@ export interface ScraperDownloadJob {
   scraperId?: string;
   scraperName?: string;
   sourceUrl?: string;
+  sourceChapterUrl?: string;
+  sourceChapterLabel?: string;
+  replaceMangaId?: string;
   refererUrl?: string;
   chapterLabel?: string;
   createdAt: string;

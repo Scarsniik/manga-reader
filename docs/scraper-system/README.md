@@ -8,6 +8,8 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 
 - [`product-overview.md`](./product-overview.md) : vision produit, perimetre, parcours user, vision UI et phasage
 - [`technical-design.md`](./technical-design.md) : structure des donnees, configuration site/API, validation et points techniques
+- [`scraper-config-guide.md`](./scraper-config-guide.md) : guide technique de configuration des scrapers, des selecteurs et des modules V1
+- [`source-linking.md`](./source-linking.md) : liaison entre une fiche scraper, un manga local et sa source externe
 - [`v1-implementation-status.md`](./v1-implementation-status.md) : ce qui est effectivement branche dans l'application aujourd'hui
 - [`first-draft-archive.md`](./first-draft-archive.md) : archive integrale du brouillon initial, conservee sans perte d'information
 

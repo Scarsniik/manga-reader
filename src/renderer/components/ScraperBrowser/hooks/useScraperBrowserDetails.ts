@@ -56,6 +56,10 @@ type DetailsLookupOptions = {
   canCommit?: () => boolean;
 };
 
+type DownloadOptions = {
+  replaceMangaId?: string | null;
+};
+
 const normalizeRequestedReaderPage = (
   value: number | undefined,
   totalPages: number,
@@ -280,7 +284,10 @@ export function useScraperBrowserDetails({
     );
   }, [detailsResult, pagesConfig, scraper]);
 
-  const handleDownload = useCallback(async (chapter?: ScraperRuntimeChapterResult) => {
+  const handleDownload = useCallback(async (
+    chapter?: ScraperRuntimeChapterResult,
+    options?: DownloadOptions,
+  ) => {
     const queueDownloadApi = (window as any).api?.queueScraperDownload
       || (window as any).api?.downloadScraperManga;
     const normalizedChapter = isScraperRuntimeChapterResult(chapter) ? chapter : undefined;
@@ -307,6 +314,9 @@ export function useScraperBrowserDetails({
         scraperId: scraper.id,
         scraperName: scraper.name,
         sourceUrl: detailsResult?.finalUrl || detailsResult?.requestedUrl,
+        sourceChapterUrl: normalizedChapter?.url,
+        sourceChapterLabel: normalizedChapter?.label,
+        replaceMangaId: options?.replaceMangaId || undefined,
         defaultTagIds: scraper.globalConfig.defaultTagIds,
         defaultLanguage: scraper.globalConfig.defaultLanguage,
         autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
@@ -318,12 +328,13 @@ export function useScraperBrowserDetails({
       });
       const activeJobs = Number(queueResult?.status?.counts?.active || 0);
       const isChapterDownload = Boolean(normalizedChapter?.label);
+      const isReplacement = Boolean(options?.replaceMangaId);
       const statusLabel = queueResult?.job?.status === 'running'
         ? 'demarre'
         : 'a ete ajoute a la file';
 
       setDownloadMessage(
-        `${isChapterDownload ? 'Le telechargement du chapitre' : 'Le telechargement du manga'} ${statusLabel}. `
+        `${isReplacement ? 'Le remplacement local' : isChapterDownload ? 'Le telechargement du chapitre' : 'Le telechargement du manga'} ${statusLabel}. `
         + `${activeJobs > 0 ? `${activeJobs} job(s) actif(s). ` : ''}`
         + 'Suis l\'avancement depuis "Telechargements" en haut de l\'accueil.',
       );

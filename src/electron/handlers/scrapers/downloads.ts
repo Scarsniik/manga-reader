@@ -12,9 +12,12 @@ import {
 import {
   addManga,
   createStoredThumbnailForMangaFromBuffer,
+  ensureStoredThumbnailForManga,
+  getMangaById,
   patchMangaById,
 } from "../mangas";
 import { ocrQueueImportManga } from "../ocr";
+import { listImageFiles } from "../pages";
 import { ensureSeriesByTitle } from "../series";
 import { getTags } from "../tags";
 import {
@@ -113,6 +116,101 @@ const finalizeScraperDownloadJob = (
   });
 };
 
+const resolveReplacementManga = async (
+  job: InternalScraperDownloadJob,
+): Promise<any | null> => {
+  if (!job.replaceMangaId) {
+    return null;
+  }
+
+  const manga = await getMangaById(job.replaceMangaId);
+  if (!manga?.id) {
+    throw new Error("Le manga a remplacer est introuvable.");
+  }
+
+  if (!manga.path || typeof manga.path !== "string") {
+    throw new Error("Le manga a remplacer n'a pas de dossier local.");
+  }
+
+  return manga;
+};
+
+const createReplacementStagingFolder = async (targetFolderPath: string): Promise<string> => {
+  const parentPath = path.dirname(targetFolderPath);
+  const stagingPath = path.join(parentPath, `.manga-helper-redownload-${randomUUID()}`);
+  await fs.mkdir(stagingPath, { recursive: true });
+  return stagingPath;
+};
+
+const replaceLocalImageFiles = async (
+  sourceFolderPath: string,
+  targetFolderPath: string,
+) => {
+  await fs.mkdir(targetFolderPath, { recursive: true });
+
+  const oldImageFiles = await listImageFiles(targetFolderPath).catch(() => []);
+  for (const imageFile of oldImageFiles) {
+    await fs.rm(imageFile, { force: true });
+  }
+
+  const newImageFiles = await listImageFiles(sourceFolderPath);
+  for (const imageFile of newImageFiles) {
+    await fs.rename(imageFile, path.join(targetFolderPath, path.basename(imageFile)));
+  }
+
+  await cleanupScraperDownloadFolder(sourceFolderPath);
+};
+
+const applyScraperThumbnail = async (
+  manga: any,
+  job: InternalScraperDownloadJob,
+): Promise<any> => {
+  if (!manga?.id) {
+    return manga;
+  }
+
+  if (job.thumbnailUrl) {
+    try {
+      const thumbnailResponse = await fetch(job.thumbnailUrl, {
+        method: "GET",
+        redirect: "follow",
+        headers: buildDownloadHeaders(job.refererUrl),
+      });
+
+      if (
+        thumbnailResponse.ok
+        && String(thumbnailResponse.headers.get("content-type") || "").toLowerCase().startsWith("image/")
+      ) {
+        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
+        const thumbnailPath = await createStoredThumbnailForMangaFromBuffer(
+          String(manga.id),
+          thumbnailBuffer,
+        );
+
+        if (thumbnailPath) {
+          return patchMangaById(String(manga.id), { thumbnailPath });
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to override scraper download thumbnail from scraper cover", {
+        mangaId: manga.id,
+        thumbnailUrl: job.thumbnailUrl,
+        error,
+      });
+    }
+  }
+
+  const { manga: mangaWithThumbnail } = await ensureStoredThumbnailForManga(manga, {
+    forceRegenerate: true,
+  });
+
+  if (mangaWithThumbnail?.thumbnailPath !== manga.thumbnailPath) {
+    return patchMangaById(String(manga.id), { thumbnailPath: mangaWithThumbnail.thumbnailPath ?? null });
+  }
+
+  return mangaWithThumbnail;
+};
+
 const executeScraperDownloadJob = async (
   job: InternalScraperDownloadJob,
 ): Promise<CompletedScraperDownload> => {
@@ -121,12 +219,21 @@ const executeScraperDownloadJob = async (
 
   ensureScraperDownloadNotCancelled(job);
 
-  const folderPath = await getUniqueFolderPath(libraryRoot, job.title);
-  await fs.mkdir(folderPath, { recursive: true });
+  const replacementManga = await resolveReplacementManga(job);
+  const targetFolderPath = replacementManga
+    ? path.resolve(replacementManga.path)
+    : await getUniqueFolderPath(libraryRoot, job.title);
+  const downloadFolderPath = replacementManga
+    ? await createReplacementStagingFolder(targetFolderPath)
+    : targetFolderPath;
+
+  await fs.mkdir(downloadFolderPath, { recursive: true });
   touchScraperDownloadJob(job, {
-    folderPath,
+    folderPath: targetFolderPath,
     libraryRoot,
-    message: "Preparation du dossier local",
+    message: replacementManga
+      ? "Preparation du remplacement local"
+      : "Preparation du dossier local",
   });
 
   const fileNameWidth = Math.max(3, String(job.pageUrls.length - 1).length);
@@ -161,7 +268,7 @@ const executeScraperDownloadJob = async (
       const buffer = Buffer.from(await response.arrayBuffer());
       const extension = inferExtensionFromUrl(response.url || pageUrl, contentType);
       const fileName = `${String(index).padStart(fileNameWidth, "0")}${extension}`;
-      const targetFilePath = path.join(folderPath, fileName);
+      const targetFilePath = path.join(downloadFolderPath, fileName);
 
       await fs.writeFile(targetFilePath, buffer);
       touchScraperDownloadJob(job, {
@@ -173,11 +280,15 @@ const executeScraperDownloadJob = async (
 
     ensureScraperDownloadNotCancelled(job);
     touchScraperDownloadJob(job, {
-      message: "Ajout du manga a la bibliotheque",
+      message: replacementManga
+        ? "Remplacement des images locales"
+        : "Ajout du manga a la bibliotheque",
     });
-    ensureScraperDownloadNotCancelled(job);
+    if (replacementManga) {
+      await replaceLocalImageFiles(downloadFolderPath, targetFolderPath);
+    }
   } catch (error) {
-    await cleanupScraperDownloadFolder(folderPath);
+    await cleanupScraperDownloadFolder(downloadFolderPath);
     throw error;
   }
 
@@ -195,19 +306,46 @@ const executeScraperDownloadJob = async (
     ? extractChapterValueFromLabel(job.chapterLabel)
     : undefined;
 
+  if (replacementManga) {
+    const updatedManga = await patchMangaById(String(replacementManga.id), {
+      sourceKind: "scraper",
+      scraperId: job.scraperId ?? replacementManga.scraperId ?? null,
+      sourceUrl: job.sourceUrl ?? job.refererUrl ?? replacementManga.sourceUrl ?? null,
+      sourceChapterUrl: job.sourceChapterUrl ?? null,
+      sourceChapterLabel: job.sourceChapterLabel ?? job.chapterLabel ?? null,
+      currentPage: null,
+      pages: job.pageUrls.length,
+    });
+    const mangaWithThumbnail = await applyScraperThumbnail(updatedManga, job);
+
+    return {
+      result: {
+        ok: true,
+        mangaId: String(mangaWithThumbnail.id),
+        folderPath: targetFolderPath,
+        libraryRoot,
+        downloadedCount: job.pageUrls.length,
+      },
+      notifySeriesUpdated: false,
+      libraryManga: mangaWithThumbnail,
+    };
+  }
+
   const createdManga = await addManga(undefined as any, {
     id: randomUUID(),
     title: job.title,
-    path: folderPath,
+    path: targetFolderPath,
     createdAt: new Date().toISOString(),
     authorIds: [],
     tagIds: defaultTagIds,
     language: job.defaultLanguage,
     seriesId: linkedSeries?.id ?? null,
     chapters: linkedSeries ? (chapterValue || job.chapterLabel) : undefined,
-    sourceKind: "library",
+    sourceKind: "scraper",
     scraperId: job.scraperId ?? null,
     sourceUrl: job.sourceUrl ?? job.refererUrl ?? null,
+    sourceChapterUrl: job.sourceChapterUrl ?? null,
+    sourceChapterLabel: job.sourceChapterLabel ?? job.chapterLabel ?? null,
   });
 
   const inserted = Array.isArray(createdManga)
@@ -218,47 +356,18 @@ const executeScraperDownloadJob = async (
     throw new Error("Le manga a ete telecharge, mais son ajout a la bibliotheque a echoue.");
   }
 
-  if (job.thumbnailUrl) {
-    try {
-      const thumbnailResponse = await fetch(job.thumbnailUrl, {
-        method: "GET",
-        redirect: "follow",
-        headers: buildDownloadHeaders(job.refererUrl),
-      });
-
-      if (
-        thumbnailResponse.ok
-        && String(thumbnailResponse.headers.get("content-type") || "").toLowerCase().startsWith("image/")
-      ) {
-        const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
-        const thumbnailPath = await createStoredThumbnailForMangaFromBuffer(
-          String(inserted.id),
-          thumbnailBuffer,
-        );
-
-        if (thumbnailPath) {
-          await patchMangaById(String(inserted.id), { thumbnailPath });
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to override scraper download thumbnail from scraper cover", {
-        mangaId: inserted.id,
-        thumbnailUrl: job.thumbnailUrl,
-        error,
-      });
-    }
-  }
+  const mangaWithThumbnail = await applyScraperThumbnail(inserted, job);
 
   return {
     result: {
       ok: true,
-      mangaId: String(inserted.id),
-      folderPath,
+      mangaId: String(mangaWithThumbnail.id),
+      folderPath: targetFolderPath,
       libraryRoot,
       downloadedCount: job.pageUrls.length,
     },
     notifySeriesUpdated: Boolean(linkedSeries),
-    insertedManga: inserted,
+    libraryManga: mangaWithThumbnail,
   };
 };
 
@@ -298,7 +407,7 @@ async function runQueuedScraperDownloadJob(job: InternalScraperDownloadJob): Pro
     setTimeout(() => {
       void (async () => {
         try {
-          const queueResult = await ocrQueueImportManga(completed.insertedManga);
+          const queueResult = await ocrQueueImportManga(completed.libraryManga);
           if (queueResult?.queued) {
             notifyScraperDownloadChannel("mangas-updated");
           }

@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Manga } from '@/renderer/types';
+import { ScraperRecord } from '@/shared/scraper';
 import MangaCard from '@/renderer/components/MangaCard/MangaCard';
 import SeriesCard from '@/renderer/components/SeriesCard/SeriesCard';
 import { useParams } from '@/renderer/hooks/useParams';
@@ -9,6 +10,7 @@ import './styles.scss';
 interface CardListProps {
     mangas: Manga[];
     allMangas?: Manga[];
+    scrapers?: ScraperRecord[];
     className?: string;
     onRemove?: (id: string) => void;
     onCardUpdated?: (id: string) => void;
@@ -44,6 +46,7 @@ const normalizeSeriesId = (seriesId?: string | null): string | null => {
 const CardList: React.FC<CardListProps> = ({
     mangas,
     allMangas = mangas,
+    scrapers = [],
     className = '',
     onRemove,
     onCardUpdated,
@@ -152,6 +155,7 @@ const CardList: React.FC<CardListProps> = ({
                     {entry.type === 'manga' ? (
                         <MangaCard
                             manga={entry.manga}
+                            scrapers={scrapers}
                             onRemove={onRemove}
                             onCardUpdated={onCardUpdated}
                             selected={selectedIdSet.has(entry.manga.id)}

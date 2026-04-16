@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
     getLinks: () => ipcRenderer.invoke('get-links'),
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
+    openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
     // Mangas API
     getMangas: () => ipcRenderer.invoke('get-mangas'),
     addManga: (manga: any) => ipcRenderer.invoke('add-manga', manga),

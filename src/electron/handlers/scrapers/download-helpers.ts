@@ -186,6 +186,15 @@ export const normalizeScraperDownloadRequest = (
   const sourceUrl = typeof request.sourceUrl === "string" && request.sourceUrl.trim().length > 0
     ? request.sourceUrl.trim()
     : undefined;
+  const sourceChapterUrl = typeof request.sourceChapterUrl === "string" && request.sourceChapterUrl.trim().length > 0
+    ? request.sourceChapterUrl.trim()
+    : undefined;
+  const sourceChapterLabel = typeof request.sourceChapterLabel === "string" && request.sourceChapterLabel.trim().length > 0
+    ? request.sourceChapterLabel.trim()
+    : undefined;
+  const replaceMangaId = typeof request.replaceMangaId === "string" && request.replaceMangaId.trim().length > 0
+    ? request.replaceMangaId.trim()
+    : undefined;
   const defaultTagIds = sanitizeStringList(request.defaultTagIds);
   const defaultLanguage = String(request.defaultLanguage ?? "").trim().toLowerCase() || undefined;
   const autoAssignSeriesOnChapterDownload = Boolean(request.autoAssignSeriesOnChapterDownload);
@@ -214,6 +223,9 @@ export const normalizeScraperDownloadRequest = (
     scraperId,
     scraperName,
     sourceUrl,
+    sourceChapterUrl,
+    sourceChapterLabel,
+    replaceMangaId,
     defaultTagIds,
     defaultLanguage,
     autoAssignSeriesOnChapterDownload,
@@ -236,6 +248,9 @@ export const createScraperDownloadJob = (
     scraperId: request.scraperId,
     scraperName: request.scraperName,
     sourceUrl: request.sourceUrl,
+    sourceChapterUrl: request.sourceChapterUrl,
+    sourceChapterLabel: request.sourceChapterLabel,
+    replaceMangaId: request.replaceMangaId,
     refererUrl: request.refererUrl,
     chapterLabel: request.chapterLabel || undefined,
     createdAt: now,

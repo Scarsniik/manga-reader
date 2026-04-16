@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { prewarmOcrEngine } from './handlers/ocr/index';
@@ -8,6 +8,32 @@ import { resolveLocalProtocolPath } from './utils/localProtocol';
 import './ipc';
 
 let mainWindow: BrowserWindow | null;
+
+const isHttpUrl = (url: string): boolean => {
+    try {
+        const parsedUrl = new URL(url);
+        return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
+
+const isSameWindowOrigin = (targetUrl: string, windowUrl: string): boolean => {
+    try {
+        return new URL(targetUrl).origin === new URL(windowUrl).origin;
+    } catch {
+        return false;
+    }
+};
+
+const openExternalNavigation = async (url: string) => {
+    if (!isHttpUrl(url)) {
+        return false;
+    }
+
+    await shell.openExternal(url);
+    return true;
+};
 
 const startOcrPrewarmInBackground = () => {
     setTimeout(() => {
@@ -37,6 +63,20 @@ const createWindow = () => {
         autoHideMenuBar: app.isPackaged, // Cache la barre de menu en prod
     });
 
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        void openExternalNavigation(url);
+        return { action: 'deny' };
+    });
+
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        const currentUrl = mainWindow?.webContents.getURL() ?? '';
+        if (!isHttpUrl(url) || isSameWindowOrigin(url, currentUrl)) {
+            return;
+        }
+
+        event.preventDefault();
+        void openExternalNavigation(url);
+    });
 
     if (app.isPackaged) {
         // En production, charge le build Vite dans dist/renderer (chemin absolu, compatible asar et portable)

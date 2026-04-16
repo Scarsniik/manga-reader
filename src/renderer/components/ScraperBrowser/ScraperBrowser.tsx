@@ -1,8 +1,10 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
+import { Manga } from '@/renderer/types';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
+import buildScraperLinkMangaModal from '@/renderer/components/Modal/modales/ScraperLinkMangaModal';
 import ScraperBrowserHero from '@/renderer/components/ScraperBrowser/components/ScraperBrowserHero';
 import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/components/ScraperBrowserMessages';
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
@@ -34,6 +36,7 @@ import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
+import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
 import {
   formatScraperValueForDisplay,
@@ -154,6 +157,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     [scraper.globalConfig.homeSearch.query],
   );
   const { bookmarks: scraperBookmarks } = useScraperBookmarks({ scraperId: scraper.id });
+  const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
   const [query, setQuery] = useState('');
@@ -184,6 +188,21 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setRuntimeError(null);
     setDownloadError(null);
     setDownloadMessage(null);
+  }, []);
+
+  const loadLibraryMangas = useCallback(async () => {
+    if (!window.api || typeof window.api.getMangas !== 'function') {
+      setLibraryMangas([]);
+      return;
+    }
+
+    try {
+      const data = await window.api.getMangas();
+      setLibraryMangas(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.warn('Failed to load library mangas for scraper source matching', error);
+      setLibraryMangas([]);
+    }
   }, []);
 
   const resetListingState = useCallback(() => {
@@ -282,6 +301,17 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       cancelScheduledScrollRestore();
     }
   ), [cancelScheduledScrollRestore]);
+
+  useEffect(() => {
+    void loadLibraryMangas();
+
+    const onMangasUpdated = () => {
+      void loadLibraryMangas();
+    };
+
+    window.addEventListener('mangas-updated', onMangasUpdated as EventListener);
+    return () => window.removeEventListener('mangas-updated', onMangasUpdated as EventListener);
+  }, [loadLibraryMangas]);
 
   const {
     currentDetailsUrl,
@@ -614,6 +644,40 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }));
   }, [openModal]);
 
+  const getLinkedMangaForSource = useCallback((
+    chapter?: ScraperRuntimeChapterResult,
+  ): Manga | null => {
+    const sourceUrl = detailsResult?.finalUrl || detailsResult?.requestedUrl || '';
+
+    return findMangaLinkedToSource(libraryMangas, {
+      scraperId: scraper.id,
+      sourceUrl,
+      sourceChapterUrl: chapter?.url ?? null,
+      sourceChapterLabel: chapter?.label ?? null,
+    });
+  }, [detailsResult?.finalUrl, detailsResult?.requestedUrl, libraryMangas, scraper.id]);
+
+  const handleLinkSourceToManga = useCallback((chapter?: ScraperRuntimeChapterResult) => {
+    const sourceUrl = detailsResult?.finalUrl || detailsResult?.requestedUrl || '';
+    if (!sourceUrl) {
+      setRuntimeError('Aucune URL source n\'est disponible pour cette fiche.');
+      return;
+    }
+
+    const currentLinkedManga = getLinkedMangaForSource(chapter);
+
+    openModal(buildScraperLinkMangaModal({
+      mangas: libraryMangas,
+      scraperId: scraper.id,
+      sourceUrl,
+      sourceTitle: detailsResult?.title || sourceUrl,
+      sourceChapterUrl: chapter?.url ?? null,
+      sourceChapterLabel: chapter?.label ?? null,
+      currentLinkedMangaId: currentLinkedManga?.id ?? null,
+      onLinked: () => void loadLibraryMangas(),
+    }));
+  }, [detailsResult, getLinkedMangaForSource, libraryMangas, loadLibraryMangas, openModal, scraper.id, setRuntimeError]);
+
   const renderSearchResultBookmarkAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
     if (!result.detailUrl) {
       return null;
@@ -716,13 +780,20 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         openingReader={openingReader}
         downloading={downloading}
         loadingMoreThumbnails={loadingMoreThumbnails}
+        getLinkedMangaForSource={getLinkedMangaForSource}
         onBack={canNavigateBack ? handleNavigateBack : () => void handleBackToListing()}
         onOpenAuthor={(value) => {
           handleOpenAuthorFromDetails(value);
         }}
         onOpenReader={(options) => void handleOpenReader(options)}
+        onLinkSourceToManga={(chapter) => handleLinkSourceToManga(chapter)}
         onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}
-        onDownload={(chapter) => void handleDownload(chapter)}
+        onDownload={(chapter) => {
+          const linkedManga = getLinkedMangaForSource(chapter);
+          void handleDownload(chapter, {
+            replaceMangaId: linkedManga?.id ?? null,
+          });
+        }}
       />
     </section>
   );

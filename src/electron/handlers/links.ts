@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import { shell } from "electron";
 import { linksFilePath } from "../utils";
 
 export async function getLinks() {
@@ -35,4 +36,22 @@ export async function removeLink(event: any, url: string) {
         console.error("Error removing link:", error);
         throw new Error("Failed to remove link");
     }
+}
+
+export async function openExternalUrl(event: any, input: string) {
+    const rawUrl = String(input || "").trim();
+    if (!rawUrl) {
+        throw new Error("URL is required");
+    }
+
+    const parsedUrl = new URL(rawUrl);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        throw new Error("Only http and https URLs can be opened");
+    }
+
+    await shell.openExternal(parsedUrl.toString());
+    return {
+        ok: true,
+        url: parsedUrl.toString(),
+    };
 }

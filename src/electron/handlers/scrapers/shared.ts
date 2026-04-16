@@ -24,6 +24,9 @@ export type InternalScraperDownloadJob = ScraperDownloadJob & {
   autoAssignSeriesOnChapterDownload: boolean;
   seriesTitle: string;
   thumbnailUrl?: string;
+  sourceChapterUrl?: string;
+  sourceChapterLabel?: string;
+  replaceMangaId?: string;
   cancelRequested?: boolean;
   abortController?: AbortController | null;
 };
@@ -35,6 +38,9 @@ export type NormalizedScraperDownloadRequest = {
   scraperId?: string;
   scraperName?: string;
   sourceUrl?: string;
+  sourceChapterUrl?: string;
+  sourceChapterLabel?: string;
+  replaceMangaId?: string;
   defaultTagIds: string[];
   defaultLanguage?: string;
   autoAssignSeriesOnChapterDownload: boolean;
@@ -46,7 +52,7 @@ export type NormalizedScraperDownloadRequest = {
 export type CompletedScraperDownload = {
   result: DownloadScraperMangaResult;
   notifySeriesUpdated: boolean;
-  insertedManga: any;
+  libraryManga: any;
 };
 
 export const sanitizeAccessValidation = (
