@@ -4,7 +4,7 @@
 
 ### Features
 
-- [ ] Ajouter lecture et dl sur les cards de scrapper
+- [ ] Ajouter lecture sur les cards de scrapper
 - [ ] Possibilité de partager les scrappers
 - [ ] Import de tag / auteur depuis scrapper
 - [ ] Pourvoir cliquer sur les tags et auteurs pour voir les autres scrappers associés
@@ -12,15 +12,13 @@
 - [ ] OCR dispo en lecteur en ligne sur scrapper
 - [ ] Ajout de nouveaux types de scrappers modules : tag, homepage, etc
 - [ ] Recherche sur tous les scrappers en même temps
-- [ ] Ajout de la source quand on dl un manga depuis un scrapper
 - [ ] Log d'erreur des scrappers pour pouvoir les corriger plus facilement dans l'appli
 - [ ] Historique de recherche
 - [ ] Plus de config dans les scrappeur pour proposer des évitement de protection anti bot ou autre
 - [ ] Ajout de tags blacklist qui cache les résultats qu'on ne veut pas voir
-- [ ] Miniatures dans les fiches
-- [ ] Mode hors-ligne explicite pour n’afficher que le contenu local.
+- [ ] Mode hors-ligne pour contenu local uniquement (scrapper désactivés, option forçage mode en ligne)
 - [ ] Selection de page dans les resultat de recherche
-- [ ] Détction de derniere page de resultat de recherche
+- [ ] Détection de derniere page de resultat de recherche
 - [ ] Gerer le systeme de téléchargement natif du site avec le scrapper (nouveau module)
 - [ ] Gerer les apis
 - [ ] Nombre de page dans module fiche
