@@ -54,6 +54,26 @@ export interface Manga {
     sourceChapterLabel?: string | null;
 }
 
+export type LibrarySearchFilterState = {
+    query: string;
+    selectedTags: string[];
+    selectedLanguageIds: string[];
+    sortBy: string;
+    expanded: boolean;
+    statusFilter: string[];
+    unfinishedFirst: boolean;
+    withCompleteOcr: boolean;
+    selectedAuthorId: string | null;
+    selectedSeriesId: string | null;
+};
+
+export type SavedLibrarySearch = {
+    id: string;
+    name: string;
+    filters: LibrarySearchFilterState;
+    createdAt: string;
+};
+
 export type MangasList = Manga[];
 export type AuthorsList = Author[];
 export type TagsList = Tag[];

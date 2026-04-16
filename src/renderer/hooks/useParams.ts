@@ -1,5 +1,6 @@
 import useRefresh from '@/renderer/hooks/useRefresh';
 import { useEffect, useState, useCallback } from 'react';
+import type { LibrarySearchFilterState, SavedLibrarySearch } from '@/renderer/types';
 
 export type AppParams = {
     libraryPath?: string;
@@ -13,18 +14,9 @@ export type AppParams = {
     ocrAutoRunOnImport?: boolean;
     ocrAutoAssignJapaneseLanguage?: boolean;
     persistMangaFilters?: boolean;
-    mangaListFilters?: {
-        query: string;
-        selectedTags: string[];
-        selectedLanguageIds: string[];
-        sortBy: string;
-        expanded: boolean;
-        statusFilter: string[];
-        unfinishedFirst: boolean;
-        withCompleteOcr: boolean;
-        selectedAuthorId: string | null;
-        selectedSeriesId: string | null;
-    } | null;
+    showSavedLibrarySearches?: boolean;
+    savedLibrarySearches?: SavedLibrarySearch[];
+    mangaListFilters?: LibrarySearchFilterState | null;
     [key: string]: any;
 };
 

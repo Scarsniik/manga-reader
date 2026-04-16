@@ -1,17 +1,20 @@
 import React, { useMemo, useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Manga } from '@/renderer/types';
+import type { LibrarySearchFilterState, Manga, SavedLibrarySearch } from '@/renderer/types';
 import useTags from '@/renderer/hooks/useTags';
 import { Field } from '@/renderer/components/utils/Form/types';
 import useParams from '@/renderer/hooks/useParams';
-import { ChevronDownIcon, MagnifyingGlassIcon } from '@/renderer/components/icons';
+import { ChevronDownIcon, CloseXIcon, MagnifyingGlassIcon, PlusSignIcon } from '@/renderer/components/icons';
 import './styles.scss';
 import SeriesField from '@/renderer/components/utils/Form/fields/SeriesField';
 import AuthorField from '@/renderer/components/utils/Form/fields/AuthorField';
 import EntityPickerField, { EntityOption } from '@/renderer/components/utils/Form/fields/EntityPickerField';
 import { languages } from '@/renderer/consts/languages';
 import { compareSeriesMangasByChapter } from '@/renderer/utils/seriesChapters';
-import { CloseXIcon } from "@/renderer/components/icons";
+import generateId from '@/utils/id';
+import SavedLibrarySearches from '@/renderer/components/SearchAndSort/SavedLibrarySearches';
+import SaveLibrarySearchModalContent from '@/renderer/components/SearchAndSort/SaveLibrarySearchModalContent';
+import { useModal } from '@/renderer/hooks/useModal';
 
 type Props = {
     mangaList: Manga[];
@@ -20,18 +23,7 @@ type Props = {
     defaultSearch?: string;
 };
 
-type MangaListFilterState = {
-    query: string;
-    selectedTags: string[];
-    selectedLanguageIds: string[];
-    sortBy: string;
-    expanded: boolean;
-    statusFilter: string[];
-    unfinishedFirst: boolean;
-    withCompleteOcr: boolean;
-    selectedAuthorId: string | null;
-    selectedSeriesId: string | null;
-};
+type MangaListFilterState = LibrarySearchFilterState;
 
 const EMPTY_LANGUAGE_TOKEN = '__none__';
 
@@ -131,6 +123,41 @@ function normalizePersistedFilters(
     };
 }
 
+function normalizeSavedLibrarySearches(
+    value: unknown,
+    defaultSort: string,
+    defaultSearch: string,
+): SavedLibrarySearch[] {
+    if (!Array.isArray(value)) return [];
+
+    return value.reduce<SavedLibrarySearch[]>((searches, item, index) => {
+        if (!item || typeof item !== 'object') return searches;
+
+        const data = item as Record<string, unknown>;
+        const name = typeof data.name === 'string' ? data.name.trim() : '';
+        if (!name) return searches;
+
+        const id = typeof data.id === 'string' && data.id.trim().length > 0
+            ? data.id
+            : `saved-library-search-${index}`;
+        const createdAt = typeof data.createdAt === 'string' && data.createdAt.trim().length > 0
+            ? data.createdAt
+            : '1970-01-01T00:00:00.000Z';
+
+        searches.push({
+            id,
+            name,
+            createdAt,
+            filters: {
+                ...normalizePersistedFilters(data.filters, defaultSort, defaultSearch),
+                expanded: false,
+            },
+        });
+
+        return searches;
+    }, []);
+}
+
 function parseFiltersFromSearch(search: string, defaultSort: string, defaultSearch: string) {
     const defaults = buildDefaultFilters(defaultSort, defaultSearch);
 
@@ -191,7 +218,9 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     const navigate = useNavigate();
     const { tags } = useTags();
     const { params, loading, setParams } = useParams();
+    const { openModal, closeModal } = useModal();
     const persistMangaFilters = params?.persistMangaFilters !== false;
+    const showSavedLibrarySearches = params?.showSavedLibrarySearches !== false;
     const hideHiddenTags = params?.showHiddens === false || params?.showHiddens === undefined;
 
     // Cache for page counts that are computed asynchronously by backend (like MangaCard)
@@ -221,6 +250,8 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     const [withCompleteOcr, setWithCompleteOcr] = useState<boolean>(initialUrlStateRef.current.filters.withCompleteOcr);
     const [selectedAuthorId, setSelectedAuthorId] = useState<string | null>(initialUrlStateRef.current.filters.selectedAuthorId);
     const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(initialUrlStateRef.current.filters.selectedSeriesId);
+    const [savedSearchesExpanded, setSavedSearchesExpanded] = useState<boolean>(false);
+    const [savedSearchDeleteMode, setSavedSearchDeleteMode] = useState<boolean>(false);
     const availableTags = useMemo(
         () => hideHiddenTags ? tags.filter(tag => !tag.hidden) : tags,
         [hideHiddenTags, tags],
@@ -277,6 +308,11 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         unfinishedFirst,
         withCompleteOcr,
     ]);
+
+    const savedLibrarySearches = useMemo(
+        () => normalizeSavedLibrarySearches(params?.savedLibrarySearches, defaultSort, defaultSearch),
+        [defaultSearch, defaultSort, params?.savedLibrarySearches],
+    );
 
     const parsedLocationFilterState = useMemo(
         () => parseFiltersFromSearch(location.search, defaultSort, defaultSearch).filters,
@@ -364,6 +400,15 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
     useEffect(() => {
         latestParamsRef.current = params;
     }, [params]);
+
+    useEffect(() => {
+        if (showSavedLibrarySearches && savedLibrarySearches.length > 0) return;
+
+        setSavedSearchDeleteMode(false);
+        if (savedLibrarySearches.length === 0) {
+            setSavedSearchesExpanded(false);
+        }
+    }, [savedLibrarySearches.length, showSavedLibrarySearches]);
 
     useEffect(() => {
         const hasChanged = selectedTags.length !== effectiveSelectedTags.length
@@ -536,11 +581,87 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         ? `${activeAdvancedFilterCount} filtre${activeAdvancedFilterCount > 1 ? 's' : ''} actif${activeAdvancedFilterCount > 1 ? 's' : ''}`
         : 'Aucun filtre avance';
 
+    const hasSavableSearch = showSavedLibrarySearches
+        && filtersHydrated
+        && (query.trim().length > 0 || activeAdvancedFilterCount > 0);
+
     // Remove all the filters
     const resetFilters = useCallback(() => {
         const defaultFilters = buildDefaultFilters(defaultSort, defaultSearch);
         applyFilterState(defaultFilters);
     }, [applyFilterState, defaultSearch, defaultSort]);
+
+    const saveLibrarySearch = useCallback((name: string) => {
+        const savedSearch: SavedLibrarySearch = {
+            id: generateId(),
+            name,
+            createdAt: new Date().toISOString(),
+            filters: {
+                ...persistedFilterSnapshot,
+                expanded: false,
+            },
+        };
+
+        setParams({
+            savedLibrarySearches: [
+                ...savedLibrarySearches,
+                savedSearch,
+            ],
+        }, { broadcast: false });
+        setSavedSearchesExpanded(true);
+        setSavedSearchDeleteMode(false);
+    }, [persistedFilterSnapshot, savedLibrarySearches, setParams]);
+
+    const handleSaveLibrarySearch = useCallback(() => {
+        if (!hasSavableSearch) return;
+
+        openModal({
+            title: 'Enregistrer la recherche',
+            content: (
+                <SaveLibrarySearchModalContent
+                    onCancel={closeModal}
+                    onSubmit={(name) => {
+                        saveLibrarySearch(name);
+                        closeModal();
+                    }}
+                />
+            ),
+            className: 'save-library-search-modal-shell',
+        });
+    }, [closeModal, hasSavableSearch, openModal, saveLibrarySearch]);
+
+    const handleSavedSearchClick = useCallback((search: SavedLibrarySearch) => {
+        if (savedSearchDeleteMode) {
+            const confirmed = window.confirm(`Supprimer la recherche "${search.name}" ?`);
+            if (!confirmed) return;
+
+            const nextSearches = savedLibrarySearches.filter(item => item.id !== search.id);
+            setParams({ savedLibrarySearches: nextSearches }, { broadcast: false });
+
+            if (nextSearches.length === 0) {
+                setSavedSearchDeleteMode(false);
+                setSavedSearchesExpanded(false);
+            }
+            return;
+        }
+
+        const nextFilters = normalizeUiFilterState(
+            normalizePersistedFilters(search.filters, defaultSort, defaultSearch),
+        );
+        applyFilterState({
+            ...nextFilters,
+            expanded,
+        });
+    }, [
+        applyFilterState,
+        defaultSearch,
+        defaultSort,
+        expanded,
+        normalizeUiFilterState,
+        savedLibrarySearches,
+        savedSearchDeleteMode,
+        setParams,
+    ]);
 
     const applyFilters = useCallback(() => {
         const searchLower = (query || '').trim().toLowerCase();
@@ -824,6 +945,19 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                     </div>
                     <div className="tag-summary">{tagSummary}</div>
                 </div>
+                {hasSavableSearch ? (
+                    <div className="searchAndSort__headerActions">
+                        <button
+                            type="button"
+                            className="searchAndSort__saveSearch"
+                            onClick={handleSaveLibrarySearch}
+                            title="Enregistrer la recherche active"
+                            aria-label="Enregistrer la recherche active"
+                        >
+                            <PlusSignIcon focusable="false" />
+                        </button>
+                    </div>
+                ) : null}
             </div>
 
             <div className="search-row">
@@ -856,6 +990,17 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                     </span>
                 </button>
             </div>
+
+            {showSavedLibrarySearches && savedLibrarySearches.length > 0 ? (
+                <SavedLibrarySearches
+                    searches={savedLibrarySearches}
+                    expanded={savedSearchesExpanded}
+                    deleteMode={savedSearchDeleteMode}
+                    onToggleExpanded={() => setSavedSearchesExpanded(value => !value)}
+                    onToggleDeleteMode={() => setSavedSearchDeleteMode(value => !value)}
+                    onSearchClick={handleSavedSearchClick}
+                />
+            ) : null}
 
             <div
                 className="filters-shell"

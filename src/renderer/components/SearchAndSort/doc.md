@@ -25,7 +25,13 @@ Il y a un tagPicker et un select pour le tri.
 
 Quand on selectionne des tags, une phrase de résumé des choix s'affiche au dessus de la barre de recherche même quand le composant est réduit.
 
+Quand une recherche ou des filtres sont actifs, un bouton d'enregistrement apparaît dans l'en-tête. Il ouvre une modale avec un champ texte pour nommer la recherche puis sauvegarde l'état courant de recherche et de filtres.
+
+Les recherches enregistrées s'affichent sous la barre de recherche via le composant `SavedLibrarySearches`. La section peut être ouverte ou fermée. Chaque recherche est affichée comme un tag ; un clic rejoue les filtres sauvegardés. Quand le mode suppression est activé dans cette section, un clic demande confirmation puis supprime la recherche.
+
 ## Technique
 
 - Utilisation de useTags pour avoir les tags.
 - Utiliser useParams (le mien, pas celui de react src/rendererhooks/useParams.tsx) pour avoir les parametres de l'appli (notement displayHidden qui permet de savoir si on affiche les mangas cachés ou pas).
+- `savedLibrarySearches` stocke les recherches enregistrées dans les paramètres de l'application.
+- `showSavedLibrarySearches` permet de désactiver uniquement l'affichage et les boutons liés aux recherches enregistrées. Les recherches déjà sauvegardées sont conservées.
