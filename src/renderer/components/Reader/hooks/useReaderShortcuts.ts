@@ -8,6 +8,7 @@ type Args = {
     navigateOcrBox: (direction: OcrNavigationDirection) => boolean;
     next: () => void;
     prev: () => void;
+    requireFreshNavigationInput: boolean;
 };
 
 const useReaderShortcuts = ({
@@ -17,6 +18,7 @@ const useReaderShortcuts = ({
     navigateOcrBox,
     next,
     prev,
+    requireFreshNavigationInput,
 }: Args) => {
     React.useEffect(() => {
         const isEditableTarget = (target: EventTarget | null) => {
@@ -75,8 +77,20 @@ const useReaderShortcuts = ({
             }
 
             if (key === 'arrowright' || key === 'd' || key === 'p') {
+                try {
+                    event.preventDefault();
+                } catch {}
+                if (requireFreshNavigationInput && event.repeat) {
+                    return;
+                }
                 next();
             } else if (key === 'arrowleft' || key === 'a' || key === 'q' || key === 'i') {
+                try {
+                    event.preventDefault();
+                } catch {}
+                if (requireFreshNavigationInput && event.repeat) {
+                    return;
+                }
                 prev();
             } else if (key === 'z') {
                 try {
@@ -95,7 +109,7 @@ const useReaderShortcuts = ({
 
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [copyCurrentImage, navigateOcrBox, next, prev, requestTokenCycle, selectedBoxes]);
+    }, [copyCurrentImage, navigateOcrBox, next, prev, requestTokenCycle, requireFreshNavigationInput, selectedBoxes]);
 };
 
 export default useReaderShortcuts;

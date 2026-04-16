@@ -1,6 +1,8 @@
 import React from 'react';
+import { Manga } from '@/renderer/types';
 import ImageViewer from './ImageViewer';
 import ReaderChapterTransition from './ReaderChapterTransition';
+import ReaderCompletion from './ReaderCompletion';
 import ReaderEmptyState from './ReaderEmptyState';
 import {
     ManualSelection,
@@ -15,12 +17,18 @@ type Props = {
     progressAriaText: string;
     isLastPage: boolean;
     isTransitionPage: boolean;
+    isCompletionPage: boolean;
     transitionDirection: 'previous' | 'next' | null;
     activeTransitionTarget: ReaderAdjacentTarget | null;
+    completionRecommendations: Manga[];
+    completionSourceUrl: string | null;
     continuationCoverSrc: string | null;
     continuationLoading: boolean;
     continuationError: string | null;
     onContinue: (direction: 'previous' | 'next') => void;
+    onReturnToLibrary: () => void;
+    onOpenSource: () => void;
+    onOpenRecommendation: (manga: Manga) => void;
     currentImageSrc: string | null;
     activeOcrEnabled: boolean;
     showBoxes: boolean;
@@ -51,12 +59,18 @@ const ReaderStage: React.FC<Props> = ({
     progressAriaText,
     isLastPage,
     isTransitionPage,
+    isCompletionPage,
     transitionDirection,
     activeTransitionTarget,
+    completionRecommendations,
+    completionSourceUrl,
     continuationCoverSrc,
     continuationLoading,
     continuationError,
     onContinue,
+    onReturnToLibrary,
+    onOpenSource,
+    onOpenRecommendation,
     currentImageSrc,
     activeOcrEnabled,
     showBoxes,
@@ -93,7 +107,15 @@ const ReaderStage: React.FC<Props> = ({
                 ) : null}
 
                 <div className="reader-stage-content">
-                    {isTransitionPage && activeTransitionTarget ? (
+                    {isCompletionPage ? (
+                        <ReaderCompletion
+                            recommendations={completionRecommendations}
+                            sourceUrl={completionSourceUrl}
+                            onReturnToLibrary={onReturnToLibrary}
+                            onOpenSource={onOpenSource}
+                            onOpenRecommendation={onOpenRecommendation}
+                        />
+                    ) : isTransitionPage && activeTransitionTarget ? (
                         <ReaderChapterTransition
                             direction={transitionDirection === 'previous' ? 'previous' : 'next'}
                             title={activeTransitionTarget.title}

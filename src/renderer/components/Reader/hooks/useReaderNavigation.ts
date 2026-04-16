@@ -11,7 +11,14 @@ import {
     getScraperPagesFeatureConfig,
     resolveScraperPageUrls,
 } from '@/renderer/utils/scraperRuntime';
+import {
+    clearScraperRouteState,
+    writeScraperRouteState,
+} from '@/renderer/utils/scraperBrowserNavigation';
 import { findNextSeriesManga, findPreviousSeriesManga } from '@/renderer/utils/seriesChapters';
+import { getMangaSourceUrl } from '@/renderer/utils/mangaSource';
+import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
+import { getEndOfReadingRecommendations } from '@/renderer/components/Reader/endOfReadingRecommendations';
 import {
     ReaderAdjacentTarget,
     ReaderCopyFeedback,
@@ -29,6 +36,8 @@ type Args = {
     locationState: ReaderLocationState;
     manga: Manga | null;
     libraryMangas: Manga[];
+    hiddenTagIds: string[];
+    showHiddenContent: boolean;
     images: string[];
     currentIndex: number;
     setCurrentIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -43,6 +52,8 @@ const useReaderNavigation = ({
     locationState,
     manga,
     libraryMangas,
+    hiddenTagIds,
+    showHiddenContent,
     images,
     currentIndex,
     setCurrentIndex,
@@ -52,9 +63,11 @@ const useReaderNavigation = ({
     navigate,
 }: Args) => {
     const [transitionDirection, setTransitionDirection] = React.useState<'previous' | 'next' | null>(null);
+    const [isCompletionPage, setIsCompletionPage] = React.useState<boolean>(false);
     const [continuationLoading, setContinuationLoading] = React.useState<boolean>(false);
     const [continuationError, setContinuationError] = React.useState<string | null>(null);
     const [copyFeedback, setCopyFeedback] = React.useState<ReaderCopyFeedback | null>(null);
+    const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
 
     const ocrAvailable = !isScraperReaderManga(manga);
     const previousLocalManga = React.useMemo(
@@ -154,14 +167,55 @@ const useReaderNavigation = ({
             ? nextTarget
             : null;
     const isTransitionPage = Boolean(transitionDirection && activeTransitionTarget);
-    const currentImageSrc = !isTransitionPage && currentIndex >= 0 && currentIndex < images.length
+    const currentImageSrc = !isTransitionPage && !isCompletionPage && currentIndex >= 0 && currentIndex < images.length
         ? images[currentIndex]
         : null;
     const continuationCoverSrc = React.useMemo(
         () => normalizeReaderAssetSrc(activeTransitionTarget?.cover ?? null),
         [activeTransitionTarget],
     );
-    const pageCounterLabel = isTransitionPage
+    const completionRecommendations = React.useMemo(
+        () => isCompletionPage
+            ? getEndOfReadingRecommendations(manga, libraryMangas.map((candidate) => {
+                const resolvedPageCount = resolvedPageCounts[candidate.id];
+                if (
+                    (typeof candidate.pages === 'number' && candidate.pages > 0)
+                    || typeof resolvedPageCount !== 'number'
+                    || resolvedPageCount <= 0
+                ) {
+                    return candidate;
+                }
+
+                return {
+                    ...candidate,
+                    pages: resolvedPageCount,
+                };
+            }), 3, {
+                excludeStartedWithoutPageCount: true,
+                hiddenTagIds,
+                showHiddenContent,
+            })
+            : [],
+        [hiddenTagIds, isCompletionPage, libraryMangas, manga, resolvedPageCounts, showHiddenContent],
+    );
+    const completionSourceUrl = React.useMemo(
+        () => manga ? getMangaSourceUrl(manga) || null : null,
+        [manga],
+    );
+    const mangasMissingPageCount = React.useMemo(
+        () => libraryMangas.filter((candidate) => (
+            candidate.path
+            && typeof candidate.currentPage === 'number'
+            && Number.isFinite(candidate.currentPage)
+            && candidate.currentPage > 0
+            && !(typeof candidate.pages === 'number' && candidate.pages > 0)
+            && typeof resolvedPageCounts[candidate.id] !== 'number'
+        )),
+        [libraryMangas, resolvedPageCounts],
+    );
+    const pageCounterLabel = isCompletionPage
+        ? 'Fin'
+        : isTransitionPage
         ? (transitionDirection === 'previous' ? 'Précédent' : 'Suite')
         : images.length > 0
             ? `${currentIndex + 1} / ${images.length}`
@@ -173,20 +227,24 @@ const useReaderNavigation = ({
         ? Math.max(0, Math.min(100, (currentPage / totalPages) * 100))
         : 0;
     const isLastPage = totalPages > 0 && currentPage >= totalPages;
-    const progressAriaText = isTransitionPage
+    const progressAriaText = isCompletionPage
+        ? 'Lecture terminée'
+        : isTransitionPage
         ? (transitionDirection === 'previous'
             ? 'Début du chapitre, précédent disponible'
             : 'Chapitre termine, suite disponible')
         : `Page ${currentPage} sur ${totalPages}`;
     const canGoPrev = images.length > 0 && !continuationLoading && (
-        isTransitionPage
+        isCompletionPage
+        || isTransitionPage
         || currentIndex > 0
         || Boolean(previousTarget)
     );
-    const canGoNext = images.length > 0 && !continuationLoading && (
+    const canGoNext = images.length > 0 && !continuationLoading && !isCompletionPage && (
         isTransitionPage
         || currentIndex < images.length - 1
         || Boolean(nextTarget)
+        || currentIndex >= images.length - 1
     );
 
     const scrollToTopImmediate = React.useCallback(() => {
@@ -252,9 +310,149 @@ const useReaderNavigation = ({
         );
     }, [locationSearch, locationState, manga?.id, navigate]);
 
+    const getLibraryReturnLocation = React.useCallback((focusMangaId?: string | null) => {
+        const fromSearch = locationState?.from?.pathname === '/'
+            ? locationState.from.search ?? ''
+            : '';
+        const librarySearch = clearScraperRouteState(fromSearch);
+        const fallbackSearch = new URLSearchParams(librarySearch.startsWith('?')
+            ? librarySearch.slice(1)
+            : librarySearch);
+
+        if (focusMangaId && !fallbackSearch.get('focus')) {
+            fallbackSearch.set('focus', String(focusMangaId));
+        }
+
+        return {
+            pathname: '/',
+            search: fallbackSearch.toString() ? `?${fallbackSearch.toString()}` : '',
+        };
+    }, [locationState]);
+
+    const returnToLibrary = React.useCallback(() => {
+        const currentQuery = new URLSearchParams(locationSearch);
+        const focusMangaId = manga?.id ?? locationState?.mangaId ?? currentQuery.get('id');
+
+        if (focusMangaId) {
+            writeMangaManagerViewState({ focusMangaId: String(focusMangaId) });
+        }
+
+        navigate(getLibraryReturnLocation(focusMangaId), { replace: true });
+    }, [getLibraryReturnLocation, locationSearch, locationState?.mangaId, manga?.id, navigate]);
+
+    const openMangaSource = React.useCallback(async () => {
+        if (!completionSourceUrl) {
+            return;
+        }
+
+        const scraperId = String(
+            manga?.scraperId
+            || locationState?.scraperReader?.scraperId
+            || locationState?.scraperBrowserReturn?.scraperId
+            || ''
+        ).trim();
+
+        try {
+            if (scraperId && window.api && typeof window.api.getScrapers === 'function') {
+                try {
+                    const scrapers: ScraperRecord[] = await window.api.getScrapers();
+                    const sourceScraper = Array.isArray(scrapers)
+                        ? scrapers.find((scraper) => scraper.id === scraperId) ?? null
+                        : null;
+
+                    if (sourceScraper) {
+                        const baseSearch = locationState?.from?.pathname === '/'
+                            ? locationState.from.search ?? ''
+                            : '';
+
+                        navigate(
+                            {
+                                pathname: '/',
+                                search: writeScraperRouteState(baseSearch, {
+                                    scraperId: sourceScraper.id,
+                                    mode: 'manga',
+                                    searchActive: false,
+                                    searchQuery: '',
+                                    searchPage: 1,
+                                    authorActive: false,
+                                    authorQuery: '',
+                                    authorPage: 1,
+                                    mangaQuery: '',
+                                    mangaUrl: completionSourceUrl,
+                                }),
+                            },
+                            {
+                                state: {
+                                    scraperBrowserHistorySource: {
+                                        kind: 'manga',
+                                    },
+                                },
+                            },
+                        );
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('Reader: failed to resolve source scraper, falling back to external URL', error);
+                }
+            }
+
+            if (window.api && typeof window.api.openExternalUrl === 'function') {
+                await window.api.openExternalUrl(completionSourceUrl);
+                return;
+            }
+
+            window.open(completionSourceUrl, '_blank', 'noopener,noreferrer');
+        } catch (error) {
+            console.error('Reader: failed to open manga source', error);
+            alert('Impossible d\'ouvrir la source.');
+        }
+    }, [completionSourceUrl, locationState, manga?.scraperId, navigate]);
+
+    const resolveLocalMangaPageCount = React.useCallback(async (targetManga: Manga): Promise<number | null> => {
+        if (typeof targetManga.pages === 'number' && targetManga.pages > 0) {
+            return targetManga.pages;
+        }
+
+        if (targetManga.path && window.api && typeof window.api.countPages === 'function') {
+            try {
+                const pageCount = await window.api.countPages(targetManga.path);
+                if (typeof pageCount === 'number' && pageCount > 0) {
+                    return pageCount;
+                }
+            } catch (error) {
+                console.warn('Reader: failed to count pages for library manga', error);
+            }
+        }
+
+        return null;
+    }, []);
+
+    const openLibraryManga = React.useCallback(async (targetManga: Manga) => {
+        const savedPage = typeof targetManga.currentPage === 'number' && targetManga.currentPage > 0
+            ? targetManga.currentPage
+            : 1;
+        const totalPages = await resolveLocalMangaPageCount(targetManga);
+        const targetPage = totalPages !== null && savedPage >= totalPages
+            ? 1
+            : savedPage;
+        const libraryReturnLocation = getLibraryReturnLocation(targetManga.id);
+
+        writeMangaManagerViewState({ focusMangaId: targetManga.id });
+        navigate(
+            `/reader?id=${encodeURIComponent(targetManga.id)}&page=${encodeURIComponent(String(targetPage))}`,
+            {
+                state: {
+                    from: libraryReturnLocation,
+                    mangaId: targetManga.id,
+                },
+            },
+        );
+    }, [getLibraryReturnLocation, navigate, resolveLocalMangaPageCount]);
+
     const goTo = React.useCallback((index: number) => {
         scrollToTopImmediate();
         setTransitionDirection(null);
+        setIsCompletionPage(false);
         setContinuationError(null);
         setCurrentIndex(() => {
             if (images.length === 0) {
@@ -273,6 +471,7 @@ const useReaderNavigation = ({
 
         setContinuationLoading(true);
         setContinuationError(null);
+        setIsCompletionPage(false);
 
         try {
             const targetPageForLocalManga = async (adjacentManga: Manga): Promise<number> => {
@@ -280,22 +479,7 @@ const useReaderNavigation = ({
                     return 1;
                 }
 
-                if (typeof adjacentManga.pages === 'number' && adjacentManga.pages > 0) {
-                    return adjacentManga.pages;
-                }
-
-                if (adjacentManga.path && window.api && typeof window.api.countPages === 'function') {
-                    try {
-                        const pageCount = await window.api.countPages(adjacentManga.path);
-                        if (typeof pageCount === 'number' && pageCount > 0) {
-                            return pageCount;
-                        }
-                    } catch (error) {
-                        console.warn('Reader: failed to count pages for adjacent chapter', error);
-                    }
-                }
-
-                return 1;
+                return (await resolveLocalMangaPageCount(adjacentManga)) ?? 1;
             };
 
             if (target.kind === 'library' && target.adjacentManga) {
@@ -397,10 +581,14 @@ const useReaderNavigation = ({
         } finally {
             setContinuationLoading(false);
         }
-    }, [bookmarkExcludedFields, continuationLoading, locationState, navigate, nextTarget, previousTarget]);
+    }, [bookmarkExcludedFields, continuationLoading, locationState, navigate, nextTarget, previousTarget, resolveLocalMangaPageCount]);
 
     const next = React.useCallback(() => {
         if (continuationLoading) {
+            return;
+        }
+
+        if (isCompletionPage) {
             return;
         }
 
@@ -416,17 +604,33 @@ const useReaderNavigation = ({
             return;
         }
 
-        if (images.length > 0 && currentIndex >= images.length - 1 && nextTarget) {
+        if (images.length > 0 && currentIndex >= images.length - 1) {
             scrollToTopImmediate();
-            setTransitionDirection('next');
+            if (nextTarget) {
+                setTransitionDirection('next');
+                setIsCompletionPage(false);
+                setContinuationError(null);
+                return;
+            }
+
+            setTransitionDirection(null);
+            setIsCompletionPage(true);
             setContinuationError(null);
             return;
         }
 
         goTo(currentIndex + 1);
-    }, [continuationLoading, continueToAdjacentChapter, currentIndex, goTo, images.length, isTransitionPage, nextTarget, scrollToTopImmediate, transitionDirection]);
+    }, [continuationLoading, continueToAdjacentChapter, currentIndex, goTo, images.length, isCompletionPage, isTransitionPage, nextTarget, scrollToTopImmediate, transitionDirection]);
 
     const prev = React.useCallback(() => {
+        if (isCompletionPage) {
+            scrollToTopImmediate();
+            setIsCompletionPage(false);
+            setTransitionDirection(null);
+            setContinuationError(null);
+            return;
+        }
+
         if (isTransitionPage) {
             if (transitionDirection === 'previous') {
                 void continueToAdjacentChapter('previous');
@@ -447,14 +651,14 @@ const useReaderNavigation = ({
         }
 
         goTo(currentIndex - 1);
-    }, [continueToAdjacentChapter, currentIndex, goTo, isTransitionPage, previousTarget, scrollToTopImmediate, transitionDirection]);
+    }, [continueToAdjacentChapter, currentIndex, goTo, isCompletionPage, isTransitionPage, previousTarget, scrollToTopImmediate, transitionDirection]);
 
     const showCopyFeedback = React.useCallback((type: 'success' | 'error', message: string) => {
         setCopyFeedback({ type, message });
     }, []);
 
     const copyCurrentImage = React.useCallback(async () => {
-        if (isTransitionPage) {
+        if (isTransitionPage || isCompletionPage) {
             showCopyFeedback('error', 'Aucune image');
             return;
         }
@@ -490,10 +694,11 @@ const useReaderNavigation = ({
             const fallbackError = error && error.message ? error.message : null;
             showCopyFeedback('error', fallbackError || electronError || 'Echec de copie');
         }
-    }, [currentIndex, images, imgRef, isTransitionPage, showCopyFeedback]);
+    }, [currentIndex, images, imgRef, isCompletionPage, isTransitionPage, showCopyFeedback]);
 
     React.useEffect(() => {
         setTransitionDirection(null);
+        setIsCompletionPage(false);
         setContinuationLoading(false);
         setContinuationError(null);
     }, [locationSearch]);
@@ -510,6 +715,70 @@ const useReaderNavigation = ({
     }, [nextTarget, previousTarget, transitionDirection]);
 
     React.useEffect(() => {
+        if (isCompletionPage && nextTarget) {
+            setIsCompletionPage(false);
+        }
+    }, [isCompletionPage, nextTarget]);
+
+    React.useEffect(() => {
+        if (!isCompletionPage || mangasMissingPageCount.length === 0) {
+            return;
+        }
+
+        if (!window.api || typeof window.api.countPages !== 'function') {
+            return;
+        }
+
+        let cancelled = false;
+
+        const resolvePageCounts = async () => {
+            const entries = await Promise.all(
+                mangasMissingPageCount.map(async (candidate): Promise<[string, number] | null> => {
+                    try {
+                        const pageCount = await window.api.countPages(candidate.path);
+                        if (typeof pageCount === 'number' && pageCount > 0) {
+                            return [candidate.id, pageCount];
+                        }
+                    } catch (error) {
+                        console.warn('Reader: failed to count recommendation pages', candidate.id, error);
+                    }
+
+                    return null;
+                }),
+            );
+
+            if (cancelled) {
+                return;
+            }
+
+            setResolvedPageCounts((currentCounts) => {
+                const nextCounts = { ...currentCounts };
+                let hasChanges = false;
+
+                entries.forEach((entry) => {
+                    if (!entry) {
+                        return;
+                    }
+
+                    const [mangaId, pageCount] = entry;
+                    if (nextCounts[mangaId] !== pageCount) {
+                        nextCounts[mangaId] = pageCount;
+                        hasChanges = true;
+                    }
+                });
+
+                return hasChanges ? nextCounts : currentCounts;
+            });
+        };
+
+        void resolvePageCounts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isCompletionPage, mangasMissingPageCount]);
+
+    React.useEffect(() => {
         if (!copyFeedback) {
             return;
         }
@@ -522,7 +791,7 @@ const useReaderNavigation = ({
     }, [copyFeedback]);
 
     React.useEffect(() => {
-        if (isTransitionPage) {
+        if (isTransitionPage || isCompletionPage) {
             return;
         }
 
@@ -547,7 +816,7 @@ const useReaderNavigation = ({
             img.removeEventListener('click', onClick);
             img.removeEventListener('contextmenu', preventContextMenu);
         };
-    }, [imgRef, isTransitionPage, next, prev]);
+    }, [imgRef, isCompletionPage, isTransitionPage, next, prev]);
 
     return {
         ocrAvailable,
@@ -558,7 +827,10 @@ const useReaderNavigation = ({
         continuationLoading,
         continuationError,
         isTransitionPage,
+        isCompletionPage,
         currentImageSrc,
+        completionRecommendations,
+        completionSourceUrl,
         continuationCoverSrc,
         pageCounterLabel,
         totalPages,
@@ -570,6 +842,9 @@ const useReaderNavigation = ({
         canGoNext,
         copyFeedback,
         handleBack,
+        returnToLibrary,
+        openMangaSource,
+        openLibraryManga,
         continueToAdjacentChapter,
         next,
         prev,
