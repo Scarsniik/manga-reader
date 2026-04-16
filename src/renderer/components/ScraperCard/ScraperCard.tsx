@@ -39,6 +39,7 @@ type Props = {
   isActionable?: boolean;
   onClick?: () => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
+  onViewed?: () => void;
   ariaLabel?: string;
 };
 
@@ -48,6 +49,38 @@ const normalizeOptionalText = (value: string | null | undefined): string | null 
 };
 
 const isVisibleAction = (action: ScraperCardAction | null | undefined): action is ScraperCardAction => Boolean(action);
+
+const getWindowScrollY = (): number => (
+  window.scrollY
+  || window.pageYOffset
+  || document.documentElement.scrollTop
+  || document.body?.scrollTop
+  || 0
+);
+
+const getScrollViewBand = (scrollY: number): { top: number; bottom: number } => {
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  return {
+    top: scrollY + (viewportHeight * 0.25),
+    bottom: scrollY + (viewportHeight * 0.75),
+  };
+};
+
+const hasCrossedScrollViewBand = (
+  element: HTMLElement,
+  previousScrollY: number,
+  currentScrollY: number,
+): boolean => {
+  const rect = element.getBoundingClientRect();
+  const elementTop = rect.top + currentScrollY;
+  const elementBottom = rect.bottom + currentScrollY;
+  const previousBand = getScrollViewBand(previousScrollY);
+  const currentBand = getScrollViewBand(currentScrollY);
+  const sweptTop = Math.min(previousBand.top, currentBand.top);
+  const sweptBottom = Math.max(previousBand.bottom, currentBand.bottom);
+
+  return elementTop <= sweptBottom && elementBottom >= sweptTop;
+};
 
 export default function ScraperCard({
   title,
@@ -62,12 +95,68 @@ export default function ScraperCard({
   isActionable = false,
   onClick,
   onKeyDown,
+  onViewed,
   ariaLabel,
 }: Props) {
+  const articleRef = React.useRef<HTMLElement | null>(null);
+  const onViewedRef = React.useRef(onViewed);
+  const hasReportedViewRef = React.useRef(false);
+  const canReportView = Boolean(onViewed);
   const normalizedSummary = normalizeOptionalText(summary);
   const normalizedEmptySummary = normalizeOptionalText(emptySummary);
   const resolvedCoverAlt = normalizeOptionalText(coverAlt) || title;
   const visibleActions = actions?.filter(isVisibleAction) ?? [];
+
+  React.useEffect(() => {
+    onViewedRef.current = onViewed;
+  }, [onViewed]);
+
+  React.useEffect(() => {
+    if (!canReportView || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    let frameId: number | null = null;
+    let previousScrollY = getWindowScrollY();
+
+    const reportIfCardIsPassed = () => {
+      if (hasReportedViewRef.current) {
+        return;
+      }
+
+      const currentScrollY = getWindowScrollY();
+      const article = articleRef.current;
+      if (!article || !hasCrossedScrollViewBand(article, previousScrollY, currentScrollY)) {
+        previousScrollY = currentScrollY;
+        return;
+      }
+
+      hasReportedViewRef.current = true;
+      onViewedRef.current?.();
+      window.removeEventListener('scroll', handleScroll);
+    };
+
+    const handleScroll = () => {
+      if (frameId !== null) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        reportIfCardIsPassed();
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [canReportView]);
 
   const renderAction = (action: ScraperCardAction) => {
     if (action.type === 'custom') {
@@ -131,6 +220,7 @@ export default function ScraperCard({
 
   return (
     <article
+      ref={articleRef}
       className={[
         'scraper-card',
         className,

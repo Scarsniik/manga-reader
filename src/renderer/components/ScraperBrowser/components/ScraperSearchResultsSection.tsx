@@ -4,6 +4,7 @@ import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime'
 import { ScraperSearchResultItem } from '@/shared/scraper';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
 import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultCard';
+import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
   mode: 'search' | 'author';
@@ -20,6 +21,8 @@ type Props = {
   usesSearchTemplatePaging: boolean;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
+  getViewState?: (result: ScraperSearchResultItem) => ScraperCardViewState;
+  renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderDownloadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   onPreviousPage: () => void;
@@ -30,6 +33,7 @@ type Props = {
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
+  onResultViewed?: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultsSection({
@@ -47,6 +51,8 @@ export default function ScraperSearchResultsSection({
   usesSearchTemplatePaging,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
+  getViewState,
+  renderReadAction,
   renderBookmarkAction,
   renderDownloadAction,
   onPreviousPage,
@@ -57,6 +63,7 @@ export default function ScraperSearchResultsSection({
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
+  onResultViewed,
 }: Props) {
   if (!visibleSearchResults.length && !backLabel) {
     return null;
@@ -139,6 +146,8 @@ export default function ScraperSearchResultsSection({
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
               canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
               canOpenAuthorResult={canOpenAuthorResult}
+              viewState={getViewState ? getViewState(result) : 'seen'}
+              readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               downloadAction={renderDownloadAction ? renderDownloadAction(result) : null}
               onOpenResult={onOpenResult}
@@ -146,6 +155,7 @@ export default function ScraperSearchResultsSection({
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}
               onOpenResultImage={onOpenResultImage}
+              onViewed={onResultViewed}
             />
           );
         })}

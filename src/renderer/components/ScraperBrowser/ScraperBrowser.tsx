@@ -1,6 +1,10 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
+import {
+  buildScraperViewHistoryCardId,
+  ScraperRecord,
+  ScraperSearchResultItem,
+} from '@/shared/scraper';
 import type { Manga, SavedScraperSearch } from '@/renderer/types';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
@@ -17,7 +21,7 @@ import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hoo
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
-import { DownloadArrowIcon } from '@/renderer/components/icons';
+import { DownloadArrowIcon, OpenBookIcon } from '@/renderer/components/icons';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -37,10 +41,20 @@ import {
 import { useModal } from '@/renderer/hooks/useModal';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import {
+  recordScraperCardsSeen,
+  setScraperCardRead,
+  useScraperViewHistory,
+} from '@/renderer/stores/scraperViewHistory';
+import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import {
+  buildSearchResultViewHistoryIdentity,
+  getScraperCardViewState,
+  getScraperViewHistoryRecord,
+} from '@/renderer/utils/scraperViewHistory';
 import {
   buildScraperDownloadQueuedMessage,
   canQueueStandaloneScraperDownload,
@@ -215,6 +229,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     [savedScraperSearches, scraper.id],
   );
   const { bookmarks: scraperBookmarks } = useScraperBookmarks({ scraperId: scraper.id });
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory({ scraperId: scraper.id });
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
@@ -238,7 +256,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [loadingMoreThumbnails, setLoadingMoreThumbnails] = useState(false);
   const [savedSearchesExpanded, setSavedSearchesExpanded] = useState(false);
   const [savedSearchDeleteMode, setSavedSearchDeleteMode] = useState(false);
+  const [newSearchResultIds, setNewSearchResultIds] = useState<Set<string>>(() => new Set());
   const browserRootRef = useRef<HTMLElement | null>(null);
+  const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
   const historySourceKind = locationState?.scraperBrowserHistorySource?.kind ?? null;
@@ -712,6 +732,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [listingResults],
   );
+  const visibleSearchResultsHistoryKey = useMemo(
+    () => visibleSearchResults
+      .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result)))
+      .join('|'),
+    [scraper.id, visibleSearchResults],
+  );
   const scraperBookmarkCount = scraperBookmarks.length;
   const canReturnToListing = Boolean(listingReturnState?.hasExecutedListing);
   const historyIndex = typeof window !== 'undefined'
@@ -743,6 +769,24 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => `Page ${listingPageIndex + 1}`,
     [listingPageIndex],
   );
+
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    if (!viewHistoryLoaded || !visibleSearchResults.length) {
+      setNewSearchResultIds(new Set());
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    setNewSearchResultIds(new Set(
+      visibleSearchResults
+        .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result)))
+        .filter((id) => id && !historySnapshot.has(id)),
+    ));
+  }, [scraper.id, viewHistoryLoaded, visibleSearchResults, visibleSearchResultsHistoryKey]);
 
   const handleNavigateBack = useCallback(() => {
     if (!canNavigateBack) {
@@ -917,6 +961,57 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }));
   }, [detailsResult, getLinkedMangaForSource, libraryMangas, loadLibraryMangas, openModal, scraper.id, setRuntimeError]);
 
+  const handleSetSearchResultRead = useCallback(async (
+    result: ScraperSearchResultItem,
+    read: boolean,
+  ) => {
+    try {
+      await setScraperCardRead({
+        ...buildSearchResultViewHistoryIdentity(scraper.id, result),
+        read,
+      });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Impossible de mettre a jour l\'historique de lecture.');
+    }
+  }, [scraper.id, setRuntimeError]);
+
+  const handleSearchResultViewed = useCallback((result: ScraperSearchResultItem) => {
+    void recordScraperCardsSeen([
+      buildSearchResultViewHistoryIdentity(scraper.id, result),
+    ]).catch((error) => {
+      console.warn('Failed to record scraper card view', error);
+    });
+  }, [scraper.id]);
+
+  const getSearchResultViewState = useCallback((result: ScraperSearchResultItem) => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const id = buildScraperViewHistoryCardId(identity);
+    return getScraperCardViewState(record, Boolean(id && newSearchResultIds.has(id)));
+  }, [newSearchResultIds, scraper.id, viewHistoryRecordsById]);
+
+  const renderSearchResultReadAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const isRead = Boolean(record?.readAt);
+    const label = isRead ? 'Lu' : 'Marquer lu';
+
+    return {
+      id: `read-${identity.sourceUrl || identity.title}`,
+      type: 'secondary',
+      label,
+      ariaLabel: `${isRead ? 'Marquer non lu' : 'Marquer lu'} ${result.title}`,
+      icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
+      className: [
+        'is-read-toggle',
+        isRead ? 'is-read' : '',
+      ].join(' ').trim(),
+      onClick: () => {
+        void handleSetSearchResultRead(result, !isRead);
+      },
+    };
+  }, [handleSetSearchResultRead, scraper.id, viewHistoryRecordsById]);
+
   const renderSearchResultBookmarkAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
     if (!result.detailUrl) {
       return null;
@@ -1028,6 +1123,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         usesSearchTemplatePaging={usesActiveTemplatePaging}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
+        getViewState={getSearchResultViewState}
+        renderReadAction={renderSearchResultReadAction}
         renderBookmarkAction={renderSearchResultBookmarkAction}
         renderDownloadAction={renderSearchResultDownloadAction}
         onPreviousPage={() => void handleListingPreviousPage()}
@@ -1038,6 +1135,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onResultKeyDown={handleResultKeyDown}
         onOpenResultAction={handleOpenResultAction}
         onOpenResultImage={handleOpenSearchResultImage}
+        onResultViewed={handleSearchResultViewed}
       />
 
       <ScraperDetailsPanel

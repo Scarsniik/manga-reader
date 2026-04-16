@@ -1,14 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeftIcon, DownloadArrowIcon } from '@/renderer/components/icons';
+import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon } from '@/renderer/components/icons';
 import { ScraperBrowserLocationState } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
-import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
+import {
+  buildScraperViewHistoryCardId,
+  type ScraperBookmarkRecord,
+  type ScraperRecord,
+} from '@/shared/scraper';
 import ScraperBookmarkCard from '@/renderer/components/ScraperBookmarks/ScraperBookmarkCard';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import {
+  recordScraperCardsSeen,
+  setScraperCardRead,
+  useScraperViewHistory,
+} from '@/renderer/stores/scraperViewHistory';
 import type { Manga } from '@/renderer/types';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
+import {
+  buildBookmarkViewHistoryIdentity,
+  getScraperCardViewState,
+  getScraperViewHistoryRecord,
+} from '@/renderer/utils/scraperViewHistory';
 import {
   buildScraperDownloadQueuedMessage,
   canQueueStandaloneScraperDownload,
@@ -65,10 +79,17 @@ export default function ScraperBookmarksView({
   const navigate = useNavigate();
   const locationState = location.state as ScraperBookmarksLocationState;
   const { bookmarks, loading, loaded, error } = useScraperBookmarks({ scraperId: filterScraperId });
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory({ scraperId: filterScraperId });
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [downloadingSourceUrl, setDownloadingSourceUrl] = useState<string | null>(null);
+  const [newBookmarkIds, setNewBookmarkIds] = useState<Set<string>>(() => new Set());
+  const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
 
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
@@ -76,6 +97,12 @@ export default function ScraperBookmarksView({
   );
   const filteredScraper = filterScraperId ? scrapersById.get(filterScraperId) ?? null : null;
   const bookmarksReturn = locationState?.bookmarksReturn ?? null;
+  const bookmarksHistoryKey = useMemo(
+    () => bookmarks
+      .map((bookmark) => buildScraperViewHistoryCardId(buildBookmarkViewHistoryIdentity(bookmark)))
+      .join('|'),
+    [bookmarks],
+  );
 
   const loadLibraryMangas = useCallback(async () => {
     if (!window.api || typeof window.api.getMangas !== 'function') {
@@ -102,6 +129,24 @@ export default function ScraperBookmarksView({
     window.addEventListener('mangas-updated', onMangasUpdated as EventListener);
     return () => window.removeEventListener('mangas-updated', onMangasUpdated as EventListener);
   }, [loadLibraryMangas]);
+
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    if (!viewHistoryLoaded || !bookmarks.length) {
+      setNewBookmarkIds(new Set());
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    setNewBookmarkIds(new Set(
+      bookmarks
+        .map((bookmark) => buildScraperViewHistoryCardId(buildBookmarkViewHistoryIdentity(bookmark)))
+        .filter((id) => id && !historySnapshot.has(id)),
+    ));
+  }, [bookmarks, bookmarksHistoryKey, viewHistoryLoaded]);
 
   const handleBack = useCallback(() => {
     const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
@@ -229,6 +274,59 @@ export default function ScraperBookmarksView({
     libraryMangas,
   ]);
 
+  const handleSetBookmarkRead = useCallback(async (
+    bookmark: ScraperBookmarkRecord,
+    read: boolean,
+  ) => {
+    setHistoryError(null);
+
+    try {
+      await setScraperCardRead({
+        ...buildBookmarkViewHistoryIdentity(bookmark),
+        read,
+      });
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Impossible de mettre a jour l\'historique de lecture.');
+    }
+  }, []);
+
+  const handleBookmarkViewed = useCallback((bookmark: ScraperBookmarkRecord) => {
+    void recordScraperCardsSeen([
+      buildBookmarkViewHistoryIdentity(bookmark),
+    ]).catch((err) => {
+      console.warn('Failed to record scraper bookmark view', err);
+    });
+  }, []);
+
+  const getBookmarkViewState = useCallback((bookmark: ScraperBookmarkRecord) => {
+    const identity = buildBookmarkViewHistoryIdentity(bookmark);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const id = buildScraperViewHistoryCardId(identity);
+    return getScraperCardViewState(record, Boolean(id && newBookmarkIds.has(id)));
+  }, [newBookmarkIds, viewHistoryRecordsById]);
+
+  const renderBookmarkReadAction = useCallback((bookmark: ScraperBookmarkRecord): ScraperCardAction => {
+    const identity = buildBookmarkViewHistoryIdentity(bookmark);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const isRead = Boolean(record?.readAt);
+    const label = isRead ? 'Lu' : 'Marquer lu';
+
+    return {
+      id: `read-${identity.sourceUrl || identity.title}`,
+      type: 'secondary',
+      label,
+      ariaLabel: `${isRead ? 'Marquer non lu' : 'Marquer lu'} ${bookmark.title}`,
+      icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
+      className: [
+        'is-read-toggle',
+        isRead ? 'is-read' : '',
+      ].join(' ').trim(),
+      onClick: () => {
+        void handleSetBookmarkRead(bookmark, !isRead);
+      },
+    };
+  }, [handleSetBookmarkRead, viewHistoryRecordsById]);
+
   const renderBookmarkDownloadAction = useCallback((
     bookmark: ScraperBookmarkRecord,
     scraper: ScraperRecord | null,
@@ -321,6 +419,10 @@ export default function ScraperBookmarksView({
         <div className="scraper-browser__message is-error">{downloadError}</div>
       ) : null}
 
+      {historyError ? (
+        <div className="scraper-browser__message is-error">{historyError}</div>
+      ) : null}
+
       {!loaded && loading ? (
         <div className="scraper-browser__message">Chargement des bookmarks...</div>
       ) : bookmarks.length === 0 ? (
@@ -339,8 +441,11 @@ export default function ScraperBookmarksView({
                 key={`${bookmark.scraperId}-${bookmark.sourceUrl}`}
                 bookmark={bookmark}
                 scraper={scraper}
+                viewState={getBookmarkViewState(bookmark)}
+                readAction={renderBookmarkReadAction(bookmark)}
                 downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
                 onOpenBookmark={handleOpenBookmark}
+                onViewed={handleBookmarkViewed}
               />
             );
           })}

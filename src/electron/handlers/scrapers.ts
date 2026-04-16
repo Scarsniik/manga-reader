@@ -18,6 +18,11 @@ export {
   saveScraperReaderProgress,
 } from "./scrapers/readerProgress";
 export {
+  getScraperViewHistory,
+  recordScraperCardsSeen,
+  setScraperCardRead,
+} from "./scrapers/viewHistory";
+export {
   deleteScraper,
   getScrapers,
   saveScraperDraft,

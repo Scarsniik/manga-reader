@@ -5,11 +5,13 @@ import {
   type ScraperFeatureDefinition,
   type ScraperReaderProgressRecord,
   type ScraperRecord,
+  type ScraperViewHistoryRecord,
 } from "../../scraper";
 import {
   ensureDataDir,
   scraperBookmarksFilePath,
   scraperReaderProgressFilePath,
+  scraperViewHistoryFilePath,
   scrapersFilePath,
 } from "../../utils";
 import {
@@ -18,6 +20,7 @@ import {
   sanitizeGlobalConfig,
   sanitizeScraperBookmarkRecord,
   sanitizeScraperReaderProgressRecord,
+  sanitizeScraperViewHistoryRecord,
 } from "./shared";
 
 const toPersistedScraperRecord = (scraper: ScraperRecord) => ({
@@ -190,4 +193,136 @@ export async function writeScraperReaderProgressFile(
 ): Promise<void> {
   await ensureDataDir();
   await fs.writeFile(scraperReaderProgressFilePath, JSON.stringify(records, null, 2));
+}
+
+const SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
+const SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS = 45;
+const SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const getScraperViewHistoryActivityTime = (record: ScraperViewHistoryRecord): number => {
+  const candidates = [
+    record.readAt,
+    record.firstSeenAt,
+  ]
+    .map((value) => (value ? Date.parse(value) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+
+  return candidates.length ? Math.max(...candidates) : 0;
+};
+
+const sortScraperViewHistory = (records: ScraperViewHistoryRecord[]): ScraperViewHistoryRecord[] => (
+  [...records].sort((left, right) => {
+    const activityCompare = getScraperViewHistoryActivityTime(right) - getScraperViewHistoryActivityTime(left);
+    if (activityCompare !== 0) {
+      return activityCompare;
+    }
+
+    const scraperCompare = left.scraperId.localeCompare(right.scraperId);
+    if (scraperCompare !== 0) {
+      return scraperCompare;
+    }
+
+    return left.id.localeCompare(right.id);
+  })
+);
+
+const pruneScraperViewHistory = (
+  records: ScraperViewHistoryRecord[],
+  now = new Date(),
+): ScraperViewHistoryRecord[] => {
+  const nowTime = now.getTime();
+  const seenCutoff = nowTime - (SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS * DAY_MS);
+  const readCutoff = nowTime - (SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS * DAY_MS);
+  const freshRecords = records.filter((record) => {
+    const activityTime = getScraperViewHistoryActivityTime(record);
+    if (!activityTime) {
+      return false;
+    }
+
+    return activityTime >= (record.readAt ? readCutoff : seenCutoff);
+  });
+
+  const sorted = sortScraperViewHistory(freshRecords);
+  if (sorted.length <= SCRAPER_VIEW_HISTORY_MAX_RECORDS) {
+    return sorted;
+  }
+
+  const readRecords = sorted.filter((record) => record.readAt);
+  const seenRecords = sorted.filter((record) => !record.readAt);
+
+  return sortScraperViewHistory([
+    ...readRecords,
+    ...seenRecords,
+  ].slice(0, SCRAPER_VIEW_HISTORY_MAX_RECORDS));
+};
+
+const parseScraperViewHistoryFileData = (
+  data: string,
+): { parsed: unknown; repaired: boolean } => {
+  try {
+    return {
+      parsed: JSON.parse(data),
+      repaired: false,
+    };
+  } catch (error) {
+    const originalError = error;
+    let candidate = data.trim();
+
+    for (let attempt = 0; attempt < 3 && candidate.endsWith("]"); attempt += 1) {
+      candidate = candidate.slice(0, -1).trimEnd();
+
+      try {
+        const parsed = JSON.parse(candidate);
+        if (Array.isArray(parsed)) {
+          return {
+            parsed,
+            repaired: true,
+          };
+        }
+      } catch {
+        // Keep trying only trailing bracket repairs, then rethrow the original parse error.
+      }
+    }
+
+    throw originalError;
+  }
+};
+
+export async function readScraperViewHistoryFile(): Promise<ScraperViewHistoryRecord[]> {
+  try {
+    const data = await fs.readFile(scraperViewHistoryFilePath, "utf-8");
+    const { parsed, repaired } = parseScraperViewHistoryFileData(data);
+    const sanitized = Array.isArray(parsed)
+      ? parsed
+        .map((record) => sanitizeScraperViewHistoryRecord(record))
+        .filter((record): record is ScraperViewHistoryRecord => Boolean(record))
+      : [];
+    const pruned = pruneScraperViewHistory(sanitized);
+
+    const normalizedRaw = JSON.stringify(parsed, null, 2);
+    const normalizedSanitized = JSON.stringify(pruned, null, 2);
+    if (repaired || normalizedRaw !== normalizedSanitized) {
+      await ensureDataDir();
+      await fs.writeFile(scraperViewHistoryFilePath, normalizedSanitized);
+    }
+
+    return pruned;
+  } catch (error: any) {
+    if (error && error.code === "ENOENT") {
+      await ensureDataDir();
+      await fs.writeFile(scraperViewHistoryFilePath, JSON.stringify([], null, 2));
+      return [];
+    }
+
+    console.error("Error reading scraper view history file:", error);
+    throw new Error("Failed to read scraper view history");
+  }
+}
+
+export async function writeScraperViewHistoryFile(
+  records: ScraperViewHistoryRecord[],
+): Promise<void> {
+  await ensureDataDir();
+  await fs.writeFile(scraperViewHistoryFilePath, JSON.stringify(pruneScraperViewHistory(records), null, 2));
 }

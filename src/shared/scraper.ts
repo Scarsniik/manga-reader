@@ -383,6 +383,29 @@ export interface RemoveScraperBookmarkRequest {
   sourceUrl: string;
 }
 
+export interface ScraperViewHistoryCardIdentity {
+  scraperId: string;
+  sourceUrl?: string | null;
+  title?: string | null;
+  thumbnailUrl?: string | null;
+}
+
+export interface ScraperViewHistoryRecord {
+  id: string;
+  scraperId: string;
+  sourceUrl?: string;
+  firstSeenAt: string;
+  readAt?: string;
+}
+
+export interface RecordScraperCardsSeenRequest {
+  cards: ScraperViewHistoryCardIdentity[];
+}
+
+export interface SetScraperCardReadRequest extends ScraperViewHistoryCardIdentity {
+  read: boolean;
+}
+
 export interface ScraperReaderProgressRecord {
   id: string;
   scraperId: string;
@@ -400,6 +423,57 @@ export interface SaveScraperReaderProgressRequest {
   sourceUrl: string;
   currentPage?: number | null;
   totalPages?: number | null;
+}
+
+const normalizeScraperViewHistoryText = (value: unknown): string => (
+  String(value ?? "").trim().replace(/\s+/g, " ")
+);
+
+export function normalizeScraperViewHistorySourceUrl(value: unknown): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+const hashScraperViewHistoryIdentity = (value: string): string => {
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    left ^= code;
+    left = Math.imul(left, 0x01000193);
+    right ^= code + index;
+    right = Math.imul(right, 0x85ebca6b);
+  }
+
+  return `${(left >>> 0).toString(36)}${(right >>> 0).toString(36)}`;
+};
+
+export function buildScraperViewHistoryCardId(identity: ScraperViewHistoryCardIdentity): string {
+  const scraperId = normalizeScraperViewHistoryText(identity.scraperId);
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(identity.sourceUrl);
+  const title = normalizeScraperViewHistoryText(identity.title);
+  const thumbnailUrl = normalizeScraperViewHistorySourceUrl(identity.thumbnailUrl);
+
+  if (!scraperId || (!sourceUrl && !title)) {
+    return "";
+  }
+
+  const identityKey = [
+    scraperId,
+    sourceUrl || title,
+    sourceUrl ? "" : thumbnailUrl,
+  ].join("::");
+
+  return `svh_${hashScraperViewHistoryIdentity(identityKey)}`;
 }
 
 export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{

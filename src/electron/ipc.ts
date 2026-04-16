@@ -29,6 +29,12 @@ const notifyScraperBookmarksUpdated = () => {
     }
 };
 
+const notifyScraperViewHistoryUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-view-history-updated");
+    }
+};
+
 const notifySeriesUpdated = () => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("series-updated");
@@ -120,6 +126,19 @@ ipcMain.handle("save-scraper-bookmark", async (event: IpcMainInvokeEvent, reques
 ipcMain.handle("remove-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.removeScraperBookmark(event, request);
     notifyScraperBookmarksUpdated();
+    return updated;
+});
+ipcMain.handle("get-scraper-view-history", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
+    scrapers.getScraperViewHistory(event, scraperId)
+));
+ipcMain.handle("record-scraper-cards-seen", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.recordScraperCardsSeen(event, request);
+    notifyScraperViewHistoryUpdated();
+    return updated;
+});
+ipcMain.handle("set-scraper-card-read", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.setScraperCardRead(event, request);
+    notifyScraperViewHistoryUpdated();
     return updated;
 });
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {

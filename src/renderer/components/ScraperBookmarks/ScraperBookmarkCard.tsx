@@ -3,12 +3,16 @@ import ScraperCard, { type ScraperCardAction } from '@/renderer/components/Scrap
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { DetailsCardIcon } from '@/renderer/components/icons';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
+import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
   scraper?: ScraperRecord | null;
+  viewState: ScraperCardViewState;
+  readAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
+  onViewed?: (bookmark: ScraperBookmarkRecord) => void;
 };
 
 const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
@@ -28,11 +32,15 @@ const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
 export default function ScraperBookmarkCard({
   bookmark,
   scraper = null,
+  viewState,
+  readAction = null,
   downloadAction = null,
   onOpenBookmark,
+  onViewed,
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
   const actions: ScraperCardAction[] = [
+    ...(readAction ? [readAction] : []),
     {
       id: 'bookmark-toggle',
       type: 'custom',
@@ -87,7 +95,10 @@ export default function ScraperBookmarkCard({
         </>
       )}
       actions={actions}
-      className="scraper-bookmarks-view__card"
+      className={[
+        'scraper-bookmarks-view__card',
+        viewState === 'read' ? 'is-history-read' : viewState === 'new' ? 'is-history-new' : '',
+      ].join(' ').trim()}
       isActionable={canOpenBookmark}
       onClick={canOpenBookmark ? () => onOpenBookmark(bookmark) : undefined}
       onKeyDown={canOpenBookmark ? (event) => {
@@ -98,6 +109,7 @@ export default function ScraperBookmarkCard({
         event.preventDefault();
         onOpenBookmark(bookmark);
       } : undefined}
+      onViewed={onViewed ? () => onViewed(bookmark) : undefined}
       ariaLabel={canOpenBookmark ? `Ouvrir la fiche ${bookmark.title}` : undefined}
     />
   );

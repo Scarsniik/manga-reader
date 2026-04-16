@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
+    RecordScraperCardsSeenRequest,
     RemoveScraperBookmarkRequest,
     SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
@@ -9,6 +10,7 @@ import type {
     SaveScraperDraftRequest,
     SaveScraperFeatureRequest,
     ScraperAccessValidationRequest,
+    SetScraperCardReadRequest,
 } from './scraper';
 
 ipcRenderer.on('mangas-updated', () => {
@@ -32,6 +34,14 @@ ipcRenderer.on('scraper-bookmarks-updated', () => {
         window.dispatchEvent(new CustomEvent('scraper-bookmarks-updated'));
     } catch (error) {
         console.warn('preload: failed to dispatch scraper-bookmarks-updated event', error);
+    }
+});
+
+ipcRenderer.on('scraper-view-history-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-view-history-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-view-history-updated event', error);
     }
 });
 
@@ -85,6 +95,9 @@ contextBridge.exposeInMainWorld('api', {
     getScraperBookmarks: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-bookmarks', scraperId),
     saveScraperBookmark: (request: SaveScraperBookmarkRequest) => ipcRenderer.invoke('save-scraper-bookmark', request),
     removeScraperBookmark: (request: RemoveScraperBookmarkRequest) => ipcRenderer.invoke('remove-scraper-bookmark', request),
+    getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),
+    recordScraperCardsSeen: (request: RecordScraperCardsSeenRequest) => ipcRenderer.invoke('record-scraper-cards-seen', request),
+    setScraperCardRead: (request: SetScraperCardReadRequest) => ipcRenderer.invoke('set-scraper-card-read', request),
     deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),

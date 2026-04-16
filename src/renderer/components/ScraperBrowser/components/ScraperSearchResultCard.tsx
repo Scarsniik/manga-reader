@@ -2,6 +2,7 @@ import React from 'react';
 import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import { ScraperSearchResultItem } from '@/shared/scraper';
 import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
+import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
   result: ScraperSearchResultItem;
@@ -9,6 +10,8 @@ type Props = {
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
   canOpenAuthorResult: boolean;
+  viewState: ScraperCardViewState;
+  readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   onOpenResult: (result: ScraperSearchResultItem) => void;
@@ -16,6 +19,7 @@ type Props = {
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
+  onViewed?: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultCard({
@@ -24,6 +28,8 @@ export default function ScraperSearchResultCard({
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
   canOpenAuthorResult,
+  viewState,
+  readAction,
   bookmarkAction,
   downloadAction,
   onOpenResult,
@@ -31,8 +37,13 @@ export default function ScraperSearchResultCard({
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
+  onViewed,
 }: Props) {
   const actions: ScraperCardAction[] = [];
+
+  if (readAction) {
+    actions.push(readAction);
+  }
 
   if (bookmarkAction) {
     actions.push(bookmarkAction);
@@ -90,9 +101,11 @@ export default function ScraperSearchResultCard({
       coverAlt={result.title}
       summary={result.summary}
       actions={actions}
+      className={viewState === 'read' ? 'is-history-read' : viewState === 'new' ? 'is-history-new' : ''}
       isActionable={canOpenResult}
       onClick={canOpenResult ? () => onOpenResult(result) : undefined}
       onKeyDown={canOpenResult ? (event) => onResultKeyDown(event, result) : undefined}
+      onViewed={onViewed ? () => onViewed(result) : undefined}
       aria-label={canOpenResult ? `Ouvrir la fiche ${result.title}` : undefined}
     />
   );

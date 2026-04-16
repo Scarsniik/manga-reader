@@ -1,4 +1,5 @@
 import {
+  buildScraperViewHistoryCardId,
   type DownloadScraperMangaResult,
   type ScraperAccessValidationResult,
   type ScraperBookmarkMetadataField,
@@ -12,6 +13,9 @@ import {
   type ScraperRequestConfig,
   type ScraperRequestField,
   type ScraperReaderProgressRecord,
+  type ScraperViewHistoryCardIdentity,
+  type ScraperViewHistoryRecord,
+  normalizeScraperViewHistorySourceUrl,
 } from "../../scraper";
 
 export const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
@@ -418,5 +422,81 @@ export const sanitizeScraperReaderProgressRecord = (
       ? Math.max(1, Math.floor(record.totalPages))
       : null,
     updatedAt: updatedAt || new Date().toISOString(),
+  };
+};
+
+const normalizeScraperViewHistoryTitle = (value: unknown): string => (
+  String(value ?? "").trim().replace(/\s+/g, " ")
+);
+
+const normalizeScraperViewHistoryIsoDate = (
+  value: unknown,
+  fallback: string,
+): string => {
+  const rawValue = String(value ?? "").trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const timestamp = Date.parse(rawValue);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
+};
+
+export const sanitizeScraperViewHistoryCardIdentity = (
+  identity: Partial<ScraperViewHistoryCardIdentity>,
+): ScraperViewHistoryCardIdentity | null => {
+  const scraperId = normalizeScraperViewHistoryTitle(identity.scraperId);
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(identity.sourceUrl);
+  const title = normalizeScraperViewHistoryTitle(identity.title);
+  const thumbnailUrl = normalizeScraperViewHistorySourceUrl(identity.thumbnailUrl);
+
+  if (!scraperId || (!sourceUrl && !title)) {
+    return null;
+  }
+
+  return {
+    scraperId,
+    sourceUrl: sourceUrl || undefined,
+    title: title || sourceUrl,
+    thumbnailUrl: thumbnailUrl || undefined,
+  };
+};
+
+export const sanitizeScraperViewHistoryRecord = (
+  record: Partial<ScraperViewHistoryRecord & ScraperViewHistoryCardIdentity>,
+): ScraperViewHistoryRecord | null => {
+  const scraperId = normalizeScraperViewHistoryTitle(record.scraperId);
+  if (!scraperId) {
+    return null;
+  }
+
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(record.sourceUrl);
+  const title = normalizeScraperViewHistoryTitle(record.title);
+  const thumbnailUrl = normalizeScraperViewHistorySourceUrl(record.thumbnailUrl);
+  const now = new Date().toISOString();
+  const computedId = buildScraperViewHistoryCardId({
+    scraperId,
+    sourceUrl,
+    title,
+    thumbnailUrl,
+  });
+  const storedId = String(record.id ?? "").trim();
+  const id = /^svh_[a-z0-9]+$/i.test(storedId) ? storedId : computedId;
+  const firstSeenFallback = normalizeScraperViewHistoryIsoDate((record as { lastSeenAt?: unknown }).lastSeenAt, now);
+  const firstSeenAt = normalizeScraperViewHistoryIsoDate(record.firstSeenAt, firstSeenFallback);
+  const readAt = String(record.readAt ?? "").trim()
+    ? normalizeScraperViewHistoryIsoDate(record.readAt, "")
+    : "";
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    scraperId,
+    sourceUrl: sourceUrl || undefined,
+    firstSeenAt,
+    readAt: readAt || undefined,
   };
 };
