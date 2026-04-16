@@ -10,6 +10,7 @@ type Props = {
   canOpenSearchResultsAsAuthor: boolean;
   canOpenAuthorResult: boolean;
   bookmarkAction?: ScraperCardAction | null;
+  downloadAction?: ScraperCardAction | null;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
@@ -24,6 +25,7 @@ export default function ScraperSearchResultCard({
   canOpenSearchResultsAsAuthor,
   canOpenAuthorResult,
   bookmarkAction,
+  downloadAction,
   onOpenResult,
   onOpenAuthorResultAction,
   onResultKeyDown,
@@ -34,6 +36,10 @@ export default function ScraperSearchResultCard({
 
   if (bookmarkAction) {
     actions.push(bookmarkAction);
+  }
+
+  if (downloadAction) {
+    actions.push(downloadAction);
   }
 
   if (canOpenResult) {

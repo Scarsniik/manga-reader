@@ -21,6 +21,7 @@ type Props = {
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
+  renderDownloadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onBack?: () => void;
@@ -47,6 +48,7 @@ export default function ScraperSearchResultsSection({
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
   renderBookmarkAction,
+  renderDownloadAction,
   onPreviousPage,
   onNextPage,
   onBack,
@@ -138,6 +140,7 @@ export default function ScraperSearchResultsSection({
               canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
               canOpenAuthorResult={canOpenAuthorResult}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
+              downloadAction={renderDownloadAction ? renderDownloadAction(result) : null}
               onOpenResult={onOpenResult}
               onOpenAuthorResultAction={onOpenAuthorResultAction}
               onResultKeyDown={onResultKeyDown}

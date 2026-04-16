@@ -892,14 +892,9 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             const serializedSnapshot = JSON.stringify(latestSnapshot);
             if (serializedSnapshot === lastPersistedSnapshotRef.current) return;
 
-            const nextSettings = {
-                ...(latestParamsRef.current || {}),
-                mangaListFilters: latestSnapshot,
-            };
-
             try {
                 if (window.api && typeof window.api.saveSettings === 'function') {
-                    void window.api.saveSettings(nextSettings);
+                    void window.api.saveSettings({ mangaListFilters: latestSnapshot });
                 }
                 lastPersistedSnapshotRef.current = serializedSnapshot;
             } catch (err) {

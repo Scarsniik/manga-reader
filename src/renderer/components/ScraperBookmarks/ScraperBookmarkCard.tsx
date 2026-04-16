@@ -7,6 +7,7 @@ import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 type Props = {
   bookmark: ScraperBookmarkRecord;
   scraper?: ScraperRecord | null;
+  downloadAction?: ScraperCardAction | null;
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
 };
 
@@ -27,6 +28,7 @@ const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
 export default function ScraperBookmarkCard({
   bookmark,
   scraper = null,
+  downloadAction = null,
   onOpenBookmark,
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
@@ -51,6 +53,7 @@ export default function ScraperBookmarkCard({
         />
       ),
     },
+    ...(downloadAction ? [downloadAction] : []),
     canOpenBookmark
       ? {
         id: 'open-details',

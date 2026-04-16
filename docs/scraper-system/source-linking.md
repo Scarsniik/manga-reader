@@ -11,6 +11,8 @@ The library card action **Voir source** opens the configured scraper on the stor
 
 On a scraper details page, the download button changes to a redownload action when a matching library manga is already linked to the current source. Redownloading keeps the existing manga entry and replaces only the local image files in its folder.
 
+Search result cards and scraper bookmark cards expose the same standalone download action when the scraper has `Fiche` and `Pages` configured without chapter linking. The card action uses the download icon; it switches to the linked yellow state when a local manga already matches the scraper source.
+
 The scraper details page also provides:
 
 - **Lier a un manga** / **Changer le lien**, to attach the current scraper source to an existing local manga through a searchable cover grid. When the source was already linked to another manga, validating a new selection clears the previous link.

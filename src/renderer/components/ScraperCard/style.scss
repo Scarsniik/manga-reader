@@ -149,6 +149,36 @@
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
 }
 
+.scraper-card__action-button.is-download {
+  border-color: rgba(95, 173, 122, 0.38);
+  background: rgba(95, 173, 122, 0.18);
+  color: #b8f0c5;
+}
+
+.scraper-card__action-button.is-download:hover {
+  border-color: rgba(95, 173, 122, 0.56);
+  background: rgba(95, 173, 122, 0.26);
+  color: #e3ffe9;
+}
+
+.scraper-card__action-button.is-download.is-linked {
+  border-color: rgba(233, 194, 97, 0.52);
+  background: #9b741f;
+  color: #fff0bd;
+}
+
+.scraper-card__action-button.is-download.is-linked:hover {
+  border-color: rgba(233, 194, 97, 0.72);
+  background: #b08222;
+  color: #fff8dd;
+}
+
+.scraper-card__action-button.is-download:focus-visible {
+  outline: none;
+  border-color: #e9c261;
+  box-shadow: 0 0 0 3px rgba(233, 194, 97, 0.18);
+}
+
 .scraper-card__action-button.is-icon-only {
   width: 34px;
   padding: 0;

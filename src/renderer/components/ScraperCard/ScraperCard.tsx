@@ -9,6 +9,7 @@ export type ScraperCardAction = (
     icon?: React.ReactNode;
     onClick: () => void;
     ariaLabel?: string;
+    className?: string;
     disabled?: boolean;
   }
   | {
@@ -101,6 +102,7 @@ export default function ScraperCard({
           'scraper-card__action-button',
           toneClassName,
           isIconOnly ? 'is-icon-only' : '',
+          action.className || '',
         ].join(' ').trim()}
         onClick={(event) => {
           event.preventDefault();

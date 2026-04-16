@@ -17,6 +17,7 @@ import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hoo
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import { DownloadArrowIcon } from '@/renderer/components/icons';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -40,6 +41,11 @@ import {
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import {
+  buildScraperDownloadQueuedMessage,
+  canQueueStandaloneScraperDownload,
+  queueStandaloneScraperCardDownload,
+} from '@/renderer/utils/scraperDownload';
 import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
 import {
   formatScraperValueForDisplay,
@@ -823,6 +829,60 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }));
   }, [openModal]);
 
+  const canDownloadListingCards = hasDetails
+    && hasPages
+    && canQueueStandaloneScraperDownload(detailsConfig, pagesConfig);
+
+  const getLinkedMangaForListingSource = useCallback((sourceUrl: string | null | undefined): Manga | null => (
+    findMangaLinkedToSource(libraryMangas, {
+      scraperId: scraper.id,
+      sourceUrl,
+    })
+  ), [libraryMangas, scraper.id]);
+
+  const handleDownloadSearchResult = useCallback(async (result: ScraperSearchResultItem) => {
+    if (!result.detailUrl) {
+      setDownloadError('Aucune URL source n\'est disponible pour ce resultat.');
+      return;
+    }
+
+    const linkedManga = getLinkedMangaForListingSource(result.detailUrl);
+
+    setDownloading(true);
+    setDownloadError(null);
+    setDownloadMessage(null);
+
+    try {
+      const downloadResult = await queueStandaloneScraperCardDownload({
+        scraper,
+        detailsConfig,
+        pagesConfig,
+        sourceUrl: result.detailUrl,
+        fallbackTitle: result.title,
+        libraryMangas,
+        replaceMangaId: linkedManga?.id ?? null,
+      });
+
+      setDownloadMessage(buildScraperDownloadQueuedMessage({
+        queueResult: downloadResult.queueResult,
+        isReplacement: Boolean(downloadResult.replaceMangaId),
+      }));
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Le telechargement du manga a echoue.');
+    } finally {
+      setDownloading(false);
+    }
+  }, [
+    detailsConfig,
+    getLinkedMangaForListingSource,
+    libraryMangas,
+    pagesConfig,
+    scraper,
+    setDownloadError,
+    setDownloadMessage,
+    setDownloading,
+  ]);
+
   const getLinkedMangaForSource = useCallback((
     chapter?: ScraperRuntimeChapterResult,
   ): Manga | null => {
@@ -879,6 +939,36 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       ),
     };
   }, [scraper.globalConfig.bookmark.excludedFields, scraper.id]);
+
+  const renderSearchResultDownloadAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
+    if (!canDownloadListingCards || !result.detailUrl) {
+      return null;
+    }
+
+    const linkedManga = getLinkedMangaForListingSource(result.detailUrl);
+    const label = linkedManga ? 'Retelecharger' : 'Telecharger';
+
+    return {
+      id: `download-${result.detailUrl}`,
+      type: 'icon-secondary',
+      label,
+      ariaLabel: `${label} ${result.title}`,
+      icon: <DownloadArrowIcon aria-hidden="true" focusable="false" />,
+      className: [
+        'is-download',
+        linkedManga ? 'is-linked' : '',
+      ].join(' ').trim(),
+      onClick: () => {
+        void handleDownloadSearchResult(result);
+      },
+      disabled: downloading,
+    };
+  }, [
+    canDownloadListingCards,
+    downloading,
+    getLinkedMangaForListingSource,
+    handleDownloadSearchResult,
+  ]);
 
   return (
     <section className="scraper-browser" ref={browserRootRef}>
@@ -939,6 +1029,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
         renderBookmarkAction={renderSearchResultBookmarkAction}
+        renderDownloadAction={renderSearchResultDownloadAction}
         onPreviousPage={() => void handleListingPreviousPage()}
         onNextPage={() => void handleListingNextPage()}
         onBack={handleNavigateBack}
