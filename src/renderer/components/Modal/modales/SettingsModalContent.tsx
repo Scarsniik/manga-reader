@@ -100,6 +100,11 @@ export default function SettingsModalContent() {
       type: 'checkbox',
     },
     {
+      name: 'showSavedScraperSearches',
+      label: 'Afficher les recherches enregistrées des scrappers',
+      type: 'checkbox',
+    },
+    {
       name: 'stackMangaInSeries',
       label: 'Empiler les mangas dans une série dans la bibliothèque',
       type: 'checkbox',
@@ -109,6 +114,7 @@ export default function SettingsModalContent() {
   const onSubmit = async (values: Record<string, any>) => {
     const persistMangaFilters = values.persistMangaFilters !== false
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
+    const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
     const readerPreloadPageCount = normalizeReaderPreloadPageCount(values.readerPreloadPageCount)
 
@@ -129,6 +135,8 @@ export default function SettingsModalContent() {
       persistMangaFilters,
       showSavedLibrarySearches,
       savedLibrarySearches: params?.savedLibrarySearches ?? [],
+      showSavedScraperSearches,
+      savedScraperSearches: params?.savedScraperSearches ?? [],
       stackMangaInSeries,
       mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
     }

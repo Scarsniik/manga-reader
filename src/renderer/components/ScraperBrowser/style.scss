@@ -143,6 +143,7 @@
 
 .scraper-browser__mode-select,
 .scraper-browser__query,
+.scraper-browser__save-search,
 .scraper-browser__submit {
   min-height: 46px;
   border-radius: 10px;
@@ -183,6 +184,35 @@
   font-weight: 700;
   cursor: pointer;
   padding: 0 14px;
+}
+
+.scraper-browser__save-search {
+  flex: 0 0 46px;
+  width: 46px;
+  padding: 0;
+  border: 1px solid #2f2f2f;
+  background: transparent;
+  color: #9f9f9f;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scraper-browser__save-search:hover {
+  border-color: rgba(93, 156, 255, 0.36);
+  color: #d0d0d0;
+}
+
+.scraper-browser__save-search:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.14);
+}
+
+.scraper-browser__save-search svg {
+  width: 18px;
+  height: 18px;
 }
 
 .scraper-browser__submit:disabled {

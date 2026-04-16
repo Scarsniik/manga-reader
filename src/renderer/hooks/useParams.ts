@@ -1,6 +1,6 @@
 import useRefresh from '@/renderer/hooks/useRefresh';
 import { useEffect, useState, useCallback } from 'react';
-import type { LibrarySearchFilterState, SavedLibrarySearch } from '@/renderer/types';
+import type { LibrarySearchFilterState, SavedLibrarySearch, SavedScraperSearch } from '@/renderer/types';
 
 export type AppParams = {
     libraryPath?: string;
@@ -16,6 +16,8 @@ export type AppParams = {
     persistMangaFilters?: boolean;
     showSavedLibrarySearches?: boolean;
     savedLibrarySearches?: SavedLibrarySearch[];
+    showSavedScraperSearches?: boolean;
+    savedScraperSearches?: SavedScraperSearch[];
     mangaListFilters?: LibrarySearchFilterState | null;
     [key: string]: any;
 };
@@ -91,7 +93,10 @@ export function useParams() {
         (async () => {
             try {
                 if (window.api && typeof window.api.saveSettings === 'function') {
-                    await window.api.saveSettings(next);
+                    const persisted = await window.api.saveSettings(partial);
+                    if (persisted && typeof persisted === 'object') {
+                        setParamsState(persisted);
+                    }
                     if (broadcast) {
                         dispatchSettingsUpdated();
                     }

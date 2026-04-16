@@ -1,10 +1,12 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
-import { Manga } from '@/renderer/types';
+import type { Manga, SavedScraperSearch } from '@/renderer/types';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
 import buildScraperLinkMangaModal from '@/renderer/components/Modal/modales/ScraperLinkMangaModal';
+import SavedSearchesList from '@/renderer/components/SavedSearches/SavedSearchesList';
+import SaveSearchModalContent from '@/renderer/components/SavedSearches/SaveSearchModalContent';
 import ScraperBrowserHero from '@/renderer/components/ScraperBrowser/components/ScraperBrowserHero';
 import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/components/ScraperBrowserMessages';
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
@@ -21,6 +23,7 @@ import {
   ScraperBrowserInitialState,
   ScraperBrowserLocationState,
   ScraperCapability,
+  ScraperListingMode,
   ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
 import {
@@ -54,6 +57,8 @@ import {
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
+import generateId from '@/utils/id';
+import useParams from '@/renderer/hooks/useParams';
 import './style.scss';
 
 type Props = {
@@ -92,11 +97,50 @@ const buildBackLabel = (
   return null;
 };
 
+const normalizeSavedScraperSearches = (value: unknown): SavedScraperSearch[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.reduce<SavedScraperSearch[]>((searches, item, index) => {
+    if (!item || typeof item !== 'object') {
+      return searches;
+    }
+
+    const data = item as Record<string, unknown>;
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    const scraperId = typeof data.scraperId === 'string' ? data.scraperId.trim() : '';
+    const query = typeof data.query === 'string' ? data.query.trim() : '';
+    const mode = data.mode === 'author' ? 'author' : data.mode === 'search' ? 'search' : null;
+
+    if (!name || !scraperId || !query || !mode) {
+      return searches;
+    }
+
+    searches.push({
+      id: typeof data.id === 'string' && data.id.trim().length > 0
+        ? data.id
+        : `saved-scraper-search-${index}`,
+      scraperId,
+      name,
+      query,
+      mode,
+      createdAt: typeof data.createdAt === 'string' && data.createdAt.trim().length > 0
+        ? data.createdAt
+        : '1970-01-01T00:00:00.000Z',
+    });
+
+    return searches;
+  }, []);
+};
+
 export default function ScraperBrowser({ scraper, initialState = null }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as ScraperBrowserLocationState | null;
-  const { openModal } = useModal();
+  const { openModal, closeModal } = useModal();
+  const { params, setParams } = useParams();
+  const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
   const authorFeature = useMemo(() => getScraperFeature(scraper, 'author'), [scraper]);
@@ -156,6 +200,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => scraper.globalConfig.homeSearch.query || '',
     [scraper.globalConfig.homeSearch.query],
   );
+  const savedScraperSearches = useMemo(
+    () => normalizeSavedScraperSearches(params?.savedScraperSearches),
+    [params?.savedScraperSearches],
+  );
+  const currentScraperSavedSearches = useMemo(
+    () => savedScraperSearches.filter((search) => search.scraperId === scraper.id),
+    [savedScraperSearches, scraper.id],
+  );
   const { bookmarks: scraperBookmarks } = useScraperBookmarks({ scraperId: scraper.id });
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
 
@@ -178,6 +230,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [downloading, setDownloading] = useState(false);
   const [openingReader, setOpeningReader] = useState(false);
   const [loadingMoreThumbnails, setLoadingMoreThumbnails] = useState(false);
+  const [savedSearchesExpanded, setSavedSearchesExpanded] = useState(false);
+  const [savedSearchDeleteMode, setSavedSearchDeleteMode] = useState(false);
   const browserRootRef = useRef<HTMLElement | null>(null);
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
@@ -301,6 +355,17 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       cancelScheduledScrollRestore();
     }
   ), [cancelScheduledScrollRestore]);
+
+  useEffect(() => {
+    if (showSavedScraperSearches && currentScraperSavedSearches.length > 0) {
+      return;
+    }
+
+    setSavedSearchDeleteMode(false);
+    if (currentScraperSavedSearches.length === 0) {
+      setSavedSearchesExpanded(false);
+    }
+  }, [currentScraperSavedSearches.length, showSavedScraperSearches]);
 
   useEffect(() => {
     void loadLibraryMangas();
@@ -465,6 +530,120 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     await runDetailsLookup(trimmedQuery);
   }, [mode, query, runAuthorLookup, runDetailsLookup, runSearchLookup]);
+
+  const canSaveScraperSearch = showSavedScraperSearches
+    && (mode === 'search' || mode === 'author')
+    && query.trim().length > 0;
+
+  const saveScraperSearch = useCallback((name: string) => {
+    if (mode !== 'search' && mode !== 'author') {
+      return;
+    }
+
+    const savedSearch: SavedScraperSearch = {
+      id: generateId(),
+      scraperId: scraper.id,
+      name,
+      mode,
+      query: query.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setParams({
+      savedScraperSearches: [
+        ...savedScraperSearches,
+        savedSearch,
+      ],
+    }, { broadcast: false });
+    setSavedSearchesExpanded(true);
+    setSavedSearchDeleteMode(false);
+  }, [mode, query, savedScraperSearches, scraper.id, setParams]);
+
+  const handleSaveScraperSearch = useCallback(() => {
+    if (!canSaveScraperSearch) {
+      return;
+    }
+
+    openModal({
+      title: 'Enregistrer la recherche',
+      content: (
+        <SaveSearchModalContent
+          onCancel={closeModal}
+          onSubmit={(name) => {
+            saveScraperSearch(name);
+            closeModal();
+          }}
+        />
+      ),
+      className: 'save-search-modal-shell',
+    });
+  }, [canSaveScraperSearch, closeModal, openModal, saveScraperSearch]);
+
+  const handleSavedScraperSearchClick = useCallback(async (search: SavedScraperSearch) => {
+    if (savedSearchDeleteMode) {
+      const confirmed = window.confirm(`Supprimer la recherche "${search.name}" ?`);
+      if (!confirmed) {
+        return;
+      }
+
+      const nextSearches = savedScraperSearches.filter((item) => item.id !== search.id);
+      setParams({ savedScraperSearches: nextSearches }, { broadcast: false });
+
+      if (!nextSearches.some((item) => item.scraperId === scraper.id)) {
+        setSavedSearchDeleteMode(false);
+        setSavedSearchesExpanded(false);
+      }
+      return;
+    }
+
+    if (search.mode === 'search' && !hasSearch) {
+      setRuntimeError('Le composant Recherche n\'est plus disponible pour ce scrapper.');
+      return;
+    }
+
+    if (search.mode === 'author' && !hasAuthor) {
+      setRuntimeError('Le composant Auteur n\'est plus disponible pour ce scrapper.');
+      return;
+    }
+
+    const nextMode: ScraperListingMode = search.mode;
+    setMode(nextMode);
+    setQuery(search.query);
+    setAuthorTemplateContext(null);
+
+    if (nextMode === 'search') {
+      await runSearchLookup(search.query);
+      return;
+    }
+
+    await runAuthorLookup(search.query, { templateContext: null });
+  }, [
+    hasAuthor,
+    hasSearch,
+    runAuthorLookup,
+    runSearchLookup,
+    savedScraperSearches,
+    savedSearchDeleteMode,
+    scraper.id,
+    setAuthorTemplateContext,
+    setMode,
+    setParams,
+    setQuery,
+    setRuntimeError,
+  ]);
+
+  const savedScraperSearchesList = showSavedScraperSearches && currentScraperSavedSearches.length > 0 ? (
+    <SavedSearchesList
+      searches={currentScraperSavedSearches}
+      expanded={savedSearchesExpanded}
+      deleteMode={savedSearchDeleteMode}
+      onToggleExpanded={() => setSavedSearchesExpanded((value) => !value)}
+      onToggleDeleteMode={() => setSavedSearchDeleteMode((value) => !value)}
+      onSearchClick={(search) => {
+        void handleSavedScraperSearchClick(search);
+      }}
+    />
+  ) : null;
 
   const activePlaceholder = useMemo(
     () => buildQueryPlaceholder(
@@ -728,7 +907,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           activePlaceholder={activePlaceholder}
           helperText={helperText}
           loading={loading}
+          canSaveSearch={canSaveScraperSearch}
+          savedSearchesList={savedScraperSearchesList}
           onSubmit={handleSubmit}
+          onSaveSearch={handleSaveScraperSearch}
           onModeChange={(nextMode) => void handleModeChange(nextMode)}
           onQueryChange={setQuery}
         />

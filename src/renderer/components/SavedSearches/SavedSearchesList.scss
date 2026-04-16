@@ -1,30 +1,30 @@
-.saved-library-searches {
+.saved-searches-list {
   margin-top: 8px;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
-.saved-library-searches__header {
+.saved-searches-list__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.saved-library-searches__toggle,
-.saved-library-searches__delete-toggle,
-.saved-library-searches__tag {
+.saved-searches-list__toggle,
+.saved-searches-list__delete-toggle,
+.saved-searches-list__tag {
   border-radius: 8px;
   cursor: pointer;
 }
 
-.saved-library-searches__toggle {
+.saved-searches-list__toggle {
   min-width: 0;
   padding: 4px 0;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--sas-muted);
+  color: var(--sas-muted, #9f9f9f);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -32,11 +32,11 @@
   font-weight: 600;
 }
 
-.saved-library-searches__toggle:hover {
-  color: var(--sas-text-soft);
+.saved-searches-list__toggle:hover {
+  color: var(--sas-text-soft, #d0d0d0);
 }
 
-.saved-library-searches__count {
+.saved-searches-list__count {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -46,36 +46,36 @@
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   background: transparent;
-  color: var(--sas-muted);
+  color: var(--sas-muted, #9f9f9f);
   font-size: 11px;
 }
 
-.saved-library-searches__chevron {
+.saved-searches-list__chevron {
   width: 14px;
   height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--sas-muted);
+  color: var(--sas-muted, #9f9f9f);
   transition: transform 160ms ease;
 }
 
-.saved-library-searches__chevron svg,
-.saved-library-searches__delete-toggle svg {
+.saved-searches-list__chevron svg,
+.saved-searches-list__delete-toggle svg {
   width: 100%;
   height: 100%;
 }
 
-.saved-library-searches--expanded .saved-library-searches__chevron {
+.saved-searches-list--expanded .saved-searches-list__chevron {
   transform: rotate(180deg);
 }
 
-.saved-library-searches__delete-toggle {
+.saved-searches-list__delete-toggle {
   min-height: 28px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--sas-muted);
+  color: var(--sas-muted, #9f9f9f);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -84,17 +84,17 @@
   font-weight: 600;
 }
 
-.saved-library-searches__delete-toggle svg {
+.saved-searches-list__delete-toggle svg {
   width: 13px;
   height: 13px;
 }
 
-.saved-library-searches__delete-toggle:hover,
-.saved-library-searches__delete-toggle[aria-pressed="true"] {
+.saved-searches-list__delete-toggle:hover,
+.saved-searches-list__delete-toggle[aria-pressed="true"] {
   color: #fecaca;
 }
 
-.saved-library-searches__list-shell {
+.saved-searches-list__list-shell {
   overflow: hidden;
   max-height: 0;
   opacity: 0;
@@ -103,24 +103,24 @@
     opacity 140ms ease;
 }
 
-.saved-library-searches__list-shell[data-expanded="true"] {
+.saved-searches-list__list-shell[data-expanded="true"] {
   max-height: 220px;
   opacity: 1;
 }
 
-.saved-library-searches__list {
+.saved-searches-list__list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px 0 0;
 }
 
-.saved-library-searches__tag {
+.saved-searches-list__tag {
   max-width: 220px;
   padding: 5px 8px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: transparent;
-  color: var(--sas-muted);
+  color: var(--sas-muted, #9f9f9f);
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
@@ -128,30 +128,30 @@
   white-space: nowrap;
 }
 
-.saved-library-searches__tag:hover {
+.saved-searches-list__tag:hover {
   border-color: rgba(96, 165, 250, 0.26);
-  color: var(--sas-text-soft);
+  color: var(--sas-text-soft, #d0d0d0);
 }
 
-.saved-library-searches--delete-mode .saved-library-searches__tag {
+.saved-searches-list--delete-mode .saved-searches-list__tag {
   border-color: rgba(248, 113, 113, 0.28);
   background: transparent;
   color: #fecaca;
 }
 
 @media (max-width: 640px) {
-  .saved-library-searches__header {
+  .saved-searches-list__header {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .saved-library-searches__toggle,
-  .saved-library-searches__delete-toggle {
+  .saved-searches-list__toggle,
+  .saved-searches-list__delete-toggle {
     width: 100%;
     justify-content: space-between;
   }
 
-  .saved-library-searches__tag {
+  .saved-searches-list__tag {
     max-width: 100%;
   }
 }

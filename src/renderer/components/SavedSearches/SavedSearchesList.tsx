@@ -1,44 +1,48 @@
 import React from "react";
 import { ChevronDownIcon, TrashCanIcon } from "@/renderer/components/icons";
-import type { SavedLibrarySearch } from "@/renderer/types";
-import "@/renderer/components/SearchAndSort/SavedLibrarySearches.scss";
+import "@/renderer/components/SavedSearches/SavedSearchesList.scss";
 
-type Props = {
-    searches: SavedLibrarySearch[];
+export type SavedSearchListItem = {
+    id: string;
+    name: string;
+};
+
+type Props<TSearch extends SavedSearchListItem> = {
+    searches: TSearch[];
     expanded: boolean;
     deleteMode: boolean;
     onToggleExpanded: () => void;
     onToggleDeleteMode: () => void;
-    onSearchClick: (search: SavedLibrarySearch) => void;
+    onSearchClick: (search: TSearch) => void;
 };
 
-const SavedLibrarySearches: React.FC<Props> = ({
+const SavedSearchesList = <TSearch extends SavedSearchListItem>({
     searches,
     expanded,
     deleteMode,
     onToggleExpanded,
     onToggleDeleteMode,
     onSearchClick,
-}) => (
+}: Props<TSearch>) => (
     <section
         className={[
-            "saved-library-searches",
-            expanded ? "saved-library-searches--expanded" : "",
-            deleteMode ? "saved-library-searches--delete-mode" : "",
+            "saved-searches-list",
+            expanded ? "saved-searches-list--expanded" : "",
+            deleteMode ? "saved-searches-list--delete-mode" : "",
         ].filter(Boolean).join(" ")}
         aria-label="Recherches enregistrees"
     >
-        <div className="saved-library-searches__header">
+        <div className="saved-searches-list__header">
             <button
                 type="button"
-                className="saved-library-searches__toggle"
+                className="saved-searches-list__toggle"
                 onClick={onToggleExpanded}
                 aria-expanded={expanded}
-                aria-controls="saved-library-searches-list"
+                aria-controls="saved-searches-list-panel"
             >
                 <span>Recherches enregistrees</span>
-                <span className="saved-library-searches__count">{searches.length}</span>
-                <span className="saved-library-searches__chevron" aria-hidden="true">
+                <span className="saved-searches-list__count">{searches.length}</span>
+                <span className="saved-searches-list__chevron" aria-hidden="true">
                     <ChevronDownIcon focusable="false" />
                 </span>
             </button>
@@ -46,7 +50,7 @@ const SavedLibrarySearches: React.FC<Props> = ({
             {expanded ? (
                 <button
                     type="button"
-                    className="saved-library-searches__delete-toggle"
+                    className="saved-searches-list__delete-toggle"
                     onClick={onToggleDeleteMode}
                     aria-pressed={deleteMode}
                     title={deleteMode ? "Quitter le mode suppression" : "Activer le mode suppression"}
@@ -58,16 +62,16 @@ const SavedLibrarySearches: React.FC<Props> = ({
         </div>
 
         <div
-            id="saved-library-searches-list"
-            className="saved-library-searches__list-shell"
+            id="saved-searches-list-panel"
+            className="saved-searches-list__list-shell"
             data-expanded={expanded ? "true" : "false"}
         >
-            <div className="saved-library-searches__list">
+            <div className="saved-searches-list__list">
                 {searches.map((search) => (
                     <button
                         key={search.id}
                         type="button"
-                        className="saved-library-searches__tag"
+                        className="saved-searches-list__tag"
                         onClick={() => onSearchClick(search)}
                         title={deleteMode ? `Supprimer "${search.name}"` : `Rejouer "${search.name}"`}
                     >
@@ -79,4 +83,4 @@ const SavedLibrarySearches: React.FC<Props> = ({
     </section>
 );
 
-export default SavedLibrarySearches;
+export default SavedSearchesList;

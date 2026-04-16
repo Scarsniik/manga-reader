@@ -74,40 +74,6 @@ export const buildQueryPlaceholder = (
   return 'Exemple : URL complete, chemin relatif ou slug';
 };
 
-export const buildSearchResultsMessage = (options: {
-  resultsCount: number;
-  pageIndex: number;
-  usesSearchTemplatePaging: boolean;
-  hasNextPage: boolean;
-  canOpenSearchResultsAsDetails: boolean;
-}): string => {
-  const {
-    resultsCount,
-    pageIndex,
-    usesSearchTemplatePaging,
-    hasNextPage,
-    canOpenSearchResultsAsDetails,
-  } = options;
-
-  if (pageIndex > 0) {
-    return `${resultsCount} resultat(s) trouves sur la page ${pageIndex + 1}.`;
-  }
-
-  if (usesSearchTemplatePaging) {
-    return `${resultsCount} resultat(s) trouve(s). Pagination pilotee par le template de recherche.`;
-  }
-
-  if (hasNextPage) {
-    return `${resultsCount} resultat(s) trouve(s). Pagination detectee sur cette recherche.`;
-  }
-
-  if (canOpenSearchResultsAsDetails) {
-    return `${resultsCount} resultat(s) trouve(s). Tu peux ouvrir une fiche directement depuis la liste.`;
-  }
-
-  return `${resultsCount} resultat(s) trouve(s).`;
-};
-
 export const buildSearchPageLoadedMessage = (
   nextPageIndex: number,
   usesSearchTemplatePaging: boolean,
@@ -134,15 +100,11 @@ export const buildScraperBrowserHelperText = (options: {
   canOpenSearchResultsAsAuthor: boolean;
   hasDetails: boolean;
   hasAuthor: boolean;
-}): string => {
+}): string | undefined => {
   const {
     mode,
-    usesSearchTemplatePaging,
     usesAuthorTemplatePaging,
-    hasSearchNextPageSelector,
     hasAuthorNextPageSelector,
-    canOpenSearchResultsAsDetails,
-    canOpenSearchResultsAsAuthor,
     hasDetails,
     hasAuthor,
   } = options;
@@ -173,31 +135,7 @@ export const buildScraperBrowserHelperText = (options: {
     }
   }
 
-  if (usesSearchTemplatePaging && hasSearchNextPageSelector) {
-    return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle, et la pagination peut venir du template `{{page}}` ou du lien HTML de page suivante.';
-  }
-
-  if (usesSearchTemplatePaging) {
-    return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle et la pagination est pilotee via le template `{{page}}`.';
-  }
-
-  if (hasSearchNextPageSelector) {
-    return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle, la pagination HTML est detectee, et tu peux naviguer entre les pages de resultats.';
-  }
-
-  if (canOpenSearchResultsAsDetails) {
-    return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle et tu peux ouvrir une fiche directement depuis un resultat.';
-  }
-
-  if (canOpenSearchResultsAsAuthor) {
-    return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle et tu peux aussi ouvrir une page auteur quand un lien auteur est detecte.';
-  }
-
-  if (hasDetails) {
-    return 'La recherche est active et la requete est optionnelle. Configure `Fiche` pour pouvoir ouvrir un resultat directement.';
-  }
-
-  return 'Cette vue lance la vraie recherche du scraper. La requete est optionnelle et les resultats extraits s\'affichent ici.';
+  return undefined;
 };
 
 export const buildScraperCapabilities = (options: {

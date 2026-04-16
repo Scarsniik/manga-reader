@@ -15,7 +15,6 @@ import {
 } from '@/renderer/components/ScraperBrowser/types';
 import {
   buildSearchPageLoadedMessage,
-  buildSearchResultsMessage,
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   extractScraperSearchPageFromDocument,
@@ -432,13 +431,7 @@ export function useScraperBrowserSearch({
       setListingVisitedPageUrls(extractedListingState.visitedPageUrls);
       setListingPageIndex(extractedListingState.pageIndex);
       setListingResults(extractedResults);
-      setRuntimeMessage(buildSearchResultsMessage({
-        resultsCount: extractedResults.length,
-        pageIndex: extractedListingState.pageIndex,
-        usesSearchTemplatePaging: getUsesTemplatePaging(listingMode),
-        hasNextPage: Boolean(extractedPage.nextPageUrl),
-        canOpenSearchResultsAsDetails,
-      }));
+      setRuntimeMessage(null);
     } catch (error) {
       if (canCommit()) {
         setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du chargement.');

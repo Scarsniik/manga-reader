@@ -1,14 +1,18 @@
 import React, { FormEvent } from 'react';
 import { ScraperBrowseMode } from '@/renderer/components/ScraperBrowser/types';
+import { PlusSignIcon } from '@/renderer/components/icons';
 
 type Props = {
   availableModes: ScraperBrowseMode[];
   mode: ScraperBrowseMode;
   query: string;
   activePlaceholder: string;
-  helperText: string;
+  helperText?: string;
   loading: boolean;
+  canSaveSearch?: boolean;
+  savedSearchesList?: React.ReactNode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSaveSearch?: () => void;
   onModeChange: (mode: ScraperBrowseMode) => void;
   onQueryChange: (value: string) => void;
 };
@@ -20,7 +24,10 @@ export default function ScraperBrowserToolbar({
   activePlaceholder,
   helperText,
   loading,
+  canSaveSearch = false,
+  savedSearchesList = null,
   onSubmit,
+  onSaveSearch,
   onModeChange,
   onQueryChange,
 }: Props) {
@@ -53,14 +60,29 @@ export default function ScraperBrowserToolbar({
           placeholder={activePlaceholder}
         />
 
+        {canSaveSearch ? (
+          <button
+            type="button"
+            className="scraper-browser__save-search"
+            onClick={onSaveSearch}
+            title="Enregistrer la recherche active"
+            aria-label="Enregistrer la recherche active"
+          >
+            <PlusSignIcon focusable="false" />
+          </button>
+        ) : null}
+
         <button type="submit" className="scraper-browser__submit" disabled={loading}>
           {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : 'Lancer'}
         </button>
       </form>
 
-      <div className="scraper-browser__helper">
-        {helperText}
-      </div>
+      {savedSearchesList}
+      {helperText &&
+        <div className="scraper-browser__helper">
+          {helperText}
+        </div>
+      }
     </div>
   );
 }

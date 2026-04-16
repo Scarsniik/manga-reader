@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import "@/renderer/components/SearchAndSort/SaveLibrarySearchModalContent.scss";
+import "@/renderer/components/SavedSearches/SaveSearchModalContent.scss";
 
 type Props = {
     onCancel: () => void;
     onSubmit: (name: string) => void;
 };
 
-const SaveLibrarySearchModalContent: React.FC<Props> = ({
+const SaveSearchModalContent: React.FC<Props> = ({
     onCancel,
     onSubmit,
 }) => {
@@ -22,30 +22,30 @@ const SaveLibrarySearchModalContent: React.FC<Props> = ({
     };
 
     return (
-        <form className="save-library-search-modal" onSubmit={handleSubmit}>
-            <label className="save-library-search-modal__label" htmlFor="saved-library-search-name">
+        <form className="save-search-modal" onSubmit={handleSubmit}>
+            <label className="save-search-modal__label" htmlFor="saved-search-name">
                 Nom de la recherche
             </label>
             <input
-                id="saved-library-search-name"
-                className="save-library-search-modal__input"
+                id="saved-search-name"
+                className="save-search-modal__input"
                 type="text"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Ex: Mangas japonais en cours"
                 autoFocus
             />
-            <div className="save-library-search-modal__actions">
+            <div className="save-search-modal__actions">
                 <button
                     type="button"
-                    className="save-library-search-modal__button save-library-search-modal__button--secondary"
+                    className="save-search-modal__button save-search-modal__button--secondary"
                     onClick={onCancel}
                 >
                     Annuler
                 </button>
                 <button
                     type="submit"
-                    className="save-library-search-modal__button save-library-search-modal__button--primary"
+                    className="save-search-modal__button save-search-modal__button--primary"
                     disabled={!canSubmit}
                 >
                     Enregistrer
@@ -55,4 +55,4 @@ const SaveLibrarySearchModalContent: React.FC<Props> = ({
     );
 };
 
-export default SaveLibrarySearchModalContent;
+export default SaveSearchModalContent;

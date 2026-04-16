@@ -27,7 +27,7 @@ Quand on selectionne des tags, une phrase de résumé des choix s'affiche au des
 
 Quand une recherche ou des filtres sont actifs, un bouton d'enregistrement apparaît dans l'en-tête. Il ouvre une modale avec un champ texte pour nommer la recherche puis sauvegarde l'état courant de recherche et de filtres.
 
-Les recherches enregistrées s'affichent sous la barre de recherche via le composant `SavedLibrarySearches`. La section peut être ouverte ou fermée. Chaque recherche est affichée comme un tag ; un clic rejoue les filtres sauvegardés. Quand le mode suppression est activé dans cette section, un clic demande confirmation puis supprime la recherche.
+Les recherches enregistrées s'affichent sous la barre de recherche via le composant `SavedSearchesList`. La section peut être ouverte ou fermée. Chaque recherche est affichée comme un tag ; un clic rejoue les filtres sauvegardés. Quand le mode suppression est activé dans cette section, un clic demande confirmation puis supprime la recherche.
 
 ## Technique
 

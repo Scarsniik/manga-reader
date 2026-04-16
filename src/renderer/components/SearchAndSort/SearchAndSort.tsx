@@ -12,8 +12,8 @@ import EntityPickerField, { EntityOption } from '@/renderer/components/utils/For
 import { languages } from '@/renderer/consts/languages';
 import { compareSeriesMangasByChapter } from '@/renderer/utils/seriesChapters';
 import generateId from '@/utils/id';
-import SavedLibrarySearches from '@/renderer/components/SearchAndSort/SavedLibrarySearches';
-import SaveLibrarySearchModalContent from '@/renderer/components/SearchAndSort/SaveLibrarySearchModalContent';
+import SavedSearchesList from '@/renderer/components/SavedSearches/SavedSearchesList';
+import SaveSearchModalContent from '@/renderer/components/SavedSearches/SaveSearchModalContent';
 import { useModal } from '@/renderer/hooks/useModal';
 
 type Props = {
@@ -618,7 +618,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         openModal({
             title: 'Enregistrer la recherche',
             content: (
-                <SaveLibrarySearchModalContent
+                <SaveSearchModalContent
                     onCancel={closeModal}
                     onSubmit={(name) => {
                         saveLibrarySearch(name);
@@ -626,7 +626,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
                     }}
                 />
             ),
-            className: 'save-library-search-modal-shell',
+            className: 'save-search-modal-shell',
         });
     }, [closeModal, hasSavableSearch, openModal, saveLibrarySearch]);
 
@@ -992,7 +992,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
             </div>
 
             {showSavedLibrarySearches && savedLibrarySearches.length > 0 ? (
-                <SavedLibrarySearches
+                <SavedSearchesList
                     searches={savedLibrarySearches}
                     expanded={savedSearchesExpanded}
                     deleteMode={savedSearchDeleteMode}

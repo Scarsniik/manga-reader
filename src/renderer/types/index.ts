@@ -74,6 +74,15 @@ export type SavedLibrarySearch = {
     createdAt: string;
 };
 
+export type SavedScraperSearch = {
+    id: string;
+    scraperId: string;
+    name: string;
+    mode: 'search' | 'author';
+    query: string;
+    createdAt: string;
+};
+
 export type MangasList = Manga[];
 export type AuthorsList = Author[];
 export type TagsList = Tag[];

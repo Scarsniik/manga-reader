@@ -34,9 +34,30 @@ const defaultSettings = {
     persistMangaFilters: true,
     showSavedLibrarySearches: true,
     savedLibrarySearches: [],
+    showSavedScraperSearches: true,
+    savedScraperSearches: [],
     stackMangaInSeries: true,
     mangaListFilters: null,
 };
+
+async function readStoredSettings() {
+    try {
+        const data = await fs.readFile(paramsFilePath, "utf-8");
+        if (!data || data.trim().length === 0) {
+            return {};
+        }
+
+        const parsed = JSON.parse(data);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error: any) {
+        if (error && error.code === "ENOENT") {
+            return {};
+        }
+
+        console.warn("Could not read current params before saving", error);
+        return {};
+    }
+}
 
 export async function getSettings() {
     try {
@@ -77,8 +98,10 @@ export async function getSettings() {
 
 export async function saveSettings(event: any, settings: any) {
     try {
+        const storedSettings = await readStoredSettings();
         const nextSettings = {
             ...defaultSettings,
+            ...storedSettings,
             ...(settings || {}),
         };
         nextSettings.readerPreloadPageCount = normalizeReaderPreloadPageCount(nextSettings.readerPreloadPageCount);
