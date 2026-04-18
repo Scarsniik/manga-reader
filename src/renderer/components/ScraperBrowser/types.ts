@@ -13,6 +13,7 @@ export type ScraperBrowserLocationState = {
   scraperBrowserHistorySource?: {
     kind: ScraperBrowserHistorySourceKind;
   };
+  scraperBrowserListingReturnState?: ScraperListingReturnState | null;
 };
 
 export type ScraperBrowserInitialState = {
@@ -35,6 +36,7 @@ export type ScraperListingReturnState = {
   pageIndex: number;
   results: ScraperSearchResultItem[];
   scrollTop: number | null;
+  newResultIds?: string[];
 };
 
 export type ScraperCapability = {

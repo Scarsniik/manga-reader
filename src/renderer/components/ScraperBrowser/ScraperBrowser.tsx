@@ -36,6 +36,8 @@ import {
   buildQueryPlaceholder,
   buildScraperBrowserHelperText,
   buildScraperCapabilities,
+  buildScraperListingReturnStateCacheKey,
+  cacheScraperListingReturnState,
   MAX_VISIBLE_SEARCH_RESULTS,
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { useModal } from '@/renderer/hooks/useModal';
@@ -446,7 +448,6 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     handleListingPreviousPage,
     handleOpenResult,
     handleOpenAuthorResult,
-    handleResultKeyDown,
     handleBackToListing,
     handleGoToHome,
     handleModeChange,
@@ -525,10 +526,16 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     cancelScheduledScrollRestore,
     setMode,
     setQuery,
+    setListingPage,
+    setListingVisitedPageUrls,
+    setListingPageIndex,
+    setListingResults,
+    setHasExecutedListing,
     setListingReturnState,
     setAuthorTemplateContext,
     setDetailsResult,
     setChaptersResult,
+    restoreSearchScrollPosition,
     runSearchLookup,
     runAuthorLookup,
     runDetailsLookup,
@@ -732,11 +739,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [listingResults],
   );
-  const visibleSearchResultsHistoryKey = useMemo(
+  const visibleSearchResultHistoryIds = useMemo(
     () => visibleSearchResults
-      .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result)))
-      .join('|'),
+      .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result))),
     [scraper.id, visibleSearchResults],
+  );
+  const visibleSearchResultsHistoryKey = useMemo(
+    () => visibleSearchResultHistoryIds.join('|'),
+    [visibleSearchResultHistoryIds],
   );
   const scraperBookmarkCount = scraperBookmarks.length;
   const canReturnToListing = Boolean(listingReturnState?.hasExecutedListing);
@@ -770,23 +780,90 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     [listingPageIndex],
   );
 
+  const buildCurrentListingReturnState = useCallback((): ScraperListingReturnState | null => {
+    if ((mode !== 'search' && mode !== 'author') || !hasExecutedListing) {
+      return null;
+    }
+
+    return {
+      mode,
+      hasExecutedListing,
+      query,
+      page: listingPage,
+      visitedPageUrls: listingVisitedPageUrls,
+      pageIndex: listingPageIndex,
+      results: listingResults,
+      scrollTop: getCurrentScrollTop(),
+      newResultIds: Array.from(newSearchResultIds),
+    };
+  }, [
+    getCurrentScrollTop,
+    hasExecutedListing,
+    listingPage,
+    listingPageIndex,
+    listingResults,
+    listingVisitedPageUrls,
+    mode,
+    newSearchResultIds,
+    query,
+  ]);
+
+  const cacheCurrentListingReturnState = useCallback((): ScraperListingReturnState | null => {
+    const returnState = buildCurrentListingReturnState();
+    if (!returnState) {
+      return null;
+    }
+
+    cacheScraperListingReturnState(
+      buildScraperListingReturnStateCacheKey(location.pathname, location.search),
+      returnState,
+    );
+    setListingReturnState(returnState);
+    return returnState;
+  }, [buildCurrentListingReturnState, location.pathname, location.search]);
+
   useEffect(() => {
     viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
   }, [viewHistoryRecordsById]);
 
   useEffect(() => {
-    if (!viewHistoryLoaded || !visibleSearchResults.length) {
+    if (!visibleSearchResults.length) {
+      setNewSearchResultIds(new Set());
+      return;
+    }
+
+    const restoredNewResultIds = listingReturnState?.mode === mode
+      && listingReturnState.query === query
+      && listingReturnState.pageIndex === listingPageIndex
+      ? listingReturnState.newResultIds ?? []
+      : [];
+
+    if (restoredNewResultIds.length > 0) {
+      const visibleIds = new Set(visibleSearchResultHistoryIds);
+      setNewSearchResultIds(new Set(restoredNewResultIds.filter((id) => visibleIds.has(id))));
+      return;
+    }
+
+    if (!viewHistoryLoaded) {
       setNewSearchResultIds(new Set());
       return;
     }
 
     const historySnapshot = viewHistoryRecordsByIdRef.current;
     setNewSearchResultIds(new Set(
-      visibleSearchResults
-        .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result)))
+      visibleSearchResultHistoryIds
         .filter((id) => id && !historySnapshot.has(id)),
     ));
-  }, [scraper.id, viewHistoryLoaded, visibleSearchResults, visibleSearchResultsHistoryKey]);
+  }, [
+    listingPageIndex,
+    listingReturnState,
+    mode,
+    query,
+    viewHistoryLoaded,
+    visibleSearchResultHistoryIds,
+    visibleSearchResults.length,
+    visibleSearchResultsHistoryKey,
+  ]);
 
   const handleNavigateBack = useCallback(() => {
     if (!canNavigateBack) {
@@ -854,9 +931,28 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     });
   }, [location.pathname, location.search, navigate, scraper.id]);
 
+  const handleOpenListingResult = useCallback((result: ScraperSearchResultItem) => {
+    const listingReturnStateToRestore = cacheCurrentListingReturnState();
+    void handleOpenResult(result, {
+      listingReturnState: listingReturnStateToRestore,
+    });
+  }, [cacheCurrentListingReturnState, handleOpenResult]);
+
+  const handleListingResultKeyDown = useCallback((
+    event: React.KeyboardEvent<HTMLElement>,
+    result: ScraperSearchResultItem,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    handleOpenListingResult(result);
+  }, [handleOpenListingResult]);
+
   const handleOpenResultAction = useCallback((result: ScraperSearchResultItem) => {
-    void handleOpenResult(result);
-  }, [handleOpenResult]);
+    handleOpenListingResult(result);
+  }, [handleOpenListingResult]);
 
   const handleOpenAuthorResultAction = useCallback((result: ScraperSearchResultItem) => {
     void handleOpenAuthorResult(result);
@@ -1130,9 +1226,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onPreviousPage={() => void handleListingPreviousPage()}
         onNextPage={() => void handleListingNextPage()}
         onBack={handleNavigateBack}
-        onOpenResult={(result) => void handleOpenResult(result)}
+        onOpenResult={handleOpenListingResult}
         onOpenAuthorResultAction={handleOpenAuthorResultAction}
-        onResultKeyDown={handleResultKeyDown}
+        onResultKeyDown={handleListingResultKeyDown}
         onOpenResultAction={handleOpenResultAction}
         onOpenResultImage={handleOpenSearchResultImage}
         onResultViewed={handleSearchResultViewed}

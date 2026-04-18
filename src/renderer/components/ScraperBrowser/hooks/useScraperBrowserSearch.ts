@@ -40,6 +40,10 @@ export type ListingLookupOptions = {
   canCommit?: () => boolean;
 };
 
+type OpenResultOptions = {
+  listingReturnState?: ScraperListingReturnState | null;
+};
+
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
   locationPathname: string;
@@ -616,7 +620,7 @@ export function useScraperBrowserSearch({
     setRuntimeMessage,
   ]);
 
-  const handleOpenResult = useCallback((result: ScraperSearchResultItem) => {
+  const handleOpenResult = useCallback((result: ScraperSearchResultItem, options?: OpenResultOptions) => {
     setRuntimeMessage(null);
     setRuntimeError(null);
 
@@ -657,6 +661,7 @@ export function useScraperBrowserSearch({
           scraperBrowserHistorySource: {
             kind: mode,
           },
+          scraperBrowserListingReturnState: options?.listingReturnState ?? null,
         },
       },
     );
