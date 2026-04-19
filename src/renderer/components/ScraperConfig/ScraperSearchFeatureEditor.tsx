@@ -3,7 +3,6 @@ import {
   FetchScraperDocumentResult,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
-  ScraperRecord,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import {
@@ -22,6 +21,7 @@ import {
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
@@ -43,18 +43,15 @@ import {
 } from '@/renderer/components/ScraperConfig/search/searchFeatureEditor.utils';
 
 type Props = {
-  scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
-  onScraperChange: (scraper: ScraperRecord) => void;
 };
 
 export default function ScraperSearchFeatureEditor({
-  scraper,
   feature,
   onBack,
-  onScraperChange,
 }: Props) {
+  const { scraper } = useScraperConfig();
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const [previewPage, setPreviewPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
   const [previewVisitedPageUrls, setPreviewVisitedPageUrls] = useState<string[]>([]);
@@ -515,11 +512,9 @@ export default function ScraperSearchFeatureEditor({
   }, [formValues]);
 
   const handleSave = useSaveScraperFeatureConfig({
-    scraperId: scraper.id,
     featureKind: feature.kind,
     validationResult,
     lastValidatedSignature,
-    onScraperChange,
     buildSaveConfig,
     setFieldErrors,
     setSaving,

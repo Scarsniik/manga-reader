@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import ScraperIdentityStep from './ScraperIdentityStep';
-import ScraperValidationStep from './ScraperValidationStep';
-import ScraperFeatureSelectionStep from './ScraperFeatureSelectionStep';
+import ScraperIdentityStep from '@/renderer/components/ScraperConfig/ScraperIdentityStep';
+import ScraperValidationStep from '@/renderer/components/ScraperConfig/ScraperValidationStep';
+import ScraperFeatureSelectionStep from '@/renderer/components/ScraperConfig/ScraperFeatureSelectionStep';
+import { ScraperConfigProvider } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import {
   ScraperAccessValidationResult,
   ScraperIdentityDraft,
@@ -131,6 +132,11 @@ export default function ScraperConfigWizard({ initialScraper = null, onScraperCh
     }
   }, [draft, initialScraper?.id, onScraperChange, savedScraper?.id, validationResult]);
 
+  const handleScraperChange = useCallback((nextScraper: ScraperRecord) => {
+    setSavedScraper(nextScraper);
+    onScraperChange?.(nextScraper);
+  }, [onScraperChange]);
+
   return (
     <div className="scraper-config-wizard">
       <div className="scraper-config-wizard__header">
@@ -182,14 +188,9 @@ export default function ScraperConfigWizard({ initialScraper = null, onScraperCh
         ) : null}
 
         {step === 'features' && savedScraper ? (
-          <ScraperFeatureSelectionStep
-            scraper={savedScraper}
-            onEditSource={() => setStep('identity')}
-            onScraperChange={(nextScraper) => {
-              setSavedScraper(nextScraper);
-              onScraperChange?.(nextScraper);
-            }}
-          />
+          <ScraperConfigProvider scraper={savedScraper} onScraperChange={handleScraperChange}>
+            <ScraperFeatureSelectionStep onEditSource={() => setStep('identity')} />
+          </ScraperConfigProvider>
         ) : null}
       </div>
     </div>

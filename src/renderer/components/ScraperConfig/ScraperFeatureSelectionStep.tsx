@@ -2,28 +2,25 @@ import React, { useMemo, useState } from 'react';
 import {
   ScraperFeatureDefinition,
   ScraperFeatureKind,
-  ScraperRecord,
 } from '@/shared/scraper';
-import ScraperAuthorFeatureEditor from './ScraperAuthorFeatureEditor';
-import ScraperChaptersFeatureEditor from './ScraperChaptersFeatureEditor';
-import ScraperDetailsFeatureEditor from './ScraperDetailsFeatureEditor';
-import ScraperGlobalSettingsEditor from './ScraperGlobalSettingsEditor';
-import ScraperPagesFeatureEditor from './ScraperPagesFeatureEditor';
-import ScraperSearchFeatureEditor from './ScraperSearchFeatureEditor';
-import ScraperFeaturePlaceholderEditor from './ScraperFeaturePlaceholderEditor';
+import ScraperAuthorFeatureEditor from '@/renderer/components/ScraperConfig/ScraperAuthorFeatureEditor';
+import ScraperChaptersFeatureEditor from '@/renderer/components/ScraperConfig/ScraperChaptersFeatureEditor';
+import ScraperDetailsFeatureEditor from '@/renderer/components/ScraperConfig/ScraperDetailsFeatureEditor';
+import ScraperGlobalSettingsEditor from '@/renderer/components/ScraperConfig/ScraperGlobalSettingsEditor';
+import ScraperPagesFeatureEditor from '@/renderer/components/ScraperConfig/ScraperPagesFeatureEditor';
+import ScraperSearchFeatureEditor from '@/renderer/components/ScraperConfig/ScraperSearchFeatureEditor';
+import ScraperFeaturePlaceholderEditor from '@/renderer/components/ScraperConfig/ScraperFeaturePlaceholderEditor';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import { FEATURE_STATUS_META } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
 type Props = {
-  scraper: ScraperRecord;
-  onScraperChange: (scraper: ScraperRecord) => void;
   onEditSource?: () => void;
 };
 
 export default function ScraperFeatureSelectionStep({
-  scraper,
-  onScraperChange,
   onEditSource,
 }: Props) {
+  const { scraper } = useScraperConfig();
   const [activeFeatureKind, setActiveFeatureKind] = useState<ScraperFeatureKind | 'global' | null>(null);
 
   const configuredFeatures = useMemo(
@@ -58,9 +55,7 @@ export default function ScraperFeatureSelectionStep({
   if (activeFeatureKind === 'global') {
     return (
       <ScraperGlobalSettingsEditor
-        scraper={scraper}
         onBack={() => setActiveFeatureKind(null)}
-        onScraperChange={onScraperChange}
       />
     );
   }
@@ -69,10 +64,8 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'search') {
       return (
         <ScraperSearchFeatureEditor
-          scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
-          onScraperChange={onScraperChange}
         />
       );
     }
@@ -80,10 +73,8 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'details') {
       return (
         <ScraperDetailsFeatureEditor
-          scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
-          onScraperChange={onScraperChange}
         />
       );
     }
@@ -91,10 +82,8 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'author') {
       return (
         <ScraperAuthorFeatureEditor
-          scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
-          onScraperChange={onScraperChange}
         />
       );
     }
@@ -102,10 +91,8 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'chapters') {
       return (
         <ScraperChaptersFeatureEditor
-          scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
-          onScraperChange={onScraperChange}
         />
       );
     }
@@ -113,10 +100,8 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'pages') {
       return (
         <ScraperPagesFeatureEditor
-          scraper={scraper}
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
-          onScraperChange={onScraperChange}
         />
       );
     }

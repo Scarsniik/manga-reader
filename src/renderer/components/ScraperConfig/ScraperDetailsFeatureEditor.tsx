@@ -5,7 +5,6 @@ import {
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
-  ScraperRecord,
 } from '@/shared/scraper';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
@@ -17,6 +16,7 @@ import {
   ScraperResolvedUrlPreview,
   ScraperUrlTemplateFields,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import DetailsDerivedValuesSection from '@/renderer/components/ScraperConfig/details/DetailsDerivedValuesSection';
@@ -53,18 +53,15 @@ import {
 } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
-  scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
-  onScraperChange: (scraper: ScraperRecord) => void;
 };
 
 export default function ScraperDetailsFeatureEditor({
-  scraper,
   feature,
   onBack,
-  onScraperChange,
 }: Props) {
+  const { scraper } = useScraperConfig();
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const initialFormState = useMemo(
     () => createFormStateFromConfig(initialConfig),
@@ -454,11 +451,9 @@ export default function ScraperDetailsFeatureEditor({
   }, [formValues]);
 
   const handleSave = useSaveScraperFeatureConfig({
-    scraperId: scraper.id,
     featureKind: feature.kind,
     validationResult,
     lastValidatedSignature,
-    onScraperChange,
     buildSaveConfig,
     setFieldErrors,
     setSaving,

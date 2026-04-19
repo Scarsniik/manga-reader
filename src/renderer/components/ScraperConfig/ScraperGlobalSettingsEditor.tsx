@@ -7,6 +7,7 @@ import {
   ScraperGlobalConfig,
   ScraperRecord,
 } from '@/shared/scraper';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 
 declare global {
   interface Window {
@@ -15,9 +16,7 @@ declare global {
 }
 
 type Props = {
-  scraper: ScraperRecord;
   onBack: () => void;
-  onScraperChange: (scraper: ScraperRecord) => void;
 };
 
 const sanitizeTagIds = (value: unknown): string[] => (
@@ -72,10 +71,9 @@ const buildGlobalConfig = (values: Record<string, unknown>): ScraperGlobalConfig
 });
 
 export default function ScraperGlobalSettingsEditor({
-  scraper,
   onBack,
-  onScraperChange,
 }: Props) {
+  const { scraper, updateScraper } = useScraperConfig();
   const [saveError, setSaveError] = useState<string | null>(null);
   const hasSearch = useMemo(
     () => scraper.features.some((feature) => feature.kind === 'search' && feature.status !== 'not_configured'),
@@ -186,11 +184,11 @@ export default function ScraperGlobalSettingsEditor({
         globalConfig: buildGlobalConfig(values),
       });
 
-      onScraperChange(updatedScraper as ScraperRecord);
+      updateScraper(updatedScraper as ScraperRecord);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d\'enregistrer les reglages globaux.');
     }
-  }, [onScraperChange, scraper.id]);
+  }, [scraper.id, updateScraper]);
 
   return (
     <section className="scraper-config-step">

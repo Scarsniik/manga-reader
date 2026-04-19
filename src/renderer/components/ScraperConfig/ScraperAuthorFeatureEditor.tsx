@@ -4,7 +4,6 @@ import {
   ScraperCardListConfig,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
-  ScraperRecord,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
@@ -18,6 +17,7 @@ import {
   ScraperResolvedUrlPreview,
   ScraperUrlTemplateFields,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
@@ -48,18 +48,15 @@ import {
 } from '@/renderer/components/ScraperConfig/author/authorFeatureEditor.utils';
 
 type Props = {
-  scraper: ScraperRecord;
   feature: ScraperFeatureDefinition;
   onBack: () => void;
-  onScraperChange: (scraper: ScraperRecord) => void;
 };
 
 export default function ScraperAuthorFeatureEditor({
-  scraper,
   feature,
   onBack,
-  onScraperChange,
 }: Props) {
+  const { scraper } = useScraperConfig();
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const detailsFeature = useMemo(
     () => scraper.features.find((candidate) => candidate.kind === 'details') || null,
@@ -469,11 +466,9 @@ export default function ScraperAuthorFeatureEditor({
   }, [formValues]);
 
   const handleSave = useSaveScraperFeatureConfig({
-    scraperId: scraper.id,
     featureKind: feature.kind,
     validationResult,
     lastValidatedSignature,
-    onScraperChange,
     buildSaveConfig,
     setFieldErrors,
     setSaving,
