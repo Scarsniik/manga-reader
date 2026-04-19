@@ -843,14 +843,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       ? listingReturnState.newResultIds ?? []
       : [];
 
-    if (restoredNewResultIds.length > 0) {
-      const visibleIds = new Set(visibleSearchResultHistoryIds);
-      setNewSearchResultIds(new Set(restoredNewResultIds.filter((id) => visibleIds.has(id))));
+    if (!viewHistoryLoaded) {
+      setNewSearchResultIds(new Set());
       return;
     }
 
-    if (!viewHistoryLoaded) {
-      setNewSearchResultIds(new Set());
+    if (restoredNewResultIds.length > 0) {
+      const visibleIds = new Set(visibleSearchResultHistoryIds);
+      setNewSearchResultIds(new Set(restoredNewResultIds.filter((id) => visibleIds.has(id))));
       return;
     }
 
@@ -1170,8 +1170,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [scraper.id, setRuntimeError]);
 
   const handleSearchResultViewed = useCallback((result: ScraperSearchResultItem) => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+
     void recordScraperCardsSeen([
-      buildSearchResultViewHistoryIdentity(scraper.id, result),
+      identity,
     ]).catch((error) => {
       console.warn('Failed to record scraper card view', error);
     });

@@ -64,36 +64,37 @@ const isInteractiveMiddleClickTarget = (
   return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
 };
 
-const getWindowScrollY = (): number => (
-  window.scrollY
-  || window.pageYOffset
-  || document.documentElement.scrollTop
-  || document.body?.scrollTop
-  || 0
-);
-
-const getScrollViewBand = (scrollY: number): { top: number; bottom: number } => {
+const getScrollViewBand = (): { top: number; bottom: number } => {
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
   return {
-    top: scrollY + (viewportHeight * 0.25),
-    bottom: scrollY + (viewportHeight * 0.75),
+    top: viewportHeight * 0.25,
+    bottom: viewportHeight * 0.75,
   };
 };
 
-const hasCrossedScrollViewBand = (
-  element: HTMLElement,
-  previousScrollY: number,
-  currentScrollY: number,
-): boolean => {
+const isInsideScrollViewBand = (element: HTMLElement): boolean => {
   const rect = element.getBoundingClientRect();
-  const elementTop = rect.top + currentScrollY;
-  const elementBottom = rect.bottom + currentScrollY;
-  const previousBand = getScrollViewBand(previousScrollY);
-  const currentBand = getScrollViewBand(currentScrollY);
-  const sweptTop = Math.min(previousBand.top, currentBand.top);
-  const sweptBottom = Math.max(previousBand.bottom, currentBand.bottom);
+  const band = getScrollViewBand();
 
-  return elementTop <= sweptBottom && elementBottom >= sweptTop;
+  return rect.top <= band.bottom && rect.bottom >= band.top;
+};
+
+const getScrollableParent = (element: HTMLElement): HTMLElement | Window => {
+  let parent = element.parentElement;
+
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    const overflowY = style.overflowY;
+    const canScroll = overflowY === 'auto' || overflowY === 'scroll';
+
+    if (canScroll && parent.scrollHeight > parent.clientHeight) {
+      return parent;
+    }
+
+    parent = parent.parentElement;
+  }
+
+  return window;
 };
 
 export default function ScraperCard({
@@ -132,23 +133,23 @@ export default function ScraperCard({
     }
 
     let frameId: number | null = null;
-    let previousScrollY = getWindowScrollY();
+    const article = articleRef.current;
+    const scrollTarget = article ? getScrollableParent(article) : window;
 
     const reportIfCardIsPassed = () => {
       if (hasReportedViewRef.current) {
         return;
       }
 
-      const currentScrollY = getWindowScrollY();
-      const article = articleRef.current;
-      if (!article || !hasCrossedScrollViewBand(article, previousScrollY, currentScrollY)) {
-        previousScrollY = currentScrollY;
+      const currentArticle = articleRef.current;
+      if (!currentArticle || !isInsideScrollViewBand(currentArticle)) {
         return;
       }
 
       hasReportedViewRef.current = true;
       onViewedRef.current?.();
-      window.removeEventListener('scroll', handleScroll);
+      scrollTarget.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
     };
 
     const handleScroll = () => {
@@ -162,14 +163,16 @@ export default function ScraperCard({
       });
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
 
     return () => {
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId);
       }
 
-      window.removeEventListener('scroll', handleScroll);
+      scrollTarget.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
     };
   }, [canReportView]);
 

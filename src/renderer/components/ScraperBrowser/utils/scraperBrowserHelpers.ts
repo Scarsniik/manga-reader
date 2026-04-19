@@ -49,7 +49,6 @@ export const readScraperListingReturnStateCache = (
   }
 
   scraperListingReturnStateCache.delete(cacheKey);
-  scraperListingReturnStateCache.set(cacheKey, state);
   return state;
 };
 
