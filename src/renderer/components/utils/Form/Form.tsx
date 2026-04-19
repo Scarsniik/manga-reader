@@ -1,21 +1,10 @@
 import React, { useState, ChangeEvent, FormEvent, useEffect, useCallback, useMemo } from 'react'
-import { Field } from './types'
-import TextField from "./fields/TextField";
-import NumberField from "./fields/NumberField";
-import TextareaField from "./fields/TextareaField";
-import SelectField from "./fields/SelectField";
-import MultiSelectField from "./fields/MultiSelectField";
-import TagPickerField from "./fields/TagPickerField";
-import RadioField from "./fields/RadioField";
-import CheckboxField from "./fields/CheckboxField";
-import FileField from "./fields/FileField";
-import SeriesField from "./fields/SeriesField";
-import AuthorField from "./fields/AuthorField";
-import EntityPickerField from "./fields/EntityPickerField";
-import './style.scss'
+import type { Field, FormItem } from '@/renderer/components/utils/Form/types'
+import FormField from '@/renderer/components/utils/Form/FormField'
+import '@/renderer/components/utils/Form/style.scss'
 
 type Props = {
-  fields: Field[]
+  fields: FormItem[]
   onSubmit: (values: Record<string, any>) => void | Promise<void>
   initialValues?: Record<string, any>
   submitLabel?: string
@@ -26,10 +15,20 @@ type Props = {
   className?: string
 }
 
+const isFormSection = (item: FormItem): item is Extract<FormItem, { type: 'section' }> => (
+    item.type === 'section'
+)
+
+const getFieldsFromItems = (items: FormItem[]): Field[] => (
+    items.flatMap(item => (isFormSection(item) ? item.fields : [item]))
+)
+
 export default function Form({ fields, onSubmit, initialValues = {}, submitLabel = 'Submit', globalError, fieldErrors = {}, className = '', formId, submitButtonId }: Props) {
+    const flatFields = useMemo(() => getFieldsFromItems(fields), [fields])
+
     const buildInitialState = useCallback((srcInitial: Record<string, any>) => {
         const s: Record<string, any> = {}
-        for (const f of fields) {
+        for (const f of flatFields) {
             if (srcInitial && srcInitial[f.name] !== undefined) {
                 s[f.name] = srcInitial[f.name]
                 continue
@@ -48,17 +47,17 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
             s[f.name] = srcInitial?.[f.name] ?? ''
         }
         return s
-    }, [fields])
+    }, [flatFields])
 
     const initialState = useMemo(() => buildInitialState(initialValues), [buildInitialState, initialValues])
     const [values, setValues] = useState<Record<string, any>>(initialState)
     const isBatchDebugForm = useMemo(() => {
         if (!formId?.startsWith('batch-edit-form-')) return false
-        return fields.some(f => ['authorId', 'seriesId', 'clearAuthor', 'clearSeries'].includes(f.name))
-    }, [fields, formId])
+        return flatFields.some(f => ['authorId', 'seriesId', 'clearAuthor', 'clearSeries'].includes(f.name))
+    }, [flatFields, formId])
 
     // Keep internal values in sync when initialValues or fields change
-    const fieldsKey = useMemo(() => fields.map(f => f.name).join('|'), [fields])
+    const fieldsKey = useMemo(() => flatFields.map(f => f.name).join('|'), [flatFields])
     useEffect(() => {
         const nextValues = buildInitialState(initialValues)
         setValues(nextValues)
@@ -68,10 +67,10 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                 formId,
                 initialValues,
                 nextValues,
-                fields: fields.map(f => ({ name: f.name, type: f.type })),
+                fields: flatFields.map(f => ({ name: f.name, type: f.type })),
             })
         }
-    }, [buildInitialState, fields, fieldsKey, formId, initialValues, isBatchDebugForm])
+    }, [buildInitialState, flatFields, fieldsKey, formId, initialValues, isBatchDebugForm])
     const [localFieldErrors, setLocalFieldErrors] = useState<Record<string, string>>({})
     const [submitting, setSubmitting] = useState(false)
 
@@ -152,7 +151,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
 
     const validate = useCallback((): boolean => {
         const errors: Record<string, string> = {}
-        for (const f of fields) {
+        for (const f of flatFields) {
             if (!f.required) continue
             const v = values[f.name]
             const empty = v === '' || v === null || v === undefined || (Array.isArray(v) && v.length === 0)
@@ -160,7 +159,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         }
         setLocalFieldErrors(errors)
         return Object.keys(errors).length === 0
-    }, [fields, values])
+    }, [flatFields, values])
 
     const submitValues = useCallback(async () => {
         // Validate current state first
@@ -174,7 +173,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                 try {
                     const fd = new FormData(fEl)
                     const s: Record<string, any> = {}
-                    for (const f of fields) {
+                    for (const f of flatFields) {
                         if (f.type === 'checkbox') {
                             const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
                             s[f.name] = !!input?.checked
@@ -233,7 +232,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
 
         // Validate snapshot
         const errors: Record<string, string> = {}
-        for (const f of fields) {
+        for (const f of flatFields) {
             if (f.required) {
                 const v = snapshot[f.name]
                 const empty = v === '' || v === null || v === undefined || (Array.isArray(v) && v.length === 0)
@@ -249,11 +248,42 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         } finally {
             setSubmitting(false)
         }
-    }, [fields, formId, onSubmit, validate, values])
+    }, [flatFields, formId, onSubmit, validate, values])
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault()
         void submitValues()
     }
+
+    const openPath = useCallback(async (field: Field) => {
+        const targetPath = String(values[field.name] || '').trim()
+        if (!targetPath) return
+
+        const api = (window as any).api
+        if (!api || typeof api.openPath !== 'function') return
+
+        try {
+            await api.openPath(targetPath)
+        } catch (error) {
+            console.error('Failed to open path', error)
+        }
+    }, [values])
+
+    const choosePath = useCallback(async (field: Field) => {
+        const api = (window as any).api
+        if (!api) return
+
+        const picker = field.pathPicker === 'file' ? api.openFile : api.openDirectory
+        if (typeof picker !== 'function') return
+
+        try {
+            const pickedPath = await picker()
+            if (!pickedPath) return
+
+            setValues(prev => ({ ...prev, [field.name]: pickedPath }))
+        } catch (error) {
+            console.error('Failed to choose path', error)
+        }
+    }, [])
 
     // If an external submit button id is provided, wire it to submitValues
     useEffect(() => {
@@ -288,40 +318,32 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         }
     }, [submitButtonId, submitValues])
 
+    const renderField = (f: Field) => (
+        <FormField
+            key={f.name}
+            field={f}
+            value={values[f.name]}
+            error={mergedFieldError(f.name)}
+            onChange={handleChange}
+            onOpenPath={(field) => void openPath(field)}
+            onChoosePath={(field) => void choosePath(field)}
+        />
+    )
+
     return (
     <form id={formId} className={`mh-form ${className}`} onSubmit={handleSubmit} noValidate>
         {globalError ? <div className="mh-form__global-error">{globalError}</div> : null}
 
-        {fields.map(f => (
-            <div key={f.name} className="mh-form__field">
-            {f.label ? <label htmlFor={f.name}>{f.label}{f.required ? ' *' : ''}</label> : null}
-
-            {f.type === "text" ? <TextField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "number" ? <NumberField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "textarea" ? <TextareaField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "select" ? <SelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "selectMulti" ? <MultiSelectField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "tagsPicker" ? <TagPickerField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "entityPicker" ? (
-              <EntityPickerField
-                field={f}
-                options={(f.options || []).map((option) => ({
-                  id: option.value,
-                  name: option.label,
-                }))}
-                value={values[f.name] || []}
-                onChange={handleChange(f) as any}
-                placeholder={f.placeholder}
-              />
-            ) : null}
-            {f.type === "radio" ? <RadioField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "checkbox" ? <CheckboxField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "file" ? <FileField field={f} onChange={handleChange(f) as any} /> : null}
-            {f.type === "series" ? <SeriesField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-            {f.type === "author" ? <AuthorField field={f} value={values[f.name]} onChange={handleChange(f) as any} /> : null}
-
-            {mergedFieldError(f.name) ? <div className="mh-form__field-error">{mergedFieldError(f.name)}</div> : null}
-            </div>
+        {fields.map((item, index) => isFormSection(item) ? (
+            <section key={`section-${item.id || item.title}-${index}`} className="mh-form__section">
+                <div className="mh-form__section-header">
+                    <h3>{item.title}</h3>
+                    {item.description ? <p>{item.description}</p> : null}
+                </div>
+                {item.fields.map(renderField)}
+            </section>
+        ) : (
+            renderField(item)
         ))}
 
         {(!submitButtonId) ? (

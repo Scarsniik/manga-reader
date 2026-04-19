@@ -1,5 +1,6 @@
-import { ipcMain, IpcMainInvokeEvent, app } from "electron";
+import { ipcMain, IpcMainInvokeEvent, app, shell } from "electron";
 import { dialog, BrowserWindow } from "electron";
+import { stat } from "fs/promises";
 
 // Themed handlers
 import * as mangas from "./handlers/mangas";
@@ -211,6 +212,46 @@ ipcMain.handle("open-directory", async (event: IpcMainInvokeEvent) => {
     } catch (error) {
         console.error("Error opening directory dialog", error);
         return null;
+    }
+});
+
+ipcMain.handle("open-file", async (event: IpcMainInvokeEvent) => {
+    try {
+        const win = BrowserWindow.getFocusedWindow();
+        const result = await dialog.showOpenDialog((win as BrowserWindow) || undefined, {
+            properties: ["openFile"]
+        });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) return null;
+        return result.filePaths[0];
+    } catch (error) {
+        console.error("Error opening file dialog", error);
+        return null;
+    }
+});
+
+ipcMain.handle("open-path", async (event: IpcMainInvokeEvent, targetPath: string) => {
+    const normalizedPath = String(targetPath || "").trim();
+    if (!normalizedPath) {
+        return { success: false, error: "Path is empty" };
+    }
+
+    try {
+        const pathStat = await stat(normalizedPath);
+        if (pathStat.isDirectory()) {
+            const error = await shell.openPath(normalizedPath);
+            return {
+                success: error.length === 0,
+                error,
+            };
+        }
+
+        shell.showItemInFolder(normalizedPath);
+        return { success: true, error: "" };
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unable to open path",
+        };
     }
 });
 

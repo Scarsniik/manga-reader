@@ -150,6 +150,8 @@ contextBridge.exposeInMainWorld('api', {
     getCoverData: (folderPath: string) => ipcRenderer.invoke('get-cover-data', folderPath),
     countPages: (folderPath: string) => ipcRenderer.invoke('count-pages', folderPath),
     openDirectory: () => ipcRenderer.invoke('open-directory'),
+    openFile: () => ipcRenderer.invoke('open-file'),
+    openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath),
     listPages: (folderPath: string) => ipcRenderer.invoke('list-pages', folderPath),
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),

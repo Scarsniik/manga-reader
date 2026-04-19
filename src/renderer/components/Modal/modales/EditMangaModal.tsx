@@ -70,6 +70,7 @@ export default function buildEditMangaModal(manga: Manga | EditMangaInput): Moda
         name: "path",
         label: "Emplacement",
         type: "text",
+        pathPicker: "directory",
       }
     ], [tags]);
 
