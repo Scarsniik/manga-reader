@@ -51,6 +51,11 @@ import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
+import {
+  getCurrentVerticalScrollTop,
+  scrollElementToVerticalStart,
+  scrollToVerticalPosition,
+} from '@/renderer/utils/scrollPosition';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import {
   buildSearchResultViewHistoryIdentity,
@@ -325,17 +330,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, []);
 
   const getCurrentScrollTop = useCallback(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return 0;
-    }
-
-    const windowScrollTop = window.scrollY || window.pageYOffset || 0;
-    const documentScrollTop = document.scrollingElement?.scrollTop
-      ?? document.documentElement.scrollTop
-      ?? document.body?.scrollTop
-      ?? 0;
-
-    return Math.max(windowScrollTop, documentScrollTop);
+    return getCurrentVerticalScrollTop(browserRootRef.current);
   }, []);
 
   const restoreSearchScrollPosition = useCallback((scrollTop: number | null | undefined) => {
@@ -354,7 +349,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       scrollRestoreFrameRef.current = null;
       nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
         nestedScrollRestoreFrameRef.current = null;
-        window.scrollTo({ top: nextScrollTop, left: 0, behavior: 'auto' });
+        scrollToVerticalPosition(browserRootRef.current, nextScrollTop);
       });
     });
   }, [cancelScheduledScrollRestore]);
@@ -370,15 +365,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       scrollRestoreFrameRef.current = null;
       nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
         nestedScrollRestoreFrameRef.current = null;
-        const top = browserRootRef.current
-          ? browserRootRef.current.getBoundingClientRect().top + window.scrollY
-          : 0;
-
-        window.scrollTo({
-          top: Math.max(0, top),
-          left: 0,
-          behavior: 'auto',
-        });
+        scrollElementToVerticalStart(browserRootRef.current);
       });
     });
   }, [cancelScheduledScrollRestore]);
