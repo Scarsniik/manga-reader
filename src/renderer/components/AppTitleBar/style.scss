@@ -1,0 +1,84 @@
+.app-titlebar {
+    position: relative;
+    z-index: 10000;
+    display: flex;
+    align-items: stretch;
+    height: var(--app-titlebar-height);
+    min-height: var(--app-titlebar-height);
+    background: #171717;
+    border-bottom: 1px solid #2a2a2a;
+    color: #eeeeee;
+    user-select: none;
+    -webkit-app-region: drag;
+}
+
+.app-titlebar__title {
+    display: flex;
+    align-items: center;
+    max-width: 260px;
+    min-width: 0;
+    padding: 0 12px;
+    overflow: hidden;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-titlebar__slot {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    -webkit-app-region: no-drag;
+}
+
+.app-titlebar__drag-space {
+    flex: 1 1 auto;
+    min-width: 24px;
+}
+
+.app-titlebar__actions {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    -webkit-app-region: no-drag;
+}
+
+.app-titlebar__control,
+.app-titlebar__devtools {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #eeeeee;
+    cursor: pointer;
+    font: inherit;
+}
+
+.app-titlebar__control {
+    width: 46px;
+    padding: 0;
+    font-size: 0.78rem;
+}
+
+.app-titlebar__devtools {
+    padding: 0 12px;
+    border-left: 1px solid #2a2a2a;
+    font-size: 0.78rem;
+}
+
+.app-titlebar__control:hover:not(:disabled),
+.app-titlebar__devtools:hover {
+    background: #252525;
+}
+
+.app-titlebar__control--close:hover:not(:disabled) {
+    background: #c42b1c;
+    color: #ffffff;
+}
+
+.app-titlebar__control:disabled {
+    cursor: default;
+    opacity: 0.45;
+}

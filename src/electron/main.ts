@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { prewarmOcrEngine } from './handlers/ocr/index';
+import { attachWindowStateListeners } from "./handlers/windowControls";
 import { resolveLocalProtocolPath } from './utils/localProtocol';
 
 // Ensure IPC handlers (links, mangas, count-pages...) are registered
@@ -53,6 +54,8 @@ const createWindow = () => {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
+        backgroundColor: '#121212',
+        frame: false,
         webPreferences: {
             // Use the compiled preload in `dist` during development and when packaged.
             preload: path.join(basePath, 'dist', 'preload.js'),
@@ -62,6 +65,8 @@ const createWindow = () => {
         },
         autoHideMenuBar: app.isPackaged, // Cache la barre de menu en prod
     });
+
+    attachWindowStateListeners(mainWindow);
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         void openExternalNavigation(url);

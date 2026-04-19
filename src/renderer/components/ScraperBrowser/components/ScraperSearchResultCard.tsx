@@ -19,6 +19,8 @@ type Props = {
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
+  onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
+  onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
   onViewed?: (result: ScraperSearchResultItem) => void;
 };
 
@@ -37,6 +39,8 @@ export default function ScraperSearchResultCard({
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
+  onOpenResultInWorkspace,
+  onOpenAuthorInWorkspace,
   onViewed,
 }: Props) {
   const actions: ScraperCardAction[] = [];
@@ -75,6 +79,7 @@ export default function ScraperSearchResultCard({
       type: 'secondary',
       label: 'Auteur',
       onClick: () => onOpenAuthorResultAction(result),
+      onMiddleClick: onOpenAuthorInWorkspace ? () => onOpenAuthorInWorkspace(result) : undefined,
     });
   } else if (result.authorUrl && !canOpenSearchResultsAsAuthor) {
     actions.push({
@@ -105,6 +110,13 @@ export default function ScraperSearchResultCard({
       isActionable={canOpenResult}
       onClick={canOpenResult ? () => onOpenResult(result) : undefined}
       onKeyDown={canOpenResult ? (event) => onResultKeyDown(event, result) : undefined}
+      onMiddleClick={
+        canOpenResult && onOpenResultInWorkspace
+          ? () => onOpenResultInWorkspace(result)
+          : canOpenAuthorResult && onOpenAuthorInWorkspace
+            ? () => onOpenAuthorInWorkspace(result)
+            : undefined
+      }
       onViewed={onViewed ? () => onViewed(result) : undefined}
       aria-label={canOpenResult ? `Ouvrir la fiche ${result.title}` : undefined}
     />

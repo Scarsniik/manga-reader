@@ -6,13 +6,35 @@ body {
     color: #e6e6e6;
     margin: 0;
     padding: 0;
+    overflow: hidden;
 }
 
 :root {
+    --app-titlebar-height: 34px;
     --app-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2399a8bc' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --app-select-chevron-size: 12px 8px;
     --app-select-chevron-offset: 16px;
     --app-select-padding-right: 42px;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background-color: #121212;
+}
+
+.app-shell__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
 }
 
 h1, h2, h3 {
@@ -22,7 +44,8 @@ h1, h2, h3 {
 .container {
     display: flex;
     flex-direction: row;
-    height: 100vh;
+    height: 100%;
+    min-height: 0;
 }
 
 .sidebar {

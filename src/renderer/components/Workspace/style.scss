@@ -1,0 +1,127 @@
+.workspace-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: #eeeeee;
+  background: #121212;
+}
+
+.workspace-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 8px;
+  border-bottom: 3px solid #303030;
+  background: #181818;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.24);
+  overflow-x: auto;
+}
+
+.workspace-tabs__empty {
+  display: flex;
+  align-items: center;
+  color: #9a9a9a;
+  font-size: 0.88rem;
+}
+
+.workspace-tab {
+  display: flex;
+  align-items: stretch;
+  max-width: 260px;
+  min-width: 150px;
+  margin: 5px 4px 0 0;
+  border: 1px solid #303030;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: #202020;
+}
+
+.workspace-tab.is-active {
+  background: #303030;
+  border-color: #6a6a6a;
+  box-shadow: inset 0 3px 0 #4f9ddf;
+}
+
+.workspace-tab__button,
+.workspace-tab__close {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #eeeeee;
+  cursor: pointer;
+}
+
+.workspace-tab__button {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0 10px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab.is-active .workspace-tab__button {
+  color: #ffffff;
+  cursor: default;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.workspace-tab__button:disabled {
+  opacity: 1;
+}
+
+.workspace-tab__close {
+  flex: 0 0 34px;
+  padding: 0;
+  font-size: 0.78rem;
+}
+
+.workspace-tab__button:hover,
+.workspace-tab__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-tab.is-active .workspace-tab__button:hover {
+  background: transparent;
+}
+
+.workspace-view__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 8px;
+  overflow: auto;
+}
+
+.workspace-placeholder {
+  margin: 24px;
+  padding: 18px;
+  border: 1px solid #2b2b2b;
+  border-radius: 6px;
+  background: #181818;
+  color: #bdbdbd;
+}
+
+.workspace-placeholder.is-error {
+  border-color: rgba(207, 79, 79, 0.55);
+  color: #ffb4b4;
+}
+
+.workspace-scraper-config {
+  padding: 16px 20px 24px;
+}
+
+.workspace-scraper-details {
+  min-height: 100%;
+}
+
+.workspace-scraper-author {
+  min-height: 100%;
+}

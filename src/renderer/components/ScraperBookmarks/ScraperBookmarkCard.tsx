@@ -12,6 +12,7 @@ type Props = {
   readAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
+  onOpenBookmarkInWorkspace?: (bookmark: ScraperBookmarkRecord) => void;
   onViewed?: (bookmark: ScraperBookmarkRecord) => void;
 };
 
@@ -36,6 +37,7 @@ export default function ScraperBookmarkCard({
   readAction = null,
   downloadAction = null,
   onOpenBookmark,
+  onOpenBookmarkInWorkspace,
   onViewed,
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
@@ -101,6 +103,7 @@ export default function ScraperBookmarkCard({
       ].join(' ').trim()}
       isActionable={canOpenBookmark}
       onClick={canOpenBookmark ? () => onOpenBookmark(bookmark) : undefined}
+      onMiddleClick={canOpenBookmark && onOpenBookmarkInWorkspace ? () => onOpenBookmarkInWorkspace(bookmark) : undefined}
       onKeyDown={canOpenBookmark ? (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') {
           return;

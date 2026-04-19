@@ -26,6 +26,7 @@ type Props = {
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   onBack?: () => void;
   onOpenAuthor: (value: string) => void;
+  onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
   onLoadMoreThumbnails: () => void;
@@ -49,6 +50,7 @@ export default function ScraperDetailsPanel({
   getLinkedMangaForSource,
   onBack,
   onOpenAuthor,
+  onOpenAuthorInWorkspace,
   onOpenReader,
   onLinkSourceToManga,
   onLoadMoreThumbnails,
@@ -182,7 +184,25 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className="scraper-card__chip is-author is-clickable"
                     onClick={() => onOpenAuthor(authorTarget)}
+                    onMouseDown={onOpenAuthorInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                    } : undefined}
+                    onAuxClick={onOpenAuthorInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenAuthorInWorkspace(authorTarget, author);
+                    } : undefined}
                     title={`Ouvrir la page auteur pour ${author}`}
+                    data-prevent-middle-click-autoscroll={onOpenAuthorInWorkspace ? 'true' : undefined}
                   >
                     {author}
                   </button>

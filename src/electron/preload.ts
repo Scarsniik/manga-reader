@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { IpcRendererEvent } from "electron";
 import type {
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
@@ -12,6 +13,78 @@ import type {
     ScraperAccessValidationRequest,
     SetScraperCardReadRequest,
 } from './scraper';
+
+type WindowState = {
+    isFocused: boolean;
+    isFullScreen: boolean;
+    isMaximized: boolean;
+    isMinimized: boolean;
+};
+
+type WindowStateChangeListener = (state: WindowState) => void;
+
+type ScraperConfigWorkspaceTarget = {
+    kind: "scraper.config";
+    scraperId: string;
+    title?: string;
+};
+
+type ScraperDetailsWorkspaceTarget = {
+    kind: "scraper.details";
+    scraperId: string;
+    sourceUrl: string;
+    title?: string;
+};
+
+type ScraperAuthorWorkspaceTarget = {
+    kind: "scraper.author";
+    scraperId: string;
+    query: string;
+    title?: string;
+    templateContext?: Record<string, string | undefined>;
+};
+
+type WorkspaceTarget =
+    | ScraperConfigWorkspaceTarget
+    | ScraperDetailsWorkspaceTarget
+    | ScraperAuthorWorkspaceTarget;
+
+type WorkspaceTargetListener = (target: WorkspaceTarget) => void;
+
+const workspaceTargetListeners = new Set<WorkspaceTargetListener>();
+const queuedWorkspaceTargets: WorkspaceTarget[] = [];
+
+const onWindowStateChanged = (callback: WindowStateChangeListener) => {
+    const handler = (_event: IpcRendererEvent, state: WindowState) => {
+        callback(state);
+    };
+
+    ipcRenderer.on("window-state-changed", handler);
+
+    return () => {
+        ipcRenderer.removeListener("window-state-changed", handler);
+    };
+};
+
+const onWorkspaceOpenTarget = (callback: WorkspaceTargetListener) => {
+    workspaceTargetListeners.add(callback);
+
+    const queuedTargets = queuedWorkspaceTargets.splice(0, queuedWorkspaceTargets.length);
+    queuedTargets.forEach(callback);
+
+    return () => {
+        workspaceTargetListeners.delete(callback);
+    };
+};
+
+ipcRenderer.on("workspace-open-target", (_event: IpcRendererEvent, target: WorkspaceTarget) => {
+    if (workspaceTargetListeners.size === 0) {
+        queuedWorkspaceTargets.push(target);
+        return;
+    }
+
+    workspaceTargetListeners.forEach((listener) => listener(target));
+});
 
 ipcRenderer.on('mangas-updated', () => {
     try {
@@ -58,6 +131,16 @@ contextBridge.exposeInMainWorld('api', {
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
     openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
+    // Window controls
+    getAppRuntimeInfo: () => ipcRenderer.invoke("app-runtime-info"),
+    getWindowState: () => ipcRenderer.invoke("window-get-state"),
+    minimizeWindow: () => ipcRenderer.invoke("window-minimize"),
+    toggleMaximizeWindow: () => ipcRenderer.invoke("window-toggle-maximize"),
+    closeWindow: () => ipcRenderer.invoke("window-close"),
+    toggleDevTools: () => ipcRenderer.invoke("window-toggle-devtools"),
+    onWindowStateChanged,
+    openWorkspaceTarget: (target: WorkspaceTarget) => ipcRenderer.invoke("workspace-open-target", target),
+    onWorkspaceOpenTarget,
     // Mangas API
     getMangas: () => ipcRenderer.invoke('get-mangas'),
     addManga: (manga: any) => ipcRenderer.invoke('add-manga', manga),

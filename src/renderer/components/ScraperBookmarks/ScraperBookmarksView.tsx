@@ -34,6 +34,7 @@ import {
   getScraperPagesFeatureConfig,
   isScraperFeatureConfigured,
 } from '@/renderer/utils/scraperRuntime';
+import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import './style.scss';
 
 type Props = {
@@ -220,6 +221,35 @@ export default function ScraperBookmarksView({
       },
     });
   }, [location.pathname, location.search, locationState, navigate, scrapersById]);
+
+  const handleOpenBookmarkInWorkspace = useCallback((bookmark: ScraperBookmarkRecord) => {
+    const scraper = scrapersById.get(bookmark.scraperId);
+    if (!scraper) {
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setDownloadError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.details',
+      scraperId: scraper.id,
+      sourceUrl: bookmark.sourceUrl,
+      title: bookmark.title,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setDownloadError('Impossible d\'ouvrir cette fiche dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setDownloadError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette fiche dans le workspace.');
+      });
+  }, [scrapersById]);
 
   const getLinkedMangaForBookmark = useCallback((bookmark: ScraperBookmarkRecord): Manga | null => (
     findMangaLinkedToSource(libraryMangas, {
@@ -445,6 +475,7 @@ export default function ScraperBookmarksView({
                 readAction={renderBookmarkReadAction(bookmark)}
                 downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
                 onOpenBookmark={handleOpenBookmark}
+                onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}
                 onViewed={handleBookmarkViewed}
               />
             );

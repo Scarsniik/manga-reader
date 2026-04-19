@@ -168,12 +168,29 @@ export function useScraperBrowserRouteSync({
   }, [availableModes, defaultMode, setMode]);
 
   useEffect(() => {
+    const initialListingMode = initialState?.listingMode;
+    const hasInitialListing = Boolean(initialListingMode && availableModes.includes(initialListingMode));
+
     setQuery(formatScraperValueForDisplay(initialState?.query ?? ''));
     resetListingState();
     setListingReturnState(initialState?.listingReturnState ?? null);
-    setAuthorTemplateContext(null);
+    setAuthorTemplateContext(initialState?.authorTemplateContext ?? null);
     setDetailsResult(initialState?.detailsResult ?? null);
     setChaptersResult(initialState?.chaptersResult ?? []);
+
+    if (hasInitialListing && initialListingMode) {
+      const initialListingResults = initialState?.listingResults ?? [];
+      setMode(initialListingMode);
+      setListingPage(initialState?.listingPage ?? null);
+      setListingVisitedPageUrls(initialState?.listingVisitedPageUrls ?? []);
+      setListingPageIndex(initialState?.listingPageIndex ?? 0);
+      setListingResults(initialListingResults);
+      setHasExecutedListing(
+        initialState?.hasExecutedListing
+        ?? Boolean(initialState?.listingPage || initialListingResults.length > 0),
+      );
+    }
+
     clearFeedback();
     resetAsyncState();
     setUrlRestoreReady(false);
@@ -182,6 +199,7 @@ export function useScraperBrowserRouteSync({
     lastInternalSearchRef.current = null;
     lastRestoredRouteSignatureRef.current = null;
   }, [
+    availableModes,
     cancelScheduledScrollRestore,
     clearFeedback,
     initialState,
@@ -190,8 +208,14 @@ export function useScraperBrowserRouteSync({
     scraperId,
     setChaptersResult,
     setDetailsResult,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
     setListingReturnState,
+    setListingVisitedPageUrls,
     setAuthorTemplateContext,
+    setMode,
     setQuery,
   ]);
 
@@ -216,6 +240,17 @@ export function useScraperBrowserRouteSync({
       setQuery(formatScraperValueForDisplay(
         routeState.mangaQuery || routeState.mangaUrl || initialState.query || '',
       ));
+      setListingReturnState(restoredListingReturnState);
+      return;
+    }
+
+    if (
+      allowInitialState
+      && initialState?.listingMode
+      && availableModes.includes(initialState.listingMode)
+    ) {
+      setMode(initialState.listingMode);
+      setQuery(formatScraperValueForDisplay(initialState.query || ''));
       setListingReturnState(restoredListingReturnState);
       return;
     }

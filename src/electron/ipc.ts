@@ -12,6 +12,8 @@ import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
 import * as series from "./handlers/series";
 import * as scrapers from "./handlers/scrapers";
+import * as windowControls from "./handlers/windowControls";
+import * as workspaceWindow from "./handlers/workspaceWindow";
 import { migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -46,6 +48,17 @@ ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
 ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => links.removeLink(event, url));
 ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
+
+// Window controls
+ipcMain.handle("window-get-state", async (event: IpcMainInvokeEvent) => windowControls.getWindowState(event));
+ipcMain.handle("window-minimize", async (event: IpcMainInvokeEvent) => windowControls.minimizeWindow(event));
+ipcMain.handle("window-toggle-maximize", async (event: IpcMainInvokeEvent) => windowControls.toggleMaximizeWindow(event));
+ipcMain.handle("window-close", async (event: IpcMainInvokeEvent) => windowControls.closeWindow(event));
+ipcMain.handle("window-toggle-devtools", async (event: IpcMainInvokeEvent) => windowControls.toggleDevTools(event));
+ipcMain.handle("app-runtime-info", async () => windowControls.getAppRuntimeInfo());
+ipcMain.handle("workspace-open-target", async (event: IpcMainInvokeEvent, target: unknown) => (
+    workspaceWindow.openWorkspaceTarget(event, target)
+));
 
 // Mangas
 ipcMain.handle("get-mangas", async () => mangas.getMangas());

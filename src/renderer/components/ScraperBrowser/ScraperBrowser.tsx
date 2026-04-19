@@ -81,6 +81,7 @@ import {
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import generateId from '@/utils/id';
 import useParams from '@/renderer/hooks/useParams';
+import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import './style.scss';
 
 type Props = {
@@ -195,6 +196,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [hasAuthor, hasDetails, hasSearch]);
 
   const defaultMode = useMemo<ScraperBrowseMode>(() => {
+    if (initialState?.listingMode && availableModes.includes(initialState.listingMode)) {
+      return initialState.listingMode;
+    }
+
     if (initialState?.detailsResult && availableModes.includes('manga')) {
       return 'manga';
     }
@@ -208,7 +213,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }
 
     return availableModes[0] ?? 'manga';
-  }, [availableModes, initialState?.detailsResult]);
+  }, [availableModes, initialState?.detailsResult, initialState?.listingMode]);
 
   const canOpenSearchResultsAsDetails = Boolean(hasDetails && detailsConfig?.titleSelector);
   const canOpenSearchResultsAsAuthor = Boolean(hasAuthor && authorConfig?.titleSelector && authorConfig?.resultItemSelector);
@@ -906,6 +911,36 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     );
   }, [detailsResult, location.pathname, location.search, locationState, navigate, scraper.id]);
 
+  const handleOpenAuthorFromDetailsInWorkspace = useCallback((value: string, authorTitle: string) => {
+    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+      setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.author',
+      scraperId: scraper.id,
+      query: value,
+      title: authorTitle || formatScraperValueForDisplay(value),
+      templateContext: detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : undefined,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette page auteur dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette page auteur dans le workspace.');
+      });
+  }, [authorConfig, detailsResult, scraper.id, setRuntimeError]);
+
   const handleOpenScraperBookmarks = useCallback(() => {
     navigate({
       pathname: location.pathname,
@@ -937,6 +972,69 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       listingReturnState: listingReturnStateToRestore,
     });
   }, [cacheCurrentListingReturnState, handleOpenResult]);
+
+  const handleOpenListingResultInWorkspace = useCallback((result: ScraperSearchResultItem) => {
+    if (!result.detailUrl) {
+      setRuntimeError('Cette card ne fournit pas d\'URL de fiche.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.details',
+      scraperId: scraper.id,
+      sourceUrl: result.detailUrl,
+      title: result.title,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette fiche dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette fiche dans le workspace.');
+      });
+  }, [scraper.id, setRuntimeError]);
+
+  const handleOpenAuthorResultInWorkspace = useCallback((result: ScraperSearchResultItem) => {
+    if (!result.authorUrl) {
+      setRuntimeError('Cette card ne fournit pas d\'URL auteur.');
+      return;
+    }
+
+    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+      setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.author',
+      scraperId: scraper.id,
+      query: result.authorUrl,
+      title: result.title,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette page auteur dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette page auteur dans le workspace.');
+      });
+  }, [authorConfig, scraper.id, setRuntimeError]);
 
   const handleListingResultKeyDown = useCallback((
     event: React.KeyboardEvent<HTMLElement>,
@@ -1231,6 +1329,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onResultKeyDown={handleListingResultKeyDown}
         onOpenResultAction={handleOpenResultAction}
         onOpenResultImage={handleOpenSearchResultImage}
+        onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
+        onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
         onResultViewed={handleSearchResultViewed}
       />
 
@@ -1252,6 +1352,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onOpenAuthor={(value) => {
           handleOpenAuthorFromDetails(value);
         }}
+        onOpenAuthorInWorkspace={handleOpenAuthorFromDetailsInWorkspace}
         onOpenReader={(options) => void handleOpenReader(options)}
         onLinkSourceToManga={(chapter) => handleLinkSourceToManga(chapter)}
         onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}

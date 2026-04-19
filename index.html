@@ -4,9 +4,89 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manga Helper</title>
+    <style>
+      :root {
+        --app-titlebar-height: 34px;
+      }
+
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #121212;
+        color: #e6e6e6;
+        font-family: Arial, sans-serif;
+      }
+
+      .startup-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        background: #121212;
+      }
+
+      .startup-titlebar {
+        display: flex;
+        align-items: center;
+        height: var(--app-titlebar-height);
+        min-height: var(--app-titlebar-height);
+        padding: 0 12px;
+        border-bottom: 1px solid #2a2a2a;
+        background: #171717;
+        color: #eeeeee;
+        font-size: 0.86rem;
+        font-weight: 600;
+        line-height: 1;
+        user-select: none;
+        -webkit-app-region: drag;
+      }
+
+      .startup-content {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+      }
+
+      .startup-spinner {
+        width: 22px;
+        height: 22px;
+        border: 3px solid #2f2f2f;
+        border-top-color: #e6e6e6;
+        border-radius: 50%;
+        animation: startup-spin 0.8s linear infinite;
+      }
+
+      .startup-label {
+        color: #cfcfcf;
+        font-size: 0.95rem;
+      }
+
+      @keyframes startup-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="startup-shell">
+        <div class="startup-titlebar">Manga Helper</div>
+        <div class="startup-content" aria-live="polite" aria-busy="true">
+          <div class="startup-spinner" aria-hidden="true"></div>
+          <div class="startup-label">Chargement...</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/renderer/index.tsx"></script>
   </body>
 </html>

@@ -33,6 +33,8 @@ type Props = {
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
+  onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
+  onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
   onResultViewed?: (result: ScraperSearchResultItem) => void;
 };
 
@@ -63,6 +65,8 @@ export default function ScraperSearchResultsSection({
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
+  onOpenResultInWorkspace,
+  onOpenAuthorInWorkspace,
   onResultViewed,
 }: Props) {
   if (!visibleSearchResults.length && !backLabel) {
@@ -155,6 +159,8 @@ export default function ScraperSearchResultsSection({
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}
               onOpenResultImage={onOpenResultImage}
+              onOpenResultInWorkspace={onOpenResultInWorkspace}
+              onOpenAuthorInWorkspace={onOpenAuthorInWorkspace}
               onViewed={onResultViewed}
             />
           );

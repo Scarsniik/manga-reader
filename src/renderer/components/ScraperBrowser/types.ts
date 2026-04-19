@@ -4,6 +4,7 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 
 export type ScraperListingMode = 'search' | 'author';
 export type ScraperBrowseMode = ScraperListingMode | 'manga';
@@ -18,14 +19,25 @@ export type ScraperBrowserLocationState = {
 
 export type ScraperBrowserInitialState = {
   query: string;
-  detailsResult: ScraperRuntimeDetailsResult;
+  detailsResult?: ScraperRuntimeDetailsResult | null;
   chaptersResult?: ScraperRuntimeChapterResult[];
   listingReturnState?: ScraperListingReturnState | null;
+  listingMode?: ScraperListingMode;
+  listingPage?: ScraperRuntimeSearchPageResult | null;
+  listingVisitedPageUrls?: string[];
+  listingPageIndex?: number;
+  listingResults?: ScraperSearchResultItem[];
+  hasExecutedListing?: boolean;
+  authorTemplateContext?: ScraperTemplateContext | null;
 };
 
 export type ScraperBrowserReturnState = {
   scraperId: string;
-} & ScraperBrowserInitialState;
+  query: string;
+  detailsResult: ScraperRuntimeDetailsResult;
+  chaptersResult?: ScraperRuntimeChapterResult[];
+  listingReturnState?: ScraperListingReturnState | null;
+};
 
 export type ScraperListingReturnState = {
   mode: ScraperListingMode;
