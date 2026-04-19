@@ -108,6 +108,7 @@ Champs minimum proposes :
 - `authorUrlSelector` optionnel
 - `thumbnailSelector`
 - `summarySelector`
+- `pageCountSelector` optionnel
 - `nextPageSelector` optionnel
 
 Exemple conceptuel :
@@ -130,6 +131,7 @@ Champs minimum proposes :
 - `detailUrlSelector` optionnel
 - `thumbnailSelector` optionnel
 - `summarySelector` optionnel
+- `pageCountSelector` optionnel
 - `nextPageSelector` optionnel
 
 Direction retenue :
@@ -152,6 +154,7 @@ Champs minimum proposes :
 - `authorUrlSelector` optionnel
 - `tagsSelector`
 - `statusSelector`
+- `pageCountSelector`
 - `thumbnailsListSelector` optionnel
 - `thumbnailsSelector` optionnel
 - `thumbnailsNextPageSelector` optionnel

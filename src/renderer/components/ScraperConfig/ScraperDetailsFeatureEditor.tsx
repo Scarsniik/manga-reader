@@ -339,6 +339,7 @@ export default function ScraperDetailsFeatureEditor({
       }
       testSelector('tags', config.tagsSelector, false);
       testSelector('status', config.statusSelector, false);
+      testSelector('pageCount', config.pageCountSelector, false);
       if (config.thumbnailsSelector) {
         const selectorLabel = config.thumbnailsListSelector
           ? `${config.thumbnailsListSelector} -> ${config.thumbnailsSelector}`

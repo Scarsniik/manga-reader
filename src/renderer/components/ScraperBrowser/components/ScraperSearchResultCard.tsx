@@ -3,6 +3,7 @@ import ScraperCard, { type ScraperCardAction } from '@/renderer/components/Scrap
 import { ScraperSearchResultItem } from '@/shared/scraper';
 import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
+import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   result: ScraperSearchResultItem;
@@ -44,6 +45,7 @@ export default function ScraperSearchResultCard({
   onViewed,
 }: Props) {
   const actions: ScraperCardAction[] = [];
+  const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
 
   if (readAction) {
     actions.push(readAction);
@@ -105,6 +107,11 @@ export default function ScraperSearchResultCard({
       coverUrl={result.thumbnailUrl}
       coverAlt={result.title}
       summary={result.summary}
+      metadata={pageCountLabel ? (
+        <div className="scraper-card__metadata">
+          <span>{pageCountLabel}</span>
+        </div>
+      ) : undefined}
       actions={actions}
       className={viewState === 'read' ? 'is-history-read' : viewState === 'new' ? 'is-history-new' : ''}
       isActionable={canOpenResult}

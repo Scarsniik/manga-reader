@@ -321,6 +321,7 @@ export default function ScraperSearchFeatureEditor({
       const authorUrls = extractedResults.map((result) => result.authorUrl).filter(Boolean) as string[];
       const thumbnails = extractedResults.map((result) => result.thumbnailUrl).filter(Boolean) as string[];
       const summaries = extractedResults.map((result) => result.summary).filter(Boolean) as string[];
+      const pageCounts = extractedResults.map((result) => result.pageCount).filter(Boolean) as string[];
 
       const checks = [
         titles.length > 0
@@ -388,6 +389,24 @@ export default function ScraperSearchFeatureEditor({
             : {
               key: 'description' as const,
               selector: config.summarySelector,
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match' as const,
+            }]
+          : []),
+        ...(config.pageCountSelector
+          ? [pageCounts.length > 0
+            ? {
+              key: 'pageCount' as const,
+              selector: config.pageCountSelector,
+              required: false,
+              matchedCount: pageCounts.length,
+              sample: pageCounts[0],
+              samples: pageCounts.slice(0, 12),
+            }
+            : {
+              key: 'pageCount' as const,
+              selector: config.pageCountSelector,
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,

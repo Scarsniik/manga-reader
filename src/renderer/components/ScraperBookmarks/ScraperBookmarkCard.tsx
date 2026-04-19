@@ -4,6 +4,7 @@ import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/S
 import { DetailsCardIcon } from '@/renderer/components/icons';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
+import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
@@ -41,6 +42,7 @@ export default function ScraperBookmarkCard({
   onViewed,
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
+  const pageCountLabel = formatScraperPageCountForDisplay(bookmark.pageCount);
   const actions: ScraperCardAction[] = [
     ...(readAction ? [readAction] : []),
     {
@@ -58,6 +60,7 @@ export default function ScraperBookmarkCard({
           authors={bookmark.authors}
           tags={bookmark.tags}
           mangaStatus={bookmark.mangaStatus}
+          pageCount={bookmark.pageCount}
           excludedFields={scraper?.globalConfig.bookmark.excludedFields}
           size="sm"
         />
@@ -92,6 +95,11 @@ export default function ScraperBookmarkCard({
       summary={bookmark.description || bookmark.summary}
       metadata={(
         <>
+          {pageCountLabel ? (
+            <div className="scraper-card__metadata">
+              <span>{pageCountLabel}</span>
+            </div>
+          ) : null}
           {renderChipGroup(bookmark.authors, 'author')}
           {renderChipGroup(bookmark.tags, 'tag')}
         </>

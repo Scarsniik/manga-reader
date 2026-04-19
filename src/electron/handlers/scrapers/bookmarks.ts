@@ -61,6 +61,7 @@ const mergeScraperBookmarkRecord = (
     authors: normalizedRequest.authors.length ? normalizedRequest.authors : existing.authors,
     tags: normalizedRequest.tags.length ? normalizedRequest.tags : existing.tags,
     mangaStatus: normalizedRequest.mangaStatus || existing.mangaStatus,
+    pageCount: normalizedRequest.pageCount || existing.pageCount,
     createdAt: existing.createdAt,
     updatedAt: now,
   }, excludedFields));

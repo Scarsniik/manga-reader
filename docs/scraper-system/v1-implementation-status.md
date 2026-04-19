@@ -173,6 +173,7 @@ Pour les bookmarks, une section dediee permet de choisir plusieurs informations 
 - les tags
 - le statut
 - la couverture
+- le nombre de pages
 
 ## Configuration actuelle de `Fiche`
 
@@ -188,7 +189,7 @@ Le composant permet :
 - un acces par URL connue
 - ou un acces par template d'URL
 - un selecteur de titre obligatoire
-- des selecteurs optionnels pour couverture, description, auteurs, tags et statut
+- des selecteurs optionnels pour couverture, description, auteurs, tags, statut et nombre de pages
 - un selecteur optionnel de lien auteur, pour rendre les tags auteur cliquables
 - des selecteurs optionnels pour extraire une liste ordonnee de vignettes depuis la fiche et son lien de page suivante
 - une liste de variables derivees reutilisables par d'autres composants
@@ -253,7 +254,7 @@ Le composant permet :
 - ou un acces par template d'URL auteur
 - de recopier en un clic les selecteurs de `Recherche` vers `Auteur` quand `Recherche` est deja configuree
 - un selecteur de titre obligatoire
-- des selecteurs optionnels pour lien fiche, lien auteur, miniature, resume et page suivante
+- des selecteurs optionnels pour lien fiche, lien auteur, miniature, resume, nombre de pages et page suivante
 - un rendu de previsualisation identique a une liste de `Recherche`
 
 Regles actuelles :
@@ -397,6 +398,7 @@ Le mode `Recherche` permet deja :
 
 - de lancer une vraie requete
 - d'extraire les cartes de resultats
+- d'afficher le nombre de pages sur les cards quand le selecteur est configure
 - de naviguer entre les pages de recherche
 - d'ouvrir `Fiche` depuis un resultat quand un lien detail est disponible
 - d'ouvrir `Auteur` depuis un resultat quand un lien auteur est disponible
@@ -406,6 +408,7 @@ Le mode `Auteur` permet deja :
 - d'ouvrir une page auteur par URL complete, chemin relatif ou valeur libre
 - d'ouvrir une page auteur via un template qui peut reutiliser les variables derivees de `Fiche`
 - d'extraire les cartes de la page auteur
+- d'afficher le nombre de pages sur les cards auteur quand le selecteur est configure
 - de naviguer entre les pages auteur
 - d'ouvrir `Fiche` depuis les cartes retournees
 
@@ -417,6 +420,7 @@ Le rendu temporaire affiche :
 - auteurs
 - tags
 - statut
+- nombre de pages
 - tags auteur cliquables vers le mode `Auteur` quand la configuration le permet
 - la liste des chapitres extraits sous la fiche manga
 - URL demandee / URL finale

@@ -80,7 +80,20 @@ export const sanitizeAccessValidation = (
 const sanitizeFeatureValidationCheck = (
   check: Partial<ScraperFeatureValidationCheck>,
 ): ScraperFeatureValidationCheck | null => {
-  const allowedKeys = ["title", "cover", "description", "authors", "authorUrl", "tags", "status", "chapters", "pages"];
+  const allowedKeys = [
+    "title",
+    "cover",
+    "description",
+    "authors",
+    "authorUrl",
+    "tags",
+    "status",
+    "pageCount",
+    "thumbnails",
+    "thumbnailsNextPage",
+    "chapters",
+    "pages",
+  ];
   if (!allowedKeys.includes(String(check.key))) {
     return null;
   }
@@ -126,7 +139,7 @@ const sanitizeDerivedValueResult = (
   derivedValue: Partial<ScraperDetailsDerivedValueResult>,
 ): ScraperDetailsDerivedValueResult | null => {
   const allowedSourceTypes = ["requested_url", "final_url", "field", "selector", "html"];
-  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "status"];
+  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "status", "pageCount"];
   const allowedIssueCodes = ["missing_source", "invalid_selector", "invalid_pattern", "no_match"];
 
   const key = String(derivedValue.key ?? "").trim();
@@ -207,6 +220,7 @@ const SCRAPER_BOOKMARK_METADATA_FIELDS: ScraperBookmarkMetadataField[] = [
   "authors",
   "tags",
   "mangaStatus",
+  "pageCount",
 ];
 
 export const sanitizeBookmarkMetadataFieldList = (
@@ -381,6 +395,7 @@ export const sanitizeScraperBookmarkRecord = (
   const summary = String(record.summary ?? "").trim();
   const description = String(record.description ?? "").trim();
   const mangaStatus = String(record.mangaStatus ?? "").trim();
+  const pageCount = String(record.pageCount ?? "").trim();
 
   return {
     scraperId,
@@ -392,6 +407,7 @@ export const sanitizeScraperBookmarkRecord = (
     authors: sanitizeStringList(record.authors),
     tags: sanitizeStringList(record.tags),
     mangaStatus: mangaStatus || undefined,
+    pageCount: pageCount || undefined,
     createdAt: createdAt || new Date().toISOString(),
     updatedAt: updatedAt || new Date().toISOString(),
   };

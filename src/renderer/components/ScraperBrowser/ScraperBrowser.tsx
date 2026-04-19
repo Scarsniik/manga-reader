@@ -1211,6 +1211,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           title={result.title}
           cover={result.thumbnailUrl}
           summary={result.summary}
+          pageCount={result.pageCount}
           excludedFields={scraper.globalConfig.bookmark.excludedFields}
           size="sm"
         />

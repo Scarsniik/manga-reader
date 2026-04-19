@@ -78,6 +78,25 @@
   color: #8f8f8f;
 }
 
+.scraper-card__metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scraper-card__metadata span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #d8d8d8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .scraper-card__actions {
   grid-column: 1 / -1;
   display: flex;

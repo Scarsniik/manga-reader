@@ -4,6 +4,7 @@ import { Manga } from '@/renderer/types';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
 import {
+  formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
@@ -69,6 +70,7 @@ export default function ScraperDetailsPanel({
   const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl);
   const linkedStandaloneManga = getLinkedMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+  const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
   const downloadLabel = linkedStandaloneManga
     ? 'Retelecharger'
     : 'Telecharger';
@@ -103,6 +105,9 @@ export default function ScraperDetailsPanel({
               {detailsResult.mangaStatus ? (
                 <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
               ) : null}
+              {pageCountLabel ? (
+                <span className="scraper-browser__status-pill">{pageCountLabel}</span>
+              ) : null}
               <ScraperBookmarkButton
                 scraperId={scraperId}
                 sourceUrl={detailsResult.finalUrl || detailsResult.requestedUrl}
@@ -112,6 +117,7 @@ export default function ScraperDetailsPanel({
                 authors={detailsResult.authors}
                 tags={detailsResult.tags}
                 mangaStatus={detailsResult.mangaStatus}
+                pageCount={detailsResult.pageCount}
                 excludedFields={bookmarkExcludedFields}
               />
             </div>

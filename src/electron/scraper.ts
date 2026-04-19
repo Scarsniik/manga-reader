@@ -35,7 +35,8 @@ export type ScraperBookmarkMetadataField =
   | 'description'
   | 'authors'
   | 'tags'
-  | 'mangaStatus';
+  | 'mangaStatus'
+  | 'pageCount';
 
 export interface ScraperBookmarkConfig {
   excludedFields: ScraperBookmarkMetadataField[];
@@ -78,6 +79,9 @@ export type ScraperFeatureValidationCheckKey =
   | 'authorUrl'
   | 'tags'
   | 'status'
+  | 'pageCount'
+  | 'thumbnails'
+  | 'thumbnailsNextPage'
   | 'chapters'
   | 'pages';
 
@@ -150,6 +154,7 @@ export interface ScraperCardListConfig {
   authorUrlSelector?: string;
   thumbnailSelector?: string;
   summarySelector?: string;
+  pageCountSelector?: string;
   nextPageSelector?: string;
 }
 
@@ -172,6 +177,7 @@ export interface ScraperSearchResultItem {
   authorUrl?: string;
   thumbnailUrl?: string;
   summary?: string;
+  pageCount?: string;
 }
 
 export interface ScraperDetailsFeatureConfig {
@@ -186,6 +192,10 @@ export interface ScraperDetailsFeatureConfig {
   authorUrlSelector?: string;
   tagsSelector?: string;
   statusSelector?: string;
+  pageCountSelector?: string;
+  thumbnailsListSelector?: string;
+  thumbnailsSelector?: string;
+  thumbnailsNextPageSelector?: string;
   derivedValues: ScraperDetailsDerivedValueConfig[];
 }
 
@@ -356,6 +366,7 @@ export interface ScraperBookmarkRecord {
   authors: string[];
   tags: string[];
   mangaStatus?: string;
+  pageCount?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -370,6 +381,7 @@ export interface SaveScraperBookmarkRequest {
   authors?: string[];
   tags?: string[];
   mangaStatus?: string;
+  pageCount?: string;
   excludedFields?: ScraperBookmarkMetadataField[];
 }
 

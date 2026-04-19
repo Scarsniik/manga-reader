@@ -1,6 +1,9 @@
 import React from 'react';
 import { ScraperSearchResultItem } from '@/shared/scraper';
-import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
+import {
+  formatScraperPageCountForDisplay,
+  ScraperRuntimeSearchPageResult,
+} from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   previewCards: ScraperSearchResultItem[];
@@ -59,30 +62,37 @@ export default function SearchFeaturePreview({
       ) : null}
 
       <div className="scraper-fake-search-results">
-        {previewCards.map((result) => (
-          <article
-            key={`${result.detailUrl ?? result.title}-${result.title}`}
-            className="scraper-fake-search-card"
-          >
-            <div className="scraper-fake-search-card__media">
-              {result.thumbnailUrl ? (
-                <img src={result.thumbnailUrl} alt={result.title} />
-              ) : (
-                <div className="scraper-fake-search-card__media-placeholder">Image</div>
-              )}
-            </div>
+        {previewCards.map((result) => {
+          const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
 
-            <div className="scraper-fake-search-card__content">
-              <h5>{result.title}</h5>
-              {result.summary ? <p>{result.summary}</p> : null}
-              {result.detailUrl ? (
-                <div className="scraper-fake-search-card__meta">Lien de fiche detecte</div>
-              ) : (
-                <div className="scraper-fake-search-card__meta is-muted">Aucun lien de fiche detecte</div>
-              )}
-            </div>
-          </article>
-        ))}
+          return (
+            <article
+              key={`${result.detailUrl ?? result.title}-${result.title}`}
+              className="scraper-fake-search-card"
+            >
+              <div className="scraper-fake-search-card__media">
+                {result.thumbnailUrl ? (
+                  <img src={result.thumbnailUrl} alt={result.title} />
+                ) : (
+                  <div className="scraper-fake-search-card__media-placeholder">Image</div>
+                )}
+              </div>
+
+              <div className="scraper-fake-search-card__content">
+                <h5>{result.title}</h5>
+                {result.summary ? <p>{result.summary}</p> : null}
+                {pageCountLabel ? (
+                  <div className="scraper-fake-search-card__meta">{pageCountLabel}</div>
+                ) : null}
+                {result.detailUrl ? (
+                  <div className="scraper-fake-search-card__meta">Lien de fiche detecte</div>
+                ) : (
+                  <div className="scraper-fake-search-card__meta is-muted">Aucun lien de fiche detecte</div>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </>
   );

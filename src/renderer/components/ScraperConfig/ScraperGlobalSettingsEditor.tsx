@@ -39,6 +39,7 @@ const BOOKMARK_FIELD_OPTIONS: Array<{
   { label: 'Auteurs', value: 'authors' },
   { label: 'Tags', value: 'tags' },
   { label: 'Statut', value: 'mangaStatus' },
+  { label: 'Nombre de pages', value: 'pageCount' },
 ];
 
 const BOOKMARK_FIELD_LABELS = new Map(

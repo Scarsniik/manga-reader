@@ -1,5 +1,6 @@
 import React from 'react';
 import { FakeDetailsPreview as FakeDetailsPreviewData } from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
+import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   preview: FakeDetailsPreviewData | null;
@@ -9,6 +10,8 @@ export default function FakeDetailsPreview({ preview }: Props) {
   if (!preview) {
     return null;
   }
+
+  const pageCountLabel = formatScraperPageCountForDisplay(preview.pageCount);
 
   return (
     <div className="scraper-fake-details">
@@ -32,6 +35,9 @@ export default function FakeDetailsPreview({ preview }: Props) {
           ) : null}
           {preview.tags ? (
             <span className="scraper-feature-pill is-validated">{preview.tags}</span>
+          ) : null}
+          {pageCountLabel ? (
+            <span className="scraper-feature-pill">{pageCountLabel}</span>
           ) : null}
         </div>
 

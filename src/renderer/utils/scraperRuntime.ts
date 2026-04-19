@@ -39,7 +39,7 @@ import {
 
 type DetailsFieldKey = Extract<
   ScraperFeatureValidationCheckKey,
-  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status'
+  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status' | 'pageCount'
 >;
 
 export type ScraperRuntimeChapterResult = ScraperChapterItem;
@@ -58,6 +58,7 @@ export type ScraperRuntimeDetailsResult = {
   thumbnails?: string[];
   thumbnailsNextPageUrl?: string;
   mangaStatus?: string;
+  pageCount?: string;
   derivedValues: Record<string, string>;
 };
 
@@ -94,6 +95,7 @@ const DETAILS_FIELD_KEYS: DetailsFieldKey[] = [
   'authors',
   'tags',
   'status',
+  'pageCount',
 ];
 
 const trimOptional = (value: unknown): string | undefined => {
@@ -146,6 +148,17 @@ export const formatScraperValueForDisplay = (value: string | undefined): string 
   });
 };
 
+export const formatScraperPageCountForDisplay = (value: string | undefined): string => {
+  const normalizedValue = formatScraperValueForDisplay(String(value ?? '').trim());
+  if (!normalizedValue) {
+    return '';
+  }
+
+  return /^\d+$/.test(normalizedValue)
+    ? `${normalizedValue} page(s)`
+    : normalizedValue;
+};
+
 const trimOptionalSelector = (value: unknown): string | undefined => {
   const normalized = normalizeSelectorInput(String(value ?? ''));
   return normalized ? normalized : undefined;
@@ -165,6 +178,7 @@ const buildCardListConfig = (
   authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
   thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
   summarySelector: trimOptionalSelector(raw.summarySelector),
+  pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
   nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
 });
 
@@ -325,6 +339,7 @@ export const getScraperDetailsFeatureConfig = (
     authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalSelector(raw.tagsSelector),
     statusSelector: trimOptionalSelector(raw.statusSelector),
+    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
     thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
@@ -772,6 +787,9 @@ export const extractScraperSearchPageFromDocument = (
     const summaryValue = config.summarySelector
       ? extractSelectorValuesFromRoot(item, config.summarySelector)[0]
       : undefined;
+    const pageCountValue = config.pageCountSelector
+      ? extractSelectorValuesFromRoot(item, config.pageCountSelector)[0]
+      : undefined;
 
     accumulator.push({
       title,
@@ -785,6 +803,7 @@ export const extractScraperSearchPageFromDocument = (
         ? toAbsoluteScraperUrl(thumbnailValue, documentUrl)
         : undefined,
       summary: summaryValue,
+      pageCount: pageCountValue,
     });
 
     return accumulator;
@@ -899,6 +918,7 @@ export const extractScraperDetailsFieldValues = (
     authors: config.authorsSelector,
     tags: config.tagsSelector,
     status: config.statusSelector,
+    pageCount: config.pageCountSelector,
   };
 
   DETAILS_FIELD_KEYS.forEach((fieldKey) => {
@@ -1048,6 +1068,7 @@ export const extractScraperDetailsFromDocument = (
     thumbnails: config.thumbnailsSelector ? thumbnailsPage.thumbnails : undefined,
     thumbnailsNextPageUrl: thumbnailsPage.nextPageUrl,
     mangaStatus: fieldValuesByKey.status?.[0],
+    pageCount: fieldValuesByKey.pageCount?.[0],
     derivedValues,
   };
 };
@@ -1200,6 +1221,7 @@ export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): bool
     || details.tags.length
     || (details.thumbnails?.length ?? 0) > 0
     || details.mangaStatus
+    || details.pageCount
   )
 );
 

@@ -31,6 +31,7 @@ type Props = {
   authors?: string[];
   tags?: string[];
   mangaStatus?: string | null;
+  pageCount?: string | null;
   excludedFields?: ScraperBookmarkMetadataField[];
   className?: string;
   size?: 'sm' | 'md';
@@ -61,6 +62,7 @@ const BOOKMARK_METADATA_FIELDS = new Set<ScraperBookmarkMetadataField>([
   'authors',
   'tags',
   'mangaStatus',
+  'pageCount',
 ]);
 
 const normalizeExcludedFields = (values: ScraperBookmarkMetadataField[] | undefined): ScraperBookmarkMetadataField[] => (
@@ -128,6 +130,11 @@ const shouldSyncBookmarkMetadata = (
 
   const nextMangaStatus = normalizeOptional(request.mangaStatus);
   if (!excludedFields.has('mangaStatus') && nextMangaStatus && nextMangaStatus !== bookmark.mangaStatus) {
+    return true;
+  }
+
+  const nextPageCount = normalizeOptional(request.pageCount);
+  if (!excludedFields.has('pageCount') && nextPageCount && nextPageCount !== bookmark.pageCount) {
     return true;
   }
 
@@ -271,6 +278,7 @@ const enrichBookmarkRequestFromDetails = async (
         ? normalizeStringList(extractedDetails.tags)
         : requestWithGlobalConfig.tags,
       mangaStatus: normalizeOptional(extractedDetails.mangaStatus) || requestWithGlobalConfig.mangaStatus,
+      pageCount: normalizeOptional(extractedDetails.pageCount) || requestWithGlobalConfig.pageCount,
     };
   } catch (error) {
     console.warn('Failed to enrich scraper bookmark from details page', error);
@@ -288,6 +296,7 @@ export default function ScraperBookmarkButton({
   authors,
   tags,
   mangaStatus,
+  pageCount,
   excludedFields,
   className = '',
   size = 'md',
@@ -316,6 +325,7 @@ export default function ScraperBookmarkButton({
       authors: normalizedAuthors,
       tags: normalizedTags,
       mangaStatus: normalizeOptional(mangaStatus),
+      pageCount: normalizeOptional(pageCount),
       excludedFields: normalizedExcludedFields,
     };
   }, [
@@ -328,6 +338,7 @@ export default function ScraperBookmarkButton({
     normalizedSourceUrl,
     normalizedTags,
     normalizedTitle,
+    pageCount,
     summary,
   ]);
   const { bookmark, isBookmarked } = useScraperBookmark(normalizedScraperId, normalizedSourceUrl);
