@@ -1,6 +1,7 @@
 import React from 'react';
 import { Manga } from '@/renderer/types';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
+import { notifyOcrRuntimeMissing } from '@/renderer/utils/ocrRuntimeUi';
 import {
     ManualSelection,
     OcrNavigationDirection,
@@ -281,6 +282,14 @@ const useReaderOcr = ({
             setOcrStatusNote('Selection manuelle ajoutee');
             setManualSelectionEnabled(false);
         } catch (error: any) {
+            if (notifyOcrRuntimeMissing(error, {
+                title: "Installer l'OCR",
+                message: "Installe le runtime OCR pour utiliser la selection manuelle dans le reader.",
+            })) {
+                setOcrError("Runtime OCR absent.");
+                return;
+            }
+
             setOcrError(String(error && error.message ? error.message : error));
         } finally {
             setManualSelectionLoading(false);
@@ -444,6 +453,15 @@ const useReaderOcr = ({
             }
 
             applyCurrentPageOcrBoxes([]);
+            if (notifyOcrRuntimeMissing(error, {
+                title: "Installer l'OCR",
+                message: "Installe le runtime OCR pour reconnaitre le texte de cette page.",
+            })) {
+                setOcrError("Runtime OCR absent.");
+                setOcrStatusNote(null);
+                return;
+            }
+
             setOcrError(String(error && error.message ? error.message : error));
             setOcrStatusNote(null);
         } finally {
@@ -537,6 +555,15 @@ const useReaderOcr = ({
                 }
 
                 applyCurrentPageOcrBoxes([]);
+                if (notifyOcrRuntimeMissing(error, {
+                    title: "Installer l'OCR",
+                    message: "Installe le runtime OCR pour reconnaitre le texte dans le reader.",
+                })) {
+                    setOcrError("Runtime OCR absent.");
+                    setOcrStatusNote(null);
+                    return;
+                }
+
                 setOcrError(String(error && error.message ? error.message : error));
                 setOcrStatusNote(null);
             } finally {

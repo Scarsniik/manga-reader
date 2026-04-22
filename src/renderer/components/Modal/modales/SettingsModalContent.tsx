@@ -2,6 +2,7 @@ import React from 'react'
 import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
 import type { FormItem } from '@/renderer/components/utils/Form/types'
+import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 
 import '@/renderer/components/Modal/style.scss'
 
@@ -176,6 +177,7 @@ export default function SettingsModalContent() {
 
   return (
     <div className="settings-modal-content">
+      <OcrRuntimeSettingsPanel />
       <Form
         fields={fields}
         onSubmit={onSubmit}

@@ -359,7 +359,7 @@ export type OcrWorkerState = {
   stderrLines: string[];
 };
 
-export type BundledOcrAssets = {
+export type OcrRuntimeAssets = {
   root: string;
   workerScriptPath?: string;
   pythonExecutable?: string;

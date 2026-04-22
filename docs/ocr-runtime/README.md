@@ -1,6 +1,6 @@
 # Cahier des charges - Runtime OCR externe
 
-Date de mise a jour : 2026-04-19
+Date de mise a jour : 2026-04-20
 
 ## Statut
 
@@ -19,6 +19,9 @@ Ce cahier des charges se concentre sur l'installation, la detection, la distribu
 - [Specification technique](./technical-spec.md)
 - [Packaging et distribution](./packaging-distribution.md)
 - [Roadmap et criteres d'acceptation](./roadmap.md)
+- [Plan d'action MVP](./mvp-action-plan.md)
+- [Test local du runtime OCR](./local-test.md)
+- [Procedures de test MVP](./mvp-test-procedures.md)
 
 ## Probleme a resoudre
 
@@ -70,7 +73,7 @@ L'application principale doit redevenir legere, tout en gardant une installation
 - Les informations techniques OCR sont stockees dans un fichier dedie, pas dans `params.json`.
 - Les variables d'environnement doivent permettre le developpement et les tests locaux.
 - Le manifeste OCR peut pointer vers un gros fichier unique ou vers plusieurs morceaux.
-- Le choix exact de l'hebergeur est reporte.
+- Le premier hebergeur de publication MVP est GitHub Releases.
 
 ## Hors perimetre du premier bloc
 

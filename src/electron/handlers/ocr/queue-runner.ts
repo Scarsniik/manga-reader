@@ -20,6 +20,7 @@ import {
   writeMangaOcrProfileFile,
 } from "./manga-file";
 import { recognizePageInternal } from "./recognize-page";
+import { ensureOcrWorkerAvailable } from "./worker";
 import {
   getNextRunnableQueueJob,
   registerQueueRunScheduler,
@@ -44,6 +45,8 @@ async function processQueueJob(job: OcrQueueJob) {
   }
 
   const settings = await getSettings();
+  await ensureOcrWorkerAvailable(settings);
+
   const pageFiles = await listImageFiles(manga.path);
   touchQueueJob(job, {
     startedAt: job.startedAt || new Date().toISOString(),

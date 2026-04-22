@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { notifyOcrRuntimeMissing, openOcrRuntimeStatus } from '@/renderer/utils/ocrRuntimeUi';
 import './OcrModalContent.scss';
 
 type Props = {
@@ -83,6 +84,14 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
         // noop
       }
     } catch (err: any) {
+      if (notifyOcrRuntimeMissing(err, {
+        title: "Installer l'OCR",
+        message: "Installe le runtime OCR pour lancer l'OCR sur la bibliotheque.",
+      })) {
+        setError("Runtime OCR absent.");
+        return;
+      }
+
       setError(String(err?.message || err || 'Impossible de lancer l\'OCR de la bibliotheque'));
     }
   }, [filteredMangaIds, loadQueue, selectedMangaIds]);
@@ -183,6 +192,13 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
           </button>
           <button type="button" className="secondary" onClick={() => { void loadQueue(); }}>
             Actualiser
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => openOcrRuntimeStatus({ title: "Installation OCR" })}
+          >
+            Runtime OCR
           </button>
           <button
             type="button"

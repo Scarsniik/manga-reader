@@ -13,6 +13,7 @@ import {
   getQueueJobByMangaId,
   isQueueJobRunning,
 } from "./queue-store";
+import { ensureOcrWorkerAvailable } from "./worker";
 import { getMangaVocabularyStatusSnapshot, readMangaVocabularyFile } from "./vocabulary";
 import type { OcrMangaStatus, OcrQueueJob } from "./types";
 
@@ -63,6 +64,8 @@ export async function getMangaOcrStatusInternal(manga: any): Promise<OcrMangaSta
 
 export async function startMangaOcrInternal(manga: any, options?: Record<string, any>) {
   const settings = await getSettings();
+  await ensureOcrWorkerAvailable(settings);
+
   const pageFiles = await listImageFiles(manga.path);
   const detection = await detectLanguageForManga(manga, pageFiles, settings, !!options?.forceResample);
 

@@ -118,6 +118,14 @@ ipcRenderer.on('scraper-view-history-updated', () => {
     }
 });
 
+ipcRenderer.on('ocr-runtime-notification', (_event: IpcRendererEvent, payload: unknown) => {
+    try {
+        window.dispatchEvent(new CustomEvent('ocr-runtime-notification', { detail: payload }));
+    } catch (error) {
+        console.warn('preload: failed to dispatch ocr-runtime-notification event', error);
+    }
+});
+
 ipcRenderer.on('series-updated', () => {
     try {
         window.dispatchEvent(new CustomEvent('series-updated'));
@@ -156,6 +164,17 @@ contextBridge.exposeInMainWorld('api', {
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),
     // OCR
+    ocrRuntimeDefaults: () => ipcRenderer.invoke('ocr-runtime-defaults'),
+    ocrRuntimeStatus: () => ipcRenderer.invoke('ocr-runtime-status'),
+    ocrRuntimeMarkSkipped: () => ipcRenderer.invoke('ocr-runtime-mark-skipped'),
+    ocrRuntimeReadManifest: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-read-manifest', request),
+    ocrRuntimeInstallStatus: () => ipcRenderer.invoke('ocr-runtime-install-status'),
+    ocrRuntimeStartInstall: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-start-install', request),
+    ocrRuntimeCancelInstall: () => ipcRenderer.invoke('ocr-runtime-cancel-install'),
+    ocrRuntimeOpenInstallLog: () => ipcRenderer.invoke('ocr-runtime-open-install-log'),
+    ocrRuntimeVerify: () => ipcRenderer.invoke('ocr-runtime-verify'),
+    ocrRuntimeRepair: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-repair', request),
+    ocrRuntimeUninstall: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-uninstall', request),
     ocrRecognize: (imagePathOrDataUrl: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl, options),
     ocrAddManualSelections: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-add-manual-selections', payload),
     ocrDeleteManualSelection: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-delete-manual-selection', payload),

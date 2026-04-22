@@ -4,6 +4,8 @@ import Reader from '@/renderer/components/Reader/Reader';
 import Home from '@/renderer/components/Home/Home';
 import AppTitleBar from "@/renderer/components/AppTitleBar/AppTitleBar";
 import WorkspaceView from "@/renderer/components/Workspace/WorkspaceView";
+import OcrRuntimeFirstLaunchGate from "@/renderer/components/OcrRuntimeFirstLaunchGate/OcrRuntimeFirstLaunchGate";
+import OcrRuntimeGlobalUi from "@/renderer/components/OcrRuntime/OcrRuntimeGlobalUi";
 import './styles/main.scss';
 import useRefresh from '@/renderer/hooks/useRefresh';
 import usePreventMiddleClickAutoScroll from "@/renderer/hooks/usePreventMiddleClickAutoScroll";
@@ -24,6 +26,8 @@ const App: React.FC = () => {
                     </Routes>
                 </HashRouter>
             </main>
+            <OcrRuntimeFirstLaunchGate />
+            <OcrRuntimeGlobalUi />
         </div>
     );
 };

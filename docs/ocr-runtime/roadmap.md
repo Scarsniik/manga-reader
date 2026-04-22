@@ -1,6 +1,6 @@
 # Roadmap OCR externe
 
-Date de mise a jour : 2026-04-19
+Date de mise a jour : 2026-04-20
 
 ## Bloc 1 - Externalisation et installation initiale
 
@@ -54,12 +54,16 @@ Livrable attendu :
 - Le mode developpeur permet d'utiliser un manifeste local et un runtime OCR local.
 - Le build peut produire separement l'application principale et le runtime OCR.
 
-## Points a revalider avant implementation
+## Decisions MVP verrouillees
 
-- nom exact du fichier de configuration OCR
-- emplacement portable exact des donnees
-- structure finale du manifeste
-- choix du premier hebergeur
-- taille reelle du runtime apres audit
-- strategie exacte pour la verification d'un runtime deja present
-- niveau de detail des logs exposes a l'utilisateur
+- Le fichier de configuration OCR est `ocr-runtime.json`.
+- Le fichier de metadata installe dans le runtime est `runtime-metadata.json`.
+- En mode standard, la configuration OCR est stockee dans `%APPDATA%\manga-helper\data\ocr-runtime.json`.
+- En mode portable, la configuration OCR est stockee dans `Manga Helper Data\ocr-runtime.json`.
+- En mode portable, l'emplacement runtime propose est `Manga Helper Data\ocr-runtime`.
+- Le manifeste MVP decrit une seule version runtime recommandee.
+- Le premier hebergeur de publication est GitHub Releases.
+- Les archives OCR sont decoupees en morceaux de 1,8 Go maximum quand necessaire.
+- La taille exacte du runtime est mesuree par `package:ocr-runtime` et inscrite dans le manifeste.
+- Un runtime deja present est valide par metadata, structure de fichiers, compatibilite plateforme/version et test worker leger sur demande.
+- L'UI affiche une erreur courte et propose d'ouvrir `ocr-install-last.log` pour le diagnostic detaille.

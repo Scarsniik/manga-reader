@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Manga } from '@/renderer/types';
 import useModal from '@/renderer/hooks/useModal';
+import { notifyOcrRuntimeMissing } from '@/renderer/utils/ocrRuntimeUi';
 import buildSettingsModal from './SettingsModal';
 import './OcrModalContent.scss';
 
@@ -261,6 +262,14 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
         }
       }
     } catch (err: any) {
+      if (notifyOcrRuntimeMissing(err, {
+        title: "Installer l'OCR",
+        message: "Installe le runtime OCR pour lancer l'OCR ou extraire le vocabulaire de ce manga.",
+      })) {
+        setActionError("Runtime OCR absent.");
+        return;
+      }
+
       setActionError(String(err?.message || err || 'Impossible de lancer l\'OCR'));
     } finally {
       setStarting(false);
@@ -300,6 +309,14 @@ const MangaOcrModalContent: React.FC<Props> = ({ manga }) => {
       await loadStatus();
       await loadVocabulary();
     } catch (err: any) {
+      if (notifyOcrRuntimeMissing(err, {
+        title: "Installer l'OCR",
+        message: "Installe le runtime OCR pour extraire le vocabulaire depuis les pages du manga.",
+      })) {
+        setActionError("Runtime OCR absent.");
+        return;
+      }
+
       setActionError(String(err?.message || err || 'Impossible d\'extraire le vocabulaire'));
     } finally {
       setExtracting(false);

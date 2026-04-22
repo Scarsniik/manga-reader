@@ -13,7 +13,8 @@ import {
 import { getQueueStatusInternal, startMangaOcrInternal, recognizePageInternal, getMangaOcrStatusInternal, ensureMangaOcrReadyForVocabularyExtraction, enqueueMangaQueueJob, pauseQueueJob, resumeQueueJob, cancelQueueJob, cancelAllQueueJobs } from "./queue";
 import { ocrRuntimeState } from "./state";
 import { buildVocabularyFileFromOcr, normalizeVocabularyMode, readMangaVocabularyForUi, writeMangaVocabularyFile } from "./vocabulary";
-import { callWorkerPrewarm, normalizeRawResult, terminateOcrWorker, callWorkerRecognize } from "./worker";
+import { callWorkerPrewarm, ensureOcrWorkerAvailable, normalizeRawResult, terminateOcrWorker, callWorkerRecognize } from "./worker";
+import { isOcrRuntimeUnavailableError } from "../ocrRuntime/index";
 import type { NormalizedBox } from "./types";
 
 export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) {
@@ -21,9 +22,10 @@ export async function ocrRecognize(_event: IpcMainInvokeEvent, imagePathOrDataUr
     throw new Error("No image provided for OCR");
   }
 
+  const settings = await getSettings();
+  await ensureOcrWorkerAvailable(settings);
   await ensureOcrDirs();
 
-  const settings = await getSettings();
   const { imagePath, cleanup } = await resolveWorkerInput(imagePathOrDataUrl);
 
   try {
@@ -179,6 +181,7 @@ export async function ocrStartLibrary(_event: IpcMainInvokeEvent, options?: Reco
     ? allMangas.filter((manga: any) => requestedIds.has(String(manga.id)))
     : allMangas;
   const settings = await getSettings();
+  await ensureOcrWorkerAvailable(settings);
   const mode = options?.mode === "overwrite_all" ? "overwrite_all" : "missing_only";
   const queuedJobs = [];
   const skippedExisting: string[] = [];
@@ -228,6 +231,20 @@ export async function ocrQueueImportManga(manga: any) {
   const settings = await getSettings();
   if (!settings?.ocrAutoRunOnImport) {
     return { queued: false, reason: "auto-import-disabled" };
+  }
+
+  try {
+    await ensureOcrWorkerAvailable(settings);
+  } catch (error) {
+    if (isOcrRuntimeUnavailableError(error)) {
+      return {
+        queued: false,
+        reason: "ocr-runtime-missing",
+        runtimeStatus: error.runtimeStatus,
+      };
+    }
+
+    throw error;
   }
 
   const pageFiles = await listImageFiles(manga.path);
@@ -330,6 +347,7 @@ export async function prewarmOcrEngine() {
 
   ocrRuntimeState.workerPrewarmPromise = (async () => {
     const settings = await getSettings();
+    await ensureOcrWorkerAvailable(settings);
     await ensureOcrDirs();
     await callWorkerPrewarm(settings);
     return true;

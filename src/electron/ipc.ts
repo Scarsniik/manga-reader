@@ -9,6 +9,7 @@ import * as links from "./handlers/links";
 import * as pages from "./handlers/pages";
 import * as clipboardHandlers from "./handlers/clipboard";
 import * as ocr from "./handlers/ocr/index";
+import * as ocrRuntime from "./handlers/ocrRuntime/index";
 import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
 import * as series from "./handlers/series";
@@ -256,6 +257,25 @@ ipcMain.handle("open-path", async (event: IpcMainInvokeEvent, targetPath: string
 });
 
 // OCR
+ipcMain.handle("ocr-runtime-defaults", async () => ocrRuntime.getOcrRuntimeDefaults());
+ipcMain.handle("ocr-runtime-status", async () => ocrRuntime.getOcrRuntimeStatus());
+ipcMain.handle("ocr-runtime-mark-skipped", async () => ocrRuntime.markOcrRuntimeSkipped());
+ipcMain.handle("ocr-runtime-read-manifest", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.readOcrRuntimeManifest(request)
+));
+ipcMain.handle("ocr-runtime-install-status", async () => ocrRuntime.getOcrRuntimeInstallStatus());
+ipcMain.handle("ocr-runtime-start-install", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.startOcrRuntimeInstall(request)
+));
+ipcMain.handle("ocr-runtime-cancel-install", async () => ocrRuntime.cancelOcrRuntimeInstall());
+ipcMain.handle("ocr-runtime-open-install-log", async () => ocrRuntime.openOcrRuntimeInstallLog());
+ipcMain.handle("ocr-runtime-verify", async () => ocrRuntime.verifyOcrRuntime());
+ipcMain.handle("ocr-runtime-repair", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.repairOcrRuntime(request)
+));
+ipcMain.handle("ocr-runtime-uninstall", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.uninstallOcrRuntime(request)
+));
 ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) => ocr.ocrRecognize(event, imagePathOrDataUrl, {
     debug: true,
     returnRaw: true,

@@ -1,0 +1,250 @@
+.ocr-runtime-install-modal {
+  max-width: 780px;
+}
+
+.ocr-runtime-modal,
+.ocr-runtime-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.ocr-runtime-modal__intro,
+.ocr-runtime-settings__header p {
+  margin: 0;
+  color: #c9d2dd;
+  line-height: 1.5;
+}
+
+.ocr-runtime-settings {
+  padding: 14px;
+  border: 1px solid #2e3640;
+  border-radius: 8px;
+  background: #171a1e;
+}
+
+.ocr-runtime-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ocr-runtime-settings__header h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.ocr-runtime-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.ocr-runtime-status-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #2f3944;
+  border-radius: 8px;
+  background: #14171b;
+}
+
+.ocr-runtime-status-card strong {
+  color: #9ba8b8;
+  font-size: 12px;
+}
+
+.ocr-runtime-status-card span {
+  min-width: 0;
+  color: #f2f6fb;
+  overflow-wrap: anywhere;
+}
+
+.ocr-runtime-status-pill {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #3c4652;
+  color: #edf3fb;
+  background: #232a33;
+}
+
+.ocr-runtime-status-pill.available {
+  border-color: #2e7044;
+  color: #d9ffe4;
+  background: #203b28;
+}
+
+.ocr-runtime-status-pill.installing {
+  border-color: #6b552d;
+  color: #fff0c6;
+  background: #302917;
+}
+
+.ocr-runtime-status-pill.invalid,
+.ocr-runtime-status-pill.missing {
+  border-color: #70402e;
+  color: #ffe1d6;
+  background: #3b2720;
+}
+
+.ocr-runtime-path-field {
+  display: grid;
+  gap: 8px;
+}
+
+.ocr-runtime-path-field > span {
+  color: #cdd6e1;
+  font-size: 13px;
+}
+
+.ocr-runtime-path-field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.ocr-runtime-progress {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid #303a45;
+  border-radius: 999px;
+  background: #101317;
+}
+
+.ocr-runtime-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1976d2, #62a8f0);
+  transition: width 160ms ease;
+}
+
+.ocr-runtime-progress__label {
+  color: #aeb8c4;
+  font-size: 12px;
+}
+
+.ocr-runtime-message,
+.ocr-runtime-warning,
+.ocr-runtime-error {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.45;
+}
+
+.ocr-runtime-message {
+  border: 1px solid #31475e;
+  color: #dcecff;
+  background: #151e28;
+}
+
+.ocr-runtime-warning {
+  border: 1px solid #6b552d;
+  color: #ffedc4;
+  background: #2d2618;
+}
+
+.ocr-runtime-error {
+  border: 1px solid #743333;
+  color: #ffd9d9;
+  background: #301c1c;
+}
+
+.ocr-runtime-message small {
+  color: #aebed0;
+}
+
+.ocr-runtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ocr-runtime-actions button,
+.ocr-runtime-path-field button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #1976d2;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ocr-runtime-actions button.secondary,
+.ocr-runtime-path-field button.secondary {
+  border: 1px solid #3b4654;
+  background: transparent;
+  color: #e6eef8;
+}
+
+.ocr-runtime-actions button.danger {
+  background: #8b1e1e;
+  color: #fff1f1;
+}
+
+.ocr-runtime-actions button:disabled,
+.ocr-runtime-path-field button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ocr-runtime-toasts {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 11000;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 36px));
+}
+
+.ocr-runtime-toast {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 1px solid #384655;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #18202a;
+  color: #edf5ff;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  cursor: pointer;
+}
+
+.ocr-runtime-toast.success {
+  border-color: #35734b;
+  background: #1c2f23;
+}
+
+.ocr-runtime-toast.error {
+  border-color: #803d3d;
+  background: #321f1f;
+}
+
+.ocr-runtime-toast.warning {
+  border-color: #746037;
+  background: #302917;
+}
+
+.ocr-runtime-toast strong,
+.ocr-runtime-toast span {
+  overflow-wrap: anywhere;
+}
+
+.ocr-runtime-toast span {
+  color: #cfdae7;
+  line-height: 1.45;
+}
+
+@media (max-width: 620px) {
+  .ocr-runtime-settings__header,
+  .ocr-runtime-path-field > div {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}

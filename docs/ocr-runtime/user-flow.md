@@ -1,6 +1,6 @@
 # Parcours utilisateur OCR
 
-Date de mise a jour : 2026-04-19
+Date de mise a jour : 2026-04-20
 
 ## Premier lancement
 
@@ -46,6 +46,10 @@ Une fois le resume valide :
 - l'application principale s'ouvre
 - l'installation continue en arriere-plan
 - une fenetre de statut OCR reste accessible
+
+Implementation MVP : le bouton `Installer l'OCR` ouvre la fenetre de statut et
+lance l'installation depuis le manifeste configure. Le dossier propose peut etre
+modifie avant relance depuis cette fenetre.
 
 ## Continuer sans OCR
 
@@ -119,6 +123,10 @@ Elle affiche aussi :
 
 Le bouton de statut dans le header n'est visible que lorsqu'une installation est en cours ou lorsqu'une action utilisateur est necessaire.
 Une fois l'installation terminee et notifiee, ce bouton peut disparaitre.
+
+Implementation MVP : la fenetre de statut est ouverte depuis le premier
+lancement, les options, les actions OCR sans runtime et le bouton `Runtime OCR`
+de la file OCR.
 
 ## Notifications
 
