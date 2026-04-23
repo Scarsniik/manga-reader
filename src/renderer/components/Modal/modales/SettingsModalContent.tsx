@@ -36,8 +36,6 @@ export default function SettingsModalContent() {
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
 
-  if (loading) return <div>Chargement...</div>
-
   const fields: FormItem[] = [
     {
       type: 'section',
@@ -207,6 +205,8 @@ export default function SettingsModalContent() {
       setIsOpeningUserDataDirectory(false)
     }
   }, [])
+
+  if (loading) return <div>Chargement...</div>
 
   return (
     <div className="settings-modal-content">
