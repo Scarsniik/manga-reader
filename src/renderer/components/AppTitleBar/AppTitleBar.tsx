@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { APP_PRODUCT_NAME } from "@/renderer/appIdentity";
 import "@/renderer/components/AppTitleBar/style.scss";
 
 type WindowState = {
@@ -39,7 +40,7 @@ const getWindowControlsApi = (): WindowControlsApi => (
     (window.api ?? {}) as WindowControlsApi
 );
 
-export default function AppTitleBar({ children, title = "Manga Helper" }: AppTitleBarProps) {
+export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppTitleBarProps) {
     const [windowState, setWindowState] = useState<WindowState>(DEFAULT_WINDOW_STATE);
     const [runtimeInfo, setRuntimeInfo] = useState<AppRuntimeInfo | null>(null);
     const [controlsAvailable, setControlsAvailable] = useState(false);

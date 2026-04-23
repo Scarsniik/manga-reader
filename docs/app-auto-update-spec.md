@@ -4,7 +4,7 @@ Date de mise a jour : 2026-04-22
 
 ## Objectif
 
-Ajouter une version installee de Manga Helper capable de se mettre a jour depuis
+Ajouter une version installee de Scaramanga capable de se mettre a jour depuis
 GitHub Releases, sans melanger ce mecanisme avec le manifeste du runtime OCR.
 
 La version portable peut continuer d'exister pour les utilisateurs qui ne veulent
@@ -13,6 +13,18 @@ etre une version installee.
 
 Le runtime OCR sera publie dans un depot separe afin d'eviter toute confusion
 entre les releases de l'application et les releases du runtime OCR.
+
+Le nom produit est centralise via variables d'environnement pour eviter de le
+dupliquer dans toutes les configs :
+
+```text
+APP_PRODUCT_NAME=Scaramanga
+APP_PACKAGE_NAME=scaramanga
+APP_ID=com.scarsniik.scaramanga
+```
+
+Les valeurs par defaut sont definies dans `scripts/app-identity.cjs` et dans le
+runtime Electron. Les variables servent d'override local ou CI.
 
 ## Decision MVP
 
@@ -40,7 +52,7 @@ Le portable reste une distribution secondaire :
 L'installeur doit permettre a l'utilisateur de choisir l'emplacement
 d'installation. Le dossier selectionne dans l'interface est considere comme le
 dossier parent : si l'utilisateur choisit `C:\Program Files`, l'application doit
-s'installer dans `C:\Program Files\Manga Helper`. Les chemins proteges par
+s'installer dans `C:\Program Files\Scaramanga`. Les chemins proteges par
 Windows peuvent demander une elevation administrateur ; le chemin par defaut doit
 rester installable sans droits administrateur.
 
@@ -87,7 +99,7 @@ Ne doit pas :
 
 Utiliser deux depots GitHub separes :
 
-- depot application : artefacts auto-update de Manga Helper ;
+- depot application : artefacts auto-update de Scaramanga ;
 - depot OCR runtime : manifeste et archives OCR.
 
 Cette separation est la decision cible pour le MVP, pas seulement une option.
@@ -99,8 +111,8 @@ soient vues comme le flux "latest" de l'application.
 
 Noms de depots possibles :
 
-- `manga-helper` pour l'application ;
-- `manga-helper-ocr-runtime` pour l'OCR.
+- `scaramanga` pour l'application, si le depot est renomme ;
+- `scaramanga-ocr-runtime` pour l'OCR.
 
 ### Assets attendus pour une release application
 
@@ -222,17 +234,14 @@ explicite de l'utilisateur.
 
 ### Packaging
 
-Le projet contient actuellement deux definitions de build possibles :
+La configuration `electron-builder` de reference est
+`electron-builder.config.cjs`, afin de pouvoir lire les variables
+d'environnement d'identite applicative.
 
-- `electron-builder.json` ;
-- le champ `build` de `package.json`.
+Le fichier `electron-builder.json` separe a ete retire pour supprimer l'ancienne
+configuration qui pouvait encore referencer le bundle OCR.
 
-Avant implementation, il faut garder une seule source de configuration ou
-documenter explicitement laquelle est utilisee. Pour le MVP, preferer la
-configuration `build` de `package.json` si les scripts actuels continuent
-d'appeler `npx electron-builder` sans `--config`.
-
-Changements attendus :
+Changements attendus ou deja engages :
 
 - ajouter une cible `nsis` pour la version auto-update ;
 - conserver eventuellement une cible `portable` separee ;
@@ -293,11 +302,18 @@ La mise a jour de l'application ne doit pas toucher :
 - configuration OCR ;
 - runtime OCR installe.
 
-Point a verifier pendant l'implementation : `app.setPath("userData", ...)` est
-actuellement appele apres l'import des handlers IPC. Les chemins de donnees sont
-calcules dans `src/electron/utils.ts`. Avant de figer l'installeur, il faut
-confirmer que le dossier `userData` utilise en build installe est bien celui
-attendu et stable entre deux versions.
+Le changement de nom initial vers Scaramanga prevoit une migration automatique
+non destructive du dossier `userData` historique : au premier lancement, si le
+nouveau dossier Scaramanga ne contient pas encore `data/mangas.json`,
+l'application copie tout l'ancien dossier utilisateur trouve, par exemple
+`%APPDATA%\manga-helper` ou `%LOCALAPPDATA%\manga-helper-userdata`, vers
+`%LOCALAPPDATA%\scaramanga-userdata`. Si le nouveau dossier contient deja la
+bibliotheque, aucune copie automatique n'est faite.
+
+Point d'implementation : `app.setPath("userData", ...)` doit etre appele avant
+le chargement des handlers IPC, car les chemins de donnees sont calcules dans
+`src/electron/utils.ts`. Le dossier `userData` utilise en build installe doit
+rester stable entre deux versions.
 
 ## Architecture applicative proposee
 
@@ -492,6 +508,8 @@ Taches :
 
 - sauvegarder les fichiers utilisateur avant les tests d'installation et
   d'update ;
+- utiliser `scripts/backup-user-data.ps1` pour sauvegarder et
+  `scripts/load-user-data.ps1` pour restaurer si necessaire ;
 - tester coupure reseau ;
 - tester release absente ou incomplete ;
 - tester refus utilisateur ;

@@ -4,7 +4,7 @@ Date de mise a jour : 2026-04-22
 
 ## Objectif
 
-Verifier qu'une version installee de Manga Helper peut etre publiee sur GitHub
+Verifier qu'une version installee de Scaramanga peut etre publiee sur GitHub
 Releases, detecter une version superieure, la telecharger, l'installer au
 redemarrage et conserver les donnees utilisateur.
 
@@ -52,43 +52,54 @@ sauvegarde.
 Commande de sauvegarde recommandee :
 
 ```powershell
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backupRoot = Join-Path $env:USERPROFILE "Desktop\MangaHelper-backups\$timestamp"
-New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
-
-$items = @(
-    @{
-        Path = Join-Path $env:LOCALAPPDATA "manga-helper-userdata"
-        Name = "localappdata-manga-helper-userdata"
-    },
-    @{
-        Path = Join-Path $env:APPDATA "manga-helper"
-        Name = "appdata-manga-helper"
-    }
-)
-
-foreach ($item in $items) {
-    if (Test-Path -LiteralPath $item.Path) {
-        Copy-Item `
-            -LiteralPath $item.Path `
-            -Destination (Join-Path $backupRoot $item.Name) `
-            -Recurse `
-            -Force
-    }
-}
-
-Write-Host "Backup created in $backupRoot"
+npm run backup:user-data
 ```
+
+Le script cree un dossier date dans :
+
+```text
+Desktop\Scaramanga-backups
+```
+
+Il ecrit aussi un fichier `backup-manifest.json`, utilise par le script de
+restauration.
 
 Le dossier OCR runtime par defaut peut etre tres lourd :
 
 ```text
-%LOCALAPPDATA%\Manga Helper\ocr-runtime
+%LOCALAPPDATA%\Scaramanga\ocr-runtime
 ```
 
 Il n'est pas copie par defaut par la commande precedente. Si le test doit
-modifier ou supprimer le runtime OCR, faire une sauvegarde separee ou utiliser
-un runtime OCR de test.
+modifier ou supprimer le runtime OCR, lancer :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-user-data.ps1 -IncludeOcrRuntime
+```
+
+Pour sauvegarder aussi une bibliotheque de test :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-user-data.ps1 -LibraryPath "D:\Chemin\Vers\BibliothequeDeTest"
+```
+
+La restauration se fait avec :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/load-user-data.ps1 -BackupPath "C:\Users\User\Desktop\Scaramanga-backups\YYYYMMDD-HHMMSS"
+```
+
+Par defaut, le script de restauration fait un dry-run et n'ecrit rien. Pour
+restaurer vraiment :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/load-user-data.ps1 -BackupPath "C:\Users\User\Desktop\Scaramanga-backups\YYYYMMDD-HHMMSS" -Force
+```
+
+Le script de restauration cree automatiquement une nouvelle sauvegarde des
+donnees courantes avant d'ecraser quoi que ce soit, sauf si `-SkipCurrentBackup`
+est explicitement passe. Pour restaurer aussi le runtime OCR ou une bibliotheque,
+ajouter `-IncludeOcrRuntime` ou `-IncludeLibrary`.
 
 Regles de securite pendant les tests :
 
@@ -97,10 +108,16 @@ Regles de securite pendant les tests :
 - ne pas lancer de test de desinstallation OCR sur le runtime personnel ;
 - verifier que la sauvegarde existe avant d'installer `0.1.0`.
 
+Pour le changement de nom initial, l'application copie automatiquement tout
+l'ancien dossier utilisateur trouve (`%APPDATA%\manga-helper` ou
+`%LOCALAPPDATA%\manga-helper-userdata`) vers `scaramanga-userdata` si le nouveau
+dossier ne contient pas encore `data/mangas.json`. La sauvegarde reste
+obligatoire avant de tester cette migration.
+
 Exemple de bibliotheque de test :
 
 ```powershell
-$testLibrary = Join-Path $env:TEMP "MangaHelperAutoUpdateTestLibrary"
+$testLibrary = Join-Path $env:TEMP "ScaramangaAutoUpdateTestLibrary"
 New-Item -ItemType Directory -Force -Path $testLibrary | Out-Null
 ```
 
@@ -127,7 +144,7 @@ Resultat attendu :
 2. Lancer l'installeur `0.1.0`.
 3. Verifier que l'installeur n'est pas en mode one-click.
 4. Choisir un dossier parent d'installation.
-5. Verifier que l'application est installee dans un sous-dossier `Manga Helper`
+5. Verifier que l'application est installee dans un sous-dossier `Scaramanga`
    du dossier choisi.
 6. Lancer l'application installee.
 7. Ouvrir les parametres.
@@ -239,7 +256,7 @@ Resultat attendu :
 
 ## Test 7 - Reinstall manuelle
 
-1. Fermer Manga Helper.
+1. Fermer Scaramanga.
 2. Relancer l'installeur `0.1.1`.
 3. Installer par-dessus l'installation existante.
 4. Relancer l'application.

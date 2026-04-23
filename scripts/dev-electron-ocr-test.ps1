@@ -91,15 +91,32 @@ function Reset-OcrRuntimeState {
     Remove-Item Env:MANGA_HELPER_OCR_RUNTIME_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:MANGA_HELPER_OCR_MANIFEST_URL -ErrorAction SilentlyContinue
 
+    $appConfigDirName = if ([string]::IsNullOrWhiteSpace($env:APP_ROAMING_CONFIG_DIR_NAME)) {
+        if ([string]::IsNullOrWhiteSpace($env:APP_PACKAGE_NAME)) { 'scaramanga' } else { $env:APP_PACKAGE_NAME }
+    } else {
+        $env:APP_ROAMING_CONFIG_DIR_NAME
+    }
+    $appLocalDataDirName = if ([string]::IsNullOrWhiteSpace($env:APP_LOCAL_DATA_DIR_NAME)) {
+        if ([string]::IsNullOrWhiteSpace($env:APP_PRODUCT_NAME)) { 'Scaramanga' } else { $env:APP_PRODUCT_NAME }
+    } else {
+        $env:APP_LOCAL_DATA_DIR_NAME
+    }
+
     if ($env:APPDATA) {
         Backup-PathForFreshRun `
             -Label 'Config OCR' `
+            -PathToBackup (Join-Path $env:APPDATA "$appConfigDirName\data\ocr-runtime.json")
+        Backup-PathForFreshRun `
+            -Label 'Config OCR legacy' `
             -PathToBackup (Join-Path $env:APPDATA 'manga-helper\data\ocr-runtime.json')
     }
 
     if ($env:LOCALAPPDATA) {
         Backup-PathForFreshRun `
             -Label 'Runtime OCR' `
+            -PathToBackup (Join-Path $env:LOCALAPPDATA "$appLocalDataDirName\ocr-runtime")
+        Backup-PathForFreshRun `
+            -Label 'Runtime OCR legacy' `
             -PathToBackup (Join-Path $env:LOCALAPPDATA 'Manga Helper\ocr-runtime')
     }
 }

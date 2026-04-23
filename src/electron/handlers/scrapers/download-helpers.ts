@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import { app } from "electron";
+import { APP_PRODUCT_NAME } from "../../appIdentity";
 import {
   type DownloadScraperMangaRequest,
   type ScraperDownloadJobStatus,
@@ -14,7 +15,7 @@ import {
   type NormalizedScraperDownloadRequest,
 } from "./shared";
 
-const DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME = "Manga Helper Library";
+const DEFAULT_DOWNLOADED_MANGA_FOLDER_NAME = `${APP_PRODUCT_NAME} Library`;
 
 const sanitizePathSegment = (value: string): string => {
   const sanitized = value
@@ -118,7 +119,7 @@ export const inferExtensionFromUrl = (targetUrl: string, contentType: string | n
 
 export const buildDownloadHeaders = (refererUrl?: string): HeadersInit => {
   const headers: Record<string, string> = {
-    "User-Agent": "Manga Helper Scraper Downloader/1.0",
+    "User-Agent": `${APP_PRODUCT_NAME} Scraper Downloader/1.0`,
     Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
   };
 

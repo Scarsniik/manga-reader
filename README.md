@@ -1,6 +1,6 @@
-# Manga Helper
+# Scaramanga
 
-Manga Helper is a lightweight, portable desktop application designed to help users learn Japanese through reading manga. The application allows users to import manga images, annotate them, and manage links to various manga sources.
+Scaramanga is a lightweight desktop application designed to help users learn Japanese through reading manga. The application allows users to import manga images, annotate them, and manage links to various manga sources.
 
 ## Features
 
@@ -14,7 +14,7 @@ Manga Helper is a lightweight, portable desktop application designed to help use
 The project is organized as follows:
 
 ```
-manga-helper
+scaramanga
 ├── src
 │   ├── renderer
 │   │   ├── index.tsx          # Entry point for the renderer process
@@ -38,7 +38,7 @@ manga-helper
 1. Clone the repository:
    ```
    git clone <repository-url>
-   cd manga-helper
+   cd scaramanga
    ```
 
 2. Install dependencies:

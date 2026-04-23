@@ -1,12 +1,8 @@
-import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, protocol, shell } from 'electron';
 import path from 'path';
-import fs from 'fs';
-import { prewarmOcrEngine } from './handlers/ocr/index';
+import { configureApplicationIdentity } from './appIdentity';
 import { attachWindowStateListeners } from "./handlers/windowControls";
 import { resolveLocalProtocolPath } from './utils/localProtocol';
-
-// Ensure IPC handlers (links, mangas, count-pages...) are registered
-import './ipc';
 
 let mainWindow: BrowserWindow | null;
 
@@ -38,6 +34,8 @@ const openExternalNavigation = async (url: string) => {
 
 const startOcrPrewarmInBackground = () => {
     setTimeout(() => {
+        const { prewarmOcrEngine } = require("./handlers/ocr/index") as typeof import("./handlers/ocr/index");
+
         void prewarmOcrEngine()
             .then(() => {
                 console.info('[ocr] Engine prewarmed during app startup');
@@ -127,9 +125,7 @@ const createWindow = () => {
 // This allows the renderer to use URLs like `local://D:/path/to/file.jpg` safely
 // without disabling webSecurity. We register it when the app is ready.
 app.whenReady().then(() => {
-    if (process.platform === 'win32') {
-        app.setAppUserModelId('com.example.mangahelper');
-    }
+    configureApplicationIdentity();
 
     protocol.registerFileProtocol('local', (request, callback) => {
         try {
@@ -141,17 +137,7 @@ app.whenReady().then(() => {
         }
     });
 
-    // Ensure Electron uses a writable userData directory to avoid disk cache permission issues
-    try {
-    const localAppData = process.env.LOCALAPPDATA || app.getPath('appData');
-    const customUserData = path.join(localAppData, 'manga-helper-userdata');
-        if (!fs.existsSync(customUserData)) {
-            fs.mkdirSync(customUserData, { recursive: true });
-        }
-        app.setPath('userData', customUserData);
-    } catch (e) {
-        console.warn('Could not set custom userData path:', e);
-    }
+    require("./ipc");
 
     createWindow();
     startOcrPrewarmInBackground();
@@ -169,4 +155,4 @@ app.on('activate', () => {
     }
 });
 
-// IPC handlers are defined in src/electron/ipc.ts (imported above)
+// IPC handlers are defined in src/electron/ipc.ts and loaded after userData is configured.

@@ -3,7 +3,12 @@ import path from "path";
 import { app } from "electron";
 import { OCR_RUNTIME_METADATA_FILE_NAME, REQUIRED_RUNTIME_ITEMS } from "./constants";
 import { normalizeNullableString, normalizeOcrRuntimeMetadata, readOcrRuntimeConfig } from "./config";
-import { getDefaultOcrRuntimePath, getOcrRuntimeConfigPath } from "./paths";
+import {
+    getDefaultOcrRuntimePath,
+    getLegacyDefaultOcrRuntimePaths,
+    getLegacyPortableOcrRuntimePaths,
+    getOcrRuntimeConfigPath,
+} from "./paths";
 import { isAppVersionCompatible } from "./version";
 import type {
     OcrRuntimeDetection,
@@ -40,6 +45,12 @@ const getRuntimeCandidates = (config: OcrRuntimeDetection["config"]): RuntimeCan
     }
 
     candidates.push({ source: "default", runtimePath: defaultRuntimePath });
+    getLegacyDefaultOcrRuntimePaths().forEach((runtimePath) => {
+        candidates.push({ source: "default", runtimePath });
+    });
+    getLegacyPortableOcrRuntimePaths().forEach((runtimePath) => {
+        candidates.push({ source: "default", runtimePath });
+    });
 
     const seenPaths = new Set<string>();
     return candidates.filter((candidate) => {

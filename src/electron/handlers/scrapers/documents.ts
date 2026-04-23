@@ -7,6 +7,7 @@ import {
   type ScraperAccessValidationRequest,
   type ScraperAccessValidationResult,
 } from "../../scraper";
+import { APP_PRODUCT_NAME } from "../../appIdentity";
 import {
   buildScraperFetchInit,
   DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS,
@@ -64,7 +65,7 @@ export async function validateScraperAccess(
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent": "Manga Helper Scraper Validation/1.0",
+        "User-Agent": `${APP_PRODUCT_NAME} Scraper Validation/1.0`,
         Accept: request.kind === "api"
           ? "application/json, text/plain, */*"
           : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

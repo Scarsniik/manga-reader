@@ -17,6 +17,7 @@ import {
   type ScraperViewHistoryRecord,
   normalizeScraperViewHistorySourceUrl,
 } from "../../scraper";
+import { APP_PRODUCT_NAME } from "../../appIdentity";
 
 export const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
 export const MAX_SCRAPER_DOWNLOAD_PAGES = 4000;
@@ -304,7 +305,7 @@ export const buildScraperFetchInit = (
 } => {
   const method = requestConfig?.method === "POST" ? "POST" : "GET";
   const headers: Record<string, string> = {
-    "User-Agent": "Manga Helper Scraper Validation/1.0",
+    "User-Agent": `${APP_PRODUCT_NAME} Scraper Validation/1.0`,
     Accept: defaultAccept,
   };
 

@@ -8,7 +8,11 @@ if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgno
 }
 
 $winUnpacked = Join-Path $buildDir 'win-unpacked'
-$archiveFolderName = 'manga reader'
+$archiveFolderName = if ([string]::IsNullOrWhiteSpace($env:APP_ARTIFACT_BASE_NAME)) {
+    'Scaramanga'
+} else {
+    $env:APP_ARTIFACT_BASE_NAME
+}
 $archiveDir = Join-Path $buildDir $archiveFolderName
 $zipPath = Join-Path $archiveDir 'win-unpacked.zip'
 $legacyZipPath = Join-Path $buildDir 'win-unpacked.zip'
