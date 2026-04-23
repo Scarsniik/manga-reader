@@ -284,8 +284,12 @@ function Test-TagExists {
         return $true
     }
 
-    git ls-remote --tags origin $TagName *> $null
-    return $LASTEXITCODE -eq 0
+    $remoteTagMatch = git ls-remote --tags origin "refs/tags/$TagName"
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return -not [string]::IsNullOrWhiteSpace(($remoteTagMatch | Out-String))
 }
 
 function Get-ReleaseAssets {
