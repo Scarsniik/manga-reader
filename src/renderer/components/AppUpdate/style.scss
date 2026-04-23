@@ -187,6 +187,10 @@
   max-width: 560px;
 }
 
+.app-update-patchnotes-modal-shell {
+  max-width: 860px;
+}
+
 .app-update-install-modal {
   display: grid;
   gap: 14px;
@@ -201,6 +205,106 @@
   margin: 0;
   color: #e5ecf6;
   line-height: 1.55;
+}
+
+.app-update-patchnotes {
+  display: grid;
+  gap: 10px;
+}
+
+.app-update-patchnotes.compact {
+  gap: 8px;
+}
+
+.app-update-patchnotes__header {
+  display: grid;
+  gap: 4px;
+}
+
+.app-update-patchnotes__header h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #f2f6fb;
+}
+
+.app-update-patchnotes__header p {
+  margin: 0;
+  color: #aeb8c4;
+  line-height: 1.45;
+}
+
+.app-update-patchnotes__list {
+  display: grid;
+  gap: 10px;
+}
+
+.app-update-patchnote-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #2f3944;
+  border-radius: 8px;
+  background: #14171b;
+}
+
+.app-update-patchnotes.compact .app-update-patchnote-card {
+  padding: 10px;
+  gap: 8px;
+}
+
+.app-update-patchnote-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.app-update-patchnote-card__title {
+  display: grid;
+  gap: 3px;
+}
+
+.app-update-patchnote-card__title strong {
+  color: #f2f6fb;
+  font-size: 14px;
+}
+
+.app-update-patchnote-card__title span,
+.app-update-patchnote-card__header time {
+  color: #9ba8b8;
+  font-size: 12px;
+}
+
+.app-update-patchnote-card__content {
+  display: grid;
+  gap: 8px;
+}
+
+.app-update-patchnote-card__content h5 {
+  margin: 0;
+  color: #dcecff;
+  font-size: 13px;
+}
+
+.app-update-patchnote-card__content p,
+.app-update-patchnote-card__empty {
+  margin: 0;
+  color: #d6deea;
+  line-height: 1.5;
+}
+
+.app-update-patchnote-card__content ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #d6deea;
+}
+
+.app-update-patchnote-card__empty {
+  color: #9ba8b8;
+  font-style: italic;
 }
 
 .app-update-install-modal__meta {

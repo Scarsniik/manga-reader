@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
+import buildAppUpdatePatchNotesModal from "@/renderer/components/Modal/modales/AppUpdatePatchNotesModal";
 import useParams from "@/renderer/hooks/useParams";
+import useModal from "@/renderer/hooks/useModal";
 import {
     APP_UPDATE_NOTIFICATION_EVENT,
     getAppUpdateApi,
@@ -63,6 +65,7 @@ const formatBytes = (value?: number | null) => {
 };
 
 export default function AppUpdateSettingsPanel() {
+    const { openModal } = useModal();
     const { params, setParams } = useParams();
     const [status, setStatus] = useState<AppUpdateStatus | null>(null);
     const [busy, setBusy] = useState(false);
@@ -182,6 +185,10 @@ export default function AppUpdateSettingsPanel() {
         })
     ), [runAction]);
 
+    const openPatchNotes = useCallback(() => {
+        openModal(buildAppUpdatePatchNotesModal());
+    }, [openModal]);
+
     const currentVersion = status?.currentVersion || "Inconnue";
     const availableVersion = status?.availableVersion || "Aucune";
     const autoCheckEnabled = params?.appUpdateAutoCheck !== false;
@@ -258,6 +265,9 @@ export default function AppUpdateSettingsPanel() {
                 </button>
                 <button type="button" className="secondary" onClick={installUpdate} disabled={!canInstall}>
                     Redemarrer pour installer
+                </button>
+                <button type="button" className="secondary" onClick={openPatchNotes}>
+                    Patchnotes
                 </button>
                 <button type="button" className="secondary" onClick={openReleasePage} disabled={busy}>
                     Ouvrir la release

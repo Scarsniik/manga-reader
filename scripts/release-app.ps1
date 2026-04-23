@@ -339,23 +339,31 @@ function New-ReleaseNotesFile {
         [string]$SourcePath
     )
 
-    if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
-        if (-not (Test-Path -LiteralPath $SourcePath)) {
-            throw "Release notes file not found: $SourcePath"
-        }
-        return (Resolve-Path -LiteralPath $SourcePath).Path
+    $candidatePath = if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
+        $SourcePath
+    } else {
+        Join-Path $workspace "docs\release-notes\$TagName.md"
     }
 
-    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) "scaramanga-release-notes-$VersionNumber.md"
-    @(
-        "# $TagName"
-        ""
-        "- Application release for Scaramanga."
-        "- Version: $VersionNumber"
-        "- Generated: $(Get-Date -Format s)"
-    ) | Set-Content -LiteralPath $tempPath -Encoding utf8
+    if (-not (Test-Path -LiteralPath $candidatePath)) {
+        throw "Release notes file not found: $candidatePath. Create a user-facing patchnote, preferably from docs/release-notes/template.md."
+    }
 
-    return $tempPath
+    $releaseNotesFile = (Resolve-Path -LiteralPath $candidatePath).Path
+    $releaseNotesContent = [string](Get-Content -Raw -LiteralPath $releaseNotesFile)
+    if ([string]::IsNullOrWhiteSpace($releaseNotesContent)) {
+        throw "Release notes file is empty: $releaseNotesFile"
+    }
+
+    if (
+        $releaseNotesContent.Contains("vX.Y.Z")
+        -or $releaseNotesContent.Contains("Explique ici")
+        -or $releaseNotesContent.Contains("Ajoute une note courte")
+    ) {
+        throw "Release notes file still contains template placeholders: $releaseNotesFile"
+    }
+
+    return $releaseNotesFile
 }
 
 function Publish-GitHubReleaseWithGh {

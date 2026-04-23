@@ -250,7 +250,8 @@ Execution attendue :
 2. Lancer `release-app`.
 3. Renseigner `version` avec une version superieure a la derniere release.
 4. Choisir `mode=publish` pour la vraie publication, ou `mode=dry-run` pour une verification.
-5. Optionnel : fournir `release_notes_path` avec un fichier Markdown versionne dans le repo.
+5. Ajouter un fichier de patchnote utilisateur dans `docs/release-notes/vX.Y.Z.md`.
+6. Optionnel : fournir `release_notes_path` uniquement si le patchnote est stocke ailleurs dans le repo.
 
 Resultat attendu :
 

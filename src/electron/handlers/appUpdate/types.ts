@@ -9,6 +9,28 @@ export type AppUpdateState =
 
 export type AppUpdateNotificationKind = "info" | "success" | "warning" | "error";
 
+export type AppUpdatePatchNote = {
+    version: string;
+    tagName: string;
+    title: string;
+    publishedAt: string | null;
+    releaseUrl: string | null;
+    body: string;
+    hasDetails: boolean;
+};
+
+export type AppUpdatePatchNotesQuery = {
+    limit?: number;
+    fromVersion?: string | null;
+    toVersion?: string | null;
+};
+
+export type AppUpdatePatchNotesResult = {
+    patchNotes: AppUpdatePatchNote[];
+    fetchedAt: string;
+    repository: string | null;
+};
+
 export type AppUpdateStatus = {
     state: AppUpdateState;
     currentVersion: string;

@@ -18,7 +18,7 @@ on:
           - publish
           - dry-run
       release_notes_path:
-        description: Optional repository-relative markdown file used as release notes.
+        description: Optional repository-relative markdown file used as release notes. Defaults to docs/release-notes/vX.Y.Z.md.
         required: false
         type: string
       allow_existing_tag:

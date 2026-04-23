@@ -207,6 +207,7 @@ contextBridge.exposeInMainWorld('api', {
     appUpdateDownload: () => ipcRenderer.invoke("app-update-download"),
     appUpdateInstall: () => ipcRenderer.invoke("app-update-install"),
     appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
+    appUpdateGetPatchNotes: (query?: Record<string, unknown>) => ipcRenderer.invoke("app-update-get-patch-notes", query),
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),

@@ -28,6 +28,28 @@ export type AppUpdateStatus = {
     devModeEnabled?: boolean;
 };
 
+export type AppUpdatePatchNote = {
+    version?: string;
+    tagName?: string;
+    title?: string;
+    publishedAt?: string | null;
+    releaseUrl?: string | null;
+    body?: string;
+    hasDetails?: boolean;
+};
+
+export type AppUpdatePatchNotesQuery = {
+    limit?: number;
+    fromVersion?: string | null;
+    toVersion?: string | null;
+};
+
+export type AppUpdatePatchNotesResult = {
+    patchNotes?: AppUpdatePatchNote[];
+    fetchedAt?: string;
+    repository?: string | null;
+};
+
 export type AppUpdateActionResult = {
     started?: boolean;
     reason?: string | null;
@@ -48,6 +70,7 @@ export type AppUpdateApi = {
     appUpdateDownload?: () => Promise<AppUpdateActionResult>;
     appUpdateInstall?: () => Promise<AppUpdateActionResult>;
     appUpdateOpenReleasePage?: () => Promise<{ opened?: boolean; releaseUrl?: string; error?: string }>;
+    appUpdateGetPatchNotes?: (query?: AppUpdatePatchNotesQuery) => Promise<AppUpdatePatchNotesResult>;
 };
 
 export const APP_UPDATE_NOTIFICATION_EVENT = "app-update-notification";

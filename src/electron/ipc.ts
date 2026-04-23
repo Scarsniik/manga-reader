@@ -151,6 +151,9 @@ ipcMain.handle("app-update-check", async () => appUpdate.checkForAppUpdates());
 ipcMain.handle("app-update-download", async () => appUpdate.downloadAppUpdate());
 ipcMain.handle("app-update-install", async () => appUpdate.installAppUpdate());
 ipcMain.handle("app-update-open-release-page", async () => appUpdate.openAppUpdateReleasePage());
+ipcMain.handle("app-update-get-patch-notes", async (_event: IpcMainInvokeEvent, query?: unknown) => (
+    appUpdate.getAppUpdatePatchNotes(query as Parameters<typeof appUpdate.getAppUpdatePatchNotes>[0])
+));
 
 // Scrapers
 ipcMain.handle("validate-scraper-access", async (event: IpcMainInvokeEvent, request: any) => scrapers.validateScraperAccess(event, request));

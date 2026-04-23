@@ -50,6 +50,8 @@
 
 - avant un deploy, verifier que le repo est propre et que le build passe
 - incrementer la version dans `package.json`
+- rediger un patchnote utilisateur dans `docs/release-notes/vX.Y.Z.md` avant la publication
+- le patchnote doit etre pense pour l'utilisateur final : structure claire, phrases courtes, explication des changements visibles, pas un copier-coller du message de commit
 - utiliser `npm run release:app:dry-run` pour verifier la release, puis `npm run release:app` pour publier
 - une release applicative publie un tag `vX.Y.Z` et les assets GitHub associes
 

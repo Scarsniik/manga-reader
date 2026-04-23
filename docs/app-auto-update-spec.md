@@ -121,7 +121,7 @@ Pour une version `1.2.3`, la release application doit contenir au minimum :
 - l'installeur NSIS Windows x64 ;
 - `latest.yml` ;
 - les fichiers `.blockmap` generes si presents ;
-- les notes de version.
+- des patchnotes utilisateur dans le corps de la GitHub Release.
 
 La release portable peut aussi etre ajoutee dans la meme release application,
 mais elle n'est pas la cible auto-update.
@@ -220,6 +220,7 @@ Dans les parametres, l'utilisateur doit pouvoir :
 - lancer "Verifier les mises a jour" ;
 - voir l'etat : a jour, verification en cours, nouvelle version disponible,
   telechargement, pret a redemarrer, erreur ;
+- ouvrir un bouton `Patchnotes` qui liste les 20 dernieres releases publiees ;
 - ouvrir la page GitHub de la derniere release en cas de probleme.
 
 Les parametres doivent etre reorganises en onglets pour eviter une page trop
@@ -237,9 +238,11 @@ Flux MVP :
 1. l'application detecte une nouvelle version ;
 2. l'utilisateur peut l'accepter depuis la modale de lancement ou cliquer sur
    "Telecharger" dans les parametres ;
-3. le telechargement se fait en arriere-plan ; la modale de lancement affiche la
+3. la modale de mise a jour affiche un bloc patchnotes avec les versions
+   publiees entre la version installee et la version cible ;
+4. le telechargement se fait en arriere-plan ; la modale de lancement affiche la
    progression et peut etre fermee pendant ce telechargement ;
-4. une fois le telechargement termine, l'application affiche une modale et
+5. une fois le telechargement termine, l'application affiche une modale et
    propose :
    - redemarrer maintenant ;
    - plus tard.
@@ -390,6 +393,7 @@ app-update-check
 app-update-download
 app-update-install
 app-update-open-release-page
+app-update-get-patch-notes
 ```
 
 Evenement renderer :
@@ -417,6 +421,9 @@ Affichage minimal :
 - bouton de verification manuelle ;
 - bouton de telechargement si update disponible ;
 - bouton de redemarrage si update telechargee ;
+- bouton `Patchnotes` qui ouvre les 20 dernieres releases ;
+- bloc patchnotes dans la modale de mise a jour pour les versions comprises
+  entre la version actuelle et la nouvelle version ;
 - message d'erreur court avec bouton "Ouvrir la release".
 
 L'UI ne doit pas afficher de details techniques longs. Les details peuvent aller

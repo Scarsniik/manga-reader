@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import AppUpdatePatchNotesPanel from "@/renderer/components/AppUpdate/AppUpdatePatchNotesPanel";
 import useModal from "@/renderer/hooks/useModal";
 import {
     APP_UPDATE_NOTIFICATION_EVENT,
@@ -175,6 +176,15 @@ export default function AppUpdatePromptModalContent({
                     <span>{availableVersion}</span>
                 </div>
             </div>
+
+            <AppUpdatePatchNotesPanel
+                compact
+                title="Patchnotes incluses dans cette mise a jour"
+                description={`Versions publiees entre ${currentVersion} et ${availableVersion}.`}
+                fromVersion={currentStatus.currentVersion || null}
+                toVersion={currentStatus.availableVersion || null}
+                emptyMessage="Aucune patchnote detaillee n'a ete publiee pour les versions incluses dans cette mise a jour."
+            />
 
             {resolvedMode === "downloading" ? (
                 <div className="app-update-install-modal__download">
