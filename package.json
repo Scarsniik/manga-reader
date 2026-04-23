@@ -34,7 +34,7 @@
     "package:ocr-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-ocr-runtime.ps1 -Force",
     "package:ocr-runtime:force": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-ocr-runtime.ps1 -BuildBundle -ForceRebuild -Force",
     "zip:win-unpacked": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/zip-win-unpacked.ps1",
-    "clean:package": "powershell -NoProfile -Command \"$workspace = (Get-Location).Path; $buildDir = [System.IO.Path]::GetFullPath((Join-Path $workspace 'build')); if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to clean outside the workspace.' }; Stop-Process -Name 'scaramanga','Scaramanga','manga-helper','Manga Helper','app-builder','app-builder.exe','electron' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path $buildDir) { Get-ChildItem -LiteralPath $buildDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.lnk', '.blockmap' -or $_.Name -in 'latest.yml', 'builder-debug.yml', 'builder-effective-config.yaml' } | Remove-Item -Force -ErrorAction SilentlyContinue; $winUnpacked = Join-Path $buildDir 'win-unpacked'; if (Test-Path $winUnpacked) { Remove-Item -LiteralPath $winUnpacked -Recurse -Force -ErrorAction SilentlyContinue } }\"",
+    "clean:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-package.ps1",
     "release:app": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -Publish",
     "release:app:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -DryRun",
     "prepackage": "npm run clean:package",
