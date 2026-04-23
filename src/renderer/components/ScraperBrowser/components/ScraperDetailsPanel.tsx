@@ -67,7 +67,14 @@ export default function ScraperDetailsPanel({
     && Array.isArray(detailsResult.thumbnails);
   const canOpenThumbnailReader = hasPages && !usesChapters;
   const hasStandaloneActions = hasPages && !usesChapters;
-  const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl);
+  const totalPageCount = Number.parseInt(String(detailsResult.pageCount ?? '').match(/\d+/)?.[0] ?? '', 10);
+  const canLoadMoreFromPages = canOpenThumbnailReader
+    && Number.isFinite(totalPageCount)
+    && totalPageCount > thumbnailUrls.length;
+  const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl) || canLoadMoreFromPages;
+  const loadMoreThumbnailsLabel = detailsResult.thumbnailsNextPageUrl
+    ? 'Voir plus'
+    : 'Afficher toutes les pages';
   const linkedStandaloneManga = getLinkedMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
   const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
@@ -389,7 +396,7 @@ export default function ScraperDetailsPanel({
                   onClick={onLoadMoreThumbnails}
                   disabled={loadingMoreThumbnails}
                 >
-                  {loadingMoreThumbnails ? 'Chargement...' : 'Voir plus'}
+                  {loadingMoreThumbnails ? 'Chargement...' : loadMoreThumbnailsLabel}
                 </button>
               ) : null}
             </div>

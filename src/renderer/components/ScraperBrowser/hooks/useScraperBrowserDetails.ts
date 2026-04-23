@@ -358,25 +358,48 @@ export function useScraperBrowserDetails({
   ]);
 
   const handleLoadMoreThumbnails = useCallback(async () => {
-    if (!detailsResult?.thumbnailsNextPageUrl) {
-      return;
-    }
-
-    if (!detailsConfig?.thumbnailsSelector) {
-      setRuntimeError('Le selecteur des vignettes est requis pour charger la suite.');
-      return;
-    }
-
-    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-    if (typeof fetchScraperDocument !== 'function') {
-      setRuntimeError('Le runtime du scrapper n\'est pas disponible dans cette version.');
-      return;
-    }
-
     setLoadingMoreThumbnails(true);
     clearFeedback();
 
     try {
+      if (!detailsResult) {
+        return;
+      }
+
+      if (!detailsResult.thumbnailsNextPageUrl) {
+        if (!pagesConfig || usesChaptersForPages) {
+          return;
+        }
+
+        const pageUrls = await resolveCurrentPageUrls();
+        if (!pageUrls.length) {
+          setRuntimeError('Aucune page supplementaire n\'a ete resolue.');
+          return;
+        }
+
+        setDetailsResult((previous) => (
+          previous
+            ? {
+              ...previous,
+              thumbnails: pageUrls,
+              thumbnailsNextPageUrl: undefined,
+            }
+            : previous
+        ));
+        return;
+      }
+
+      if (!detailsConfig?.thumbnailsSelector) {
+        setRuntimeError('Le selecteur des vignettes est requis pour charger la suite.');
+        return;
+      }
+
+      const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+      if (typeof fetchScraperDocument !== 'function') {
+        setRuntimeError('Le runtime du scrapper n\'est pas disponible dans cette version.');
+        return;
+      }
+
       const documentResult = await fetchScraperDocument({
         baseUrl: scraper.baseUrl,
         targetUrl: detailsResult.thumbnailsNextPageUrl,
@@ -432,11 +455,14 @@ export function useScraperBrowserDetails({
   }, [
     clearFeedback,
     detailsConfig,
-    detailsResult?.thumbnailsNextPageUrl,
+    detailsResult,
+    pagesConfig,
+    resolveCurrentPageUrls,
     scraper.baseUrl,
     setDetailsResult,
     setLoadingMoreThumbnails,
     setRuntimeError,
+    usesChaptersForPages,
   ]);
 
   const handleOpenReader = useCallback(async (options?: ScraperOpenReaderOptions) => {
