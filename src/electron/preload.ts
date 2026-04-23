@@ -168,6 +168,7 @@ contextBridge.exposeInMainWorld('api', {
     openDirectory: () => ipcRenderer.invoke('open-directory'),
     openFile: () => ipcRenderer.invoke('open-file'),
     openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath),
+    openUserDataDirectory: () => ipcRenderer.invoke("open-user-data-directory"),
     listPages: (folderPath: string) => ipcRenderer.invoke('list-pages', folderPath),
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),

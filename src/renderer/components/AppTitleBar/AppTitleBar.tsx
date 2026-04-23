@@ -12,6 +12,7 @@ type WindowState = {
 type AppRuntimeInfo = {
     isDev: boolean;
     isPackaged: boolean;
+    version: string;
 };
 
 type WindowControlsApi = {
@@ -115,15 +116,16 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
 
     const maximizeLabel = windowState.isMaximized ? "Restaurer" : "Agrandir";
     const showDevToolsButton = runtimeInfo?.isDev && typeof getWindowControlsApi().toggleDevTools === "function";
+    const versionBadgeLabel = runtimeInfo?.version ? `v${runtimeInfo.version}` : "Version";
 
     return (
         <header className="app-titlebar">
-            <div className="app-titlebar__brand" title={`${title} - Test 0.1.10`}>
+            <div className="app-titlebar__brand" title={`${title} - ${versionBadgeLabel}`}>
                 <div className="app-titlebar__title">
                     {title}
                 </div>
                 <span className="app-titlebar__badge">
-                    Test 0.1.10
+                    {versionBadgeLabel}
                 </span>
             </div>
 

@@ -1,5 +1,6 @@
 import React from 'react'
 import AppUpdateSettingsPanel from '@/renderer/components/AppUpdate/AppUpdateSettingsPanel'
+import { FolderExternalLinkIcon } from '@/renderer/components/icons'
 import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
 import type { FormItem } from '@/renderer/components/utils/Form/types'
@@ -10,6 +11,12 @@ import '@/renderer/components/Modal/modales/settings-style.scss'
 
 const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2
 const MAX_READER_PRELOAD_PAGE_COUNT = 10
+
+declare global {
+  interface Window {
+    api: any
+  }
+}
 
 const normalizeReaderPreloadPageCount = (value: unknown) => {
   const parsed = typeof value === 'number'
@@ -26,6 +33,8 @@ const normalizeReaderPreloadPageCount = (value: unknown) => {
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
   const [activeTab, setActiveTab] = React.useState<'options' | 'version-installation'>('options')
+  const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
+  const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
 
   if (loading) return <div>Chargement...</div>
 
@@ -178,6 +187,27 @@ export default function SettingsModalContent() {
     await setParams(toSave)
   }
 
+  const handleOpenUserDataDirectory = React.useCallback(async () => {
+    if (!window.api || typeof window.api.openUserDataDirectory !== 'function') {
+      setUserDataDirectoryError("L'ouverture du dossier de données utilisateur n'est pas disponible.")
+      return
+    }
+
+    setIsOpeningUserDataDirectory(true)
+    setUserDataDirectoryError(null)
+
+    try {
+      const result = await window.api.openUserDataDirectory()
+      if (!result?.success) {
+        throw new Error(String(result?.error || "Impossible d'ouvrir le dossier de données utilisateur."))
+      }
+    } catch (error) {
+      setUserDataDirectoryError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsOpeningUserDataDirectory(false)
+    }
+  }, [])
+
   return (
     <div className="settings-modal-content">
       <div className="settings-modal-tabs">
@@ -207,6 +237,26 @@ export default function SettingsModalContent() {
               submitLabel="Enregistrer"
               formId="settings-form"
             />
+            <section className="settings-modal-shortcut">
+              <div className="settings-modal-shortcut__content">
+                <h3>Données utilisateur</h3>
+                <p>Ouvre le dossier qui contient les paramètres, historiques et fichiers JSON de l'application.</p>
+              </div>
+              <div className="settings-modal-shortcut__actions">
+                <button
+                  type="button"
+                  className="settings-modal-shortcut__button"
+                  onClick={() => void handleOpenUserDataDirectory()}
+                  disabled={isOpeningUserDataDirectory}
+                >
+                  <FolderExternalLinkIcon aria-hidden="true" />
+                  <span>{isOpeningUserDataDirectory ? "Ouverture..." : "Ouvrir le dossier de données utilisateur"}</span>
+                </button>
+              </div>
+              {userDataDirectoryError ? (
+                <div className="settings-modal-shortcut__error">{userDataDirectoryError}</div>
+              ) : null}
+            </section>
           </div>
         ) : (
           <div className="settings-modal-panel">

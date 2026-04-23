@@ -10,6 +10,7 @@ export type WindowState = {
 export type AppRuntimeInfo = {
     isDev: boolean;
     isPackaged: boolean;
+    version: string;
 };
 
 const getEventWindow = (event: IpcMainInvokeEvent): BrowserWindow | null => (
@@ -101,4 +102,5 @@ export const toggleDevTools = (event: IpcMainInvokeEvent): boolean => {
 export const getAppRuntimeInfo = (): AppRuntimeInfo => ({
     isDev: !app.isPackaged,
     isPackaged: app.isPackaged,
+    version: app.getVersion(),
 });

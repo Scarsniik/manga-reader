@@ -26,7 +26,7 @@ const getPromptMode = (status?: AppUpdateStatus | null): "available" | "download
 
 const getPromptKey = (status?: AppUpdateStatus | null): string | null => {
     const mode = getPromptMode(status);
-    if (!mode) {
+    if (!mode || !status) {
         return null;
     }
 

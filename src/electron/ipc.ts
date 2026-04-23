@@ -17,7 +17,7 @@ import * as scrapers from "./handlers/scrapers";
 import * as windowControls from "./handlers/windowControls";
 import * as workspaceWindow from "./handlers/workspaceWindow";
 import * as appUpdate from "./handlers/appUpdate";
-import { migrateExistingFiles } from "./utils";
+import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
 migrateExistingFiles().catch(() => { /* swallow */ });
@@ -258,6 +258,22 @@ ipcMain.handle("open-path", async (event: IpcMainInvokeEvent, targetPath: string
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unable to open path",
+        };
+    }
+});
+
+ipcMain.handle("open-user-data-directory", async () => {
+    try {
+        await ensureDataDir();
+        const error = await shell.openPath(dataDir);
+        return {
+            success: error.length === 0,
+            error,
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unable to open user data directory",
         };
     }
 });

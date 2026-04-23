@@ -46,8 +46,84 @@
   gap: 14px;
 }
 
+.settings-modal-shortcut {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid #263244;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(14, 20, 30, 0.98), rgba(10, 15, 24, 0.98));
+}
+
+.settings-modal-shortcut__content h3 {
+  margin: 0;
+  color: #f3f6fb;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-modal-shortcut__content p {
+  margin: 6px 0 0;
+  color: #91a1b3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-modal-shortcut__actions {
+  display: flex;
+  align-items: center;
+}
+
+.settings-modal-shortcut__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #1f2937;
+  color: #e5e7eb;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+}
+
+.settings-modal-shortcut__button:hover:not([disabled]) {
+  border-color: #60a5fa;
+  background: #243041;
+}
+
+.settings-modal-shortcut__button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-modal-shortcut__button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.settings-modal-shortcut__error {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #fecaca;
+  font-size: 13px;
+}
+
 @media (max-width: 620px) {
   .settings-modal-tabs {
     flex-wrap: wrap;
+  }
+
+  .settings-modal-shortcut__actions,
+  .settings-modal-shortcut__button {
+    width: 100%;
+  }
+
+  .settings-modal-shortcut__button {
+    justify-content: center;
   }
 }

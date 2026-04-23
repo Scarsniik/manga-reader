@@ -8,6 +8,8 @@ Scaramanga is a lightweight desktop application designed to help users learn Jap
 - **Link Management**: Easily manage a list of manga links stored in a JSON file.
 - **Annotations**: Define areas on images for transcriptions and translations.
 - **User-Friendly Interface**: Intuitive layout with a sidebar for quick access to links and annotations.
+- **Version Badge**: The custom title bar displays the actual application version instead of a fixed label.
+- **User Data Access**: Open the managed user data folder directly from the Options modal for inspection or backup.
 
 ## Project Structure
 
