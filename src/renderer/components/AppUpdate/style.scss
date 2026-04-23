@@ -183,8 +183,82 @@
   opacity: 0.58;
 }
 
+.app-update-install-modal-shell {
+  max-width: 560px;
+}
+
+.app-update-install-modal {
+  display: grid;
+  gap: 14px;
+}
+
+.app-update-install-modal__summary {
+  margin: 0;
+  color: #e5ecf6;
+  line-height: 1.55;
+}
+
+.app-update-install-modal__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-update-install-modal__meta-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #2f3944;
+  border-radius: 8px;
+  background: #14171b;
+}
+
+.app-update-install-modal__meta-card strong {
+  color: #9ba8b8;
+  font-size: 12px;
+}
+
+.app-update-install-modal__meta-card span {
+  min-width: 0;
+  color: #f2f6fb;
+  overflow-wrap: anywhere;
+}
+
+.app-update-install-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-update-install-modal__actions button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #1976d2;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-update-install-modal__actions button.secondary {
+  border: 1px solid #3b4654;
+  background: transparent;
+  color: #e6eef8;
+}
+
+.app-update-install-modal__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 @media (max-width: 620px) {
   .app-update-settings__header {
     flex-direction: column;
+  }
+
+  .app-update-install-modal__meta {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import useParams from "@/renderer/hooks/useParams";
 import {
+    APP_UPDATE_NOTIFICATION_EVENT,
     getAppUpdateApi,
     type AppUpdateNotificationPayload,
     type AppUpdateStatus,
@@ -103,8 +104,8 @@ export default function AppUpdateSettingsPanel() {
             }
         };
 
-        window.addEventListener("app-update-notification", handleNotification);
-        return () => window.removeEventListener("app-update-notification", handleNotification);
+        window.addEventListener(APP_UPDATE_NOTIFICATION_EVENT, handleNotification);
+        return () => window.removeEventListener(APP_UPDATE_NOTIFICATION_EVENT, handleNotification);
     }, [loadStatus]);
 
     const runAction = useCallback(async (action: () => Promise<unknown>, successMessage?: string | null) => {

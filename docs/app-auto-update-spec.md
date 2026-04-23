@@ -231,9 +231,9 @@ Flux MVP :
 1. l'application detecte une nouvelle version ;
 2. l'utilisateur clique sur "Telecharger" ;
 3. le telechargement se fait en arriere-plan ;
-4. une fois le telechargement termine, l'application propose :
+4. une fois le telechargement termine, l'application affiche une modale et
+   propose :
    - redemarrer maintenant ;
-   - installer au prochain redemarrage ;
    - plus tard.
 
 L'application ne doit pas se fermer toute seule pendant une lecture, un OCR en

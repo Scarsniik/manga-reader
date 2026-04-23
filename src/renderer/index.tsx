@@ -7,6 +7,13 @@ import { useContext } from 'react';
 import { TagsProvider } from '@/renderer/context/TagsContext';
 import { AuthorsProvider } from '@/renderer/context/AuthorsContext';
 import { SeriesProvider } from '@/renderer/context/SeriesContext';
+import AppUpdateGlobalUi from "@/renderer/components/AppUpdate/AppUpdateGlobalUi";
+
+const RefreshKeyedApp: React.FC = () => {
+  const ctx = useContext(RefreshContext);
+  const key = ctx?.refreshKey ?? String(Date.now());
+  return <App key={key} />;
+};
 
 const container = document.getElementById('root') as HTMLElement | null;
 if (container) {
@@ -18,14 +25,8 @@ if (container) {
           <AuthorsProvider>
             <SeriesProvider>
               <ModalProvider>
-                {(() => {
-                  const RefreshKeyedApp: React.FC = () => {
-                    const ctx = useContext(RefreshContext);
-                    const key = ctx?.refreshKey ?? String(Date.now());
-                    return <App key={key} />;
-                  };
-                  return <RefreshKeyedApp />;
-                })()}
+                <AppUpdateGlobalUi />
+                <RefreshKeyedApp />
               </ModalProvider>
             </SeriesProvider>
           </AuthorsProvider>

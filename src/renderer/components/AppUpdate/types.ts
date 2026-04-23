@@ -50,6 +50,8 @@ export type AppUpdateApi = {
     appUpdateOpenReleasePage?: () => Promise<{ opened?: boolean; releaseUrl?: string; error?: string }>;
 };
 
+export const APP_UPDATE_NOTIFICATION_EVENT = "app-update-notification";
+
 export const getAppUpdateApi = (): AppUpdateApi => (
     (window.api ?? {}) as AppUpdateApi
 );
