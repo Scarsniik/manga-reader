@@ -160,8 +160,19 @@ function Invoke-WithoutPublishCredentials {
 function Get-FileSha256Hex {
     param([Parameter(Mandatory = $true)][string]$FilePath)
 
-    $hash = Get-FileHash -LiteralPath $FilePath -Algorithm SHA256
-    return $hash.Hash.ToLowerInvariant()
+    $stream = [System.IO.File]::OpenRead($FilePath)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+        } finally {
+            $sha256.Dispose()
+        }
+
+        return ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
+    } finally {
+        $stream.Dispose()
+    }
 }
 
 function Get-FileSha512Base64 {
