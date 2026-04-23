@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
-import buildAppUpdateInstallModal from "@/renderer/components/Modal/modales/AppUpdateInstallModal";
+import buildAppUpdatePromptModal from "@/renderer/components/Modal/modales/AppUpdatePromptModal";
 import useModal from "@/renderer/hooks/useModal";
 import {
     APP_UPDATE_NOTIFICATION_EVENT,
@@ -8,41 +8,56 @@ import {
     type AppUpdateStatus,
 } from "@/renderer/components/AppUpdate/types";
 
-const getDownloadedVersionKey = (status?: AppUpdateStatus | null): string | null => {
-    if (status?.state !== "downloaded") {
+const getPromptMode = (status?: AppUpdateStatus | null): "available" | "downloaded" | null => {
+    if (status?.state === "available") {
+        return "available";
+    }
+
+    if (status?.state === "downloaded") {
+        return "downloaded";
+    }
+
+    return null;
+};
+
+const getPromptKey = (status?: AppUpdateStatus | null): string | null => {
+    const mode = getPromptMode(status);
+    if (!mode) {
         return null;
     }
 
     if (typeof status.availableVersion === "string" && status.availableVersion.trim().length > 0) {
-        return status.availableVersion.trim();
+        return `${mode}:${status.availableVersion.trim()}`;
     }
 
-    return "__downloaded_update__";
+    return `${mode}:__pending_update__`;
 };
 
 export default function AppUpdateGlobalUi() {
     const { openModal } = useModal();
-    const promptedVersionRef = useRef<string | null>(null);
-    const dismissedVersionRef = useRef<string | null>(null);
+    const promptedKeyRef = useRef<string | null>(null);
+    const dismissedPromptKeysRef = useRef(new Set<string>());
 
-    const maybeOpenInstallPrompt = useCallback((status?: AppUpdateStatus | null) => {
-        const versionKey = getDownloadedVersionKey(status);
-        if (!versionKey || !status) {
-            if (status?.state !== "downloaded") {
-                promptedVersionRef.current = null;
+    const maybeOpenPrompt = useCallback((status?: AppUpdateStatus | null) => {
+        const promptMode = getPromptMode(status);
+        const promptKey = getPromptKey(status);
+        if (!promptMode || !promptKey || !status) {
+            if (getPromptMode(status) === null) {
+                promptedKeyRef.current = null;
             }
             return;
         }
 
-        if (promptedVersionRef.current === versionKey || dismissedVersionRef.current === versionKey) {
+        if (promptedKeyRef.current === promptKey || dismissedPromptKeysRef.current.has(promptKey)) {
             return;
         }
 
-        promptedVersionRef.current = versionKey;
-        openModal(buildAppUpdateInstallModal({
+        promptedKeyRef.current = promptKey;
+        openModal(buildAppUpdatePromptModal({
+            mode: promptMode,
             status,
             onDismiss: () => {
-                dismissedVersionRef.current = versionKey;
+                dismissedPromptKeysRef.current.add(promptKey);
             },
         }));
     }, [openModal]);
@@ -50,14 +65,14 @@ export default function AppUpdateGlobalUi() {
     useEffect(() => {
         const handleNotification = (event: Event) => {
             const payload = (event as CustomEvent<AppUpdateNotificationPayload>).detail;
-            maybeOpenInstallPrompt(payload?.status || null);
+            maybeOpenPrompt(payload?.status || null);
         };
 
         window.addEventListener(APP_UPDATE_NOTIFICATION_EVENT, handleNotification);
 
         const loadInitialStatus = async () => {
             const status = await getAppUpdateApi().appUpdateStatus?.();
-            maybeOpenInstallPrompt(status || null);
+            maybeOpenPrompt(status || null);
         };
 
         void loadInitialStatus().catch(() => undefined);
@@ -65,7 +80,7 @@ export default function AppUpdateGlobalUi() {
         return () => {
             window.removeEventListener(APP_UPDATE_NOTIFICATION_EVENT, handleNotification);
         };
-    }, [maybeOpenInstallPrompt]);
+    }, [maybeOpenPrompt]);
 
     return null;
 }

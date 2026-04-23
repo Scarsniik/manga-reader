@@ -1,6 +1,6 @@
 # Cahier des charges - Mise a jour automatique de l'application
 
-Date de mise a jour : 2026-04-22
+Date de mise a jour : 2026-04-23
 
 ## Objectif
 
@@ -177,6 +177,10 @@ maintenant les deux :
 - le workflow GitHub Actions `.github/workflows/release-app.yml` pour lancer la
   meme publication depuis GitHub sur un runner Windows.
 
+Le script local doit rester autonome autant que possible : s'il ne trouve pas
+`gh`, il peut publier via l'API GitHub en utilisant un token d'environnement ou
+les credentials deja disponibles via Git.
+
 Le workflow doit :
 
 - etre declenche manuellement avec une version explicite ;
@@ -201,10 +205,12 @@ Au demarrage d'une version packagee installee :
 1. attendre que la fenetre soit chargee ;
 2. attendre un court delai pour ne pas ralentir le lancement ;
 3. verifier les mises a jour si l'option est active ;
-4. afficher une notification discrete si une version est disponible.
+4. si une version est disponible, afficher une modale proposant au minimum
+   de la telecharger maintenant ou plus tard.
 
-La verification automatique doit etre limitee, par exemple une fois toutes les
-12 ou 24 heures, pour eviter des appels inutiles.
+Pour le MVP actuel, si l'option est active, la verification se lance a chaque
+ouverture de l'application. La date de derniere verification reste affichee
+dans les parametres a titre informatif.
 
 ### Verification manuelle
 
@@ -229,7 +235,8 @@ longue :
 Flux MVP :
 
 1. l'application detecte une nouvelle version ;
-2. l'utilisateur clique sur "Telecharger" ;
+2. l'utilisateur peut l'accepter depuis la modale de lancement ou cliquer sur
+   "Telecharger" dans les parametres ;
 3. le telechargement se fait en arriere-plan ;
 4. une fois le telechargement termine, l'application affiche une modale et
    propose :

@@ -102,14 +102,8 @@ function Test-CommandAvailable {
 }
 
 function Assert-Tooling {
-    param([switch]$RequireGitHubCli)
-
     if (-not (Test-CommandAvailable -CommandName "git")) {
         throw "Git is required to publish the release."
-    }
-
-    if ($RequireGitHubCli -and -not (Test-CommandAvailable -CommandName "gh")) {
-        throw "GitHub CLI ('gh') is required to publish the release."
     }
 }
 
@@ -139,16 +133,34 @@ function Compare-SemVer {
     return $leftVersion.CompareTo($rightVersion)
 }
 
-function Get-LatestPublishedVersion {
-    param(
-        [Parameter(Mandatory = $true)][string]$Owner,
-        [Parameter(Mandatory = $true)][string]$Repo
+function Get-GitHubCredentialToken {
+    $credentialInput = @(
+        "protocol=https"
+        "host=github.com"
+        ""
     )
 
-    $headers = @{
-        "Accept" = "application/vnd.github+json"
+    try {
+        $credentialLines = $credentialInput | git credential fill
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+    } catch {
+        return $null
     }
 
+    $passwordLine = $credentialLines |
+        Where-Object { $_ -like "password=*" } |
+        Select-Object -First 1
+
+    if (-not $passwordLine) {
+        return $null
+    }
+
+    return $passwordLine.Substring("password=".Length).Trim()
+}
+
+function Get-GitHubToken {
     $tokenNames = @(
         "GITHUB_RELEASE_TOKEN",
         "GH_TOKEN",
@@ -158,10 +170,54 @@ function Get-LatestPublishedVersion {
     foreach ($tokenName in $tokenNames) {
         $tokenValue = [Environment]::GetEnvironmentVariable($tokenName)
         if (-not [string]::IsNullOrWhiteSpace($tokenValue)) {
-            $headers["Authorization"] = "Bearer $($tokenValue.Trim())"
-            break
+            return $tokenValue.Trim()
         }
     }
+
+    return Get-GitHubCredentialToken
+}
+
+function Get-GitHubApiHeaders {
+    param([switch]$RequireAuthorization)
+
+    $headers = @{
+        "Accept" = "application/vnd.github+json"
+        "User-Agent" = "scaramanga-release-script"
+        "X-GitHub-Api-Version" = "2022-11-28"
+    }
+
+    $token = Get-GitHubToken
+    if (-not [string]::IsNullOrWhiteSpace($token)) {
+        $headers["Authorization"] = "Bearer $token"
+    } elseif ($RequireAuthorization) {
+        throw "Unable to resolve GitHub credentials. Set GITHUB_RELEASE_TOKEN, GH_TOKEN, GITHUB_TOKEN, or configure git credential manager."
+    }
+
+    return $headers
+}
+
+function Get-HttpStatusCode {
+    param([System.Management.Automation.ErrorRecord]$ErrorRecord)
+
+    $response = $ErrorRecord.Exception.Response
+    if ($null -eq $response) {
+        return $null
+    }
+
+    try {
+        return [int]$response.StatusCode
+    } catch {
+        return $null
+    }
+}
+
+function Get-LatestPublishedVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo
+    )
+
+    $headers = Get-GitHubApiHeaders
 
     try {
         $releases = Invoke-RestMethod `
@@ -195,6 +251,29 @@ function Get-LatestPublishedVersion {
     return $versions |
         Sort-Object { [version]$_ } |
         Select-Object -Last 1
+}
+
+function Get-ExistingRelease {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$TagName,
+        [hashtable]$Headers
+    )
+
+    try {
+        return Invoke-RestMethod `
+            -Method Get `
+            -Uri "https://api.github.com/repos/$Owner/$Repo/releases/tags/$TagName" `
+            -Headers $Headers
+    } catch {
+        $statusCode = Get-HttpStatusCode -ErrorRecord $_
+        if ($statusCode -eq 404) {
+            return $null
+        }
+
+        throw "Unable to inspect the GitHub release for $TagName."
+    }
 }
 
 function Test-TagExists {
@@ -275,7 +354,143 @@ function New-ReleaseNotesFile {
     return $tempPath
 }
 
-Assert-Tooling -RequireGitHubCli:$Publish
+function Publish-GitHubReleaseWithGh {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$TagName,
+        [Parameter(Mandatory = $true)][string]$ReleaseNotesFile,
+        [Parameter(Mandatory = $true)][string[]]$AssetPaths
+    )
+
+    Write-Step "Creating GitHub release via GitHub CLI"
+
+    $releaseArgs = @(
+        "release",
+        "create",
+        $TagName,
+        "--repo", "$Owner/$Repo",
+        "--title", $TagName,
+        "--notes-file", $ReleaseNotesFile,
+        "--verify-tag"
+    )
+
+    foreach ($asset in $AssetPaths) {
+        $releaseArgs += $asset
+    }
+
+    & gh @releaseArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to create the GitHub release for $TagName."
+    }
+}
+
+function Publish-GitHubReleaseWithApi {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$TagName,
+        [Parameter(Mandatory = $true)][string]$ReleaseNotesFile,
+        [Parameter(Mandatory = $true)][string[]]$AssetPaths,
+        [switch]$AllowExisting
+    )
+
+    Write-Step "Creating GitHub release via GitHub API"
+
+    $headers = Get-GitHubApiHeaders -RequireAuthorization
+    $releaseBody = Get-Content -Raw -LiteralPath $ReleaseNotesFile
+    $release = Get-ExistingRelease -Owner $Owner -Repo $Repo -TagName $TagName -Headers $headers
+
+    if ($null -eq $release) {
+        $payload = @{
+            tag_name = $TagName
+            name = $TagName
+            body = $releaseBody
+            draft = $false
+            prerelease = $false
+            generate_release_notes = $false
+        } | ConvertTo-Json -Depth 5
+
+        $release = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.github.com/repos/$Owner/$Repo/releases" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $payload
+    } elseif (-not $AllowExisting) {
+        throw "GitHub release $TagName already exists."
+    } else {
+        $payload = @{
+            tag_name = $TagName
+            name = $TagName
+            body = $releaseBody
+            draft = $false
+            prerelease = $false
+        } | ConvertTo-Json -Depth 5
+
+        $release = Invoke-RestMethod `
+            -Method Patch `
+            -Uri "https://api.github.com/repos/$Owner/$Repo/releases/$($release.id)" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $payload
+    }
+
+    $assetNames = $AssetPaths | ForEach-Object { [System.IO.Path]::GetFileName($_) }
+    foreach ($existingAsset in @($release.assets)) {
+        if ($existingAsset -and $assetNames -contains [string]$existingAsset.name) {
+            Invoke-RestMethod `
+                -Method Delete `
+                -Uri "https://api.github.com/repos/$Owner/$Repo/releases/assets/$($existingAsset.id)" `
+                -Headers $headers | Out-Null
+        }
+    }
+
+    $uploadUrl = ([string]$release.upload_url) -replace "\{.*$", ""
+    foreach ($assetPath in $AssetPaths) {
+        $assetName = [System.IO.Path]::GetFileName($assetPath)
+        $escapedAssetName = [System.Uri]::EscapeDataString($assetName)
+        $assetUploadUrl = "${uploadUrl}?name=${escapedAssetName}"
+
+        Invoke-RestMethod `
+            -Method Post `
+            -Uri $assetUploadUrl `
+            -Headers $headers `
+            -ContentType "application/octet-stream" `
+            -InFile $assetPath | Out-Null
+    }
+}
+
+function Publish-GitHubRelease {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$TagName,
+        [Parameter(Mandatory = $true)][string]$ReleaseNotesFile,
+        [Parameter(Mandatory = $true)][string[]]$AssetPaths,
+        [switch]$AllowExisting
+    )
+
+    if (Test-CommandAvailable -CommandName "gh") {
+        Publish-GitHubReleaseWithGh `
+            -Owner $Owner `
+            -Repo $Repo `
+            -TagName $TagName `
+            -ReleaseNotesFile $ReleaseNotesFile `
+            -AssetPaths $AssetPaths
+        return
+    }
+
+    Publish-GitHubReleaseWithApi `
+        -Owner $Owner `
+        -Repo $Repo `
+        -TagName $TagName `
+        -ReleaseNotesFile $ReleaseNotesFile `
+        -AssetPaths $AssetPaths `
+        -AllowExisting:$AllowExisting
+}
+
+Assert-Tooling
 $packageJson = Read-PackageJson
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -346,25 +561,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Unable to push git tag $tagName to origin."
 }
 
-Write-Step "Creating GitHub release"
-$releaseArgs = @(
-    "release",
-    "create",
-    $tagName,
-    "--repo", "$($repository.Owner)/$($repository.Repo)",
-    "--title", $tagName,
-    "--notes-file", $releaseNotesFile,
-    "--verify-tag"
-)
-
-foreach ($asset in $assets) {
-    $releaseArgs += $asset
-}
-
-& gh @releaseArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "Unable to create the GitHub release for $tagName."
-}
+Publish-GitHubRelease `
+    -Owner $repository.Owner `
+    -Repo $repository.Repo `
+    -TagName $tagName `
+    -ReleaseNotesFile $releaseNotesFile `
+    -AssetPaths $assets `
+    -AllowExisting:$AllowExistingTag
 
 Write-Step "Release published"
 Write-Host "Release URL: $releaseUrl"

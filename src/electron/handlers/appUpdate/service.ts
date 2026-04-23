@@ -17,7 +17,6 @@ import type {
     AppUpdateStatus,
 } from "./types";
 
-const AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const STARTUP_CHECK_DELAY_MS = 2500;
 const DEV_MODE_ENV_NAMES = [
     "APP_UPDATE_ENABLE_DEV",
@@ -640,17 +639,6 @@ export const maybeCheckForUpdatesOnStartup = async () => {
             reason: "disabled",
             status: appUpdateStatus,
         };
-    }
-
-    if (appUpdateStatus.lastCheckedAt) {
-        const parsedTimestamp = Date.parse(appUpdateStatus.lastCheckedAt);
-        if (Number.isFinite(parsedTimestamp) && (Date.now() - parsedTimestamp) < AUTO_CHECK_INTERVAL_MS) {
-            return {
-                checked: false,
-                reason: "throttled",
-                status: appUpdateStatus,
-            };
-        }
     }
 
     const result = await checkForAppUpdates();
