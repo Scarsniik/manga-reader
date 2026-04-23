@@ -402,7 +402,7 @@ function Publish-GitHubReleaseWithApi {
     Write-Step "Creating GitHub release via GitHub API"
 
     $headers = Get-GitHubApiHeaders -RequireAuthorization
-    $releaseBody = Get-Content -Raw -LiteralPath $ReleaseNotesFile
+    $releaseBody = [string](Get-Content -Raw -LiteralPath $ReleaseNotesFile)
     $release = Get-ExistingRelease -Owner $Owner -Repo $Repo -TagName $TagName -Headers $headers
 
     if ($null -eq $release) {
