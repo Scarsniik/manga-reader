@@ -2,7 +2,13 @@ import { promises as fs } from "fs";
 import path from "path";
 import { app } from "electron";
 import { OCR_RUNTIME_METADATA_FILE_NAME, REQUIRED_RUNTIME_ITEMS } from "./constants";
-import { normalizeNullableString, normalizeOcrRuntimeMetadata, readOcrRuntimeConfig } from "./config";
+import {
+    normalizeNullableString,
+    normalizeOcrRuntimeMetadata,
+    readOcrRuntimeConfig,
+    saveOcrRuntimeConfig,
+} from "./config";
+import { readOcrRuntimeManifest } from "./manifest";
 import {
     getDefaultOcrRuntimePath,
     getLegacyDefaultOcrRuntimePaths,
@@ -69,6 +75,53 @@ const readRuntimeMetadata = async (runtimePath: string) => {
     return normalizeOcrRuntimeMetadata(JSON.parse(data));
 };
 
+const writeRuntimeMetadata = async (
+    runtimePath: string,
+    metadata: NonNullable<OcrRuntimeDetection["metadata"]>,
+) => {
+    const metadataPath = path.join(runtimePath, OCR_RUNTIME_METADATA_FILE_NAME);
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+};
+
+const tryRefreshRuntimeCompatibility = async (
+    runtimePath: string,
+    metadata: NonNullable<OcrRuntimeDetection["metadata"]>,
+) => {
+    if (isAppVersionCompatible(metadata.compatibleAppVersions)) {
+        return metadata;
+    }
+
+    try {
+        const manifestResult = await readOcrRuntimeManifest();
+        const currentPlatform = getCurrentPlatform();
+        if (
+            manifestResult.manifest.runtimeVersion !== metadata.runtimeVersion
+            || manifestResult.selectedDownload.platform !== currentPlatform
+            || !isAppVersionCompatible(manifestResult.manifest.compatibleAppVersions)
+        ) {
+            return metadata;
+        }
+
+        const refreshedMetadata: NonNullable<OcrRuntimeDetection["metadata"]> = {
+            ...metadata,
+            compatibleAppVersions: manifestResult.manifest.compatibleAppVersions,
+            sourceManifestUrl: manifestResult.source.value,
+        };
+
+        await writeRuntimeMetadata(runtimePath, refreshedMetadata);
+        await saveOcrRuntimeConfig({
+            manifestUrl: manifestResult.source.value,
+            runtimeVersion: refreshedMetadata.runtimeVersion,
+            lastCheckedAt: new Date().toISOString(),
+            lastError: null,
+        });
+
+        return refreshedMetadata;
+    } catch {
+        return metadata;
+    }
+};
+
 const checkRequiredItem = async (
     runtimePath: string,
     item: { label: string; kind: OcrRuntimeItemKind; relativePath: string },
@@ -132,6 +185,7 @@ async function validateRuntimePath(runtimePath: string): Promise<RuntimeValidati
     }
 
     if (metadata) {
+        metadata = await tryRefreshRuntimeCompatibility(resolvedRuntimePath, metadata);
         const currentPlatform = getCurrentPlatform();
         if (metadata.platform !== currentPlatform) {
             issues.push(`Runtime platform ${metadata.platform} is not compatible with ${currentPlatform}`);

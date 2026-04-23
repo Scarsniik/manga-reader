@@ -133,6 +133,18 @@ Exemple :
 }
 ```
 
+Si le runtime installe contient un `runtime-metadata.json` plus ancien avec une
+plage `compatibleAppVersions` devenue obsolete, l'application peut le
+rafraichir automatiquement depuis le manifeste OCR courant si :
+
+- la version runtime est la meme ;
+- la plateforme correspond ;
+- le manifeste courant declare bien cette version comme compatible avec
+  l'application en cours.
+
+Cela evite de forcer une reinstallation complete du runtime quand seule la
+metadata locale est perimee apres une mise a jour applicative.
+
 ## Manifeste distant
 
 L'application lit un manifeste qui decrit les versions OCR approuvees et les URLs de telechargement.

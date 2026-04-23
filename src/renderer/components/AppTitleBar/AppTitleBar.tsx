@@ -118,12 +118,12 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
 
     return (
         <header className="app-titlebar">
-            <div className="app-titlebar__brand" title={`${title} - Test 0.1.9`}>
+            <div className="app-titlebar__brand" title={`${title} - Test 0.1.10`}>
                 <div className="app-titlebar__title">
                     {title}
                 </div>
                 <span className="app-titlebar__badge">
-                    Test 0.1.9
+                    Test 0.1.10
                 </span>
             </div>
 
