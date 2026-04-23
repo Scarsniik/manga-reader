@@ -516,6 +516,18 @@
   cursor: pointer;
 }
 
+.scraper-browser__add-library {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(95, 173, 122, 0.36);
+  border-radius: 999px;
+  background: rgba(95, 173, 122, 0.12);
+  color: #dff7e5;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .scraper-browser__open-source,
 .scraper-browser__link-source {
   display: inline-flex;
@@ -543,13 +555,15 @@
 }
 
 .scraper-browser__open-source:hover:not(:disabled),
-.scraper-browser__link-source:hover:not(:disabled) {
+.scraper-browser__link-source:hover:not(:disabled),
+.scraper-browser__add-library:hover:not(:disabled) {
   border-color: #5d9cff;
   background: rgba(93, 156, 255, 0.18);
 }
 
 .scraper-browser__download:disabled,
-.scraper-browser__read:disabled {
+.scraper-browser__read:disabled,
+.scraper-browser__add-library:disabled {
   opacity: 0.7;
   cursor: wait;
 }
@@ -674,6 +688,7 @@
 
 .scraper-browser__chapter-actions--side .scraper-browser__read,
 .scraper-browser__chapter-actions--side .scraper-browser__download,
+.scraper-browser__chapter-actions--side .scraper-browser__add-library,
 .scraper-browser__chapter-actions--side .scraper-browser__link-source {
   width: 100%;
 }
@@ -907,6 +922,7 @@
 
   .scraper-browser__chapter-actions--side .scraper-browser__read,
   .scraper-browser__chapter-actions--side .scraper-browser__download,
+  .scraper-browser__chapter-actions--side .scraper-browser__add-library,
   .scraper-browser__chapter-actions--side .scraper-browser__link-source {
     width: auto;
   }

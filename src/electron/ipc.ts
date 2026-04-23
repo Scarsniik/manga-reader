@@ -46,6 +46,12 @@ const notifySeriesUpdated = () => {
     }
 };
 
+const notifyMangasUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("mangas-updated");
+    }
+};
+
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
@@ -71,6 +77,7 @@ ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => {
         ? updated.find((item: any) => String(item.id) === String(manga?.id)) || manga
         : manga;
     const hydratedMangas = await mangas.getMangas();
+    notifyMangasUpdated();
 
     // Let the import finish and the library refresh first, then queue OCR in the background.
     setTimeout(() => {
@@ -78,9 +85,7 @@ ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => {
             try {
                 const queueResult = await ocr.ocrQueueImportManga(insertedManga);
                 if (queueResult?.queued) {
-                    for (const win of BrowserWindow.getAllWindows()) {
-                        win.webContents.send("mangas-updated");
-                    }
+                    notifyMangasUpdated();
                 }
             } catch (error) {
                 console.warn("Failed to auto-queue OCR after manga import", error);
@@ -90,9 +95,23 @@ ipcMain.handle("add-manga", async (event: IpcMainInvokeEvent, manga: any) => {
 
     return hydratedMangas;
 });
-ipcMain.handle("remove-manga", async (event: IpcMainInvokeEvent, mangaId: string) => mangas.removeManga(event, mangaId));
-ipcMain.handle("update-manga", async (event: IpcMainInvokeEvent, updatedManga: any) => mangas.updateManga(event, updatedManga));
-ipcMain.handle("batch-update-tags", async (event: IpcMainInvokeEvent, payload: any) => mangas.batchUpdateTags(event, payload));
+ipcMain.handle("remove-manga", async (event: IpcMainInvokeEvent, mangaId: string) => {
+    const updated = await mangas.removeManga(event, mangaId);
+    notifyMangasUpdated();
+    return updated;
+});
+ipcMain.handle("update-manga", async (event: IpcMainInvokeEvent, updatedManga: any) => {
+    const updated = await mangas.updateManga(event, updatedManga);
+    notifyMangasUpdated();
+    return updated;
+});
+ipcMain.handle("batch-update-tags", async (event: IpcMainInvokeEvent, payload: any) => {
+    const result = await mangas.batchUpdateTags(event, payload);
+    if (result?.success) {
+        notifyMangasUpdated();
+    }
+    return result;
+});
 
 // Authors
 ipcMain.handle("get-authors", async () => authors.getAuthors());

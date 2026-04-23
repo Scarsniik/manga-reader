@@ -23,12 +23,15 @@ type Props = {
   displaysThumbnails?: boolean;
   openingReader: boolean;
   downloading: boolean;
+  addingToLibrary: boolean;
   loadingMoreThumbnails: boolean;
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
+  getLinkedLocalMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   onBack?: () => void;
   onOpenAuthor: (value: string) => void;
   onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
+  onAddToLibrary: (chapter?: ScraperRuntimeChapterResult) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
   onLoadMoreThumbnails: () => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
@@ -47,12 +50,15 @@ export default function ScraperDetailsPanel({
   usesChapters,
   openingReader,
   downloading,
+  addingToLibrary,
   loadingMoreThumbnails,
   getLinkedMangaForSource,
+  getLinkedLocalMangaForSource,
   onBack,
   onOpenAuthor,
   onOpenAuthorInWorkspace,
   onOpenReader,
+  onAddToLibrary,
   onLinkSourceToManga,
   onLoadMoreThumbnails,
   onDownload,
@@ -76,11 +82,15 @@ export default function ScraperDetailsPanel({
     ? 'Voir plus'
     : 'Afficher toutes les pages';
   const linkedStandaloneManga = getLinkedMangaForSource();
+  const linkedStandaloneLocalManga = getLinkedLocalMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
   const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
-  const downloadLabel = linkedStandaloneManga
+  const downloadLabel = linkedStandaloneLocalManga
     ? 'Retelecharger'
     : 'Telecharger';
+  const addToLibraryLabel = linkedStandaloneManga
+    ? 'Mettre a jour la bibliotheque'
+    : 'Ajouter a la bibliotheque';
 
   return (
     <>
@@ -145,13 +155,22 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className={[
                       'scraper-browser__download',
-                      linkedStandaloneManga ? 'is-linked' : '',
+                      linkedStandaloneLocalManga ? 'is-linked' : '',
                     ].join(' ').trim()}
                     onClick={() => onDownload()}
                     disabled={downloading}
-                    title={linkedStandaloneManga ? `Deja lie a ${linkedStandaloneManga.title}. Le telechargement remplacera les images locales.` : undefined}
+                    title={linkedStandaloneLocalManga ? `Deja telecharge sous ${linkedStandaloneLocalManga.title}. Le telechargement remplacera les images locales.` : undefined}
                   >
                     {downloading ? 'Telechargement...' : downloadLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className="scraper-browser__add-library"
+                    onClick={() => onAddToLibrary()}
+                    disabled={addingToLibrary}
+                    title={linkedStandaloneManga ? `Deja present en bibliotheque sous ${linkedStandaloneManga.title}. Cliquer pour mettre a jour la fiche.` : undefined}
+                  >
+                    {addingToLibrary ? 'Ajout...' : addToLibraryLabel}
                   </button>
                 </>
               ) : null}
@@ -161,9 +180,9 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className="scraper-browser__link-source"
                     onClick={() => onLinkSourceToManga()}
-                    title={linkedStandaloneManga ? `Lie a ${linkedStandaloneManga.title}. Cliquer pour changer.` : undefined}
+                    title={linkedStandaloneLocalManga ? `Lie a ${linkedStandaloneLocalManga.title}. Cliquer pour changer.` : undefined}
                   >
-                    {linkedStandaloneManga ? 'Changer le lien' : 'Lier a un manga'}
+                    {linkedStandaloneLocalManga ? 'Changer le lien' : 'Lier a un manga'}
                   </button>
                   <a
                     href={sourceUrl}
@@ -274,9 +293,13 @@ export default function ScraperDetailsPanel({
                 {chapters.map((chapter) => {
                   const hasChapterActions = hasPages && usesChapters;
                   const linkedChapterManga = getLinkedMangaForSource(chapter);
-                  const chapterDownloadLabel = linkedChapterManga
+                  const linkedChapterLocalManga = getLinkedLocalMangaForSource(chapter);
+                  const chapterDownloadLabel = linkedChapterLocalManga
                     ? 'Retelecharger'
                     : 'Telecharger';
+                  const chapterAddToLibraryLabel = linkedChapterManga
+                    ? 'Mettre a jour'
+                    : 'Ajouter';
 
                   return (
                     <article
@@ -313,21 +336,30 @@ export default function ScraperDetailsPanel({
                             type="button"
                             className={[
                               'scraper-browser__download',
-                              linkedChapterManga ? 'is-linked' : '',
+                              linkedChapterLocalManga ? 'is-linked' : '',
                             ].join(' ').trim()}
                             onClick={() => onDownload(chapter)}
                             disabled={downloading}
-                            title={linkedChapterManga ? `Deja lie a ${linkedChapterManga.title}. Le telechargement remplacera les images locales.` : undefined}
+                            title={linkedChapterLocalManga ? `Deja telecharge sous ${linkedChapterLocalManga.title}. Le telechargement remplacera les images locales.` : undefined}
                           >
                             {downloading ? 'Telechargement...' : chapterDownloadLabel}
                           </button>
                           <button
                             type="button"
+                            className="scraper-browser__add-library"
+                            onClick={() => onAddToLibrary(chapter)}
+                            disabled={addingToLibrary}
+                            title={linkedChapterManga ? `Deja present en bibliotheque sous ${linkedChapterManga.title}. Cliquer pour mettre a jour la fiche.` : undefined}
+                          >
+                            {addingToLibrary ? 'Ajout...' : chapterAddToLibraryLabel}
+                          </button>
+                          <button
+                            type="button"
                             className="scraper-browser__link-source"
                             onClick={() => onLinkSourceToManga(chapter)}
-                            title={linkedChapterManga ? `Lie a ${linkedChapterManga.title}. Cliquer pour changer.` : undefined}
+                            title={linkedChapterLocalManga ? `Lie a ${linkedChapterLocalManga.title}. Cliquer pour changer.` : undefined}
                           >
-                            {linkedChapterManga ? 'Changer' : 'Lier'}
+                            {linkedChapterLocalManga ? 'Changer' : 'Lier'}
                           </button>
                         </div>
                       ) : null}

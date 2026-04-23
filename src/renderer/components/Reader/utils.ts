@@ -544,6 +544,10 @@ export const findDirectionalOcrBox = (
     return bestCandidate;
 };
 
-export const isScraperReaderManga = (manga: Manga | null): boolean => (
+export const isRemoteScraperManga = (manga: Manga | null): boolean => (
     manga?.sourceKind === 'scraper' && !manga?.path
+);
+
+export const isScraperReaderManga = (manga: Manga | null): boolean => (
+    isRemoteScraperManga(manga) && String(manga?.id || '').startsWith('scraper-')
 );

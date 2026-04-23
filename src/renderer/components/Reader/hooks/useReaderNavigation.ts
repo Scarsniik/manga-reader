@@ -27,7 +27,7 @@ import {
 import {
     copyImageViaBrowserClipboard,
     isSameScraperChapter,
-    isScraperReaderManga,
+    isRemoteScraperManga,
     normalizeReaderAssetSrc,
 } from '../utils';
 
@@ -69,7 +69,7 @@ const useReaderNavigation = ({
     const [copyFeedback, setCopyFeedback] = React.useState<ReaderCopyFeedback | null>(null);
     const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
 
-    const ocrAvailable = !isScraperReaderManga(manga);
+    const ocrAvailable = !isRemoteScraperManga(manga);
     const previousLocalManga = React.useMemo(
         () => (manga?.path ? findPreviousSeriesManga(manga, libraryMangas) : null),
         [libraryMangas, manga],

@@ -116,9 +116,14 @@ const finalizeScraperDownloadJob = (
   });
 };
 
+type ResolvedReplacementTarget = {
+  manga: any;
+  hasLocalPath: boolean;
+};
+
 const resolveReplacementManga = async (
   job: InternalScraperDownloadJob,
-): Promise<any | null> => {
+): Promise<ResolvedReplacementTarget | null> => {
   if (!job.replaceMangaId) {
     return null;
   }
@@ -128,11 +133,10 @@ const resolveReplacementManga = async (
     throw new Error("Le manga a remplacer est introuvable.");
   }
 
-  if (!manga.path || typeof manga.path !== "string") {
-    throw new Error("Le manga a remplacer n'a pas de dossier local.");
-  }
-
-  return manga;
+  return {
+    manga,
+    hasLocalPath: Boolean(manga.path && typeof manga.path === "string"),
+  };
 };
 
 const createReplacementStagingFolder = async (targetFolderPath: string): Promise<string> => {
@@ -219,11 +223,13 @@ const executeScraperDownloadJob = async (
 
   ensureScraperDownloadNotCancelled(job);
 
-  const replacementManga = await resolveReplacementManga(job);
-  const targetFolderPath = replacementManga
+  const replacementTarget = await resolveReplacementManga(job);
+  const replacementManga = replacementTarget?.manga ?? null;
+  const hasLocalReplacementPath = Boolean(replacementTarget?.hasLocalPath);
+  const targetFolderPath = hasLocalReplacementPath && replacementManga?.path
     ? path.resolve(replacementManga.path)
     : await getUniqueFolderPath(libraryRoot, job.title);
-  const downloadFolderPath = replacementManga
+  const downloadFolderPath = hasLocalReplacementPath
     ? await createReplacementStagingFolder(targetFolderPath)
     : targetFolderPath;
 
@@ -231,7 +237,7 @@ const executeScraperDownloadJob = async (
   touchScraperDownloadJob(job, {
     folderPath: targetFolderPath,
     libraryRoot,
-    message: replacementManga
+    message: hasLocalReplacementPath
       ? "Preparation du remplacement local"
       : "Preparation du dossier local",
   });
@@ -280,11 +286,11 @@ const executeScraperDownloadJob = async (
 
     ensureScraperDownloadNotCancelled(job);
     touchScraperDownloadJob(job, {
-      message: replacementManga
+      message: hasLocalReplacementPath
         ? "Remplacement des images locales"
         : "Ajout du manga a la bibliotheque",
     });
-    if (replacementManga) {
+    if (hasLocalReplacementPath) {
       await replaceLocalImageFiles(downloadFolderPath, targetFolderPath);
     }
   } catch (error) {
@@ -308,6 +314,8 @@ const executeScraperDownloadJob = async (
 
   if (replacementManga) {
     const updatedManga = await patchMangaById(String(replacementManga.id), {
+      title: job.title,
+      path: replacementManga.path || targetFolderPath,
       sourceKind: "scraper",
       scraperId: job.scraperId ?? replacementManga.scraperId ?? null,
       sourceUrl: job.sourceUrl ?? job.refererUrl ?? replacementManga.sourceUrl ?? null,

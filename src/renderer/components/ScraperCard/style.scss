@@ -208,6 +208,36 @@
   box-shadow: 0 0 0 3px rgba(233, 194, 97, 0.18);
 }
 
+.scraper-card__action-button.is-add-library {
+  border-color: rgba(93, 156, 255, 0.34);
+  background: rgba(93, 156, 255, 0.14);
+  color: #dcebff;
+}
+
+.scraper-card__action-button.is-add-library:hover {
+  border-color: rgba(93, 156, 255, 0.5);
+  background: rgba(93, 156, 255, 0.2);
+  color: #eef6ff;
+}
+
+.scraper-card__action-button.is-add-library.is-linked {
+  border-color: rgba(233, 194, 97, 0.52);
+  background: #9b741f;
+  color: #fff0bd;
+}
+
+.scraper-card__action-button.is-add-library.is-linked:hover {
+  border-color: rgba(233, 194, 97, 0.72);
+  background: #b08222;
+  color: #fff8dd;
+}
+
+.scraper-card__action-button.is-add-library:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
 .scraper-card__action-button.is-read-toggle {
   border-color: rgba(142, 142, 142, 0.32);
   background: rgba(142, 142, 142, 0.1);

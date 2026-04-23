@@ -7,6 +7,7 @@ import { ensureDataDir, ensureThumbnailsDir, mangasFilePath, thumbnailsDir } fro
 
 const THUMBNAIL_EXTENSION = ".webp";
 const THUMBNAIL_WIDTH = 320;
+const THUMBNAIL_USER_AGENT = "Manga Helper Library Thumbnail/1.0";
 
 function sanitizeFileSegment(value: string) {
     const sanitized = value.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim();
@@ -18,6 +19,10 @@ function getThumbnailPathForMangaId(mangaId: string) {
         thumbnailsDir,
         `${sanitizeFileSegment(String(mangaId))}${THUMBNAIL_EXTENSION}`,
     );
+}
+
+function normalizeOptionalText(value: unknown) {
+    return typeof value === "string" ? value.trim() : "";
 }
 
 async function pathExists(targetPath?: string | null) {
@@ -43,6 +48,11 @@ async function removeFileIfExists(targetPath?: string | null) {
     } catch (error) {
         console.warn("Failed to remove thumbnail file", targetPath, error);
     }
+}
+
+function sanitizeStoredMangaInput<T extends Record<string, any>>(manga: T): T {
+    const { thumbnailUrl: _thumbnailUrl, ...storedManga } = manga;
+    return storedManga as T;
 }
 
 async function getFirstMangaImagePath(manga: any) {
@@ -102,6 +112,93 @@ export async function createStoredThumbnailForMangaFromBuffer(
     }
 
     return writeStoredThumbnail(mangaId, sourceBuffer);
+}
+
+async function createStoredThumbnailForMangaFromRemoteUrl(
+    mangaId: string,
+    thumbnailUrl: string,
+    refererUrl?: string | null,
+) {
+    const normalizedThumbnailUrl = normalizeOptionalText(thumbnailUrl);
+    if (!mangaId || !normalizedThumbnailUrl) {
+        return null;
+    }
+
+    try {
+        const response = await fetch(normalizedThumbnailUrl, {
+            method: "GET",
+            redirect: "follow",
+            headers: {
+                "User-Agent": THUMBNAIL_USER_AGENT,
+                Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                ...(normalizeOptionalText(refererUrl)
+                    ? { Referer: normalizeOptionalText(refererUrl) }
+                    : {}),
+            },
+        });
+
+        if (
+            !response.ok
+            || !String(response.headers.get("content-type") || "").toLowerCase().startsWith("image/")
+        ) {
+            return null;
+        }
+
+        const sourceBuffer = Buffer.from(await response.arrayBuffer());
+        return createStoredThumbnailForMangaFromBuffer(mangaId, sourceBuffer);
+    } catch (error) {
+        console.warn("Failed to download remote thumbnail for manga", {
+            mangaId,
+            thumbnailUrl: normalizedThumbnailUrl,
+            error,
+        });
+        return null;
+    }
+}
+
+async function resolveStoredThumbnailForMangaInput(
+    inputManga: any,
+    options?: { forceRegenerateLocal?: boolean },
+) {
+    if (!inputManga || typeof inputManga !== "object") {
+        return { manga: inputManga, changed: false };
+    }
+
+    const manga = sanitizeStoredMangaInput(inputManga);
+    const thumbnailUrl = normalizeOptionalText(inputManga.thumbnailUrl);
+    const refererUrl = normalizeOptionalText(manga.sourceUrl || manga.sourceChapterUrl || null);
+
+    if (manga.id && thumbnailUrl) {
+        const remoteThumbnailPath = await createStoredThumbnailForMangaFromRemoteUrl(
+            String(manga.id),
+            thumbnailUrl,
+            refererUrl || null,
+        );
+
+        if (remoteThumbnailPath) {
+            const changed = manga.thumbnailPath !== remoteThumbnailPath;
+            return {
+                manga: changed
+                    ? { ...manga, thumbnailPath: remoteThumbnailPath }
+                    : manga,
+                changed,
+            };
+        }
+    }
+
+    const hasLocalPath = typeof manga.path === "string" && manga.path.trim().length > 0;
+    const hasStoredThumbnail = typeof manga.thumbnailPath === "string" && manga.thumbnailPath.trim().length > 0;
+
+    if (hasLocalPath || !hasStoredThumbnail) {
+        return ensureStoredThumbnailForManga(manga, {
+            forceRegenerate: Boolean(options?.forceRegenerateLocal),
+        });
+    }
+
+    return {
+        manga,
+        changed: false,
+    };
 }
 
 export async function ensureStoredThumbnailForManga(
@@ -248,8 +345,8 @@ export async function addManga(event: IpcMainInvokeEvent, manga: any) {
                 console.warn("add-manga: provided path does not exist:", resolvedPath);
             }
         }
-        const { manga: mangaWithThumbnail } = await ensureStoredThumbnailForManga(manga, {
-            forceRegenerate: true,
+        const { manga: mangaWithThumbnail } = await resolveStoredThumbnailForMangaInput(manga, {
+            forceRegenerateLocal: true,
         });
         mangas.push(mangaWithThumbnail);
         await writeMangasFile(mangas);
@@ -301,11 +398,14 @@ export async function updateManga(event: IpcMainInvokeEvent, updatedManga: any) 
         }
 
         const previousManga = mangas[idx];
-        const mergedManga = { ...previousManga, ...updatedManga };
+        const mergedManga = sanitizeStoredMangaInput({ ...previousManga, ...updatedManga });
         const shouldRegenerateThumbnail = typeof updatedManga?.path === "string"
             && updatedManga.path !== previousManga?.path;
-        const { manga: mangaWithThumbnail } = await ensureStoredThumbnailForManga(mergedManga, {
-            forceRegenerate: shouldRegenerateThumbnail,
+        const { manga: mangaWithThumbnail } = await resolveStoredThumbnailForMangaInput({
+            ...mergedManga,
+            thumbnailUrl: updatedManga?.thumbnailUrl,
+        }, {
+            forceRegenerateLocal: shouldRegenerateThumbnail,
         });
 
         mangas[idx] = mangaWithThumbnail;

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon } from '@/renderer/components/icons';
+import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
 import { ScraperBrowserLocationState } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import {
@@ -28,12 +28,14 @@ import {
   canQueueStandaloneScraperDownload,
   queueStandaloneScraperCardDownload,
 } from '@/renderer/utils/scraperDownload';
+import { findLocalMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import {
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
   isScraperFeatureConfigured,
 } from '@/renderer/utils/scraperRuntime';
+import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import './style.scss';
 
@@ -87,8 +89,11 @@ export default function ScraperBookmarksView({
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [downloadingSourceUrl, setDownloadingSourceUrl] = useState<string | null>(null);
+  const [addingSourceUrl, setAddingSourceUrl] = useState<string | null>(null);
   const [newBookmarkIds, setNewBookmarkIds] = useState<Set<string>>(() => new Set());
   const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
 
@@ -258,6 +263,13 @@ export default function ScraperBookmarksView({
     })
   ), [libraryMangas]);
 
+  const getLinkedLocalMangaForBookmark = useCallback((bookmark: ScraperBookmarkRecord): Manga | null => (
+    findLocalMangaLinkedToSource(libraryMangas, {
+      scraperId: bookmark.scraperId,
+      sourceUrl: bookmark.sourceUrl,
+    })
+  ), [libraryMangas]);
+
   const handleDownloadBookmark = useCallback(async (
     bookmark: ScraperBookmarkRecord,
     scraper: ScraperRecord,
@@ -266,6 +278,8 @@ export default function ScraperBookmarksView({
       return;
     }
 
+    setLibraryMessage(null);
+    setLibraryError(null);
     const downloadConfig = getStandaloneDownloadConfig(scraper);
     if (!downloadConfig) {
       setDownloadError('Le telechargement direct depuis une card requiert `Fiche` et `Pages` sans liaison chapitre.');
@@ -302,6 +316,52 @@ export default function ScraperBookmarksView({
     downloadingSourceUrl,
     getLinkedMangaForBookmark,
     libraryMangas,
+  ]);
+
+  const handleAddBookmarkToLibrary = useCallback(async (
+    bookmark: ScraperBookmarkRecord,
+    scraper: ScraperRecord,
+  ) => {
+    if (addingSourceUrl) {
+      return;
+    }
+
+    setAddingSourceUrl(bookmark.sourceUrl);
+    setLibraryMessage(null);
+    setLibraryError(null);
+    setDownloadMessage(null);
+    setDownloadError(null);
+
+    try {
+      const downloadConfig = getStandaloneDownloadConfig(scraper);
+      if (!downloadConfig) {
+        throw new Error('L\'ajout direct depuis une card requiert `Fiche` et `Pages` sans liaison chapitre.');
+      }
+
+      const result = await saveStandaloneScraperCardToLibrary({
+        scraper,
+        detailsConfig: downloadConfig.detailsConfig,
+        pagesConfig: downloadConfig.pagesConfig,
+        sourceUrl: bookmark.sourceUrl,
+        fallbackTitle: bookmark.title,
+        libraryMangas,
+      });
+
+      await loadLibraryMangas();
+      setLibraryMessage(
+        result.created
+          ? 'Le manga distant a ete ajoute a la bibliotheque.'
+          : 'Le manga distant en bibliotheque a ete mis a jour.',
+      );
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : 'Impossible d\'ajouter ce manga a la bibliotheque.');
+    } finally {
+      setAddingSourceUrl(null);
+    }
+  }, [
+    addingSourceUrl,
+    libraryMangas,
+    loadLibraryMangas,
   ]);
 
   const handleSetBookmarkRead = useCallback(async (
@@ -365,11 +425,11 @@ export default function ScraperBookmarksView({
       return null;
     }
 
-    const linkedManga = getLinkedMangaForBookmark(bookmark);
+    const linkedLocalManga = getLinkedLocalMangaForBookmark(bookmark);
     const isDownloading = downloadingSourceUrl === bookmark.sourceUrl;
     const label = isDownloading
       ? 'Telechargement...'
-      : linkedManga
+      : linkedLocalManga
         ? 'Retelecharger'
         : 'Telecharger';
 
@@ -381,7 +441,7 @@ export default function ScraperBookmarksView({
       icon: <DownloadArrowIcon aria-hidden="true" focusable="false" />,
       className: [
         'is-download',
-        linkedManga ? 'is-linked' : '',
+        linkedLocalManga ? 'is-linked' : '',
       ].join(' ').trim(),
       onClick: () => {
         void handleDownloadBookmark(bookmark, scraper);
@@ -390,8 +450,45 @@ export default function ScraperBookmarksView({
     };
   }, [
     downloadingSourceUrl,
-    getLinkedMangaForBookmark,
+    getLinkedLocalMangaForBookmark,
     handleDownloadBookmark,
+  ]);
+
+  const renderBookmarkAddToLibraryAction = useCallback((
+    bookmark: ScraperBookmarkRecord,
+    scraper: ScraperRecord | null,
+  ): ScraperCardAction | null => {
+    if (!scraper || !getStandaloneDownloadConfig(scraper)) {
+      return null;
+    }
+
+    const linkedManga = getLinkedMangaForBookmark(bookmark);
+    const isAdding = addingSourceUrl === bookmark.sourceUrl;
+    const label = isAdding
+      ? 'Ajout...'
+      : linkedManga
+        ? 'Mettre a jour la bibliotheque'
+        : 'Ajouter a la bibliotheque';
+
+    return {
+      id: `add-library-${bookmark.scraperId}-${bookmark.sourceUrl}`,
+      type: 'icon-secondary',
+      label,
+      ariaLabel: `${label} ${bookmark.title}`,
+      icon: <PlusSignIcon aria-hidden="true" focusable="false" />,
+      className: [
+        'is-add-library',
+        linkedManga ? 'is-linked' : '',
+      ].join(' ').trim(),
+      onClick: () => {
+        void handleAddBookmarkToLibrary(bookmark, scraper);
+      },
+      disabled: Boolean(addingSourceUrl),
+    };
+  }, [
+    addingSourceUrl,
+    getLinkedMangaForBookmark,
+    handleAddBookmarkToLibrary,
   ]);
 
   return (
@@ -449,6 +546,14 @@ export default function ScraperBookmarksView({
         <div className="scraper-browser__message is-error">{downloadError}</div>
       ) : null}
 
+      {libraryMessage ? (
+        <div className="scraper-browser__message is-success">{libraryMessage}</div>
+      ) : null}
+
+      {libraryError ? (
+        <div className="scraper-browser__message is-error">{libraryError}</div>
+      ) : null}
+
       {historyError ? (
         <div className="scraper-browser__message is-error">{historyError}</div>
       ) : null}
@@ -473,6 +578,7 @@ export default function ScraperBookmarksView({
                 scraper={scraper}
                 viewState={getBookmarkViewState(bookmark)}
                 readAction={renderBookmarkReadAction(bookmark)}
+                addToLibraryAction={renderBookmarkAddToLibraryAction(bookmark, scraper)}
                 downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
                 onOpenBookmark={handleOpenBookmark}
                 onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}

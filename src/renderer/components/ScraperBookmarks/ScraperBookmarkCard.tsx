@@ -11,6 +11,7 @@ type Props = {
   scraper?: ScraperRecord | null;
   viewState: ScraperCardViewState;
   readAction?: ScraperCardAction | null;
+  addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
   onOpenBookmarkInWorkspace?: (bookmark: ScraperBookmarkRecord) => void;
@@ -36,6 +37,7 @@ export default function ScraperBookmarkCard({
   scraper = null,
   viewState,
   readAction = null,
+  addToLibraryAction = null,
   downloadAction = null,
   onOpenBookmark,
   onOpenBookmarkInWorkspace,
@@ -66,6 +68,7 @@ export default function ScraperBookmarkCard({
         />
       ),
     },
+    ...(addToLibraryAction ? [addToLibraryAction] : []),
     ...(downloadAction ? [downloadAction] : []),
     canOpenBookmark
       ? {

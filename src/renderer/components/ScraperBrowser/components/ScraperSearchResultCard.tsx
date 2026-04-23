@@ -14,6 +14,7 @@ type Props = {
   viewState: ScraperCardViewState;
   readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
+  addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
@@ -34,6 +35,7 @@ export default function ScraperSearchResultCard({
   viewState,
   readAction,
   bookmarkAction,
+  addToLibraryAction,
   downloadAction,
   onOpenResult,
   onOpenAuthorResultAction,
@@ -53,6 +55,10 @@ export default function ScraperSearchResultCard({
 
   if (bookmarkAction) {
     actions.push(bookmarkAction);
+  }
+
+  if (addToLibraryAction) {
+    actions.push(addToLibraryAction);
   }
 
   if (downloadAction) {

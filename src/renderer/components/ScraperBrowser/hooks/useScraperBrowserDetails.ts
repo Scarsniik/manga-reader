@@ -557,6 +557,7 @@ export function useScraperBrowserDetails({
     currentDetailsUrl,
     loadDetailsFromTargetUrl,
     runDetailsLookup,
+    resolveCurrentPageUrls,
     handleDownload,
     handleLoadMoreThumbnails,
     handleOpenReader,

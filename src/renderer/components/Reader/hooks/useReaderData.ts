@@ -2,10 +2,20 @@ import React from 'react';
 import { Manga } from '@/renderer/types';
 import {
     ScraperBookmarkMetadataField,
+    ScraperRecord,
     ScraperReaderProgressRecord,
 } from '@/shared/scraper';
+import {
+    extractScraperDetailsFromDocument,
+    getScraperDetailsFeatureConfig,
+    getScraperFeature,
+    getScraperPagesFeatureConfig,
+    hasRenderableDetails,
+    resolveScraperPageUrls,
+    ScraperRuntimeChapterResult,
+} from '@/renderer/utils/scraperRuntime';
 import { ReaderLocationState } from '../types';
-import { isScraperReaderManga } from '../utils';
+import { isRemoteScraperManga, isScraperReaderManga } from '../utils';
 
 type Args = {
     locationSearch: string;
@@ -127,6 +137,102 @@ const useReaderData = ({
             setBookmarkExcludedFields([]);
             openedCompletedRef.current = false;
 
+            const loadRemoteScraperLibraryManga = async (remoteManga: Manga) => {
+                if (
+                    !window.api
+                    || typeof window.api.getScrapers !== 'function'
+                    || typeof window.api.fetchScraperDocument !== 'function'
+                ) {
+                    throw new Error('Le runtime du scrapper est indisponible dans cette version.');
+                }
+
+                const scraperId = String(remoteManga.scraperId || '').trim();
+                const sourceUrl = String(remoteManga.sourceUrl || '').trim();
+                if (!scraperId || !sourceUrl) {
+                    throw new Error('La source du manga distant est incomplete.');
+                }
+
+                const scrapers: ScraperRecord[] = await window.api.getScrapers();
+                const scraper = Array.isArray(scrapers)
+                    ? scrapers.find((candidate) => candidate.id === scraperId) ?? null
+                    : null;
+                if (!scraper) {
+                    throw new Error('Le scrapper source est introuvable.');
+                }
+
+                const detailsConfig = getScraperDetailsFeatureConfig(getScraperFeature(scraper, 'details'));
+                const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, 'pages'));
+                if (!detailsConfig || !pagesConfig) {
+                    throw new Error('Le scrapper doit configurer `Fiche` et `Pages` pour lire ce manga.');
+                }
+
+                const documentResult = await window.api.fetchScraperDocument({
+                    baseUrl: scraper.baseUrl,
+                    targetUrl: sourceUrl,
+                });
+                if (!documentResult?.ok || !documentResult.html) {
+                    throw new Error(
+                        documentResult?.error
+                        || (typeof documentResult?.status === 'number'
+                            ? `La fiche a repondu avec le code HTTP ${documentResult.status}.`
+                            : 'Impossible de charger la fiche demandee.'),
+                    );
+                }
+
+                const parser = new DOMParser();
+                const documentNode = parser.parseFromString(documentResult.html, 'text/html');
+                const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+                    requestedUrl: documentResult.requestedUrl,
+                    finalUrl: documentResult.finalUrl,
+                    status: documentResult.status,
+                    contentType: documentResult.contentType,
+                    html: documentResult.html,
+                });
+                if (!hasRenderableDetails(details)) {
+                    throw new Error('La fiche distante a ete chargee, mais aucun contenu exploitable n\'a ete extrait.');
+                }
+
+                const sourceChapterUrl = String(remoteManga.sourceChapterUrl || '').trim();
+                const sourceChapterLabel = String(remoteManga.sourceChapterLabel || remoteManga.chapters || '').trim();
+                const chapter: ScraperRuntimeChapterResult | null = sourceChapterUrl
+                    ? {
+                        url: sourceChapterUrl,
+                        label: sourceChapterLabel || sourceChapterUrl,
+                    }
+                    : null;
+                const pageImages = await resolveScraperPageUrls(
+                    scraper,
+                    details,
+                    pagesConfig,
+                    async (request) => window.api.fetchScraperDocument(request),
+                    {
+                        chapter,
+                    },
+                );
+                const totalPages = pageImages.length;
+
+                setBookmarkExcludedFields(
+                    Array.isArray(scraper.globalConfig.bookmark.excludedFields)
+                        ? scraper.globalConfig.bookmark.excludedFields
+                        : [],
+                );
+                setManga({
+                    ...remoteManga,
+                    title: details.title || remoteManga.title,
+                    thumbnailPath: remoteManga.thumbnailPath || details.cover || null,
+                    pages: totalPages,
+                    chapters: sourceChapterLabel || remoteManga.chapters,
+                    scraperId: scraper.id,
+                    sourceUrl: details.finalUrl || details.requestedUrl || sourceUrl,
+                });
+                openedCompletedRef.current = totalPages > 0
+                    && typeof remoteManga.currentPage === 'number'
+                    && remoteManga.currentPage >= totalPages;
+                setImages(pageImages || []);
+                const nextIndex = Math.max(0, Math.min(totalPages - 1, startPage - 1));
+                setCurrentIndex(nextIndex);
+            };
+
             if (found && found.path) {
                 if (!window.api || typeof window.api.listPages !== 'function') {
                     console.error('window.api.listPages is not available');
@@ -146,6 +252,15 @@ const useReaderData = ({
                     setCurrentIndex(nextIndex);
                 } catch (error) {
                     console.error('Reader: listPages threw', error);
+                    openedCompletedRef.current = false;
+                    setImages([]);
+                }
+            } else if (found && isRemoteScraperManga(found)) {
+                try {
+                    await loadRemoteScraperLibraryManga(found);
+                } catch (error) {
+                    console.error('Reader: failed to resolve remote scraper manga', error);
+                    setBookmarkExcludedFields([]);
                     openedCompletedRef.current = false;
                     setImages([]);
                 }

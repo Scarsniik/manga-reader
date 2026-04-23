@@ -27,6 +27,7 @@ teste seulement comme dependance existante a ne pas casser.
 APP_UPDATE_GITHUB_OWNER=...
 APP_UPDATE_GITHUB_REPO=...
 ```
+
 - Script de packaging installeur disponible :
 
 ```text

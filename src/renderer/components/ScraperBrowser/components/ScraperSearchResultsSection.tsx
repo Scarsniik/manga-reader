@@ -24,6 +24,7 @@ type Props = {
   getViewState?: (result: ScraperSearchResultItem) => ScraperCardViewState;
   renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
+  renderAddToLibraryAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderDownloadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   onPreviousPage: () => void;
   onNextPage: () => void;
@@ -56,6 +57,7 @@ export default function ScraperSearchResultsSection({
   getViewState,
   renderReadAction,
   renderBookmarkAction,
+  renderAddToLibraryAction,
   renderDownloadAction,
   onPreviousPage,
   onNextPage,
@@ -153,6 +155,7 @@ export default function ScraperSearchResultsSection({
               viewState={getViewState ? getViewState(result) : 'seen'}
               readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
+              addToLibraryAction={renderAddToLibraryAction ? renderAddToLibraryAction(result) : null}
               downloadAction={renderDownloadAction ? renderDownloadAction(result) : null}
               onOpenResult={onOpenResult}
               onOpenAuthorResultAction={onOpenAuthorResultAction}

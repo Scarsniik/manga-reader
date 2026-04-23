@@ -455,6 +455,11 @@ valide comme chapitre de test.
 La validation reussit si au moins une page est resolue. En runtime, cette liste sert directement au
 lecteur en ligne, a la reprise de progression et au telechargement.
 
+La meme resolution de pages sert aussi a l'ajout en bibliotheque sans telechargement. Dans ce mode,
+le manga en bibliotheque reste lie au scraper, n'ecrit pas les pages sur disque et ouvre le lecteur
+en rechargeant les pages depuis le runtime du scraper. Lors de l'ajout ou de la mise a jour, la
+premiere image resolue est telechargee pour generer une miniature stockee localement.
+
 ## Ordre conseille de configuration
 
 Pour une source HTML classique :

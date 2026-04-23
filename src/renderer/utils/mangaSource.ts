@@ -11,6 +11,10 @@ const normalizeOptionalText = (value?: string | null): string => (
   typeof value === "string" ? value.trim() : ""
 );
 
+export const hasLocalMangaPath = (manga?: Manga | null): boolean => (
+  typeof manga?.path === "string" && manga.path.trim().length > 0
+);
+
 export const normalizeMangaSourceUrl = (value?: string | null): string => {
   const trimmedValue = normalizeOptionalText(value);
   if (!trimmedValue) {
@@ -65,3 +69,23 @@ export const findMangaLinkedToSource = (
     && isSameSourceChapter(manga, target)
   )) ?? null;
 };
+
+export const findLocalMangaLinkedToSource = (
+  mangas: Manga[],
+  target: MangaSourceTarget,
+): Manga | null => (
+  mangas.find((manga) => (
+    hasLocalMangaPath(manga)
+    && findMangaLinkedToSource([manga], target) !== null
+  )) ?? null
+);
+
+export const findRemoteMangaLinkedToSource = (
+  mangas: Manga[],
+  target: MangaSourceTarget,
+): Manga | null => (
+  mangas.find((manga) => (
+    !hasLocalMangaPath(manga)
+    && findMangaLinkedToSource([manga], target) !== null
+  )) ?? null
+);
