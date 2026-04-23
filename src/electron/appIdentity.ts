@@ -65,22 +65,25 @@ export const LEGACY_ROAMING_CONFIG_DIR_NAMES = ["manga-helper"];
 export const LEGACY_LOCAL_DATA_DIR_NAMES = ["Manga Helper"];
 export const LEGACY_PORTABLE_DATA_DIR_NAMES = ["Manga Helper Data"];
 
+const MANAGED_DATA_FILE_NAMES = [
+    "authors.json",
+    "mangas.json",
+    "ocr-runtime.json",
+    "params.json",
+    "scraper-bookmarks.json",
+    "scraper-reader-progress.json",
+    "scraper-view-history.json",
+    "scrapers.json",
+    "series.json",
+    "tags.json",
+];
+
 const pathExists = (targetPath: string): boolean => {
     try {
         return fs.existsSync(targetPath);
     } catch {
         return false;
     }
-};
-
-const findExistingDirectory = (candidates: string[]): string | null => {
-    for (const candidate of candidates) {
-        if (pathExists(candidate)) {
-            return candidate;
-        }
-    }
-
-    return null;
 };
 
 const getLegacyUserDataCandidates = (localAppData: string): string[] => {
@@ -92,10 +95,35 @@ const getLegacyUserDataCandidates = (localAppData: string): string[] => {
     ];
 };
 
+const hasLegacyRootData = (basePath: string): boolean => (
+    MANAGED_DATA_FILE_NAMES.some((fileName) => pathExists(path.join(basePath, fileName)))
+);
+
+const hasManagedDataDirectoryContent = (basePath: string): boolean => {
+    const dataPath = path.join(basePath, "data");
+    if (!pathExists(dataPath)) {
+        return false;
+    }
+
+    try {
+        return fs.readdirSync(dataPath, { withFileTypes: true }).some((entry) => (
+            entry.isFile()
+            && (
+                MANAGED_DATA_FILE_NAMES.includes(entry.name)
+            )
+        ));
+    } catch {
+        return false;
+    }
+};
+
+const hasLegacyManagedData = (basePath: string): boolean => (
+    hasManagedDataDirectoryContent(basePath) || hasLegacyRootData(basePath)
+);
+
 const findLegacyUserDataDirectory = (candidates: string[]): string | null => {
     for (const candidate of candidates) {
-        const mangasPath = path.join(candidate, "data", "mangas.json");
-        if (pathExists(mangasPath)) {
+        if (hasLegacyManagedData(candidate)) {
             return candidate;
         }
     }
@@ -103,11 +131,27 @@ const findLegacyUserDataDirectory = (candidates: string[]): string | null => {
     return null;
 };
 
-const migrateLegacyUserDataDirectory = (userDataPath: string, localAppData: string): void => {
+const copyManagedFilesIntoDataDirectory = (
+    sourceBasePath: string,
+    userDataPath: string,
+): void => {
     const targetDataPath = path.join(userDataPath, "data");
-    const targetMangasPath = path.join(targetDataPath, "mangas.json");
+    fs.mkdirSync(targetDataPath, { recursive: true });
 
-    if (pathExists(targetMangasPath)) {
+    for (const fileName of MANAGED_DATA_FILE_NAMES) {
+        const sourcePath = path.join(sourceBasePath, fileName);
+        const targetPath = path.join(targetDataPath, fileName);
+
+        if (!pathExists(sourcePath) || pathExists(targetPath)) {
+            continue;
+        }
+
+        fs.copyFileSync(sourcePath, targetPath);
+    }
+};
+
+const migrateLegacyUserDataDirectory = (userDataPath: string, localAppData: string): void => {
+    if (hasLegacyManagedData(userDataPath)) {
         return;
     }
 
@@ -116,9 +160,17 @@ const migrateLegacyUserDataDirectory = (userDataPath: string, localAppData: stri
         return;
     }
 
+    const legacyDataPath = path.join(legacyUserDataPath, "data");
+    const targetDataPath = path.join(userDataPath, "data");
+
     fs.mkdirSync(userDataPath, { recursive: true });
-    fs.cpSync(legacyUserDataPath, userDataPath, { recursive: true, force: true });
-    console.info(`Migrated user data from ${legacyUserDataPath} to ${userDataPath}`);
+
+    if (pathExists(legacyDataPath)) {
+        copyManagedFilesIntoDataDirectory(legacyDataPath, userDataPath);
+    }
+
+    copyManagedFilesIntoDataDirectory(legacyUserDataPath, userDataPath);
+    console.info(`Migrated legacy managed data from ${legacyUserDataPath} to ${userDataPath}`);
 };
 
 export const configureApplicationIdentity = (): void => {
@@ -130,20 +182,9 @@ export const configureApplicationIdentity = (): void => {
 
     const localAppData = process.env.LOCALAPPDATA || app.getPath("appData");
     const userDataPath = path.join(localAppData, APP_USER_DATA_DIR_NAME);
-    const legacyUserDataPath = findExistingDirectory(
-        getLegacyUserDataCandidates(localAppData),
-    );
 
     try {
-        if (!pathExists(userDataPath)) {
-            if (legacyUserDataPath) {
-                fs.cpSync(legacyUserDataPath, userDataPath, { recursive: true });
-                console.info(`Migrated user data from ${legacyUserDataPath} to ${userDataPath}`);
-            } else {
-                fs.mkdirSync(userDataPath, { recursive: true });
-            }
-        }
-
+        fs.mkdirSync(userDataPath, { recursive: true });
         migrateLegacyUserDataDirectory(userDataPath, localAppData);
         app.setPath("userData", userDataPath);
     } catch (error) {

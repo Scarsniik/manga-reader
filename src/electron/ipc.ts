@@ -16,6 +16,7 @@ import * as series from "./handlers/series";
 import * as scrapers from "./handlers/scrapers";
 import * as windowControls from "./handlers/windowControls";
 import * as workspaceWindow from "./handlers/workspaceWindow";
+import * as appUpdate from "./handlers/appUpdate";
 import { migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -126,6 +127,11 @@ ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries:
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
 ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => params.saveSettings(event, settings));
+ipcMain.handle("app-update-status", async () => appUpdate.getAppUpdateStatus());
+ipcMain.handle("app-update-check", async () => appUpdate.checkForAppUpdates());
+ipcMain.handle("app-update-download", async () => appUpdate.downloadAppUpdate());
+ipcMain.handle("app-update-install", async () => appUpdate.installAppUpdate());
+ipcMain.handle("app-update-open-release-page", async () => appUpdate.openAppUpdateReleasePage());
 
 // Scrapers
 ipcMain.handle("validate-scraper-access", async (event: IpcMainInvokeEvent, request: any) => scrapers.validateScraperAccess(event, request));

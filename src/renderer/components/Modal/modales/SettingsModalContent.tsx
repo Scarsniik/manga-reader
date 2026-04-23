@@ -1,10 +1,12 @@
 import React from 'react'
+import AppUpdateSettingsPanel from '@/renderer/components/AppUpdate/AppUpdateSettingsPanel'
 import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
 import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 
 import '@/renderer/components/Modal/style.scss'
+import '@/renderer/components/Modal/modales/settings-style.scss'
 
 const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2
 const MAX_READER_PRELOAD_PAGE_COUNT = 10
@@ -23,6 +25,7 @@ const normalizeReaderPreloadPageCount = (value: unknown) => {
 
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
+  const [activeTab, setActiveTab] = React.useState<'options' | 'version-installation'>('options')
 
   if (loading) return <div>Chargement...</div>
 
@@ -177,15 +180,41 @@ export default function SettingsModalContent() {
 
   return (
     <div className="settings-modal-content">
-      <OcrRuntimeSettingsPanel />
-      <Form
-        fields={fields}
-        onSubmit={onSubmit}
-        initialValues={params || {}}
-        submitLabel="Enregistrer"
-        submitButtonId="settings-save"
-        formId="settings-form"
-      />
+      <div className="settings-modal-tabs">
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'options' ? 'active' : ''}`}
+          onClick={() => setActiveTab('options')}
+        >
+          Options
+        </button>
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'version-installation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('version-installation')}
+        >
+          Version et installation
+        </button>
+      </div>
+
+      <div className="settings-modal-panels">
+        {activeTab === 'options' ? (
+          <div className="settings-modal-panel">
+            <Form
+              fields={fields}
+              onSubmit={onSubmit}
+              initialValues={params || {}}
+              submitLabel="Enregistrer"
+              formId="settings-form"
+            />
+          </div>
+        ) : (
+          <div className="settings-modal-panel">
+            <AppUpdateSettingsPanel />
+            <OcrRuntimeSettingsPanel />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

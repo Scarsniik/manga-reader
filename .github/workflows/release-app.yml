@@ -1,0 +1,95 @@
+name: release-app
+
+run-name: Release app ${{ inputs.version }} (${{ inputs.mode }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version to release. Must match package.json.
+        required: true
+        type: string
+      mode:
+        description: Publish to GitHub or run the same checks without publishing.
+        required: true
+        type: choice
+        default: publish
+        options:
+          - publish
+          - dry-run
+      release_notes_path:
+        description: Optional repository-relative markdown file used as release notes.
+        required: false
+        type: string
+      allow_existing_tag:
+        description: Allow an existing tag for explicit retest scenarios.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-app
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      APP_UPDATE_GITHUB_OWNER: ${{ vars.APP_UPDATE_GITHUB_OWNER }}
+      APP_UPDATE_GITHUB_REPO: ${{ vars.APP_UPDATE_GITHUB_REPO }}
+      SCARAMANGA_APP_UPDATE_GITHUB_OWNER: ${{ vars.APP_UPDATE_GITHUB_OWNER }}
+      SCARAMANGA_APP_UPDATE_GITHUB_REPO: ${{ vars.APP_UPDATE_GITHUB_REPO }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure git author
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm ci
+
+      - name: Run release script
+        shell: pwsh
+        run: |
+          $scriptArgs = @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", "scripts/release-app.ps1",
+            "-Version", "${{ inputs.version }}"
+          )
+
+          if ("${{ inputs.mode }}" -eq "publish") {
+            $scriptArgs += "-Publish"
+          } else {
+            $scriptArgs += "-DryRun"
+          }
+
+          if ("${{ inputs.allow_existing_tag }}" -eq "true") {
+            $scriptArgs += "-AllowExistingTag"
+          }
+
+          $releaseNotesPath = "${{ inputs.release_notes_path }}"
+          if (-not [string]::IsNullOrWhiteSpace($releaseNotesPath)) {
+            $scriptArgs += @("-ReleaseNotesPath", $releaseNotesPath)
+          }
+
+          & powershell.exe @scriptArgs

@@ -126,6 +126,14 @@ ipcRenderer.on('ocr-runtime-notification', (_event: IpcRendererEvent, payload: u
     }
 });
 
+ipcRenderer.on("app-update-notification", (_event: IpcRendererEvent, payload: unknown) => {
+    try {
+        window.dispatchEvent(new CustomEvent("app-update-notification", { detail: payload }));
+    } catch (error) {
+        console.warn("preload: failed to dispatch app-update-notification event", error);
+    }
+});
+
 ipcRenderer.on('series-updated', () => {
     try {
         window.dispatchEvent(new CustomEvent('series-updated'));
@@ -193,6 +201,11 @@ contextBridge.exposeInMainWorld('api', {
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+    appUpdateStatus: () => ipcRenderer.invoke("app-update-status"),
+    appUpdateCheck: () => ipcRenderer.invoke("app-update-check"),
+    appUpdateDownload: () => ipcRenderer.invoke("app-update-download"),
+    appUpdateInstall: () => ipcRenderer.invoke("app-update-install"),
+    appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),

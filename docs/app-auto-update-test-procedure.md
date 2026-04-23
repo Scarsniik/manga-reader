@@ -18,8 +18,15 @@ teste seulement comme dependance existante a ne pas casser.
 - Dependances npm installees dans le projet.
 - Acces au depot GitHub de l'application.
 - Depot OCR runtime separe du depot application.
-- GitHub CLI (`gh`) installe et authentifie si le script de release local
-  l'utilise.
+- GitHub CLI (`gh`) installe et authentifie pour la publication reelle de la
+  release. Le dry-run peut s'appuyer sur l'API GitHub publique.
+- Si le depot de release application est different du `repository.url` de
+  `package.json`, definir :
+
+```text
+APP_UPDATE_GITHUB_OWNER=...
+APP_UPDATE_GITHUB_REPO=...
+```
 - Script de packaging installeur disponible :
 
 ```text
@@ -131,6 +138,13 @@ npm version 0.1.0 --no-git-tag-version
 npm run package:app:installer
 ```
 
+Pour tester le module updater depuis un environnement de developpement Electron
+avec un `dev-app-update.yml` explicite, activer :
+
+```powershell
+$env:APP_UPDATE_ENABLE_DEV = "1"
+```
+
 Resultat attendu :
 
 - un installeur NSIS est cree dans `build/` ;
@@ -220,6 +234,30 @@ Resultat attendu :
 - le tag `v0.1.1` existe sur GitHub ;
 - la release `v0.1.1` contient les assets application ;
 - `latest.yml` pointe vers `0.1.1`.
+
+## Test 4 bis - Publication via GitHub Actions
+
+Le repo contient aussi un workflow manuel :
+
+```text
+.github/workflows/release-app.yml
+```
+
+Execution attendue :
+
+1. Ouvrir l'onglet GitHub Actions.
+2. Lancer `release-app`.
+3. Renseigner `version` avec une version superieure a la derniere release.
+4. Choisir `mode=publish` pour la vraie publication, ou `mode=dry-run` pour une verification.
+5. Optionnel : fournir `release_notes_path` avec un fichier Markdown versionne dans le repo.
+
+Resultat attendu :
+
+- le workflow prepare Node.js et les dependances sur un runner Windows ;
+- le workflow appelle `scripts/release-app.ps1` ;
+- en `publish`, le tag `vX.Y.Z` est cree puis pousse ;
+- la GitHub Release contient l'installeur, `latest.yml` et les `.blockmap` ;
+- en `dry-run`, aucune release n'est publiee.
 
 ## Test 5 - Detection de mise a jour
 

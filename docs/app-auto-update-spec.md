@@ -170,9 +170,19 @@ Responsabilites du script :
 - uploader les artefacts application ;
 - afficher les URLs de release a tester.
 
-Le script peut utiliser GitHub CLI (`gh`) ou une GitHub Action. Pour le MVP, un
-script local est suffisant et plus simple a deboguer, surtout tant que le build
-Windows est teste sur la machine de dev.
+Le script peut utiliser GitHub CLI (`gh`) ou une GitHub Action. Le repo fournit
+maintenant les deux :
+
+- le script local `scripts/release-app.ps1` pour les tests manuels ;
+- le workflow GitHub Actions `.github/workflows/release-app.yml` pour lancer la
+  meme publication depuis GitHub sur un runner Windows.
+
+Le workflow doit :
+
+- etre declenche manuellement avec une version explicite ;
+- reutiliser le script PowerShell au lieu de dupliquer la logique ;
+- avoir la permission GitHub `contents: write` pour creer le tag et la release ;
+- accepter au minimum un mode `publish` et un mode `dry-run`.
 
 Garde-fous obligatoires :
 
@@ -305,10 +315,14 @@ La mise a jour de l'application ne doit pas toucher :
 Le changement de nom initial vers Scaramanga prevoit une migration automatique
 non destructive du dossier `userData` historique : au premier lancement, si le
 nouveau dossier Scaramanga ne contient pas encore `data/mangas.json`,
-l'application copie tout l'ancien dossier utilisateur trouve, par exemple
+l'application copie seulement les fichiers de donnees utilisateur geres
+(`mangas.json`, `params.json`, auteurs, tags, series, scrapers, historiques,
+configuration OCR) depuis l'ancien dossier trouve, par exemple
 `%APPDATA%\manga-helper` ou `%LOCALAPPDATA%\manga-helper-userdata`, vers
-`%LOCALAPPDATA%\scaramanga-userdata`. Si le nouveau dossier contient deja la
-bibliotheque, aucune copie automatique n'est faite.
+`%LOCALAPPDATA%\scaramanga-userdata\data`. Les caches Electron, logs, fichiers
+temporaires OCR et autres repertoires techniques ne doivent pas etre recopies.
+Si le nouveau dossier contient deja ces donnees geres, aucune copie automatique
+n'est faite.
 
 Point d'implementation : `app.setPath("userData", ...)` doit etre appele avant
 le chargement des handlers IPC, car les chemins de donnees sont calcules dans
@@ -452,6 +466,13 @@ Taches :
 - bloquer l'updater en developpement sauf mode test explicite ;
 - loguer les erreurs courtes.
 
+Pour le mode de test explicite en developpement, l'implementation peut utiliser
+une variable d'environnement dediee, par exemple :
+
+```text
+APP_UPDATE_ENABLE_DEV=1
+```
+
 Critere de validation :
 
 - l'appel IPC de verification retourne un statut coherent ;
@@ -493,6 +514,15 @@ Taches :
 - installer `v0.1.0` ;
 - publier `v0.1.1` ;
 - verifier que `v0.1.0` detecte, telecharge et installe `v0.1.1`.
+
+Si le depot de release application est different du `repository.url`
+historique, le script et la config builder peuvent etre pilotes par variables
+d'environnement, par exemple :
+
+```text
+APP_UPDATE_GITHUB_OWNER=...
+APP_UPDATE_GITHUB_REPO=...
+```
 
 Critere de validation :
 

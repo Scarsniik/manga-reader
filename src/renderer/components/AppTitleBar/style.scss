@@ -12,18 +12,39 @@
     -webkit-app-region: drag;
 }
 
+.app-titlebar__brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 12px;
+}
+
 .app-titlebar__title {
     display: flex;
     align-items: center;
     max-width: 260px;
     min-width: 0;
-    padding: 0 12px;
     overflow: hidden;
     font-size: 0.86rem;
     font-weight: 600;
     line-height: 1;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.app-titlebar__badge {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid #865d19;
+    border-radius: 999px;
+    background: #3a2810;
+    color: #f2c46c;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-transform: uppercase;
 }
 
 .app-titlebar__slot {
