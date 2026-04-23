@@ -329,6 +329,13 @@ le chargement des handlers IPC, car les chemins de donnees sont calcules dans
 `src/electron/utils.ts`. Le dossier `userData` utilise en build installe doit
 rester stable entre deux versions.
 
+Pour les parametres utilisateur, l'ecriture de `params.json` doit etre
+resistante a un redemarrage rapide ou a un `quitAndInstall` : ecriture dans un
+fichier temporaire, conservation d'un backup local, puis remplacement du
+fichier courant. Si `params.json` est vide ou invalide au lancement, l'application
+doit tenter une restauration depuis ce backup avant de revenir aux valeurs par
+defaut.
+
 ## Architecture applicative proposee
 
 ### Main process
