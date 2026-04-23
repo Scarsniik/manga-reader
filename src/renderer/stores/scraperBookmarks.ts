@@ -57,17 +57,17 @@ const getApi = (): any => (
 
 const sortBookmarks = (records: ScraperBookmarkRecord[]): ScraperBookmarkRecord[] => (
   [...records].sort((left, right) => {
-    const updatedAtCompare = right.updatedAt.localeCompare(left.updatedAt);
-    if (updatedAtCompare !== 0) {
-      return updatedAtCompare;
+    const createdAtCompare = left.createdAt.localeCompare(right.createdAt);
+    if (createdAtCompare !== 0) {
+      return createdAtCompare;
     }
 
-    const scraperCompare = left.scraperId.localeCompare(right.scraperId);
-    if (scraperCompare !== 0) {
-      return scraperCompare;
+    const sourceCompare = left.sourceUrl.localeCompare(right.sourceUrl);
+    if (sourceCompare !== 0) {
+      return sourceCompare;
     }
 
-    return left.title.localeCompare(right.title);
+    return left.scraperId.localeCompare(right.scraperId);
   })
 );
 
