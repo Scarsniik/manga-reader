@@ -20,10 +20,13 @@
   box-shadow: $jp-focus-shadow;
 }
 
-.jp-ruby rt {
+.jp-ruby__reading {
   font-size: 0.58em;
   color: $jp-muted;
   letter-spacing: 0.02em;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
 }
 
 .translation {

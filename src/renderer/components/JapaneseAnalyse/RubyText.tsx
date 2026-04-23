@@ -17,7 +17,7 @@ export default function RubyText({ parts, className }: Props) {
         part.reading ? (
           <ruby key={`${part.text}-${part.reading}-${index}`} className="jp-ruby">
             {part.text}
-            <rt>{part.reading}</rt>
+            <rt className="jp-ruby__reading">{part.reading}</rt>
           </ruby>
         ) : (
           <span key={`${part.text}-${index}`}>{part.text}</span>
