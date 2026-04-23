@@ -133,6 +133,55 @@ function Compare-SemVer {
     return $leftVersion.CompareTo($rightVersion)
 }
 
+function Invoke-WithoutPublishCredentials {
+    param([scriptblock]$Action)
+
+    $tokenNames = @(
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_RELEASE_TOKEN"
+    )
+    $savedValues = @{}
+
+    foreach ($tokenName in $tokenNames) {
+        $savedValues[$tokenName] = [Environment]::GetEnvironmentVariable($tokenName, "Process")
+        [Environment]::SetEnvironmentVariable($tokenName, $null, "Process")
+    }
+
+    try {
+        & $Action
+    } finally {
+        foreach ($tokenName in $tokenNames) {
+            [Environment]::SetEnvironmentVariable($tokenName, $savedValues[$tokenName], "Process")
+        }
+    }
+}
+
+function Get-FileSha256Hex {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $hash = Get-FileHash -LiteralPath $FilePath -Algorithm SHA256
+    return $hash.Hash.ToLowerInvariant()
+}
+
+function Get-FileSha512Base64 {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $stream = [System.IO.File]::OpenRead($FilePath)
+    try {
+        $sha512 = [System.Security.Cryptography.SHA512]::Create()
+        try {
+            $hashBytes = $sha512.ComputeHash($stream)
+        } finally {
+            $sha512.Dispose()
+        }
+
+        return [System.Convert]::ToBase64String($hashBytes)
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-GitHubCredentialToken {
     $credentialInput = @(
         "protocol=https"
@@ -292,6 +341,40 @@ function Test-TagExists {
     return -not [string]::IsNullOrWhiteSpace(($remoteTagMatch | Out-String))
 }
 
+function Read-LatestManifest {
+    param([Parameter(Mandatory = $true)][string]$LatestFilePath)
+
+    $content = [string](Get-Content -Raw -LiteralPath $LatestFilePath)
+    $fileSection = [System.Text.RegularExpressions.Regex]::Match(
+        $content,
+        "files:\s*-\s+url:\s*(?<path>[^\r\n]+)\s+sha512:\s*(?<sha512>\S+)\s+size:\s*(?<size>\d+)",
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+
+    if (-not $fileSection.Success) {
+        throw "Unable to parse installer metadata from $LatestFilePath."
+    }
+
+    $topLevelPath = [System.Text.RegularExpressions.Regex]::Match(
+        $content,
+        "(?m)^path:\s*(?<path>\S+)\s*$",
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    $topLevelSha512 = [System.Text.RegularExpressions.Regex]::Match(
+        $content,
+        "(?m)^sha512:\s*(?<sha512>\S+)\s*$",
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+
+    return @{
+        Path = $fileSection.Groups["path"].Value.Trim()
+        Sha512 = $fileSection.Groups["sha512"].Value.Trim()
+        Size = [int64]$fileSection.Groups["size"].Value
+        TopLevelPath = if ($topLevelPath.Success) { $topLevelPath.Groups["path"].Value.Trim() } else { $null }
+        TopLevelSha512 = if ($topLevelSha512.Success) { $topLevelSha512.Groups["sha512"].Value.Trim() } else { $null }
+    }
+}
+
 function Get-ReleaseAssets {
     $buildDir = Join-Path $workspace "build"
     if (-not (Test-Path -LiteralPath $buildDir)) {
@@ -323,12 +406,122 @@ function Get-ReleaseAssets {
     return $assets
 }
 
+function Assert-LatestManifestMatchesInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$LatestFilePath,
+        [Parameter(Mandatory = $true)][string]$InstallerPath
+    )
+
+    $manifest = Read-LatestManifest -LatestFilePath $LatestFilePath
+    $installerInfo = Get-Item -LiteralPath $InstallerPath
+    $installerName = $installerInfo.Name
+    $installerSha512 = Get-FileSha512Base64 -FilePath $InstallerPath
+
+    if ($manifest.Path -ne $installerName) {
+        throw "latest.yml references '$($manifest.Path)', but the built installer is '$installerName'."
+    }
+
+    if ($manifest.TopLevelPath -and $manifest.TopLevelPath -ne $installerName) {
+        throw "latest.yml top-level path '$($manifest.TopLevelPath)' does not match the built installer '$installerName'."
+    }
+
+    if ($manifest.Size -ne $installerInfo.Length) {
+        throw "latest.yml declares size $($manifest.Size) for $installerName, but the built installer size is $($installerInfo.Length)."
+    }
+
+    if ($manifest.Sha512 -ne $installerSha512) {
+        throw "latest.yml declares sha512 '$($manifest.Sha512)' for $installerName, but the built installer hash is '$installerSha512'."
+    }
+
+    if ($manifest.TopLevelSha512 -and $manifest.TopLevelSha512 -ne $installerSha512) {
+        throw "latest.yml top-level sha512 for $installerName does not match the built installer hash."
+    }
+}
+
 function Assert-NoOcrArtifacts {
     param([string[]]$AssetPaths)
 
     $ocrArtifacts = $AssetPaths | Where-Object { [System.IO.Path]::GetFileName($_) -match "(ocr|easyocr|manga-ocr)" }
     if ($ocrArtifacts) {
         throw "OCR artifacts detected in the app release assets: $($ocrArtifacts -join ', ')"
+    }
+}
+
+function Assert-ReleaseAssetsMatchLocalBuild {
+    param(
+        [Parameter(Mandatory = $true)][string]$Owner,
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$TagName,
+        [Parameter(Mandatory = $true)][string[]]$AssetPaths
+    )
+
+    $headers = Get-GitHubApiHeaders -RequireAuthorization
+    $release = $null
+
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        $release = Get-ExistingRelease -Owner $Owner -Repo $Repo -TagName $TagName -Headers $headers
+        if ($null -eq $release) {
+            Start-Sleep -Seconds 2
+            continue
+        }
+
+        $allAssetsReady = $true
+        foreach ($assetPath in $AssetPaths) {
+            $assetName = [System.IO.Path]::GetFileName($assetPath)
+            $releaseAsset = @($release.assets) |
+                Where-Object { $null -ne $_ -and [string]$_.name -eq $assetName } |
+                Select-Object -First 1
+
+            if ($null -eq $releaseAsset -or [string]::IsNullOrWhiteSpace([string]$releaseAsset.digest)) {
+                $allAssetsReady = $false
+                break
+            }
+        }
+
+        if ($allAssetsReady) {
+            break
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    if ($null -eq $release) {
+        throw "GitHub release $TagName was not found after publishing."
+    }
+
+    foreach ($assetPath in $AssetPaths) {
+        $assetInfo = Get-Item -LiteralPath $assetPath
+        $assetName = $assetInfo.Name
+        $releaseAsset = @($release.assets) |
+            Where-Object { $null -ne $_ -and [string]$_.name -eq $assetName } |
+            Select-Object -First 1
+
+        if ($null -eq $releaseAsset) {
+            throw "GitHub release $TagName is missing asset $assetName."
+        }
+
+        if ([int64]$releaseAsset.size -ne $assetInfo.Length) {
+            throw "GitHub release asset size mismatch for $assetName. Expected $($assetInfo.Length), got $($releaseAsset.size)."
+        }
+
+        $remoteDigest = [string]$releaseAsset.digest
+        if ([string]::IsNullOrWhiteSpace($remoteDigest)) {
+            throw "GitHub did not return a digest for uploaded asset $assetName."
+        }
+
+        $digestMatch = [System.Text.RegularExpressions.Regex]::Match(
+            $remoteDigest.Trim(),
+            "^sha256:(?<value>[0-9a-fA-F]+)$"
+        )
+        if (-not $digestMatch.Success) {
+            throw "Unsupported GitHub digest format for ${assetName}: $remoteDigest"
+        }
+
+        $localSha256 = Get-FileSha256Hex -FilePath $assetPath
+        $remoteSha256 = $digestMatch.Groups["value"].Value.ToLowerInvariant()
+        if ($remoteSha256 -ne $localSha256) {
+            throw "GitHub release asset digest mismatch for $assetName. Expected $localSha256, got $remoteSha256."
+        }
     }
 }
 
@@ -482,6 +675,17 @@ function Publish-GitHubRelease {
         [switch]$AllowExisting
     )
 
+    if ($AllowExisting) {
+        Publish-GitHubReleaseWithApi `
+            -Owner $Owner `
+            -Repo $Repo `
+            -TagName $TagName `
+            -ReleaseNotesFile $ReleaseNotesFile `
+            -AssetPaths $AssetPaths `
+            -AllowExisting:$true
+        return
+    }
+
     if (Test-CommandAvailable -CommandName "gh") {
         Publish-GitHubReleaseWithGh `
             -Owner $Owner `
@@ -532,13 +736,27 @@ if ($latestPublishedVersion -and (Compare-SemVer -Left $Version -Right $latestPu
 }
 
 Write-Step "Building installer assets"
-& npm run package:app:installer
-if ($LASTEXITCODE -ne 0) {
-    throw "Packaging the installer failed."
+Invoke-WithoutPublishCredentials {
+    & npm run package:app:installer
+    if ($LASTEXITCODE -ne 0) {
+        throw "Packaging the installer failed."
+    }
 }
 
 $assets = Get-ReleaseAssets
 Assert-NoOcrArtifacts -AssetPaths $assets
+$latestManifestPath = $assets |
+    Where-Object { [System.IO.Path]::GetFileName($_) -eq "latest.yml" } |
+    Select-Object -First 1
+$installerPath = $assets |
+    Where-Object { [System.IO.Path]::GetExtension($_) -eq ".exe" } |
+    Select-Object -First 1
+
+if ([string]::IsNullOrWhiteSpace($latestManifestPath) -or [string]::IsNullOrWhiteSpace($installerPath)) {
+    throw "Unable to locate the installer or latest.yml in build/."
+}
+
+Assert-LatestManifestMatchesInstaller -LatestFilePath $latestManifestPath -InstallerPath $installerPath
 
 $releaseNotesFile = New-ReleaseNotesFile -TagName $tagName -VersionNumber $Version -SourcePath $ReleaseNotesPath
 
@@ -579,6 +797,12 @@ Publish-GitHubRelease `
     -ReleaseNotesFile $releaseNotesFile `
     -AssetPaths $assets `
     -AllowExisting:$AllowExistingTag
+
+Assert-ReleaseAssetsMatchLocalBuild `
+    -Owner $repository.Owner `
+    -Repo $repository.Repo `
+    -TagName $tagName `
+    -AssetPaths $assets
 
 Write-Step "Release published"
 Write-Host "Release URL: $releaseUrl"
