@@ -155,8 +155,8 @@ Ordre de resolution du manifeste :
 2. URL fournie par l'appel IPC
 3. `MANGA_HELPER_OCR_MANIFEST_PATH`
 4. `MANGA_HELPER_OCR_MANIFEST_URL`
-5. `manifestUrl` stockee dans `ocr-runtime.json`
-6. `ocrRuntimeManifestUrl` embarquee dans le `package.json` de l'application packagee
+5. `ocrRuntimeManifestUrl` embarquee dans le `package.json` de l'application packagee
+6. `manifestUrl` stockee dans `ocr-runtime.json`
 
 Les URLs de telechargement du manifeste doivent etre HTTP(S). En build package,
 HTTPS est obligatoire.
@@ -255,6 +255,11 @@ En build package, `electron-builder` embarque une valeur par defaut
 
 Ces variables ne sont donc pas necessaires pour un utilisateur final si
 l'application packagee a ete construite avec une configuration OCR valide.
+
+En build package, la valeur embarquee est prioritaire sur `manifestUrl` stockee
+dans `ocr-runtime.json`. Cela permet a une mise a jour applicative de
+redirectionner le manifeste OCR par defaut si le depot OCR change, sans rester
+bloque sur une ancienne URL memorisee.
 
 ## IPC runtime OCR
 

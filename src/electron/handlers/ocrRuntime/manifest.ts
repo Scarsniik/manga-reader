@@ -169,21 +169,21 @@ const resolveManifestSource = async (request?: OcrRuntimeManifestRequest): Promi
         return { type: "remote", value: envManifestUrl };
     }
 
-    const config = await readOcrRuntimeConfig();
-    const configManifestUrl = normalizeNullableString(config.manifestUrl);
-    if (configManifestUrl) {
-        return {
-            type: isRemoteUrl(configManifestUrl) ? "remote" : "local",
-            value: configManifestUrl,
-        };
-    }
-
     const packageMetadata = await readPackageMetadata();
     const packagedManifestUrl = normalizeNullableString(packageMetadata.ocrRuntimeManifestUrl);
     if (packagedManifestUrl) {
         return {
             type: isRemoteUrl(packagedManifestUrl) ? "remote" : "local",
             value: packagedManifestUrl,
+        };
+    }
+
+    const config = await readOcrRuntimeConfig();
+    const configManifestUrl = normalizeNullableString(config.manifestUrl);
+    if (configManifestUrl) {
+        return {
+            type: isRemoteUrl(configManifestUrl) ? "remote" : "local",
+            value: configManifestUrl,
         };
     }
 
