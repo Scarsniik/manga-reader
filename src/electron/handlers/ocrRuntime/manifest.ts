@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import path from "path";
 import { app } from "electron";
 import { normalizeNullableString, readOcrRuntimeConfig } from "./config";
 import { isAppVersionCompatible } from "./version";
@@ -177,6 +178,15 @@ const resolveManifestSource = async (request?: OcrRuntimeManifestRequest): Promi
         };
     }
 
+    const packageMetadata = await readPackageMetadata();
+    const packagedManifestUrl = normalizeNullableString(packageMetadata.ocrRuntimeManifestUrl);
+    if (packagedManifestUrl) {
+        return {
+            type: isRemoteUrl(packagedManifestUrl) ? "remote" : "local",
+            value: packagedManifestUrl,
+        };
+    }
+
     throw new Error("No OCR runtime manifest source is configured");
 };
 
@@ -209,6 +219,17 @@ const readManifestText = async (source: OcrRuntimeManifestSource) => {
 };
 
 const getCurrentPlatform = () => `${process.platform}-${process.arch}`;
+
+const readPackageMetadata = async (): Promise<Record<string, unknown>> => {
+    try {
+        const packageJsonPath = path.join(app.getAppPath(), "package.json");
+        const packageText = await fs.readFile(packageJsonPath, "utf-8");
+        const parsed = JSON.parse(packageText);
+        return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+    } catch {
+        return {};
+    }
+};
 
 const selectDownload = (manifest: OcrRuntimeManifest) => {
     const currentPlatform = getCurrentPlatform();

@@ -88,7 +88,7 @@ function Write-RuntimeMetadata {
         schemaVersion = 1
         runtimeVersion = $RuntimeVersion
         platform = 'win32-x64'
-        compatibleAppVersions = '>=1.0.0 <2.0.0'
+        compatibleAppVersions = '>=0.1.0 <1.0.0'
         installedAt = (Get-Date).ToUniversalTime().ToString('o')
         sourceManifestUrl = 'local-test-staging'
         installPath = $RuntimePath
@@ -391,7 +391,7 @@ $sourceSize = Get-DirectorySize -DirectoryPath $runtimeToArchive
 $manifest = [ordered]@{
     schemaVersion = 1
     runtimeVersion = $RuntimeVersion
-    compatibleAppVersions = '>=1.0.0 <2.0.0'
+    compatibleAppVersions = '>=0.1.0 <1.0.0'
     recommended = $true
     downloads = @(
         [ordered]@{

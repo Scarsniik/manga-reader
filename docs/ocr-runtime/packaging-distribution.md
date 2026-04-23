@@ -38,9 +38,19 @@ de taille, cree l'archive ZIP et genere `manifest.json`. Si l'archive depasse la
 taille de morceau configuree, le manifeste passe automatiquement en
 `delivery: "multipart"`.
 
-Sans `AssetBaseUrl`, le manifeste pointe vers des URLs locales `file://` utiles
-en developpement. Pour une release, passer une base HTTPS au script de packaging
-runtime.
+Sans `AssetBaseUrl`, le script derive maintenant une base HTTPS depuis le depot
+OCR GitHub configure. Par defaut, il pointe vers :
+
+```text
+https://github.com/Scarsniik/manga-runtime-OCR/releases/download/ocr-runtime-vX.Y.Z
+```
+
+`-AssetBaseUrl` reste disponible si la release OCR doit etre publiee ailleurs ou
+si la structure d'URL doit etre surchargee.
+
+Par defaut, le script de packaging runtime genere aussi
+`compatibleAppVersions: ">=0.1.0 <1.0.0"`. Si la plage cible change, il faut la
+passer explicitement via `-CompatibleAppVersions`.
 
 Les anciens scripts de preparation OCR peuvent etre conserves seulement s'ils servent encore a produire le runtime externe.
 Les scripts qui n'ont plus de role doivent etre retires ou renommes pour eviter toute confusion.
@@ -57,6 +67,17 @@ ocr-runtime-v1.0.0
 
 Le manifeste est publie comme asset de release, avec les archives ou morceaux
 qu'il reference.
+
+Pour que l'application packagee retrouve automatiquement ce manifeste sans
+variable d'environnement utilisateur, le build application doit embarquer une
+URL de manifeste OCR par defaut. Cette URL peut etre fournie :
+
+- directement via `MANGA_HELPER_OCR_MANIFEST_URL` ;
+- ou via `MANGA_HELPER_OCR_GITHUB_REPOSITORY` ;
+- ou via `MANGA_HELPER_OCR_GITHUB_OWNER` et `MANGA_HELPER_OCR_GITHUB_REPO`.
+
+Si rien n'est fourni, le build utilise le depot OCR GitHub par defaut du
+projet et pointe vers `releases/latest/download/manifest.json`.
 
 Contraintes connues :
 

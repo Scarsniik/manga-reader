@@ -6,7 +6,7 @@ param(
 
     [string]$RuntimeVersion = '1.0.0',
 
-    [string]$CompatibleAppVersions = '>=1.0.0 <2.0.0',
+    [string]$CompatibleAppVersions = '>=0.1.0 <1.0.0',
 
     [string]$AssetBaseUrl = '',
 
@@ -26,6 +26,9 @@ $workspace = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $sourceRuntimePath = [System.IO.Path]::GetFullPath((Join-Path $workspace $SourceRuntime))
 $outputRootPath = [System.IO.Path]::GetFullPath((Join-Path $workspace $OutputRoot))
 $safeVersion = $RuntimeVersion -replace '[^A-Za-z0-9._-]', '-'
+$defaultOcrGithubOwner = 'Scarsniik'
+$defaultOcrGithubRepo = 'manga-runtime-OCR'
+$defaultOcrReleaseTag = "ocr-runtime-v$RuntimeVersion"
 $archiveName = "ocr-runtime-$safeVersion-win32-x64.zip"
 $archivePath = Join-Path $outputRootPath $archiveName
 $manifestPath = Join-Path $outputRootPath 'manifest.json'
@@ -54,6 +57,20 @@ function Write-Utf8NoBomFile {
     }
 
     [System.IO.File]::WriteAllText($FilePath, $Content, $utf8NoBom)
+}
+
+function Get-FirstNonEmptyValue {
+    param(
+        [string[]]$Values
+    )
+
+    foreach ($value in $Values) {
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+
+    return $null
 }
 
 function Get-Sha256 {
@@ -116,6 +133,62 @@ function Convert-ToDownloadUrl {
     }
 
     return ([System.Uri][System.IO.Path]::GetFullPath($FilePath)).AbsoluteUri
+}
+
+function Resolve-DefaultAssetBaseUrl {
+    $explicitManifestUrl = Get-FirstNonEmptyValue -Values @(
+        $env:MANGA_HELPER_OCR_MANIFEST_URL,
+        $env:SCARAMANGA_OCR_MANIFEST_URL
+    )
+    if ($explicitManifestUrl) {
+        try {
+            $manifestUri = [System.Uri]$explicitManifestUrl
+            if ($manifestUri.IsAbsoluteUri) {
+                $manifestDirectory = $explicitManifestUrl.Substring(0, $explicitManifestUrl.LastIndexOf('/'))
+                if ($manifestDirectory) {
+                    return $manifestDirectory
+                }
+            }
+        } catch {
+            # Ignore invalid explicit manifest URLs and fallback to repository-derived URL.
+        }
+    }
+
+    $repositoryValue = Get-FirstNonEmptyValue -Values @(
+        $env:MANGA_HELPER_OCR_GITHUB_REPOSITORY,
+        $env:SCARAMANGA_OCR_GITHUB_REPOSITORY
+    )
+    if ($repositoryValue) {
+        $normalizedRepository = $repositoryValue.Trim() `
+            -replace '^https://github\.com/', '' `
+            -replace '^http://github\.com/', '' `
+            -replace '\.git$', '' `
+            -replace '^/', ''
+        if ($normalizedRepository -match '^[^/]+/[^/]+$') {
+            return "https://github.com/$normalizedRepository/releases/download/$defaultOcrReleaseTag"
+        }
+    }
+
+    $owner = Get-FirstNonEmptyValue -Values @(
+        $env:MANGA_HELPER_OCR_GITHUB_OWNER,
+        $env:SCARAMANGA_OCR_GITHUB_OWNER
+    )
+    $repo = Get-FirstNonEmptyValue -Values @(
+        $env:MANGA_HELPER_OCR_GITHUB_REPO,
+        $env:SCARAMANGA_OCR_GITHUB_REPO
+    )
+    if (-not $owner) {
+        $owner = $defaultOcrGithubOwner
+    }
+    if (-not $repo) {
+        $repo = $defaultOcrGithubRepo
+    }
+
+    return "https://github.com/$owner/$repo/releases/download/$defaultOcrReleaseTag"
+}
+
+if (-not $AssetBaseUrl.Trim()) {
+    $AssetBaseUrl = Resolve-DefaultAssetBaseUrl
 }
 
 function Test-RuntimeStructure {

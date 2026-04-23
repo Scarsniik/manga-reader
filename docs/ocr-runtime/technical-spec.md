@@ -125,7 +125,7 @@ Exemple :
   "schemaVersion": 1,
   "runtimeVersion": "1.0.0",
   "platform": "win32-x64",
-  "compatibleAppVersions": ">=1.0.0 <2.0.0",
+  "compatibleAppVersions": ">=0.1.0 <1.0.0",
   "installedAt": "2026-04-19T20:00:00.000Z",
   "sourceManifestUrl": "https://example.com/manga-helper/ocr/manifest.json",
   "installPath": "D:\\MangaHelperOCR",
@@ -156,6 +156,7 @@ Ordre de resolution du manifeste :
 3. `MANGA_HELPER_OCR_MANIFEST_PATH`
 4. `MANGA_HELPER_OCR_MANIFEST_URL`
 5. `manifestUrl` stockee dans `ocr-runtime.json`
+6. `ocrRuntimeManifestUrl` embarquee dans le `package.json` de l'application packagee
 
 Les URLs de telechargement du manifeste doivent etre HTTP(S). En build package,
 HTTPS est obligatoire.
@@ -168,7 +169,7 @@ Exemple multipart :
 {
   "schemaVersion": 1,
   "runtimeVersion": "1.0.0",
-  "compatibleAppVersions": ">=1.0.0 <2.0.0",
+  "compatibleAppVersions": ">=0.1.0 <1.0.0",
   "recommended": true,
   "downloads": [
     {
@@ -196,7 +197,7 @@ Exemple fichier unique :
 {
   "schemaVersion": 1,
   "runtimeVersion": "1.0.0",
-  "compatibleAppVersions": ">=1.0.0 <2.0.0",
+  "compatibleAppVersions": ">=0.1.0 <1.0.0",
   "recommended": true,
   "downloads": [
     {
@@ -230,6 +231,9 @@ Variables supportees en developpement :
 MANGA_HELPER_OCR_MANIFEST_URL
 MANGA_HELPER_OCR_MANIFEST_PATH
 MANGA_HELPER_OCR_RUNTIME_DIR
+MANGA_HELPER_OCR_GITHUB_REPOSITORY
+MANGA_HELPER_OCR_GITHUB_OWNER
+MANGA_HELPER_OCR_GITHUB_REPO
 ```
 
 Usage attendu :
@@ -237,8 +241,20 @@ Usage attendu :
 - `MANGA_HELPER_OCR_MANIFEST_URL` force une URL distante de manifeste.
 - `MANGA_HELPER_OCR_MANIFEST_PATH` force un manifeste local.
 - `MANGA_HELPER_OCR_RUNTIME_DIR` force l'utilisation d'un runtime deja present.
+- `MANGA_HELPER_OCR_GITHUB_REPOSITORY` permet de fournir un depot GitHub OCR sous forme d'URL complete ou `owner/repo`.
+- `MANGA_HELPER_OCR_GITHUB_OWNER` et `MANGA_HELPER_OCR_GITHUB_REPO` permettent le meme override en deux variables.
 
-Ces variables ne sont pas necessaires pour un utilisateur final.
+En build package, `electron-builder` embarque une valeur par defaut
+`ocrRuntimeManifestUrl` dans le `package.json` genere. Cette valeur est :
+
+- l'URL explicite de `MANGA_HELPER_OCR_MANIFEST_URL` si elle est definie ;
+- sinon `https://github.com/<owner>/<repo>/releases/latest/download/manifest.json`
+  deduite depuis `MANGA_HELPER_OCR_GITHUB_REPOSITORY` ou
+  `MANGA_HELPER_OCR_GITHUB_OWNER` + `MANGA_HELPER_OCR_GITHUB_REPO` ;
+- sinon l'URL par defaut du depot OCR officiel du projet.
+
+Ces variables ne sont donc pas necessaires pour un utilisateur final si
+l'application packagee a ete construite avec une configuration OCR valide.
 
 ## IPC runtime OCR
 
