@@ -8,9 +8,13 @@ import {
     type AppUpdateStatus,
 } from "@/renderer/components/AppUpdate/types";
 
-const getPromptMode = (status?: AppUpdateStatus | null): "available" | "downloaded" | null => {
+const getPromptMode = (status?: AppUpdateStatus | null): "available" | "downloading" | "downloaded" | null => {
     if (status?.state === "available") {
         return "available";
+    }
+
+    if (status?.state === "downloading") {
+        return "downloading";
     }
 
     if (status?.state === "downloaded") {
@@ -37,14 +41,19 @@ export default function AppUpdateGlobalUi() {
     const { openModal } = useModal();
     const promptedKeyRef = useRef<string | null>(null);
     const dismissedPromptKeysRef = useRef(new Set<string>());
+    const activeUpdateModalKeyRef = useRef<string | null>(null);
 
     const maybeOpenPrompt = useCallback((status?: AppUpdateStatus | null) => {
         const promptMode = getPromptMode(status);
         const promptKey = getPromptKey(status);
         if (!promptMode || !promptKey || !status) {
-            if (getPromptMode(status) === null) {
+            if (activeUpdateModalKeyRef.current && getPromptMode(status) === null) {
                 promptedKeyRef.current = null;
             }
+            return;
+        }
+
+        if (promptMode === "downloading" && !activeUpdateModalKeyRef.current) {
             return;
         }
 
@@ -53,11 +62,13 @@ export default function AppUpdateGlobalUi() {
         }
 
         promptedKeyRef.current = promptKey;
+        activeUpdateModalKeyRef.current = promptKey;
         openModal(buildAppUpdatePromptModal({
             mode: promptMode,
             status,
             onDismiss: () => {
                 dismissedPromptKeysRef.current.add(promptKey);
+                activeUpdateModalKeyRef.current = null;
             },
         }));
     }, [openModal]);

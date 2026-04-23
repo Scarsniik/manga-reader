@@ -192,6 +192,11 @@
   gap: 14px;
 }
 
+.app-update-install-modal__download {
+  display: grid;
+  gap: 8px;
+}
+
 .app-update-install-modal__summary {
   margin: 0;
   color: #e5ecf6;

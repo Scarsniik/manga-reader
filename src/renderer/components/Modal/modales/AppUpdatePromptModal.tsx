@@ -12,6 +12,8 @@ type AppUpdatePromptModalOptions = {
 export default function buildAppUpdatePromptModal(options: AppUpdatePromptModalOptions): ModalOptions {
     const title = options.mode === "available"
         ? "Mise a jour disponible"
+        : options.mode === "downloading"
+            ? "Telechargement en cours"
         : "Mise a jour prete";
 
     return {

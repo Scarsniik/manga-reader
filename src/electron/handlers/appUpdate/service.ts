@@ -65,6 +65,7 @@ let appUpdateStatus: AppUpdateStatus = {
 
 let isInitialized = false;
 let startupCheckTimer: NodeJS.Timeout | null = null;
+let activeDownloadPromise: Promise<void> | null = null;
 
 const getAutoUpdater = (): AppUpdater => autoUpdater;
 
@@ -550,6 +551,14 @@ export const downloadAppUpdate = async () => {
         };
     }
 
+    if (appUpdateStatus.state === "downloading" || activeDownloadPromise) {
+        return {
+            started: false,
+            reason: "busy",
+            status: appUpdateStatus,
+        };
+    }
+
     if (appUpdateStatus.state !== "available") {
         return {
             started: false,
@@ -562,7 +571,31 @@ export const downloadAppUpdate = async () => {
         await appendAppUpdateLog("App update download requested", {
             version: appUpdateStatus.availableVersion,
         });
-        await getAutoUpdater().downloadUpdate();
+
+        setStatus({
+            state: "downloading",
+            errorMessage: null,
+            message: "Telechargement de la mise a jour en cours.",
+            progressPercent: 0,
+            transferredBytes: 0,
+            totalBytes: 0,
+            bytesPerSecond: 0,
+        });
+
+        notifyStatusChange(
+            "info",
+            "Telechargement en cours",
+            "La mise a jour se telecharge en arriere-plan.",
+        );
+
+        activeDownloadPromise = Promise.resolve(getAutoUpdater().downloadUpdate())
+            .then(() => undefined)
+            .catch(async (error) => {
+                await handleUpdaterError(error, "Le telechargement de la mise a jour a echoue.");
+            })
+            .finally(() => {
+                activeDownloadPromise = null;
+            });
 
         return {
             started: true,

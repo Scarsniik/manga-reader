@@ -237,7 +237,8 @@ Flux MVP :
 1. l'application detecte une nouvelle version ;
 2. l'utilisateur peut l'accepter depuis la modale de lancement ou cliquer sur
    "Telecharger" dans les parametres ;
-3. le telechargement se fait en arriere-plan ;
+3. le telechargement se fait en arriere-plan ; la modale de lancement affiche la
+   progression et peut etre fermee pendant ce telechargement ;
 4. une fois le telechargement termine, l'application affiche une modale et
    propose :
    - redemarrer maintenant ;
