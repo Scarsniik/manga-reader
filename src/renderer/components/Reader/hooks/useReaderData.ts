@@ -11,9 +11,9 @@ import {
     getScraperFeature,
     getScraperPagesFeatureConfig,
     hasRenderableDetails,
-    resolveScraperPageUrls,
     ScraperRuntimeChapterResult,
 } from '@/renderer/utils/scraperRuntime';
+import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import { ReaderLocationState } from '../types';
 import { isRemoteScraperManga, isScraperReaderManga } from '../utils';
 
@@ -200,13 +200,14 @@ const useReaderData = ({
                         label: sourceChapterLabel || sourceChapterUrl,
                     }
                     : null;
-                const pageImages = await resolveScraperPageUrls(
+                const pageImages = await resolveScraperReaderPageUrls(
                     scraper,
                     details,
                     pagesConfig,
                     async (request) => window.api.fetchScraperDocument(request),
                     {
                         chapter,
+                        knownTotalPages: remoteManga.pages,
                     },
                 );
                 const totalPages = pageImages.length;

@@ -12,6 +12,7 @@ import type {
 } from '@/renderer/components/ScraperBrowser/types';
 import { isScraperRuntimeChapterResult } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraperTemplateContext';
+import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
   createScraperMangaId,
   extractScraperDetailsFromDocument,
@@ -482,19 +483,32 @@ export function useScraperBrowserDetails({
     clearFeedback();
 
     try {
-      const pageUrls = await resolveCurrentPageUrls(normalizedChapter);
+      const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+      if (typeof fetchScraperDocument !== 'function') {
+        throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
+      }
+
       const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
       const readerMangaId = createScraperMangaId(
         scraper.id,
         sourceUrl,
         usesChaptersForPages ? normalizedChapter?.url : null,
       );
-      const requestedPage = normalizeRequestedReaderPage(options?.page, pageUrls.length);
-      const savedProgress = requestedPage === null
-        && (window as any).api
+      const savedProgress = (window as any).api
         && typeof (window as any).api.getScraperReaderProgress === 'function'
         ? await (window as any).api.getScraperReaderProgress(readerMangaId)
         : null;
+      const pageUrls = await resolveScraperReaderPageUrls(
+        scraper,
+        detailsResult,
+        pagesConfig,
+        async (request) => fetchScraperDocument(request),
+        {
+          chapter: normalizedChapter ?? null,
+          knownTotalPages: savedProgress?.totalPages,
+        },
+      );
+      const requestedPage = normalizeRequestedReaderPage(options?.page, pageUrls.length);
       const initialPage = requestedPage
         ?? (typeof savedProgress?.currentPage === 'number' && savedProgress.currentPage > 0
           ? savedProgress.currentPage
@@ -544,9 +558,9 @@ export function useScraperBrowserDetails({
     navigate,
     pagesConfig,
     query,
-    resolveCurrentPageUrls,
     scraper.globalConfig.bookmark.excludedFields,
     scraper.id,
+    scraper,
     listingReturnState,
     setOpeningReader,
     setRuntimeError,

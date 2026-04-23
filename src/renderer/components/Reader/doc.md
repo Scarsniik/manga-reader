@@ -14,6 +14,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - synchronise la page courante dans l'URL
   - persiste la progression de lecture et le nombre de pages connu
   - précharge les images voisines
+  - pour les scrapers a template sequentiel, evite de sonder toutes les pages a l'ouverture du reader : reutilise un total connu si disponible, sinon detecte la derniere page par recherche exponentielle puis dichotomie
 - `hooks/useReaderNavigation.ts`
   - gère le retour, le changement de page, les transitions entre chapitres et l'écran de fin de lecture
   - gère la copie de l'image courante

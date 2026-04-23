@@ -9,8 +9,8 @@ import {
     createScraperMangaId,
     getScraperFeature,
     getScraperPagesFeatureConfig,
-    resolveScraperPageUrls,
 } from '@/renderer/utils/scraperRuntime';
+import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
     clearScraperRouteState,
     writeScraperRouteState,
@@ -531,23 +531,33 @@ const useReaderNavigation = ({
                 throw new Error('La configuration Pages du scrapper est introuvable.');
             }
 
-            const pageUrls = await resolveScraperPageUrls(
-                scraper,
-                target.detailsResult,
-                pagesConfig,
-                async (request) => window.api.fetchScraperDocument(request),
-                {
-                    chapter: target.adjacentChapter,
-                },
-            );
-
-            const targetPage = direction === 'previous' ? pageUrls.length : 1;
             const sourceUrl = target.detailsResult.finalUrl || target.detailsResult.requestedUrl;
             const readerMangaId = createScraperMangaId(
                 scraper.id,
                 sourceUrl,
                 target.adjacentChapter.url,
             );
+            let savedProgress = null;
+            if (typeof window.api.getScraperReaderProgress === 'function') {
+                try {
+                    savedProgress = await window.api.getScraperReaderProgress(readerMangaId);
+                } catch (error) {
+                    console.warn('Reader: failed to load scraper reader progress for adjacent chapter', error);
+                }
+            }
+
+            const pageUrls = await resolveScraperReaderPageUrls(
+                scraper,
+                target.detailsResult,
+                pagesConfig,
+                async (request) => window.api.fetchScraperDocument(request),
+                {
+                    chapter: target.adjacentChapter,
+                    knownTotalPages: savedProgress?.totalPages,
+                },
+            );
+
+            const targetPage = direction === 'previous' ? pageUrls.length : 1;
 
             navigate(
                 `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(targetPage))}`,
