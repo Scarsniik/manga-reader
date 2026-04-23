@@ -1,5 +1,6 @@
 import React from 'react';
 import { Manga } from '@/renderer/types';
+import { findVerticalScrollContainer } from '@/renderer/utils/scrollPosition';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
 import { notifyOcrRuntimeMissing } from '@/renderer/utils/ocrRuntimeUi';
 import {
@@ -373,6 +374,22 @@ const useReaderOcr = ({
         }
 
         const bubbleCenterY = imageRect.top + ((targetBox.bbox.y + (targetBox.bbox.h / 2)) * imageRect.height);
+        const scrollContainer = findVerticalScrollContainer(imageElement);
+
+        if (scrollContainer) {
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const targetScrollTop = Math.max(
+                0,
+                scrollContainer.scrollTop + (bubbleCenterY - containerRect.top) - (scrollContainer.clientHeight * 0.45),
+            );
+
+            scrollContainer.scrollTo({
+                top: targetScrollTop,
+                behavior: 'smooth',
+            });
+            return;
+        }
+
         const absoluteBubbleCenterY = window.scrollY + bubbleCenterY;
         const targetScrollTop = Math.max(0, absoluteBubbleCenterY - (window.innerHeight * 0.45));
 
