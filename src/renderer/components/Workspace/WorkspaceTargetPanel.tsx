@@ -1,8 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ScraperConfigWizard from "@/renderer/components/ScraperConfig/ScraperConfigWizard";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
 import WorkspaceScraperAuthorPanel from "@/renderer/components/Workspace/WorkspaceScraperAuthorPanel";
+import {
+  readWorkspaceBrowserTabCache,
+  writeWorkspaceBrowserTabCache,
+} from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTarget } from "@/renderer/types/workspace";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
@@ -17,6 +21,7 @@ import {
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 
 type Props = {
+  tabId: string;
   target: WorkspaceTarget;
   onTitleChange: (title: string) => void;
 };
@@ -27,6 +32,7 @@ type ScraperConfigPanelProps = {
 };
 
 type ScraperDetailsPanelProps = {
+  tabId: string;
   scraperId: string;
   sourceUrl: string;
   title?: string;
@@ -112,17 +118,21 @@ function ScraperConfigPanel({ scraperId, onTitleChange }: ScraperConfigPanelProp
 }
 
 function ScraperDetailsPanel({
+  tabId,
   scraperId,
   sourceUrl,
   title,
   onTitleChange,
 }: ScraperDetailsPanelProps) {
-  const [scraper, setScraper] = useState<ScraperRecord | null>(null);
-  const [initialState, setInitialState] = useState<ScraperBrowserInitialState | null>(null);
-  const [loading, setLoading] = useState(true);
+  const targetKey = `scraper.details:${scraperId}:${sourceUrl}`;
+  const cachedEntry = readWorkspaceBrowserTabCache(tabId, targetKey);
+  const requestIdRef = useRef(0);
+  const [scraper, setScraper] = useState<ScraperRecord | null>(cachedEntry?.scraper ?? null);
+  const [initialState, setInitialState] = useState<ScraperBrowserInitialState | null>(cachedEntry?.initialState ?? null);
+  const [loading, setLoading] = useState(!cachedEntry);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDetails = useCallback(async () => {
+  const loadDetails = useCallback(async (options?: { forceRefresh?: boolean }) => {
     const api = getWorkspaceApi();
     if (!api || typeof api.getScrapers !== "function" || typeof api.fetchScraperDocument !== "function") {
       setError("Le runtime du scrapper n'est pas disponible dans cette version.");
@@ -130,10 +140,30 @@ function ScraperDetailsPanel({
       return;
     }
 
+    const cachedState = options?.forceRefresh
+      ? null
+      : readWorkspaceBrowserTabCache(tabId, targetKey);
+
+    if (cachedState) {
+      setScraper(cachedState.scraper);
+      setInitialState(cachedState.initialState);
+      setError(null);
+      setLoading(false);
+      onTitleChange(cachedState.resolvedTitle);
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setLoading(true);
     setError(null);
     try {
       const scrapers = await api.getScrapers();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       const nextScraper = Array.isArray(scrapers)
         ? scrapers.find((candidate: ScraperRecord) => candidate.id === scraperId) || null
         : null;
@@ -215,30 +245,55 @@ function ScraperDetailsPanel({
           }
         })()
         : [];
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
 
-      setScraper(nextScraper);
-      setInitialState({
-        query: title || detailsResult.title || sourceUrl,
+      const canonicalDetailsQuery = detailsResult.finalUrl || detailsResult.requestedUrl || sourceUrl;
+      const nextInitialState: ScraperBrowserInitialState = {
+        query: canonicalDetailsQuery,
         detailsResult,
         chaptersResult,
         listingReturnState: null,
+      };
+      const resolvedTitle = detailsResult.title || title || sourceUrl;
+
+      setScraper(nextScraper);
+      setInitialState(nextInitialState);
+      writeWorkspaceBrowserTabCache(tabId, {
+        targetKey,
+        scraper: nextScraper,
+        initialState: nextInitialState,
+        resolvedTitle,
       });
-      onTitleChange(detailsResult.title || title || sourceUrl);
+      onTitleChange(resolvedTitle);
     } catch (loadError) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       setScraper(null);
       setInitialState(null);
       setError(loadError instanceof Error ? loadError.message : "Impossible de charger la fiche.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [onTitleChange, scraperId, sourceUrl, title]);
+  }, [onTitleChange, scraperId, sourceUrl, tabId, targetKey, title]);
 
   useEffect(() => {
     void loadDetails();
 
-    window.addEventListener("scrapers-updated", loadDetails);
+    const handleScrapersUpdated = () => {
+      requestIdRef.current += 1;
+      void loadDetails({ forceRefresh: true });
+    };
+
+    window.addEventListener("scrapers-updated", handleScrapersUpdated);
     return () => {
-      window.removeEventListener("scrapers-updated", loadDetails);
+      requestIdRef.current += 1;
+      window.removeEventListener("scrapers-updated", handleScrapersUpdated);
     };
   }, [loadDetails]);
 
@@ -268,7 +323,7 @@ function ScraperDetailsPanel({
   );
 }
 
-export default function WorkspaceTargetPanel({ target, onTitleChange }: Props) {
+export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: Props) {
   if (target.kind === "scraper.config") {
     return (
       <ScraperConfigPanel
@@ -281,6 +336,7 @@ export default function WorkspaceTargetPanel({ target, onTitleChange }: Props) {
   if (target.kind === "scraper.details") {
     return (
       <ScraperDetailsPanel
+        tabId={tabId}
         scraperId={target.scraperId}
         sourceUrl={target.sourceUrl}
         title={target.title}
@@ -292,6 +348,7 @@ export default function WorkspaceTargetPanel({ target, onTitleChange }: Props) {
   if (target.kind === "scraper.author") {
     return (
       <WorkspaceScraperAuthorPanel
+        tabId={tabId}
         scraperId={target.scraperId}
         query={target.query}
         title={target.title}

@@ -149,10 +149,6 @@ export const buildScraperBrowserHelperText = (options: {
     hasAuthor,
   } = options;
 
-  if (mode === 'manga') {
-    return 'Cette vue charge une fiche a partir de la configuration `Fiche` et affiche un rendu temporaire.';
-  }
-
   if (mode === 'author') {
     if (usesAuthorTemplatePaging && hasAuthorNextPageSelector) {
       return 'Cette vue ouvre une page auteur. Tu peux saisir une URL auteur complete ou un nom d\'auteur, et la pagination peut venir du template `{{page}}` ou du lien HTML de page suivante.';

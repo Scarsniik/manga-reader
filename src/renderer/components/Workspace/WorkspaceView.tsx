@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import WorkspaceTargetPanel from "@/renderer/components/Workspace/WorkspaceTargetPanel";
+import { clearWorkspaceBrowserTabCache } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTab, WorkspaceTarget } from "@/renderer/types/workspace";
 import "@/renderer/components/Workspace/style.scss";
 
@@ -89,6 +90,7 @@ export default function WorkspaceView() {
       return;
     }
 
+    clearWorkspaceBrowserTabCache(tabId);
     const nextTabs = storedTabs.filter((tab) => tab.id !== tabId);
     updateTabs(nextTabs);
 
@@ -189,6 +191,7 @@ export default function WorkspaceView() {
         {activeTab ? (
           <WorkspaceTargetPanel
             key={activeTab.id}
+            tabId={activeTab.id}
             target={activeTab.target}
             onTitleChange={handleActiveTabTitleChange}
           />

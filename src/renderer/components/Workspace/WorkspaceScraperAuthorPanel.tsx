@@ -1,6 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
+import {
+  readWorkspaceBrowserTabCache,
+  writeWorkspaceBrowserTabCache,
+} from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocument,
@@ -13,6 +17,7 @@ import {
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 
 type Props = {
+  tabId: string;
   scraperId: string;
   query: string;
   title?: string;
@@ -23,18 +28,25 @@ type Props = {
 const getWorkspaceApi = () => window.api ?? {};
 
 export default function WorkspaceScraperAuthorPanel({
+  tabId,
   scraperId,
   query,
   title,
   templateContext,
   onTitleChange,
 }: Props) {
-  const [scraper, setScraper] = useState<ScraperRecord | null>(null);
-  const [initialState, setInitialState] = useState<ScraperBrowserInitialState | null>(null);
-  const [loading, setLoading] = useState(true);
+  const targetKey = `scraper.author:${scraperId}:${JSON.stringify({
+    query,
+    templateContext: templateContext ?? null,
+  })}`;
+  const cachedEntry = readWorkspaceBrowserTabCache(tabId, targetKey);
+  const requestIdRef = useRef(0);
+  const [scraper, setScraper] = useState<ScraperRecord | null>(cachedEntry?.scraper ?? null);
+  const [initialState, setInitialState] = useState<ScraperBrowserInitialState | null>(cachedEntry?.initialState ?? null);
+  const [loading, setLoading] = useState(!cachedEntry);
   const [error, setError] = useState<string | null>(null);
 
-  const loadAuthorPage = useCallback(async () => {
+  const loadAuthorPage = useCallback(async (options?: { forceRefresh?: boolean }) => {
     const api = getWorkspaceApi();
     if (!api || typeof api.getScrapers !== "function" || typeof api.fetchScraperDocument !== "function") {
       setError("Le runtime du scrapper n'est pas disponible dans cette version.");
@@ -42,10 +54,30 @@ export default function WorkspaceScraperAuthorPanel({
       return;
     }
 
+    const cachedState = options?.forceRefresh
+      ? null
+      : readWorkspaceBrowserTabCache(tabId, targetKey);
+
+    if (cachedState) {
+      setScraper(cachedState.scraper);
+      setInitialState(cachedState.initialState);
+      setError(null);
+      setLoading(false);
+      onTitleChange(cachedState.resolvedTitle);
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setLoading(true);
     setError(null);
     try {
       const scrapers = await api.getScrapers();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       const nextScraper = Array.isArray(scrapers)
         ? scrapers.find((candidate: ScraperRecord) => candidate.id === scraperId) || null
         : null;
@@ -94,9 +126,7 @@ export default function WorkspaceScraperAuthorPanel({
         finalUrl: documentResult.finalUrl,
       });
       const displayQuery = formatScraperValueForDisplay(query);
-
-      setScraper(nextScraper);
-      setInitialState({
+      const nextInitialState: ScraperBrowserInitialState = {
         query: displayQuery,
         listingMode: "author",
         listingPage: authorPage,
@@ -106,23 +136,45 @@ export default function WorkspaceScraperAuthorPanel({
         hasExecutedListing: true,
         listingReturnState: null,
         authorTemplateContext: templateContext ?? null,
+      };
+      const resolvedTitle = title || displayQuery || "Page auteur";
+
+      setScraper(nextScraper);
+      setInitialState(nextInitialState);
+      writeWorkspaceBrowserTabCache(tabId, {
+        targetKey,
+        scraper: nextScraper,
+        initialState: nextInitialState,
+        resolvedTitle,
       });
-      onTitleChange(title || displayQuery || "Page auteur");
+      onTitleChange(resolvedTitle);
     } catch (loadError) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
       setScraper(null);
       setInitialState(null);
       setError(loadError instanceof Error ? loadError.message : "Impossible de charger la page auteur.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [onTitleChange, query, scraperId, templateContext, title]);
+  }, [onTitleChange, query, scraperId, tabId, targetKey, templateContext, title]);
 
   useEffect(() => {
     void loadAuthorPage();
 
-    window.addEventListener("scrapers-updated", loadAuthorPage);
+    const handleScrapersUpdated = () => {
+      requestIdRef.current += 1;
+      void loadAuthorPage({ forceRefresh: true });
+    };
+
+    window.addEventListener("scrapers-updated", handleScrapersUpdated);
     return () => {
-      window.removeEventListener("scrapers-updated", loadAuthorPage);
+      requestIdRef.current += 1;
+      window.removeEventListener("scrapers-updated", handleScrapersUpdated);
     };
   }, [loadAuthorPage]);
 

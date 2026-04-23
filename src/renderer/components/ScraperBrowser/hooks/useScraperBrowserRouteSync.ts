@@ -237,9 +237,9 @@ export function useScraperBrowserRouteSync({
 
     if (allowInitialState && initialState?.detailsResult) {
       setMode('manga');
-      setQuery(formatScraperValueForDisplay(
-        routeState.mangaQuery || routeState.mangaUrl || initialState.query || '',
-      ));
+      // Workspace tabs share the same router location, so a freshly mounted details tab
+      // must restore from its own seeded state instead of reusing another tab's query.
+      setQuery(formatScraperValueForDisplay(initialState.query || ''));
       setListingReturnState(restoredListingReturnState);
       return;
     }

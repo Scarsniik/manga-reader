@@ -46,6 +46,13 @@
 - Les artefacts OCR doivent avoir leur propre versioning dans un dépôt séparé
   pour éviter toute confusion avec les releases de l'application.
 
+## Deploy
+
+- avant un deploy, verifier que le repo est propre et que le build passe
+- incrementer la version dans `package.json`
+- utiliser `npm run release:app:dry-run` pour verifier la release, puis `npm run release:app` pour publier
+- une release applicative publie un tag `vX.Y.Z` et les assets GitHub associes
+
 ## Documentation
 
 - la documentation doit être à jour. Il faut mettre à jour la documentation à chaque fois qu'on fait une modification qui change le fonctionnement de l'application.
