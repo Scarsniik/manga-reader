@@ -355,11 +355,8 @@ function New-ReleaseNotesFile {
         throw "Release notes file is empty: $releaseNotesFile"
     }
 
-    if (
-        $releaseNotesContent.Contains("vX.Y.Z")
-        -or $releaseNotesContent.Contains("Explique ici")
-        -or $releaseNotesContent.Contains("Ajoute une note courte")
-    ) {
+    $containsTemplatePlaceholder = $releaseNotesContent.Contains("vX.Y.Z") -or $releaseNotesContent.Contains("Explique ici") -or $releaseNotesContent.Contains("Ajoute une note courte")
+    if ($containsTemplatePlaceholder) {
         throw "Release notes file still contains template placeholders: $releaseNotesFile"
     }
 
