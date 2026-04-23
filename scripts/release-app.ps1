@@ -414,13 +414,14 @@ function Publish-GitHubReleaseWithApi {
             prerelease = $false
             generate_release_notes = $false
         } | ConvertTo-Json -Depth 5
+        $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
         $release = Invoke-RestMethod `
             -Method Post `
             -Uri "https://api.github.com/repos/$Owner/$Repo/releases" `
             -Headers $headers `
-            -ContentType "application/json" `
-            -Body $payload
+            -ContentType "application/json; charset=utf-8" `
+            -Body $payloadBytes
     } elseif (-not $AllowExisting) {
         throw "GitHub release $TagName already exists."
     } else {
@@ -431,13 +432,14 @@ function Publish-GitHubReleaseWithApi {
             draft = $false
             prerelease = $false
         } | ConvertTo-Json -Depth 5
+        $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
         $release = Invoke-RestMethod `
             -Method Patch `
             -Uri "https://api.github.com/repos/$Owner/$Repo/releases/$($release.id)" `
             -Headers $headers `
-            -ContentType "application/json" `
-            -Body $payload
+            -ContentType "application/json; charset=utf-8" `
+            -Body $payloadBytes
     }
 
     $assetNames = $AssetPaths | ForEach-Object { [System.IO.Path]::GetFileName($_) }
