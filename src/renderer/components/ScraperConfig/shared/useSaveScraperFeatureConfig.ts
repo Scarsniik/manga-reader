@@ -4,6 +4,7 @@ import {
   ScraperFeatureValidationResult,
   ScraperRecord,
 } from '@/shared/scraper';
+import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 
 type SaveConfigSnapshot<TConfig> = {
   config: TConfig;
@@ -12,11 +13,9 @@ type SaveConfigSnapshot<TConfig> = {
 };
 
 type Options<TConfig> = {
-  scraperId: string;
   featureKind: ScraperFeatureKind;
   validationResult: ScraperFeatureValidationResult | null;
   lastValidatedSignature: string | null;
-  onScraperChange: (scraper: ScraperRecord) => void;
   buildSaveConfig: () => SaveConfigSnapshot<TConfig>;
   setFieldErrors: Dispatch<SetStateAction<Record<string, string>>>;
   setSaving: Dispatch<SetStateAction<boolean>>;
@@ -25,17 +24,17 @@ type Options<TConfig> = {
 };
 
 export default function useSaveScraperFeatureConfig<TConfig>({
-  scraperId,
   featureKind,
   validationResult,
   lastValidatedSignature,
-  onScraperChange,
   buildSaveConfig,
   setFieldErrors,
   setSaving,
   setSaveError,
   setSaveMessage,
 }: Options<TConfig>) {
+  const { scraper, updateScraper } = useScraperConfig();
+
   return useCallback(async () => {
     const {
       config,
@@ -64,13 +63,13 @@ export default function useSaveScraperFeatureConfig<TConfig>({
 
     try {
       const updatedScraper = await (window as any).api.saveScraperFeatureConfig({
-        scraperId,
+        scraperId: scraper.id,
         featureKind,
         config,
         validation: matchingValidation,
       });
 
-      onScraperChange(updatedScraper as ScraperRecord);
+      updateScraper(updatedScraper as ScraperRecord);
       setSaveMessage(
         matchingValidation?.ok
           ? 'Configuration enregistree et validee.'
@@ -85,12 +84,12 @@ export default function useSaveScraperFeatureConfig<TConfig>({
     buildSaveConfig,
     featureKind,
     lastValidatedSignature,
-    onScraperChange,
-    scraperId,
+    scraper.id,
     setFieldErrors,
     setSaveError,
     setSaveMessage,
     setSaving,
+    updateScraper,
     validationResult,
   ]);
 }

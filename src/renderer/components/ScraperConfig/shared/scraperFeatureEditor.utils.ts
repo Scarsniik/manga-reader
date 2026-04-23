@@ -29,6 +29,7 @@ export const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> 
   authorUrl: 'Lien auteur',
   tags: 'Tags',
   status: 'Statut',
+  pageCount: 'Nombre de pages',
   thumbnails: 'Vignettes',
   thumbnailsNextPage: 'Page suivante des vignettes',
   chapters: 'Chapitres',

@@ -82,7 +82,17 @@ const useReaderData = ({
                     chapters: scraperReaderState.chapter?.label,
                 };
 
-                setLibraryMangas([]);
+                if (window.api && typeof window.api.getMangas === 'function') {
+                    try {
+                        const mangas: Manga[] = await window.api.getMangas();
+                        setLibraryMangas(Array.isArray(mangas) ? mangas : []);
+                    } catch (error) {
+                        console.warn('Reader: failed to load library mangas for recommendations', error);
+                        setLibraryMangas([]);
+                    }
+                } else {
+                    setLibraryMangas([]);
+                }
                 setManga(remoteManga);
                 setBookmarkExcludedFields(Array.isArray(scraperReaderState.bookmarkExcludedFields)
                     ? scraperReaderState.bookmarkExcludedFields
@@ -289,7 +299,11 @@ const useReaderData = ({
                     return;
                 }
 
-                await window.api.updateManga({ id: manga.id, currentPage: persistedPage });
+                await window.api.updateManga({
+                    id: manga.id,
+                    currentPage: persistedPage,
+                    pages: totalPages,
+                });
                 try {
                     window.dispatchEvent(new CustomEvent('mangas-updated'));
                 } catch (error) {

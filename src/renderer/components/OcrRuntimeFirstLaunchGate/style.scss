@@ -1,0 +1,87 @@
+.ocr-runtime-first-launch {
+    position: fixed;
+    inset: var(--app-titlebar-height) 0 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.ocr-runtime-first-launch__panel {
+    width: min(560px, 100%);
+    background: #161616;
+    border: 1px solid #2f3946;
+    border-radius: 8px;
+    padding: 22px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+.ocr-runtime-first-launch__panel h2 {
+    margin: 0 0 14px;
+    font-size: 1.35rem;
+}
+
+.ocr-runtime-first-launch__panel p {
+    margin: 0 0 12px;
+    color: #d8dde6;
+    line-height: 1.5;
+}
+
+.ocr-runtime-first-launch__path {
+    padding: 10px 12px;
+    background: #1d232b;
+    border: 1px solid #364250;
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+}
+
+.ocr-runtime-first-launch__error {
+    color: #ffb8b8;
+}
+
+.ocr-runtime-first-launch__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.ocr-runtime-first-launch__primary,
+.ocr-runtime-first-launch__secondary {
+    border-radius: 6px;
+    border: 1px solid transparent;
+    padding: 9px 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ocr-runtime-first-launch__primary {
+    background: #1976d2;
+    color: #ffffff;
+}
+
+.ocr-runtime-first-launch__secondary {
+    background: transparent;
+    color: #e6e6e6;
+    border-color: #3b4654;
+}
+
+.ocr-runtime-first-launch__primary:disabled,
+.ocr-runtime-first-launch__secondary:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+@media (max-width: 560px) {
+    .ocr-runtime-first-launch {
+        padding: 16px;
+        align-items: flex-start;
+        padding-top: 72px;
+    }
+
+    .ocr-runtime-first-launch__actions {
+        flex-direction: column-reverse;
+    }
+}

@@ -32,6 +32,20 @@
 - les messages de commit doivent être explicites et en anglais
 - Les messages de commit commencent par : fix, feat, refactor, doc
 
+## Versioning
+
+- Les versions de l'application suivent SemVer : `MAJOR.MINOR.PATCH`.
+- `package.json` est la source de vérité pour la version de l'application.
+- Les tags de release application suivent le format `vX.Y.Z`.
+- Pendant le développement et les tests de la mise à jour automatique, la version
+  de départ est `0.1.0`, puis on incrémente à partir de cette base.
+- La première version considérée stable avec mise à jour automatique fonctionnelle
+  sera `1.0.0`.
+- Une version publiée ne doit pas être modifiée après coup. S'il faut corriger
+  une release déjà distribuée, on publie une nouvelle version.
+- Les artefacts OCR doivent avoir leur propre versioning dans un dépôt séparé
+  pour éviter toute confusion avec les releases de l'application.
+
 ## Documentation
 
 - la documentation doit être à jour. Il faut mettre à jour la documentation à chaque fois qu'on fait une modification qui change le fonctionnement de l'application.

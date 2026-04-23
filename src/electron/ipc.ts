@@ -1,5 +1,6 @@
-import { ipcMain, IpcMainInvokeEvent, app } from "electron";
+import { ipcMain, IpcMainInvokeEvent, app, shell } from "electron";
 import { dialog, BrowserWindow } from "electron";
+import { stat } from "fs/promises";
 
 // Themed handlers
 import * as mangas from "./handlers/mangas";
@@ -8,10 +9,14 @@ import * as links from "./handlers/links";
 import * as pages from "./handlers/pages";
 import * as clipboardHandlers from "./handlers/clipboard";
 import * as ocr from "./handlers/ocr/index";
+import * as ocrRuntime from "./handlers/ocrRuntime/index";
 import * as authors from "./handlers/authors";
 import * as tags from "./handlers/tags";
 import * as series from "./handlers/series";
 import * as scrapers from "./handlers/scrapers";
+import * as windowControls from "./handlers/windowControls";
+import * as workspaceWindow from "./handlers/workspaceWindow";
+import * as appUpdate from "./handlers/appUpdate";
 import { migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -29,6 +34,12 @@ const notifyScraperBookmarksUpdated = () => {
     }
 };
 
+const notifyScraperViewHistoryUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-view-history-updated");
+    }
+};
+
 const notifySeriesUpdated = () => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("series-updated");
@@ -40,6 +51,17 @@ ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
 ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => links.removeLink(event, url));
 ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
+
+// Window controls
+ipcMain.handle("window-get-state", async (event: IpcMainInvokeEvent) => windowControls.getWindowState(event));
+ipcMain.handle("window-minimize", async (event: IpcMainInvokeEvent) => windowControls.minimizeWindow(event));
+ipcMain.handle("window-toggle-maximize", async (event: IpcMainInvokeEvent) => windowControls.toggleMaximizeWindow(event));
+ipcMain.handle("window-close", async (event: IpcMainInvokeEvent) => windowControls.closeWindow(event));
+ipcMain.handle("window-toggle-devtools", async (event: IpcMainInvokeEvent) => windowControls.toggleDevTools(event));
+ipcMain.handle("app-runtime-info", async () => windowControls.getAppRuntimeInfo());
+ipcMain.handle("workspace-open-target", async (event: IpcMainInvokeEvent, target: unknown) => (
+    workspaceWindow.openWorkspaceTarget(event, target)
+));
 
 // Mangas
 ipcMain.handle("get-mangas", async () => mangas.getMangas());
@@ -105,6 +127,11 @@ ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries:
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
 ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => params.saveSettings(event, settings));
+ipcMain.handle("app-update-status", async () => appUpdate.getAppUpdateStatus());
+ipcMain.handle("app-update-check", async () => appUpdate.checkForAppUpdates());
+ipcMain.handle("app-update-download", async () => appUpdate.downloadAppUpdate());
+ipcMain.handle("app-update-install", async () => appUpdate.installAppUpdate());
+ipcMain.handle("app-update-open-release-page", async () => appUpdate.openAppUpdateReleasePage());
 
 // Scrapers
 ipcMain.handle("validate-scraper-access", async (event: IpcMainInvokeEvent, request: any) => scrapers.validateScraperAccess(event, request));
@@ -120,6 +147,19 @@ ipcMain.handle("save-scraper-bookmark", async (event: IpcMainInvokeEvent, reques
 ipcMain.handle("remove-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.removeScraperBookmark(event, request);
     notifyScraperBookmarksUpdated();
+    return updated;
+});
+ipcMain.handle("get-scraper-view-history", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
+    scrapers.getScraperViewHistory(event, scraperId)
+));
+ipcMain.handle("record-scraper-cards-seen", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.recordScraperCardsSeen(event, request);
+    notifyScraperViewHistoryUpdated();
+    return updated;
+});
+ipcMain.handle("set-scraper-card-read", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.setScraperCardRead(event, request);
+    notifyScraperViewHistoryUpdated();
     return updated;
 });
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
@@ -182,7 +222,66 @@ ipcMain.handle("open-directory", async (event: IpcMainInvokeEvent) => {
     }
 });
 
+ipcMain.handle("open-file", async (event: IpcMainInvokeEvent) => {
+    try {
+        const win = BrowserWindow.getFocusedWindow();
+        const result = await dialog.showOpenDialog((win as BrowserWindow) || undefined, {
+            properties: ["openFile"]
+        });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) return null;
+        return result.filePaths[0];
+    } catch (error) {
+        console.error("Error opening file dialog", error);
+        return null;
+    }
+});
+
+ipcMain.handle("open-path", async (event: IpcMainInvokeEvent, targetPath: string) => {
+    const normalizedPath = String(targetPath || "").trim();
+    if (!normalizedPath) {
+        return { success: false, error: "Path is empty" };
+    }
+
+    try {
+        const pathStat = await stat(normalizedPath);
+        if (pathStat.isDirectory()) {
+            const error = await shell.openPath(normalizedPath);
+            return {
+                success: error.length === 0,
+                error,
+            };
+        }
+
+        shell.showItemInFolder(normalizedPath);
+        return { success: true, error: "" };
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unable to open path",
+        };
+    }
+});
+
 // OCR
+ipcMain.handle("ocr-runtime-defaults", async () => ocrRuntime.getOcrRuntimeDefaults());
+ipcMain.handle("ocr-runtime-status", async () => ocrRuntime.getOcrRuntimeStatus());
+ipcMain.handle("ocr-runtime-mark-skipped", async () => ocrRuntime.markOcrRuntimeSkipped());
+ipcMain.handle("ocr-runtime-read-manifest", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.readOcrRuntimeManifest(request)
+));
+ipcMain.handle("ocr-runtime-install-status", async () => ocrRuntime.getOcrRuntimeInstallStatus());
+ipcMain.handle("ocr-runtime-start-install", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.startOcrRuntimeInstall(request)
+));
+ipcMain.handle("ocr-runtime-cancel-install", async () => ocrRuntime.cancelOcrRuntimeInstall());
+ipcMain.handle("ocr-runtime-open-install-log", async () => ocrRuntime.openOcrRuntimeInstallLog());
+ipcMain.handle("ocr-runtime-verify", async () => ocrRuntime.verifyOcrRuntime());
+ipcMain.handle("ocr-runtime-repair", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.repairOcrRuntime(request)
+));
+ipcMain.handle("ocr-runtime-uninstall", async (_event: IpcMainInvokeEvent, request?: Record<string, any>) => (
+    ocrRuntime.uninstallOcrRuntime(request)
+));
 ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDataUrl: string, opts?: Record<string, any>) => ocr.ocrRecognize(event, imagePathOrDataUrl, {
     debug: true,
     returnRaw: true,

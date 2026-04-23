@@ -132,6 +132,7 @@ utiliser ce contexte :
 | `{{authors}}` | auteurs extraits, joints par virgule + espace |
 | `{{tags}}` | tags extraits, joints par virgule + espace |
 | `{{status}}` | statut extrait |
+| `{{pageCount}}` | nombre de pages extrait |
 | `{{nomVariable}}` | variable derivee configuree dans `Fiche` |
 | `{{raw:nomVariable}}` | meme valeur sans encodage |
 
@@ -160,7 +161,7 @@ scraper.
 | `homeSearch.query` | requete utilisee pour cette recherche d'accueil, vide pour une recherche globale |
 
 Les champs de bookmark excluables sont : `cover`, `summary`, `description`, `authors`, `tags`,
-`mangaStatus`.
+`mangaStatus`, `pageCount`.
 
 ## Module Recherche
 
@@ -193,6 +194,7 @@ au body brut.
 | `authorUrlSelector` | non | card | extrait l'URL auteur, necessaire pour ouvrir `Auteur` directement depuis une card |
 | `thumbnailSelector` | non | card | extrait l'image de miniature |
 | `summarySelector` | non | card | extrait un resume court |
+| `pageCountSelector` | non | card | extrait le nombre de pages affiche sur la card |
 | `nextPageSelector` | non | document | extrait l'URL de page suivante |
 
 Les resultats sont dedoublonnes par couple `detailUrl + title`.
@@ -238,6 +240,7 @@ injectee dans le template.
 | `authorUrlSelector` | non | liens auteur ; doit viser la meme logique d'ordre que `authorsSelector` |
 | `tagsSelector` | non | tags ; plusieurs valeurs possibles, dedoublonnees |
 | `statusSelector` | non | statut du manga |
+| `pageCountSelector` | non | nombre de pages du manga |
 | `thumbnailsListSelector` | non | conteneur optionnel des vignettes/pages visibles sur la fiche |
 | `thumbnailsSelector` | non | vignettes extraites depuis le document ou depuis chaque conteneur |
 | `thumbnailsNextPageSelector` | non | lien pour charger plus de vignettes |
@@ -264,7 +267,7 @@ Sources disponibles :
 
 | Source | Champs requis | Comportement |
 | --- | --- | --- |
-| `field` | `sourceField` | reutilise un champ deja extrait : `title`, `cover`, `description`, `authors`, `tags`, `status` |
+| `field` | `sourceField` | reutilise un champ deja extrait : `title`, `cover`, `description`, `authors`, `tags`, `status`, `pageCount` |
 | `selector` | `selector` | execute un selecteur personnalise sur la fiche |
 | `requested_url` | aucun | utilise l'URL demandee |
 | `final_url` | aucun | utilise l'URL finale, puis fallback sur l'URL demandee |
@@ -297,7 +300,7 @@ derivees et produit un apercu. Seul `titleSelector` est strictement requis pour 
 valide ; les champs optionnels peuvent rester absents.
 
 En runtime, une fiche est consideree exploitable si au moins un contenu est extrait : titre,
-couverture, description, auteurs, tags, vignettes ou statut.
+couverture, description, auteurs, tags, vignettes, statut ou nombre de pages.
 
 ## Module Auteur
 
@@ -330,6 +333,7 @@ module `Auteur`.
 | `authorUrlSelector` | non | card | URL auteur si les cards exposent aussi un auteur |
 | `thumbnailSelector` | non | card | miniature |
 | `summarySelector` | non | card | resume |
+| `pageCountSelector` | non | card | nombre de pages affiche sur la card |
 | `nextPageSelector` | non | document | lien de page suivante |
 
 L'ecran peut copier les selecteurs de `Recherche` pour accelerer une page auteur qui rend les memes

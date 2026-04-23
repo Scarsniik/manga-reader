@@ -13,4 +13,15 @@ export type Field = {
   step?: number
   accept?: string // for file inputs
   multiple?: boolean // for file or multi select
+  pathPicker?: 'file' | 'directory'
 }
+
+export type FormSection = {
+  type: 'section'
+  id?: string
+  title: string
+  description?: string
+  fields: Field[]
+}
+
+export type FormItem = Field | FormSection

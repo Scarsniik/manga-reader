@@ -4,6 +4,7 @@ import { Manga } from '@/renderer/types';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
 import {
+  formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
@@ -26,6 +27,7 @@ type Props = {
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   onBack?: () => void;
   onOpenAuthor: (value: string) => void;
+  onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
   onLoadMoreThumbnails: () => void;
@@ -49,6 +51,7 @@ export default function ScraperDetailsPanel({
   getLinkedMangaForSource,
   onBack,
   onOpenAuthor,
+  onOpenAuthorInWorkspace,
   onOpenReader,
   onLinkSourceToManga,
   onLoadMoreThumbnails,
@@ -67,6 +70,7 @@ export default function ScraperDetailsPanel({
   const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl);
   const linkedStandaloneManga = getLinkedMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+  const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
   const downloadLabel = linkedStandaloneManga
     ? 'Retelecharger'
     : 'Telecharger';
@@ -101,6 +105,9 @@ export default function ScraperDetailsPanel({
               {detailsResult.mangaStatus ? (
                 <span className="scraper-browser__status-pill">{detailsResult.mangaStatus}</span>
               ) : null}
+              {pageCountLabel ? (
+                <span className="scraper-browser__status-pill">{pageCountLabel}</span>
+              ) : null}
               <ScraperBookmarkButton
                 scraperId={scraperId}
                 sourceUrl={detailsResult.finalUrl || detailsResult.requestedUrl}
@@ -110,6 +117,7 @@ export default function ScraperDetailsPanel({
                 authors={detailsResult.authors}
                 tags={detailsResult.tags}
                 mangaStatus={detailsResult.mangaStatus}
+                pageCount={detailsResult.pageCount}
                 excludedFields={bookmarkExcludedFields}
               />
             </div>
@@ -182,7 +190,25 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className="scraper-card__chip is-author is-clickable"
                     onClick={() => onOpenAuthor(authorTarget)}
+                    onMouseDown={onOpenAuthorInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                    } : undefined}
+                    onAuxClick={onOpenAuthorInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenAuthorInWorkspace(authorTarget, author);
+                    } : undefined}
                     title={`Ouvrir la page auteur pour ${author}`}
+                    data-prevent-middle-click-autoscroll={onOpenAuthorInWorkspace ? 'true' : undefined}
                   >
                     {author}
                   </button>

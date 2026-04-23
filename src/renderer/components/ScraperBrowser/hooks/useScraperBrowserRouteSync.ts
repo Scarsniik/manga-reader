@@ -6,7 +6,11 @@ import {
   ScraperBrowserLocationState,
   ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
-import { buildListingReturnStateFromRoute } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
+import {
+  buildListingReturnStateFromRoute,
+  buildScraperListingReturnStateCacheKey,
+  readScraperListingReturnStateCache,
+} from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   parseScraperRouteState,
   writeScraperRouteState,
@@ -16,7 +20,9 @@ import {
   formatScraperValueForDisplay,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
+  ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import type { ScraperSearchResultItem } from '@/shared/scraper';
 
 type AsyncCommitGuard = () => boolean;
 
@@ -57,10 +63,16 @@ type UseScraperBrowserRouteSyncOptions = {
   cancelScheduledScrollRestore: () => void;
   setMode: Dispatch<SetStateAction<ScraperBrowseMode>>;
   setQuery: Dispatch<SetStateAction<string>>;
+  setListingPage: Dispatch<SetStateAction<ScraperRuntimeSearchPageResult | null>>;
+  setListingVisitedPageUrls: Dispatch<SetStateAction<string[]>>;
+  setListingPageIndex: Dispatch<SetStateAction<number>>;
+  setListingResults: Dispatch<SetStateAction<ScraperSearchResultItem[]>>;
+  setHasExecutedListing: Dispatch<SetStateAction<boolean>>;
   setListingReturnState: Dispatch<SetStateAction<ScraperListingReturnState | null>>;
   setAuthorTemplateContext: Dispatch<SetStateAction<ScraperTemplateContext | null>>;
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
+  restoreSearchScrollPosition: (scrollTop: number | null | undefined) => void;
   runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runAuthorLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runDetailsLookup: (query: string, options?: DetailsLookupOptions) => Promise<void>;
@@ -94,10 +106,16 @@ export function useScraperBrowserRouteSync({
   cancelScheduledScrollRestore,
   setMode,
   setQuery,
+  setListingPage,
+  setListingVisitedPageUrls,
+  setListingPageIndex,
+  setListingResults,
+  setHasExecutedListing,
   setListingReturnState,
   setAuthorTemplateContext,
   setDetailsResult,
   setChaptersResult,
+  restoreSearchScrollPosition,
   runSearchLookup,
   runAuthorLookup,
   runDetailsLookup,
@@ -117,17 +135,62 @@ export function useScraperBrowserRouteSync({
     [routeState],
   );
 
+  const restoreListingReturnState = useCallback((state: ScraperListingReturnState) => {
+    setMode(state.mode);
+    setQuery(state.query);
+    resetDetailsState();
+    clearFeedback();
+    resetAsyncState();
+    setListingReturnState(state);
+    setListingPage(state.page);
+    setListingVisitedPageUrls(state.visitedPageUrls);
+    setListingPageIndex(state.pageIndex);
+    setListingResults(state.results);
+    setHasExecutedListing(state.hasExecutedListing);
+    restoreSearchScrollPosition(state.scrollTop);
+  }, [
+    clearFeedback,
+    resetAsyncState,
+    resetDetailsState,
+    restoreSearchScrollPosition,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
+    setListingReturnState,
+    setListingVisitedPageUrls,
+    setMode,
+    setQuery,
+  ]);
+
   useEffect(() => {
     setMode((previous) => (availableModes.includes(previous) ? previous : defaultMode));
   }, [availableModes, defaultMode, setMode]);
 
   useEffect(() => {
+    const initialListingMode = initialState?.listingMode;
+    const hasInitialListing = Boolean(initialListingMode && availableModes.includes(initialListingMode));
+
     setQuery(formatScraperValueForDisplay(initialState?.query ?? ''));
     resetListingState();
     setListingReturnState(initialState?.listingReturnState ?? null);
-    setAuthorTemplateContext(null);
+    setAuthorTemplateContext(initialState?.authorTemplateContext ?? null);
     setDetailsResult(initialState?.detailsResult ?? null);
     setChaptersResult(initialState?.chaptersResult ?? []);
+
+    if (hasInitialListing && initialListingMode) {
+      const initialListingResults = initialState?.listingResults ?? [];
+      setMode(initialListingMode);
+      setListingPage(initialState?.listingPage ?? null);
+      setListingVisitedPageUrls(initialState?.listingVisitedPageUrls ?? []);
+      setListingPageIndex(initialState?.listingPageIndex ?? 0);
+      setListingResults(initialListingResults);
+      setHasExecutedListing(
+        initialState?.hasExecutedListing
+        ?? Boolean(initialState?.listingPage || initialListingResults.length > 0),
+      );
+    }
+
     clearFeedback();
     resetAsyncState();
     setUrlRestoreReady(false);
@@ -136,6 +199,7 @@ export function useScraperBrowserRouteSync({
     lastInternalSearchRef.current = null;
     lastRestoredRouteSignatureRef.current = null;
   }, [
+    availableModes,
     cancelScheduledScrollRestore,
     clearFeedback,
     initialState,
@@ -144,8 +208,14 @@ export function useScraperBrowserRouteSync({
     scraperId,
     setChaptersResult,
     setDetailsResult,
+    setHasExecutedListing,
+    setListingPage,
+    setListingPageIndex,
+    setListingResults,
     setListingReturnState,
+    setListingVisitedPageUrls,
     setAuthorTemplateContext,
+    setMode,
     setQuery,
   ]);
 
@@ -159,7 +229,10 @@ export function useScraperBrowserRouteSync({
 
     resetAsyncState();
 
-    const restoredListingReturnState = initialState?.listingReturnState
+    const listingReturnStateCacheKey = buildScraperListingReturnStateCacheKey(locationPathname, locationSearch);
+    const restoredListingReturnState = locationState?.scraperBrowserListingReturnState
+      ?? initialState?.listingReturnState
+      ?? readScraperListingReturnStateCache(listingReturnStateCacheKey)
       ?? buildListingReturnStateFromRoute(routeState);
 
     if (allowInitialState && initialState?.detailsResult) {
@@ -167,6 +240,17 @@ export function useScraperBrowserRouteSync({
       setQuery(formatScraperValueForDisplay(
         routeState.mangaQuery || routeState.mangaUrl || initialState.query || '',
       ));
+      setListingReturnState(restoredListingReturnState);
+      return;
+    }
+
+    if (
+      allowInitialState
+      && initialState?.listingMode
+      && availableModes.includes(initialState.listingMode)
+    ) {
+      setMode(initialState.listingMode);
+      setQuery(formatScraperValueForDisplay(initialState.query || ''));
       setListingReturnState(restoredListingReturnState);
       return;
     }
@@ -184,6 +268,14 @@ export function useScraperBrowserRouteSync({
       setQuery(routeState.searchQuery);
 
       if (routeState.searchActive && hasSearch) {
+        const cachedSearchState = restoredListingReturnState?.mode === 'search'
+          ? restoredListingReturnState
+          : null;
+        if (cachedSearchState?.page && cachedSearchState.results.length > 0) {
+          restoreListingReturnState(cachedSearchState);
+          return;
+        }
+
         await runSearchLookup(routeState.searchQuery, {
           pageIndex: Math.max(0, routeState.searchPage - 1),
           canCommit,
@@ -216,6 +308,14 @@ export function useScraperBrowserRouteSync({
       setQuery(routeState.authorQuery);
 
       if (routeState.authorActive && hasAuthor) {
+        const cachedAuthorState = restoredListingReturnState?.mode === 'author'
+          ? restoredListingReturnState
+          : null;
+        if (cachedAuthorState?.page && cachedAuthorState.results.length > 0) {
+          restoreListingReturnState(cachedAuthorState);
+          return;
+        }
+
         await runAuthorLookup(routeState.authorQuery, {
           pageIndex: Math.max(0, routeState.authorPage - 1),
           canCommit,
@@ -269,9 +369,13 @@ export function useScraperBrowserRouteSync({
     homeSearchQuery,
     initialState,
     loadDetailsFromTargetUrl,
+    locationPathname,
+    locationSearch,
+    locationState,
     resetDetailsState,
     resetListingState,
     resetAsyncState,
+    restoreListingReturnState,
     routeState,
     routeStateSignature,
     runAuthorLookup,

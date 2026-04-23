@@ -38,18 +38,14 @@
 ### Features
 
 - [ ] Ajouter un système de favoris
-- [ ] Pouvoir enregistrer des recherches
 - [ ] Suppression d'une serie d'un coup
 - [ ] Historique de lecture global
 - [ ] Clique droit sur une card pour voir les options comme avec le clique sur le bouton de la card
 - [ ] Header : il est moche
 - [ ] Lazy loading pour l'acceuil
 - [ ] Détection et fusion de doublons quand un même manga vient de plusieurs scrappers.
-- [ ] Ecran de fin de lecteur (similaire à la transition entre les chapitres) pour proposer des mangas liés en auteur ou en tag (ou random à default)
-- [ ] Filtres combinés sauvegardables, pas seulement la recherche brute.
 - [ ] Possibilité de configurer plus le reader (UI, raccourcis, etc)
 - [ ] Mode de lecture vertical (pourquoi pas configuration avec tag ou autre)
-- [ ] Si maintien de la touche pour changer de page et arrivé à la fin du chapitre, bloquer le changement de page au lieu de passer au chapitre suivant
 - [ ] Navigation de chapitre à chapitre dans le reader
 
 ### Reworks

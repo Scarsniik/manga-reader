@@ -6,6 +6,7 @@ import ReaderControls from './ReaderControls';
 import ReaderHeader from './ReaderHeader';
 import ReaderStage from './ReaderStage';
 import useParams from '@/renderer/hooks/useParams';
+import useTags from '@/renderer/hooks/useTags';
 import {
     ReaderLocationState,
 } from './types';
@@ -23,12 +24,17 @@ const Reader: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { params, loading: settingsLoading, setParams } = useParams();
+    const { tags } = useTags();
     const locationState = location.state as ReaderLocationState;
     const preloadPageCount = settingsLoading
         ? null
         : normalizeReaderPreloadPageCount(params?.readerPreloadPageCount);
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
+    const hiddenTagIds = React.useMemo(
+        () => tags.filter((tag) => tag.hidden).map((tag) => tag.id),
+        [tags],
+    );
 
     const {
         images,
@@ -54,6 +60,8 @@ const Reader: React.FC = () => {
         locationState,
         manga,
         libraryMangas,
+        hiddenTagIds,
+        showHiddenContent: Boolean(params?.showHiddens),
         images,
         currentIndex,
         setCurrentIndex,
@@ -63,7 +71,7 @@ const Reader: React.FC = () => {
         navigate,
     });
 
-    const activeOcrEnabled = ocrEnabled && !navigation.isTransitionPage;
+    const activeOcrEnabled = ocrEnabled && !navigation.isTransitionPage && !navigation.isCompletionPage;
     const ocr = useReaderOcr({
         activeOcrEnabled,
         currentImageSrc: navigation.currentImageSrc,
@@ -87,6 +95,7 @@ const Reader: React.FC = () => {
         navigateOcrBox: ocr.navigateOcrBox,
         next: navigation.next,
         prev: navigation.prev,
+        requireFreshNavigationInput: navigation.isTransitionPage || navigation.isCompletionPage,
     });
 
     return (
@@ -97,7 +106,7 @@ const Reader: React.FC = () => {
                 pageCounterLabel={navigation.pageCounterLabel}
                 ocrEnabled={ocrEnabled}
                 ocrAvailable={navigation.ocrAvailable}
-                canCopyImage={images.length > 0 && !navigation.isTransitionPage}
+                canCopyImage={images.length > 0 && !navigation.isTransitionPage && !navigation.isCompletionPage}
                 copyFeedback={navigation.copyFeedback}
                 onBack={navigation.handleBack}
                 onCopyImage={() => {
@@ -114,13 +123,23 @@ const Reader: React.FC = () => {
                     progressAriaText={navigation.progressAriaText}
                     isLastPage={navigation.isLastPage}
                     isTransitionPage={navigation.isTransitionPage}
+                    isCompletionPage={navigation.isCompletionPage}
                     transitionDirection={navigation.transitionDirection}
                     activeTransitionTarget={navigation.activeTransitionTarget}
+                    completionRecommendations={navigation.completionRecommendations}
+                    completionSourceUrl={navigation.completionSourceUrl}
                     continuationCoverSrc={navigation.continuationCoverSrc}
                     continuationLoading={navigation.continuationLoading}
                     continuationError={navigation.continuationError}
                     onContinue={(direction) => {
                         void navigation.continueToAdjacentChapter(direction);
+                    }}
+                    onReturnToLibrary={navigation.returnToLibrary}
+                    onOpenSource={() => {
+                        void navigation.openMangaSource();
+                    }}
+                    onOpenRecommendation={(targetManga) => {
+                        void navigation.openLibraryManga(targetManga);
                     }}
                     currentImageSrc={navigation.currentImageSrc}
                     activeOcrEnabled={activeOcrEnabled}
@@ -193,6 +212,7 @@ const Reader: React.FC = () => {
                 canGoPrev={navigation.canGoPrev}
                 canGoNext={navigation.canGoNext}
                 isTransitionPage={navigation.isTransitionPage}
+                isCompletionPage={navigation.isCompletionPage}
                 continuationLoading={navigation.continuationLoading}
                 transitionDirection={navigation.transitionDirection}
                 onPrev={navigation.prev}

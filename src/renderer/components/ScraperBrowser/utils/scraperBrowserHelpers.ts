@@ -11,6 +11,46 @@ import {
 } from '@/renderer/utils/scraperRuntime';
 
 export const MAX_VISIBLE_SEARCH_RESULTS = 18;
+const SCRAPER_LISTING_RETURN_STATE_CACHE_MAX = 20;
+const scraperListingReturnStateCache = new Map<string, ScraperListingReturnState>();
+
+export const buildScraperListingReturnStateCacheKey = (
+  pathname: string,
+  search: string,
+): string => `${pathname}${search}`;
+
+export const cacheScraperListingReturnState = (
+  cacheKey: string,
+  state: ScraperListingReturnState,
+): void => {
+  if (!cacheKey) {
+    return;
+  }
+
+  scraperListingReturnStateCache.delete(cacheKey);
+  scraperListingReturnStateCache.set(cacheKey, state);
+
+  while (scraperListingReturnStateCache.size > SCRAPER_LISTING_RETURN_STATE_CACHE_MAX) {
+    const oldestKey = scraperListingReturnStateCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+
+    scraperListingReturnStateCache.delete(oldestKey);
+  }
+};
+
+export const readScraperListingReturnStateCache = (
+  cacheKey: string,
+): ScraperListingReturnState | null => {
+  const state = scraperListingReturnStateCache.get(cacheKey) ?? null;
+  if (!state) {
+    return null;
+  }
+
+  scraperListingReturnStateCache.delete(cacheKey);
+  return state;
+};
 
 export const buildListingReturnStateFromRoute = (
   routeState: ScraperRouteState,

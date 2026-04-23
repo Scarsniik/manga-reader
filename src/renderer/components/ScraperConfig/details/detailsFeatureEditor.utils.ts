@@ -44,6 +44,7 @@ export type FakeDetailsPreview = {
   authors?: string;
   tags?: string;
   status?: string;
+  pageCount?: string;
   derivedValues: Array<{ key: string; value: string }>;
 };
 
@@ -133,6 +134,12 @@ export const SELECTOR_FIELDS: Field[] = [
     placeholder: 'Exemple : .status',
   },
   {
+    name: 'pageCountSelector',
+    label: 'Selecteur du nombre de pages',
+    type: 'text',
+    placeholder: 'Exemple : .pages-count',
+  },
+  {
     name: 'thumbnailsListSelector',
     label: 'Selecteur du conteneur vignettes',
     type: 'text',
@@ -167,6 +174,7 @@ export const DERIVED_VALUE_FIELD_OPTIONS = [
   { value: 'authors', label: 'Auteurs' },
   { value: 'tags', label: 'Tags' },
   { value: 'status', label: 'Statut' },
+  { value: 'pageCount', label: 'Nombre de pages' },
 ] as const;
 
 export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
@@ -181,6 +189,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   authorUrlSelector: '',
   tagsSelector: '',
   statusSelector: '',
+  pageCountSelector: '',
   thumbnailsListSelector: '',
   thumbnailsSelector: '',
   thumbnailsNextPageSelector: '',
@@ -193,11 +202,11 @@ const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toStr
 
 export type DetailsFieldKey = Extract<
   ScraperFeatureValidationCheck['key'],
-  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status'
+  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status' | 'pageCount'
 >;
 
 export const isFieldKey = (value: unknown): value is DetailsFieldKey => (
-  ['title', 'cover', 'description', 'authors', 'tags', 'status'].includes(String(value))
+  ['title', 'cover', 'description', 'authors', 'tags', 'status', 'pageCount'].includes(String(value))
 );
 
 export const createDerivedValueFormItem = (
@@ -256,6 +265,7 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   tagsSelector: trimOptionalSelector(values.tagsSelector),
   statusSelector: trimOptionalSelector(values.statusSelector),
+  pageCountSelector: trimOptionalSelector(values.pageCountSelector),
   thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
   thumbnailsSelector: trimOptionalSelector(values.thumbnailsSelector),
   thumbnailsNextPageSelector: trimOptionalSelector(values.thumbnailsNextPageSelector),
@@ -283,6 +293,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalSelector(raw.tagsSelector),
     statusSelector: trimOptionalSelector(raw.statusSelector),
+    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
     thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
@@ -436,6 +447,7 @@ export const buildPreviewFromValidation = (
     authors: getSample('authors'),
     tags: getSample('tags'),
     status: getSample('status'),
+    pageCount: getSample('pageCount'),
     derivedValues: validationResult.derivedValues
       .filter((derivedValue) => Boolean(derivedValue.value))
       .map((derivedValue) => ({

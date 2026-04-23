@@ -1,0 +1,53 @@
+.settings-modal {
+  max-width: 920px;
+}
+
+.settings-modal-body {
+  padding: 0;
+}
+
+.settings-modal-content {
+  display: grid;
+  min-height: min(70vh, 720px);
+  grid-template-rows: auto 1fr;
+}
+
+.settings-modal-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 18px 20px 0;
+  border-bottom: 1px solid #262e37;
+}
+
+.settings-modal-tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 10px 14px;
+  background: transparent;
+  color: #bfcada;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-modal-tab.active {
+  border-color: #31475e;
+  background: #1a2027;
+  color: #f1f6fd;
+}
+
+.settings-modal-panels {
+  overflow: auto;
+  padding: 18px 20px 20px;
+}
+
+.settings-modal-panel {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 620px) {
+  .settings-modal-tabs {
+    flex-wrap: wrap;
+  }
+}

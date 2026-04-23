@@ -1,0 +1,190 @@
+.app-update-settings {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #2e3640;
+  border-radius: 8px;
+  background: #171a1e;
+}
+
+.app-update-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.app-update-settings__header h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.app-update-settings__header p {
+  margin: 0;
+  color: #c9d2dd;
+  line-height: 1.5;
+}
+
+.app-update-status-pill {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #3c4652;
+  color: #edf3fb;
+  background: #232a33;
+}
+
+.app-update-status-pill.available,
+.app-update-status-pill.downloaded {
+  border-color: #2e7044;
+  color: #d9ffe4;
+  background: #203b28;
+}
+
+.app-update-status-pill.checking,
+.app-update-status-pill.downloading {
+  border-color: #6b552d;
+  color: #fff0c6;
+  background: #302917;
+}
+
+.app-update-status-pill.error {
+  border-color: #743333;
+  color: #ffd9d9;
+  background: #301c1c;
+}
+
+.app-update-status-pill.idle,
+.app-update-status-pill.not-available {
+  border-color: #3c4652;
+  color: #edf3fb;
+  background: #232a33;
+}
+
+.app-update-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.app-update-status-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #2f3944;
+  border-radius: 8px;
+  background: #14171b;
+}
+
+.app-update-status-card strong {
+  color: #9ba8b8;
+  font-size: 12px;
+}
+
+.app-update-status-card span {
+  min-width: 0;
+  color: #f2f6fb;
+  overflow-wrap: anywhere;
+}
+
+.app-update-progress {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid #303a45;
+  border-radius: 999px;
+  background: #101317;
+}
+
+.app-update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1976d2, #62a8f0);
+  transition: width 160ms ease;
+}
+
+.app-update-progress__label {
+  color: #aeb8c4;
+  font-size: 12px;
+}
+
+.app-update-message,
+.app-update-warning,
+.app-update-error {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.45;
+}
+
+.app-update-message {
+  border: 1px solid #31475e;
+  color: #dcecff;
+  background: #151e28;
+}
+
+.app-update-warning {
+  border: 1px solid #6b552d;
+  color: #ffedc4;
+  background: #2d2618;
+}
+
+.app-update-error {
+  border: 1px solid #743333;
+  color: #ffd9d9;
+  background: #301c1c;
+}
+
+.app-update-preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.app-update-toggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #e5ecf6;
+  font-size: 14px;
+}
+
+.app-update-toggle input {
+  margin: 0;
+}
+
+.app-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-update-actions button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #1976d2;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-update-actions button.secondary {
+  border: 1px solid #3b4654;
+  background: transparent;
+  color: #e6eef8;
+}
+
+.app-update-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 620px) {
+  .app-update-settings__header {
+    flex-direction: column;
+  }
+}

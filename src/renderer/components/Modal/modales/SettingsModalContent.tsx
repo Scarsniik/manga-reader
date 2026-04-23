@@ -1,9 +1,12 @@
 import React from 'react'
+import AppUpdateSettingsPanel from '@/renderer/components/AppUpdate/AppUpdateSettingsPanel'
 import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
-import { Field } from '@/renderer/components/utils/Form/types'
+import type { FormItem } from '@/renderer/components/utils/Form/types'
+import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 
 import '@/renderer/components/Modal/style.scss'
+import '@/renderer/components/Modal/modales/settings-style.scss'
 
 const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2
 const MAX_READER_PRELOAD_PAGE_COUNT = 10
@@ -22,92 +25,124 @@ const normalizeReaderPreloadPageCount = (value: unknown) => {
 
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
+  const [activeTab, setActiveTab] = React.useState<'options' | 'version-installation'>('options')
 
   if (loading) return <div>Chargement...</div>
 
-  const fields: Field[] = [
+  const fields: FormItem[] = [
     {
-      name: 'libraryPath',
-      label: 'Chemin de la bibliothèque',
-      type: 'text',
-      required: false,
+      type: 'section',
+      id: 'library',
+      title: 'Bibliothèque',
+      fields: [
+        {
+          name: 'libraryPath',
+          label: 'Chemin de la bibliothèque',
+          type: 'text',
+          required: false,
+          pathPicker: 'directory',
+        },
+        {
+          name: 'showHiddens',
+          label: 'Afficher éléments cachés',
+          type: 'checkbox',
+        },
+        {
+          name: 'persistMangaFilters',
+          label: 'Conserver les filtres de la liste au redémarrage',
+          type: 'checkbox',
+        },
+        {
+          name: 'showSavedLibrarySearches',
+          label: 'Afficher les recherches enregistrées de la bibliothèque',
+          type: 'checkbox',
+        },
+        {
+          name: 'showSavedScraperSearches',
+          label: 'Afficher les recherches enregistrées des scrappers',
+          type: 'checkbox',
+        },
+        {
+          name: 'stackMangaInSeries',
+          label: 'Empiler les mangas dans une série dans la bibliothèque',
+          type: 'checkbox',
+        },
+      ],
     },
     {
-      name: 'showPageNumbers',
-      label: 'Afficher numéros de page',
-      type: 'checkbox',
+      type: 'section',
+      id: 'reader',
+      title: 'Lecteur',
+      fields: [
+        {
+          name: 'showPageNumbers',
+          label: 'Afficher numéros de page',
+          type: 'checkbox',
+        },
+        {
+          name: 'titleLineCount',
+          label: 'Nombre de lignes pour le titre',
+          type: 'number',
+        },
+        {
+          name: 'readerPreloadPageCount',
+          label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant puis l\'arrière',
+          type: 'number',
+          min: 0,
+          max: MAX_READER_PRELOAD_PAGE_COUNT,
+          step: 1,
+          placeholder: String(DEFAULT_READER_PRELOAD_PAGE_COUNT),
+        },
+      ],
     },
     {
-      name: 'showHiddens',
-      label: 'Afficher éléments cachés',
-      type: 'checkbox',
+      type: 'section',
+      id: 'external-services',
+      title: 'Services externes',
+      fields: [
+        {
+          name: 'jpdbApiKey',
+          label: 'JPDB API Key (optionnel)',
+          type: 'text',
+          required: false,
+        },
+      ],
     },
     {
-      name: 'titleLineCount',
-      label: 'Nombre de lignes pour le titre',
-      type: 'number',
-    },
-    {
-      name: 'readerPreloadPageCount',
-      label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant puis l\'arrière',
-      type: 'number',
-      min: 0,
-      max: MAX_READER_PRELOAD_PAGE_COUNT,
-      step: 1,
-      placeholder: String(DEFAULT_READER_PRELOAD_PAGE_COUNT),
-    },
-    {
-      name: 'jpdbApiKey',
-      label: 'JPDB API Key (optionnel)',
-      type: 'text',
-      required: false,
-    },
-    {
-      name: 'ocrPythonPath',
-      label: 'Chemin Python OCR (optionnel)',
-      type: 'text',
-      required: false,
-    },
-    {
-      name: 'ocrRepoPath',
-      label: 'Chemin repo OCR (optionnel)',
-      type: 'text',
-      required: false,
-    },
-    {
-      name: 'ocrForceCpu',
-      label: 'Forcer OCR sur CPU',
-      type: 'checkbox',
-    },
-    {
-      name: 'ocrAutoRunOnImport',
-      label: 'Lancer l\'OCR complet à l\'importation des mangas',
-      type: 'checkbox',
-    },
-    {
-      name: 'ocrAutoAssignJapaneseLanguage',
-      label: 'Appliquer automatiquement la langue japonaise si l\'OCR détecte un manga japonais',
-      type: 'checkbox',
-    },
-    {
-      name: 'persistMangaFilters',
-      label: 'Conserver les filtres de la liste au redémarrage',
-      type: 'checkbox',
-    },
-    {
-      name: 'showSavedLibrarySearches',
-      label: 'Afficher les recherches enregistrées de la bibliothèque',
-      type: 'checkbox',
-    },
-    {
-      name: 'showSavedScraperSearches',
-      label: 'Afficher les recherches enregistrées des scrappers',
-      type: 'checkbox',
-    },
-    {
-      name: 'stackMangaInSeries',
-      label: 'Empiler les mangas dans une série dans la bibliothèque',
-      type: 'checkbox',
+      type: 'section',
+      id: 'ocr',
+      title: 'OCR',
+      fields: [
+        {
+          name: 'ocrPythonPath',
+          label: 'Chemin Python OCR (optionnel)',
+          type: 'text',
+          required: false,
+          pathPicker: 'file',
+        },
+        {
+          name: 'ocrRepoPath',
+          label: 'Chemin repo OCR (optionnel)',
+          type: 'text',
+          required: false,
+          pathPicker: 'directory',
+        },
+        {
+          name: 'ocrForceCpu',
+          label: 'Forcer OCR sur CPU',
+          type: 'checkbox',
+        },
+        {
+          name: 'ocrAutoRunOnImport',
+          label: 'Lancer l\'OCR complet à l\'importation des mangas',
+          type: 'checkbox',
+        },
+        {
+          name: 'ocrAutoAssignJapaneseLanguage',
+          label: 'Appliquer automatiquement la langue japonaise si l\'OCR détecte un manga japonais',
+          type: 'checkbox',
+        },
+      ],
     },
   ]
 
@@ -145,14 +180,41 @@ export default function SettingsModalContent() {
 
   return (
     <div className="settings-modal-content">
-      <Form
-        fields={fields}
-        onSubmit={onSubmit}
-        initialValues={params || {}}
-        submitLabel="Enregistrer"
-        submitButtonId="settings-save"
-        formId="settings-form"
-      />
+      <div className="settings-modal-tabs">
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'options' ? 'active' : ''}`}
+          onClick={() => setActiveTab('options')}
+        >
+          Options
+        </button>
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'version-installation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('version-installation')}
+        >
+          Version et installation
+        </button>
+      </div>
+
+      <div className="settings-modal-panels">
+        {activeTab === 'options' ? (
+          <div className="settings-modal-panel">
+            <Form
+              fields={fields}
+              onSubmit={onSubmit}
+              initialValues={params || {}}
+              submitLabel="Enregistrer"
+              formId="settings-form"
+            />
+          </div>
+        ) : (
+          <div className="settings-modal-panel">
+            <AppUpdateSettingsPanel />
+            <OcrRuntimeSettingsPanel />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

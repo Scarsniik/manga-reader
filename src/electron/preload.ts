@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { IpcRendererEvent } from "electron";
 import type {
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
+    RecordScraperCardsSeenRequest,
     RemoveScraperBookmarkRequest,
     SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
@@ -9,7 +11,80 @@ import type {
     SaveScraperDraftRequest,
     SaveScraperFeatureRequest,
     ScraperAccessValidationRequest,
+    SetScraperCardReadRequest,
 } from './scraper';
+
+type WindowState = {
+    isFocused: boolean;
+    isFullScreen: boolean;
+    isMaximized: boolean;
+    isMinimized: boolean;
+};
+
+type WindowStateChangeListener = (state: WindowState) => void;
+
+type ScraperConfigWorkspaceTarget = {
+    kind: "scraper.config";
+    scraperId: string;
+    title?: string;
+};
+
+type ScraperDetailsWorkspaceTarget = {
+    kind: "scraper.details";
+    scraperId: string;
+    sourceUrl: string;
+    title?: string;
+};
+
+type ScraperAuthorWorkspaceTarget = {
+    kind: "scraper.author";
+    scraperId: string;
+    query: string;
+    title?: string;
+    templateContext?: Record<string, string | undefined>;
+};
+
+type WorkspaceTarget =
+    | ScraperConfigWorkspaceTarget
+    | ScraperDetailsWorkspaceTarget
+    | ScraperAuthorWorkspaceTarget;
+
+type WorkspaceTargetListener = (target: WorkspaceTarget) => void;
+
+const workspaceTargetListeners = new Set<WorkspaceTargetListener>();
+const queuedWorkspaceTargets: WorkspaceTarget[] = [];
+
+const onWindowStateChanged = (callback: WindowStateChangeListener) => {
+    const handler = (_event: IpcRendererEvent, state: WindowState) => {
+        callback(state);
+    };
+
+    ipcRenderer.on("window-state-changed", handler);
+
+    return () => {
+        ipcRenderer.removeListener("window-state-changed", handler);
+    };
+};
+
+const onWorkspaceOpenTarget = (callback: WorkspaceTargetListener) => {
+    workspaceTargetListeners.add(callback);
+
+    const queuedTargets = queuedWorkspaceTargets.splice(0, queuedWorkspaceTargets.length);
+    queuedTargets.forEach(callback);
+
+    return () => {
+        workspaceTargetListeners.delete(callback);
+    };
+};
+
+ipcRenderer.on("workspace-open-target", (_event: IpcRendererEvent, target: WorkspaceTarget) => {
+    if (workspaceTargetListeners.size === 0) {
+        queuedWorkspaceTargets.push(target);
+        return;
+    }
+
+    workspaceTargetListeners.forEach((listener) => listener(target));
+});
 
 ipcRenderer.on('mangas-updated', () => {
     try {
@@ -35,6 +110,30 @@ ipcRenderer.on('scraper-bookmarks-updated', () => {
     }
 });
 
+ipcRenderer.on('scraper-view-history-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-view-history-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-view-history-updated event', error);
+    }
+});
+
+ipcRenderer.on('ocr-runtime-notification', (_event: IpcRendererEvent, payload: unknown) => {
+    try {
+        window.dispatchEvent(new CustomEvent('ocr-runtime-notification', { detail: payload }));
+    } catch (error) {
+        console.warn('preload: failed to dispatch ocr-runtime-notification event', error);
+    }
+});
+
+ipcRenderer.on("app-update-notification", (_event: IpcRendererEvent, payload: unknown) => {
+    try {
+        window.dispatchEvent(new CustomEvent("app-update-notification", { detail: payload }));
+    } catch (error) {
+        console.warn("preload: failed to dispatch app-update-notification event", error);
+    }
+});
+
 ipcRenderer.on('series-updated', () => {
     try {
         window.dispatchEvent(new CustomEvent('series-updated'));
@@ -48,6 +147,16 @@ contextBridge.exposeInMainWorld('api', {
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
     openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
+    // Window controls
+    getAppRuntimeInfo: () => ipcRenderer.invoke("app-runtime-info"),
+    getWindowState: () => ipcRenderer.invoke("window-get-state"),
+    minimizeWindow: () => ipcRenderer.invoke("window-minimize"),
+    toggleMaximizeWindow: () => ipcRenderer.invoke("window-toggle-maximize"),
+    closeWindow: () => ipcRenderer.invoke("window-close"),
+    toggleDevTools: () => ipcRenderer.invoke("window-toggle-devtools"),
+    onWindowStateChanged,
+    openWorkspaceTarget: (target: WorkspaceTarget) => ipcRenderer.invoke("workspace-open-target", target),
+    onWorkspaceOpenTarget,
     // Mangas API
     getMangas: () => ipcRenderer.invoke('get-mangas'),
     addManga: (manga: any) => ipcRenderer.invoke('add-manga', manga),
@@ -57,10 +166,23 @@ contextBridge.exposeInMainWorld('api', {
     getCoverData: (folderPath: string) => ipcRenderer.invoke('get-cover-data', folderPath),
     countPages: (folderPath: string) => ipcRenderer.invoke('count-pages', folderPath),
     openDirectory: () => ipcRenderer.invoke('open-directory'),
+    openFile: () => ipcRenderer.invoke('open-file'),
+    openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath),
     listPages: (folderPath: string) => ipcRenderer.invoke('list-pages', folderPath),
     copyImageToClipboard: (imagePathOrUrl: string) => ipcRenderer.invoke('copy-image-to-clipboard', imagePathOrUrl),
     copyTextToClipboard: (text: string) => ipcRenderer.invoke('copy-text-to-clipboard', text),
     // OCR
+    ocrRuntimeDefaults: () => ipcRenderer.invoke('ocr-runtime-defaults'),
+    ocrRuntimeStatus: () => ipcRenderer.invoke('ocr-runtime-status'),
+    ocrRuntimeMarkSkipped: () => ipcRenderer.invoke('ocr-runtime-mark-skipped'),
+    ocrRuntimeReadManifest: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-read-manifest', request),
+    ocrRuntimeInstallStatus: () => ipcRenderer.invoke('ocr-runtime-install-status'),
+    ocrRuntimeStartInstall: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-start-install', request),
+    ocrRuntimeCancelInstall: () => ipcRenderer.invoke('ocr-runtime-cancel-install'),
+    ocrRuntimeOpenInstallLog: () => ipcRenderer.invoke('ocr-runtime-open-install-log'),
+    ocrRuntimeVerify: () => ipcRenderer.invoke('ocr-runtime-verify'),
+    ocrRuntimeRepair: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-repair', request),
+    ocrRuntimeUninstall: (request?: Record<string, any>) => ipcRenderer.invoke('ocr-runtime-uninstall', request),
     ocrRecognize: (imagePathOrDataUrl: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl, options),
     ocrAddManualSelections: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-add-manual-selections', payload),
     ocrDeleteManualSelection: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-delete-manual-selection', payload),
@@ -79,12 +201,20 @@ contextBridge.exposeInMainWorld('api', {
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+    appUpdateStatus: () => ipcRenderer.invoke("app-update-status"),
+    appUpdateCheck: () => ipcRenderer.invoke("app-update-check"),
+    appUpdateDownload: () => ipcRenderer.invoke("app-update-download"),
+    appUpdateInstall: () => ipcRenderer.invoke("app-update-install"),
+    appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),
     getScraperBookmarks: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-bookmarks', scraperId),
     saveScraperBookmark: (request: SaveScraperBookmarkRequest) => ipcRenderer.invoke('save-scraper-bookmark', request),
     removeScraperBookmark: (request: RemoveScraperBookmarkRequest) => ipcRenderer.invoke('remove-scraper-bookmark', request),
+    getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),
+    recordScraperCardsSeen: (request: RecordScraperCardsSeenRequest) => ipcRenderer.invoke('record-scraper-cards-seen', request),
+    setScraperCardRead: (request: SetScraperCardReadRequest) => ipcRenderer.invoke('set-scraper-card-read', request),
     deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),

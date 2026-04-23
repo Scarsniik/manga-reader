@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ScraperConfigWizard from '@/renderer/components/ScraperConfig/ScraperConfigWizard';
 import '@/renderer/components/ScraperConfig/style.scss';
 import { ScraperRecord } from '@/shared/scraper';
+import type { WorkspaceTarget } from '@/renderer/types/workspace';
 
 declare global {
   interface Window {
@@ -83,6 +84,28 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
       }
       return [...previous, updatedScraper];
     });
+  }, []);
+
+  const handleOpenScraperInWorkspace = useCallback(async (scraper: ScraperRecord) => {
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.config',
+      scraperId: scraper.id,
+      title: scraper.name,
+    };
+
+    try {
+      const opened = await window.api.openWorkspaceTarget(target);
+      if (!opened) {
+        setError('Impossible d\'ouvrir ce scrapper dans le workspace.');
+      }
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : 'Impossible d\'ouvrir ce scrapper dans le workspace.');
+    }
   }, []);
 
   const handleDelete = useCallback(async (scraper: ScraperRecord) => {
@@ -179,8 +202,21 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
             <div
               key={scraper.id}
               className="scrapers-library__card"
+              data-prevent-middle-click-autoscroll="true"
               role="button"
               tabIndex={0}
+              onMouseDown={(event) => {
+                if (event.button === 1) {
+                  event.preventDefault();
+                }
+              }}
+              onAuxClick={(event) => {
+                if (event.button === 1) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void handleOpenScraperInWorkspace(scraper);
+                }
+              }}
               onClick={() => setView({ kind: 'edit', scraperId: scraper.id })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {

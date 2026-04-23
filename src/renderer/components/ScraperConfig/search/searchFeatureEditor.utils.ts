@@ -144,6 +144,12 @@ export const SCRAPING_FIELDS: Field[] = [
     placeholder: 'Optionnel : .excerpt, p',
   },
   {
+    name: 'pageCountSelector',
+    label: 'Selecteur du nombre de pages',
+    type: 'text',
+    placeholder: 'Optionnel : .pages-count',
+  },
+  {
     name: 'nextPageSelector',
     label: 'Selecteur page suivante',
     type: 'text',
@@ -170,6 +176,7 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   authorUrlSelector: '',
   thumbnailSelector: '',
   summarySelector: '',
+  pageCountSelector: '',
   nextPageSelector: '',
 };
 
@@ -242,6 +249,7 @@ export const buildSearchConfig = (
   authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   thumbnailSelector: trimOptionalSelector(values.thumbnailSelector),
   summarySelector: trimOptionalSelector(values.summarySelector),
+  pageCountSelector: trimOptionalSelector(values.pageCountSelector),
   nextPageSelector: trimOptionalSelector(values.nextPageSelector),
 });
 
@@ -271,6 +279,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatu
     authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
     thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
     summarySelector: trimOptionalSelector(raw.summarySelector),
+    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
     nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
   };
 };
@@ -320,6 +329,7 @@ export const buildValidationPresentation = (
   const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
+  const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
 
   if (validationResult.requestedUrl) {
     details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
@@ -358,6 +368,10 @@ export const buildValidationPresentation = (
 
   if (summaryCheck?.matchedCount) {
     details.push(`Resumes detectes : ${summaryCheck.matchedCount}`);
+  }
+
+  if (pageCountCheck?.matchedCount) {
+    details.push(`Nombre de pages detecte(s) : ${pageCountCheck.matchedCount}`);
   }
 
   if (previewPage?.nextPageUrl) {

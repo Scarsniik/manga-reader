@@ -1,4 +1,5 @@
 import {
+  buildScraperViewHistoryCardId,
   type DownloadScraperMangaResult,
   type ScraperAccessValidationResult,
   type ScraperBookmarkMetadataField,
@@ -12,7 +13,11 @@ import {
   type ScraperRequestConfig,
   type ScraperRequestField,
   type ScraperReaderProgressRecord,
+  type ScraperViewHistoryCardIdentity,
+  type ScraperViewHistoryRecord,
+  normalizeScraperViewHistorySourceUrl,
 } from "../../scraper";
+import { APP_PRODUCT_NAME } from "../../appIdentity";
 
 export const DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS = 10000;
 export const MAX_SCRAPER_DOWNLOAD_PAGES = 4000;
@@ -76,7 +81,20 @@ export const sanitizeAccessValidation = (
 const sanitizeFeatureValidationCheck = (
   check: Partial<ScraperFeatureValidationCheck>,
 ): ScraperFeatureValidationCheck | null => {
-  const allowedKeys = ["title", "cover", "description", "authors", "authorUrl", "tags", "status", "chapters", "pages"];
+  const allowedKeys = [
+    "title",
+    "cover",
+    "description",
+    "authors",
+    "authorUrl",
+    "tags",
+    "status",
+    "pageCount",
+    "thumbnails",
+    "thumbnailsNextPage",
+    "chapters",
+    "pages",
+  ];
   if (!allowedKeys.includes(String(check.key))) {
     return null;
   }
@@ -122,7 +140,7 @@ const sanitizeDerivedValueResult = (
   derivedValue: Partial<ScraperDetailsDerivedValueResult>,
 ): ScraperDetailsDerivedValueResult | null => {
   const allowedSourceTypes = ["requested_url", "final_url", "field", "selector", "html"];
-  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "status"];
+  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "status", "pageCount"];
   const allowedIssueCodes = ["missing_source", "invalid_selector", "invalid_pattern", "no_match"];
 
   const key = String(derivedValue.key ?? "").trim();
@@ -203,6 +221,7 @@ const SCRAPER_BOOKMARK_METADATA_FIELDS: ScraperBookmarkMetadataField[] = [
   "authors",
   "tags",
   "mangaStatus",
+  "pageCount",
 ];
 
 export const sanitizeBookmarkMetadataFieldList = (
@@ -286,7 +305,7 @@ export const buildScraperFetchInit = (
 } => {
   const method = requestConfig?.method === "POST" ? "POST" : "GET";
   const headers: Record<string, string> = {
-    "User-Agent": "Manga Helper Scraper Validation/1.0",
+    "User-Agent": `${APP_PRODUCT_NAME} Scraper Validation/1.0`,
     Accept: defaultAccept,
   };
 
@@ -377,6 +396,7 @@ export const sanitizeScraperBookmarkRecord = (
   const summary = String(record.summary ?? "").trim();
   const description = String(record.description ?? "").trim();
   const mangaStatus = String(record.mangaStatus ?? "").trim();
+  const pageCount = String(record.pageCount ?? "").trim();
 
   return {
     scraperId,
@@ -388,6 +408,7 @@ export const sanitizeScraperBookmarkRecord = (
     authors: sanitizeStringList(record.authors),
     tags: sanitizeStringList(record.tags),
     mangaStatus: mangaStatus || undefined,
+    pageCount: pageCount || undefined,
     createdAt: createdAt || new Date().toISOString(),
     updatedAt: updatedAt || new Date().toISOString(),
   };
@@ -418,5 +439,81 @@ export const sanitizeScraperReaderProgressRecord = (
       ? Math.max(1, Math.floor(record.totalPages))
       : null,
     updatedAt: updatedAt || new Date().toISOString(),
+  };
+};
+
+const normalizeScraperViewHistoryTitle = (value: unknown): string => (
+  String(value ?? "").trim().replace(/\s+/g, " ")
+);
+
+const normalizeScraperViewHistoryIsoDate = (
+  value: unknown,
+  fallback: string,
+): string => {
+  const rawValue = String(value ?? "").trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const timestamp = Date.parse(rawValue);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
+};
+
+export const sanitizeScraperViewHistoryCardIdentity = (
+  identity: Partial<ScraperViewHistoryCardIdentity>,
+): ScraperViewHistoryCardIdentity | null => {
+  const scraperId = normalizeScraperViewHistoryTitle(identity.scraperId);
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(identity.sourceUrl);
+  const title = normalizeScraperViewHistoryTitle(identity.title);
+  const thumbnailUrl = normalizeScraperViewHistorySourceUrl(identity.thumbnailUrl);
+
+  if (!scraperId || (!sourceUrl && !title)) {
+    return null;
+  }
+
+  return {
+    scraperId,
+    sourceUrl: sourceUrl || undefined,
+    title: title || sourceUrl,
+    thumbnailUrl: thumbnailUrl || undefined,
+  };
+};
+
+export const sanitizeScraperViewHistoryRecord = (
+  record: Partial<ScraperViewHistoryRecord & ScraperViewHistoryCardIdentity>,
+): ScraperViewHistoryRecord | null => {
+  const scraperId = normalizeScraperViewHistoryTitle(record.scraperId);
+  if (!scraperId) {
+    return null;
+  }
+
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(record.sourceUrl);
+  const title = normalizeScraperViewHistoryTitle(record.title);
+  const thumbnailUrl = normalizeScraperViewHistorySourceUrl(record.thumbnailUrl);
+  const now = new Date().toISOString();
+  const computedId = buildScraperViewHistoryCardId({
+    scraperId,
+    sourceUrl,
+    title,
+    thumbnailUrl,
+  });
+  const storedId = String(record.id ?? "").trim();
+  const id = /^svh_[a-z0-9]+$/i.test(storedId) ? storedId : computedId;
+  const firstSeenFallback = normalizeScraperViewHistoryIsoDate((record as { lastSeenAt?: unknown }).lastSeenAt, now);
+  const firstSeenAt = normalizeScraperViewHistoryIsoDate(record.firstSeenAt, firstSeenFallback);
+  const readAt = String(record.readAt ?? "").trim()
+    ? normalizeScraperViewHistoryIsoDate(record.readAt, "")
+    : "";
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    scraperId,
+    sourceUrl: sourceUrl || undefined,
+    firstSeenAt,
+    readAt: readAt || undefined,
   };
 };

@@ -34,6 +34,7 @@ export const AUTHOR_SCRAPING_FIELD_NAMES = [
   'authorUrlSelector',
   'thumbnailSelector',
   'summarySelector',
+  'pageCountSelector',
   'nextPageSelector',
 ] as const;
 
@@ -126,6 +127,12 @@ export const SCRAPING_FIELDS: Field[] = [
     placeholder: 'Optionnel : .excerpt, p',
   },
   {
+    name: 'pageCountSelector',
+    label: 'Selecteur du nombre de pages',
+    type: 'text',
+    placeholder: 'Optionnel : .pages-count',
+  },
+  {
     name: 'nextPageSelector',
     label: 'Selecteur page suivante',
     type: 'text',
@@ -145,6 +152,7 @@ export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   authorUrlSelector: '',
   thumbnailSelector: '',
   summarySelector: '',
+  pageCountSelector: '',
   nextPageSelector: '',
 };
 
@@ -158,6 +166,7 @@ export const buildAuthorScrapingFields = (
   authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
   thumbnailSelector: trimOptionalSelector(values.thumbnailSelector),
   summarySelector: trimOptionalSelector(values.summarySelector),
+  pageCountSelector: trimOptionalSelector(values.pageCountSelector),
   nextPageSelector: trimOptionalSelector(values.nextPageSelector),
 });
 
@@ -232,6 +241,7 @@ export const buildValidationPresentation = (
   const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
+  const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
 
   if (validationResult.requestedUrl) {
     details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
@@ -270,6 +280,10 @@ export const buildValidationPresentation = (
 
   if (summaryCheck?.matchedCount) {
     details.push(`Resumes detectes : ${summaryCheck.matchedCount}`);
+  }
+
+  if (pageCountCheck?.matchedCount) {
+    details.push(`Nombre de pages detecte(s) : ${pageCountCheck.matchedCount}`);
   }
 
   if (previewPage?.nextPageUrl) {

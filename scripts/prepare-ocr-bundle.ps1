@@ -8,7 +8,16 @@ $workspace = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = Join-Path $workspace 'build-resources\ocr-bundle'
 $workerScript = Join-Path $workspace 'scripts\ocr_worker.py'
 $prepareScript = Join-Path $workspace 'scripts\prepare_ocr_bundle.py'
-$paramsPath = Join-Path $env:APPDATA 'manga-helper\data\params.json'
+$appConfigDirName = if ([string]::IsNullOrWhiteSpace($env:APP_ROAMING_CONFIG_DIR_NAME)) {
+    if ([string]::IsNullOrWhiteSpace($env:APP_PACKAGE_NAME)) { 'scaramanga' } else { $env:APP_PACKAGE_NAME }
+} else {
+    $env:APP_ROAMING_CONFIG_DIR_NAME
+}
+$paramsPath = Join-Path $env:APPDATA "$appConfigDirName\data\params.json"
+$legacyParamsPath = Join-Path $env:APPDATA 'manga-helper\data\params.json'
+if (-not (Test-Path -LiteralPath $paramsPath) -and (Test-Path -LiteralPath $legacyParamsPath)) {
+    $paramsPath = $legacyParamsPath
+}
 $dotEnvPath = Join-Path $workspace '.env'
 
 function Import-DotEnvFile {

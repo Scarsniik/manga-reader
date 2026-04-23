@@ -1,6 +1,10 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ScraperRecord, ScraperSearchResultItem } from '@/shared/scraper';
+import {
+  buildScraperViewHistoryCardId,
+  ScraperRecord,
+  ScraperSearchResultItem,
+} from '@/shared/scraper';
 import type { Manga, SavedScraperSearch } from '@/renderer/types';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
@@ -17,7 +21,7 @@ import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hoo
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
-import { DownloadArrowIcon } from '@/renderer/components/icons';
+import { DownloadArrowIcon, OpenBookIcon } from '@/renderer/components/icons';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -32,15 +36,32 @@ import {
   buildQueryPlaceholder,
   buildScraperBrowserHelperText,
   buildScraperCapabilities,
+  buildScraperListingReturnStateCacheKey,
+  cacheScraperListingReturnState,
   MAX_VISIBLE_SEARCH_RESULTS,
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import {
+  recordScraperCardsSeen,
+  setScraperCardRead,
+  useScraperViewHistory,
+} from '@/renderer/stores/scraperViewHistory';
+import {
   parseScraperRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
+import {
+  getCurrentVerticalScrollTop,
+  scrollElementToVerticalStart,
+  scrollToVerticalPosition,
+} from '@/renderer/utils/scrollPosition';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import {
+  buildSearchResultViewHistoryIdentity,
+  getScraperCardViewState,
+  getScraperViewHistoryRecord,
+} from '@/renderer/utils/scraperViewHistory';
 import {
   buildScraperDownloadQueuedMessage,
   canQueueStandaloneScraperDownload,
@@ -65,6 +86,7 @@ import {
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import generateId from '@/utils/id';
 import useParams from '@/renderer/hooks/useParams';
+import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import './style.scss';
 
 type Props = {
@@ -179,6 +201,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [hasAuthor, hasDetails, hasSearch]);
 
   const defaultMode = useMemo<ScraperBrowseMode>(() => {
+    if (initialState?.listingMode && availableModes.includes(initialState.listingMode)) {
+      return initialState.listingMode;
+    }
+
     if (initialState?.detailsResult && availableModes.includes('manga')) {
       return 'manga';
     }
@@ -192,7 +218,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }
 
     return availableModes[0] ?? 'manga';
-  }, [availableModes, initialState?.detailsResult]);
+  }, [availableModes, initialState?.detailsResult, initialState?.listingMode]);
 
   const canOpenSearchResultsAsDetails = Boolean(hasDetails && detailsConfig?.titleSelector);
   const canOpenSearchResultsAsAuthor = Boolean(hasAuthor && authorConfig?.titleSelector && authorConfig?.resultItemSelector);
@@ -215,6 +241,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     [savedScraperSearches, scraper.id],
   );
   const { bookmarks: scraperBookmarks } = useScraperBookmarks({ scraperId: scraper.id });
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory({ scraperId: scraper.id });
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
 
   const [mode, setMode] = useState<ScraperBrowseMode>(defaultMode);
@@ -238,7 +268,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [loadingMoreThumbnails, setLoadingMoreThumbnails] = useState(false);
   const [savedSearchesExpanded, setSavedSearchesExpanded] = useState(false);
   const [savedSearchDeleteMode, setSavedSearchDeleteMode] = useState(false);
+  const [newSearchResultIds, setNewSearchResultIds] = useState<Set<string>>(() => new Set());
   const browserRootRef = useRef<HTMLElement | null>(null);
+  const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
   const historySourceKind = locationState?.scraperBrowserHistorySource?.kind ?? null;
@@ -298,17 +330,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, []);
 
   const getCurrentScrollTop = useCallback(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return 0;
-    }
-
-    const windowScrollTop = window.scrollY || window.pageYOffset || 0;
-    const documentScrollTop = document.scrollingElement?.scrollTop
-      ?? document.documentElement.scrollTop
-      ?? document.body?.scrollTop
-      ?? 0;
-
-    return Math.max(windowScrollTop, documentScrollTop);
+    return getCurrentVerticalScrollTop(browserRootRef.current);
   }, []);
 
   const restoreSearchScrollPosition = useCallback((scrollTop: number | null | undefined) => {
@@ -327,7 +349,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       scrollRestoreFrameRef.current = null;
       nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
         nestedScrollRestoreFrameRef.current = null;
-        window.scrollTo({ top: nextScrollTop, left: 0, behavior: 'auto' });
+        scrollToVerticalPosition(browserRootRef.current, nextScrollTop);
       });
     });
   }, [cancelScheduledScrollRestore]);
@@ -343,15 +365,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       scrollRestoreFrameRef.current = null;
       nestedScrollRestoreFrameRef.current = requestAnimationFrame(() => {
         nestedScrollRestoreFrameRef.current = null;
-        const top = browserRootRef.current
-          ? browserRootRef.current.getBoundingClientRect().top + window.scrollY
-          : 0;
-
-        window.scrollTo({
-          top: Math.max(0, top),
-          left: 0,
-          behavior: 'auto',
-        });
+        scrollElementToVerticalStart(browserRootRef.current);
       });
     });
   }, [cancelScheduledScrollRestore]);
@@ -426,7 +440,6 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     handleListingPreviousPage,
     handleOpenResult,
     handleOpenAuthorResult,
-    handleResultKeyDown,
     handleBackToListing,
     handleGoToHome,
     handleModeChange,
@@ -505,10 +518,16 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     cancelScheduledScrollRestore,
     setMode,
     setQuery,
+    setListingPage,
+    setListingVisitedPageUrls,
+    setListingPageIndex,
+    setListingResults,
+    setHasExecutedListing,
     setListingReturnState,
     setAuthorTemplateContext,
     setDetailsResult,
     setChaptersResult,
+    restoreSearchScrollPosition,
     runSearchLookup,
     runAuthorLookup,
     runDetailsLookup,
@@ -712,6 +731,15 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [listingResults],
   );
+  const visibleSearchResultHistoryIds = useMemo(
+    () => visibleSearchResults
+      .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result))),
+    [scraper.id, visibleSearchResults],
+  );
+  const visibleSearchResultsHistoryKey = useMemo(
+    () => visibleSearchResultHistoryIds.join('|'),
+    [visibleSearchResultHistoryIds],
+  );
   const scraperBookmarkCount = scraperBookmarks.length;
   const canReturnToListing = Boolean(listingReturnState?.hasExecutedListing);
   const historyIndex = typeof window !== 'undefined'
@@ -743,6 +771,91 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => `Page ${listingPageIndex + 1}`,
     [listingPageIndex],
   );
+
+  const buildCurrentListingReturnState = useCallback((): ScraperListingReturnState | null => {
+    if ((mode !== 'search' && mode !== 'author') || !hasExecutedListing) {
+      return null;
+    }
+
+    return {
+      mode,
+      hasExecutedListing,
+      query,
+      page: listingPage,
+      visitedPageUrls: listingVisitedPageUrls,
+      pageIndex: listingPageIndex,
+      results: listingResults,
+      scrollTop: getCurrentScrollTop(),
+      newResultIds: Array.from(newSearchResultIds),
+    };
+  }, [
+    getCurrentScrollTop,
+    hasExecutedListing,
+    listingPage,
+    listingPageIndex,
+    listingResults,
+    listingVisitedPageUrls,
+    mode,
+    newSearchResultIds,
+    query,
+  ]);
+
+  const cacheCurrentListingReturnState = useCallback((): ScraperListingReturnState | null => {
+    const returnState = buildCurrentListingReturnState();
+    if (!returnState) {
+      return null;
+    }
+
+    cacheScraperListingReturnState(
+      buildScraperListingReturnStateCacheKey(location.pathname, location.search),
+      returnState,
+    );
+    setListingReturnState(returnState);
+    return returnState;
+  }, [buildCurrentListingReturnState, location.pathname, location.search]);
+
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    if (!visibleSearchResults.length) {
+      setNewSearchResultIds(new Set());
+      return;
+    }
+
+    const restoredNewResultIds = listingReturnState?.mode === mode
+      && listingReturnState.query === query
+      && listingReturnState.pageIndex === listingPageIndex
+      ? listingReturnState.newResultIds ?? []
+      : [];
+
+    if (!viewHistoryLoaded) {
+      setNewSearchResultIds(new Set());
+      return;
+    }
+
+    if (restoredNewResultIds.length > 0) {
+      const visibleIds = new Set(visibleSearchResultHistoryIds);
+      setNewSearchResultIds(new Set(restoredNewResultIds.filter((id) => visibleIds.has(id))));
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    setNewSearchResultIds(new Set(
+      visibleSearchResultHistoryIds
+        .filter((id) => id && !historySnapshot.has(id)),
+    ));
+  }, [
+    listingPageIndex,
+    listingReturnState,
+    mode,
+    query,
+    viewHistoryLoaded,
+    visibleSearchResultHistoryIds,
+    visibleSearchResults.length,
+    visibleSearchResultsHistoryKey,
+  ]);
 
   const handleNavigateBack = useCallback(() => {
     if (!canNavigateBack) {
@@ -785,6 +898,36 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     );
   }, [detailsResult, location.pathname, location.search, locationState, navigate, scraper.id]);
 
+  const handleOpenAuthorFromDetailsInWorkspace = useCallback((value: string, authorTitle: string) => {
+    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+      setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.author',
+      scraperId: scraper.id,
+      query: value,
+      title: authorTitle || formatScraperValueForDisplay(value),
+      templateContext: detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : undefined,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette page auteur dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette page auteur dans le workspace.');
+      });
+  }, [authorConfig, detailsResult, scraper.id, setRuntimeError]);
+
   const handleOpenScraperBookmarks = useCallback(() => {
     navigate({
       pathname: location.pathname,
@@ -810,9 +953,91 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     });
   }, [location.pathname, location.search, navigate, scraper.id]);
 
+  const handleOpenListingResult = useCallback((result: ScraperSearchResultItem) => {
+    const listingReturnStateToRestore = cacheCurrentListingReturnState();
+    void handleOpenResult(result, {
+      listingReturnState: listingReturnStateToRestore,
+    });
+  }, [cacheCurrentListingReturnState, handleOpenResult]);
+
+  const handleOpenListingResultInWorkspace = useCallback((result: ScraperSearchResultItem) => {
+    if (!result.detailUrl) {
+      setRuntimeError('Cette card ne fournit pas d\'URL de fiche.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.details',
+      scraperId: scraper.id,
+      sourceUrl: result.detailUrl,
+      title: result.title,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette fiche dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette fiche dans le workspace.');
+      });
+  }, [scraper.id, setRuntimeError]);
+
+  const handleOpenAuthorResultInWorkspace = useCallback((result: ScraperSearchResultItem) => {
+    if (!result.authorUrl) {
+      setRuntimeError('Cette card ne fournit pas d\'URL auteur.');
+      return;
+    }
+
+    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+      setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.author',
+      scraperId: scraper.id,
+      query: result.authorUrl,
+      title: result.title,
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette page auteur dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette page auteur dans le workspace.');
+      });
+  }, [authorConfig, scraper.id, setRuntimeError]);
+
+  const handleListingResultKeyDown = useCallback((
+    event: React.KeyboardEvent<HTMLElement>,
+    result: ScraperSearchResultItem,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    handleOpenListingResult(result);
+  }, [handleOpenListingResult]);
+
   const handleOpenResultAction = useCallback((result: ScraperSearchResultItem) => {
-    void handleOpenResult(result);
-  }, [handleOpenResult]);
+    handleOpenListingResult(result);
+  }, [handleOpenListingResult]);
 
   const handleOpenAuthorResultAction = useCallback((result: ScraperSearchResultItem) => {
     void handleOpenAuthorResult(result);
@@ -917,6 +1142,59 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }));
   }, [detailsResult, getLinkedMangaForSource, libraryMangas, loadLibraryMangas, openModal, scraper.id, setRuntimeError]);
 
+  const handleSetSearchResultRead = useCallback(async (
+    result: ScraperSearchResultItem,
+    read: boolean,
+  ) => {
+    try {
+      await setScraperCardRead({
+        ...buildSearchResultViewHistoryIdentity(scraper.id, result),
+        read,
+      });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'Impossible de mettre a jour l\'historique de lecture.');
+    }
+  }, [scraper.id, setRuntimeError]);
+
+  const handleSearchResultViewed = useCallback((result: ScraperSearchResultItem) => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+
+    void recordScraperCardsSeen([
+      identity,
+    ]).catch((error) => {
+      console.warn('Failed to record scraper card view', error);
+    });
+  }, [scraper.id]);
+
+  const getSearchResultViewState = useCallback((result: ScraperSearchResultItem) => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const id = buildScraperViewHistoryCardId(identity);
+    return getScraperCardViewState(record, Boolean(id && newSearchResultIds.has(id)));
+  }, [newSearchResultIds, scraper.id, viewHistoryRecordsById]);
+
+  const renderSearchResultReadAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction => {
+    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
+    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
+    const isRead = Boolean(record?.readAt);
+    const label = isRead ? 'Lu' : 'Marquer lu';
+
+    return {
+      id: `read-${identity.sourceUrl || identity.title}`,
+      type: 'secondary',
+      label,
+      ariaLabel: `${isRead ? 'Marquer non lu' : 'Marquer lu'} ${result.title}`,
+      icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
+      className: [
+        'is-read-toggle',
+        isRead ? 'is-read' : '',
+      ].join(' ').trim(),
+      onClick: () => {
+        void handleSetSearchResultRead(result, !isRead);
+      },
+    };
+  }, [handleSetSearchResultRead, scraper.id, viewHistoryRecordsById]);
+
   const renderSearchResultBookmarkAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
     if (!result.detailUrl) {
       return null;
@@ -933,6 +1211,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           title={result.title}
           cover={result.thumbnailUrl}
           summary={result.summary}
+          pageCount={result.pageCount}
           excludedFields={scraper.globalConfig.bookmark.excludedFields}
           size="sm"
         />
@@ -1028,16 +1307,21 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         usesSearchTemplatePaging={usesActiveTemplatePaging}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
+        getViewState={getSearchResultViewState}
+        renderReadAction={renderSearchResultReadAction}
         renderBookmarkAction={renderSearchResultBookmarkAction}
         renderDownloadAction={renderSearchResultDownloadAction}
         onPreviousPage={() => void handleListingPreviousPage()}
         onNextPage={() => void handleListingNextPage()}
         onBack={handleNavigateBack}
-        onOpenResult={(result) => void handleOpenResult(result)}
+        onOpenResult={handleOpenListingResult}
         onOpenAuthorResultAction={handleOpenAuthorResultAction}
-        onResultKeyDown={handleResultKeyDown}
+        onResultKeyDown={handleListingResultKeyDown}
         onOpenResultAction={handleOpenResultAction}
         onOpenResultImage={handleOpenSearchResultImage}
+        onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
+        onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
+        onResultViewed={handleSearchResultViewed}
       />
 
       <ScraperDetailsPanel
@@ -1058,6 +1342,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         onOpenAuthor={(value) => {
           handleOpenAuthorFromDetails(value);
         }}
+        onOpenAuthorInWorkspace={handleOpenAuthorFromDetailsInWorkspace}
         onOpenReader={(options) => void handleOpenReader(options)}
         onLinkSourceToManga={(chapter) => handleLinkSourceToManga(chapter)}
         onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}

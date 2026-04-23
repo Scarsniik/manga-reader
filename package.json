@@ -1,8 +1,12 @@
 {
-  "name": "manga-helper",
-  "version": "1.0.0",
+  "name": "scaramanga",
+  "version": "0.1.2",
   "description": "A lightweight desktop application for learning Japanese through manga.",
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Scarsniik/manga-reader.git"
+  },
   "main": "dist/main.js",
   "scripts": {
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-electron.ps1",
@@ -11,19 +15,34 @@
     "build:electron": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-electron-dist.ps1 && tsc --project tsconfig.electron.json",
     "dev": "vite",
     "build:app": "npm run prestart && npm run build",
-    "build:all": "npm run build:electron && npm run build && npm run package",
-    "package:all": "npm run build:electron && npm run build && npm run package",
-    "package:win-unpacked": "npm run build:electron && npm run build && npm run clean:package && npm run prepare:ocr-bundle && npx electron-builder --win dir",
+    "build:all": "npm run package:all",
+    "backup:user-data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-user-data.ps1",
+    "load:user-data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/load-user-data.ps1",
+    "package:all": "npm run package:app:installer && npm run package:ocr-runtime",
+    "package:app": "npm run package:app:installer",
+    "package:app:installer": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win nsis",
+    "package:app:portable": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win portable",
+    "package:app:dir": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win dir",
+    "package:win-unpacked": "npm run package:app:dir",
     "dev:electron": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron.ps1",
+    "dev:electron:ocr-test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron-ocr-test.ps1",
+    "dev:electron:ocr-test:fresh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron-ocr-test.ps1 -ResetRuntimeState",
     "prepare:ocr-bundle": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ocr-bundle.ps1",
     "prepare:ocr-bundle:force": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ocr-bundle.ps1 -ForceRebuild",
+    "ocr:test-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-local-ocr-runtime-test.ps1 -Force",
+    "ocr:test-runtime:bundle": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-local-ocr-runtime-test.ps1 -Mode ExistingBundle -Force",
+    "package:ocr-runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-ocr-runtime.ps1 -Force",
+    "package:ocr-runtime:force": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-ocr-runtime.ps1 -BuildBundle -ForceRebuild -Force",
     "zip:win-unpacked": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/zip-win-unpacked.ps1",
-    "clean:package": "powershell -NoProfile -Command \"$workspace = (Get-Location).Path; $buildDir = [System.IO.Path]::GetFullPath((Join-Path $workspace 'build')); if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to clean outside the workspace.' }; Stop-Process -Name 'manga-helper','app-builder','app-builder.exe','electron' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path $buildDir) { Get-ChildItem -LiteralPath $buildDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.lnk' } | Remove-Item -Force -ErrorAction SilentlyContinue; $winUnpacked = Join-Path $buildDir 'win-unpacked'; if (Test-Path $winUnpacked) { Remove-Item -LiteralPath $winUnpacked -Recurse -Force -ErrorAction SilentlyContinue } }\"",
-    "prepackage": "npm run clean:package && npm run prepare:ocr-bundle",
-    "package": "electron-builder",
-    "dist": "npm run build:electron && npm run build && npm run clean:package && npm run prepare:ocr-bundle && npx electron-builder --win portable"
+    "clean:package": "powershell -NoProfile -Command \"$workspace = (Get-Location).Path; $buildDir = [System.IO.Path]::GetFullPath((Join-Path $workspace 'build')); if (-not $buildDir.StartsWith($workspace, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Refusing to clean outside the workspace.' }; Stop-Process -Name 'scaramanga','Scaramanga','manga-helper','Manga Helper','app-builder','app-builder.exe','electron' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; if (Test-Path $buildDir) { Get-ChildItem -LiteralPath $buildDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.lnk', '.blockmap' -or $_.Name -in 'latest.yml', 'builder-debug.yml', 'builder-effective-config.yaml' } | Remove-Item -Force -ErrorAction SilentlyContinue; $winUnpacked = Join-Path $buildDir 'win-unpacked'; if (Test-Path $winUnpacked) { Remove-Item -LiteralPath $winUnpacked -Recurse -Force -ErrorAction SilentlyContinue } }\"",
+    "release:app": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -Publish",
+    "release:app:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -DryRun",
+    "prepackage": "npm run clean:package",
+    "package": "npm run package:app",
+    "dist": "npm run package:app"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "image-size": "^1.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -42,34 +61,6 @@
     "vite": "^7.1.4",
     "vite-plugin-svgr": "^5.2.0"
   },
-  "build": {
-    "appId": "com.example.mangahelper",
-    "files": [
-      "dist/**/*",
-      "dist/electron/**/*",
-      "scripts/**/*",
-      "data/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "build-resources/ocr-bundle",
-        "to": "ocr-bundle",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-    "win": {
-      "target": [
-        "portable"
-      ],
-      "forceCodeSigning": false,
-      "verifyUpdateCodeSignature": false
-    },
-    "directories": {
-      "output": "build"
-    }
-  },
-  "homepage": "https://github.com/yourusername/manga-helper",
+  "homepage": "https://github.com/Scarsniik/manga-reader",
   "license": "MIT"
 }
