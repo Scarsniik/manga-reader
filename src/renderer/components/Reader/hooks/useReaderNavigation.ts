@@ -70,23 +70,23 @@ const useReaderNavigation = ({
     const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
 
     const ocrAvailable = !isRemoteScraperManga(manga);
-    const previousLocalManga = React.useMemo(
-        () => (manga?.path ? findPreviousSeriesManga(manga, libraryMangas) : null),
+    const previousSeriesManga = React.useMemo(
+        () => (manga ? findPreviousSeriesManga(manga, libraryMangas) : null),
         [libraryMangas, manga],
     );
-    const nextLocalManga = React.useMemo(
-        () => (manga?.path ? findNextSeriesManga(manga, libraryMangas) : null),
+    const nextSeriesManga = React.useMemo(
+        () => (manga ? findNextSeriesManga(manga, libraryMangas) : null),
         [libraryMangas, manga],
     );
 
     const previousTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
-        if (manga?.path && previousLocalManga) {
+        if (previousSeriesManga) {
             return {
                 kind: 'library',
-                title: previousLocalManga.title,
-                chapterLabel: previousLocalManga.chapters,
-                cover: previousLocalManga.thumbnailPath || null,
-                adjacentManga: previousLocalManga,
+                title: previousSeriesManga.title,
+                chapterLabel: previousSeriesManga.chapters,
+                cover: previousSeriesManga.thumbnailPath || null,
+                adjacentManga: previousSeriesManga,
             };
         }
 
@@ -118,16 +118,16 @@ const useReaderNavigation = ({
             detailsResult: scraperBrowserReturn.detailsResult,
             scraperId: scraperReaderState.scraperId,
         };
-    }, [libraryMangas, locationState, manga, previousLocalManga]);
+    }, [locationState, manga, previousSeriesManga]);
 
     const nextTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
-        if (manga?.path && nextLocalManga) {
+        if (nextSeriesManga) {
             return {
                 kind: 'library',
-                title: nextLocalManga.title,
-                chapterLabel: nextLocalManga.chapters,
-                cover: nextLocalManga.thumbnailPath || null,
-                adjacentManga: nextLocalManga,
+                title: nextSeriesManga.title,
+                chapterLabel: nextSeriesManga.chapters,
+                cover: nextSeriesManga.thumbnailPath || null,
+                adjacentManga: nextSeriesManga,
             };
         }
 
@@ -159,7 +159,7 @@ const useReaderNavigation = ({
             detailsResult: scraperBrowserReturn.detailsResult,
             scraperId: scraperReaderState.scraperId,
         };
-    }, [libraryMangas, locationState, manga, nextLocalManga]);
+    }, [locationState, manga, nextSeriesManga]);
 
     const activeTransitionTarget = transitionDirection === 'previous'
         ? previousTarget

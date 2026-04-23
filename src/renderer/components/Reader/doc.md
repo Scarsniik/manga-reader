@@ -41,6 +41,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Le reader lit les paramètres d'URL `id` et `page`.
 - Il supporte la lecture locale et la lecture issue d'un scraper.
 - Il gère la navigation clavier/souris, la progression et le passage au chapitre précédent/suivant.
+- Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.
 - En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, et les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché.
 - L'OCR reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones OCR peuvent être détectées automatiquement ou ajoutées manuellement.
