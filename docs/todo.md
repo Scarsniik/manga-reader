@@ -4,7 +4,7 @@
 
 ### Features
 
-- [ ] Ajouter lecture sur les cards de scrapper
+- [x] Ajouter lecture sur les cards de scrapper
 - [ ] Possibilité de partager les scrappers
 - [ ] Import de tag / auteur depuis scrapper
 - [ ] Pourvoir cliquer sur les tags et auteurs pour voir les autres scrappers associés
@@ -21,12 +21,12 @@
 - [ ] Détection de derniere page de resultat de recherche
 - [ ] Gerer le systeme de téléchargement natif du site avec le scrapper (nouveau module)
 - [ ] Gerer les apis
-- [ ] Nombre de page dans module fiche
+- [x] Nombre de page dans module fiche
 
 ### Fixes
 
 - [ ] Quand on clique sur télécharger dans un scrapper avec des chapitres, ça change tous les boutons d'un coup
-- [ ] Eviter de dl tout le manga avant de lancer le lecteur
+- [x] Eviter de dl tout le manga avant de lancer le lecteur
 - [ ] Erreur étrange : Je vais sur une fiche, lance une recherche, met un truc en bookmark, vais sur la fiche du truc depuis les bookmark, la fiche ne s'affiche pas, je dois cliquer sur "Ouvrir" pour que ça marche
 
 ### Reworks
