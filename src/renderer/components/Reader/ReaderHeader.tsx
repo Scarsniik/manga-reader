@@ -2,6 +2,8 @@ import React from 'react';
 import { Manga } from '@/renderer/types';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import useModal from '@/renderer/hooks/useModal';
+import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModal';
 import { ReaderCopyFeedback } from './types';
 
 type Props = {
@@ -29,6 +31,8 @@ const ReaderHeader: React.FC<Props> = ({
     onCopyImage,
     onToggleOcr,
 }) => {
+    const { openModal } = useModal();
+
     return (
         <div className="reader-header">
             <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
@@ -51,6 +55,14 @@ const ReaderHeader: React.FC<Props> = ({
                         className="reader-bookmark-button"
                     />
                 ) : null}
+                <button
+                    type="button"
+                    className="reader-action-button"
+                    onClick={() => openModal(buildSettingsModal())}
+                    title="Ouvrir les paramètres"
+                >
+                    Paramètres
+                </button>
                 <button
                     type="button"
                     className={"reader-action-button" + (copyFeedback ? ` ${copyFeedback.type}` : '')}

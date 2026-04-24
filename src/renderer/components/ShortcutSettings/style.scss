@@ -1,0 +1,188 @@
+.shortcut-settings {
+  display: grid;
+  gap: 30px;
+}
+
+.shortcut-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30px;
+}
+
+.shortcut-settings__header h3,
+.shortcut-settings__group h4 {
+  margin: 0;
+  color: #f3f6fb;
+}
+
+.shortcut-settings__header h3 {
+  font-size: 20px;
+}
+
+.shortcut-settings__header p {
+  margin: 6px 0 0;
+  color: #91a1b3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.shortcut-settings__reset {
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #1f2937;
+  color: #e5e7eb;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shortcut-settings__reset:hover:not([disabled]) {
+  border-color: #60a5fa;
+  background: #243041;
+}
+
+.shortcut-settings__reset[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.shortcut-settings__error {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #fecaca;
+  font-size: 13px;
+}
+
+.shortcut-settings__placeholder {
+  border: 1px solid #263244;
+  border-radius: 8px;
+  padding: 18px;
+  background: #111827;
+  color: #91a1b3;
+}
+
+.shortcut-settings__group {
+  display: grid;
+  gap: 12px;
+}
+
+.shortcut-settings__group h4 {
+  font-size: 18px;
+}
+
+.shortcut-settings__rows {
+  display: grid;
+  gap: 8px;
+}
+
+.shortcut-settings__row {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  border-bottom: 1px solid #263244;
+  padding: 8px 0;
+}
+
+.shortcut-settings__action {
+  color: #d7e0ec;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.shortcut-settings__slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shortcut-settings__slot-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.shortcut-settings__slot {
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #31475e;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #111827;
+  color: #f3f6fb;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+}
+
+.shortcut-settings__slot.is-empty {
+  border-style: dashed;
+  color: #7f8b9a;
+  font-weight: 700;
+}
+
+.shortcut-settings__slot.is-recording {
+  border-color: #f59e0b;
+  background: #2a2112;
+  color: #fde68a;
+}
+
+.shortcut-settings__slot.is-duplicate {
+  border-color: #ef4444;
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+.shortcut-settings__slot:hover:not([disabled]) {
+  border-color: #60a5fa;
+  background: #172033;
+}
+
+.shortcut-settings__slot[disabled],
+.shortcut-settings__slot-clear[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.shortcut-settings__slot-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 36px;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #1f2937;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.shortcut-settings__slot-clear:hover:not([disabled]) {
+  border-color: #ef4444;
+  color: #fecaca;
+}
+
+.shortcut-settings__slot-clear svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 760px) {
+  .shortcut-settings__header,
+  .shortcut-settings__row {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-settings__header {
+    display: grid;
+  }
+
+  .shortcut-settings__slots {
+    grid-template-columns: 1fr;
+  }
+}

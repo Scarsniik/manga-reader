@@ -8,6 +8,7 @@ import { TagsProvider } from '@/renderer/context/TagsContext';
 import { AuthorsProvider } from '@/renderer/context/AuthorsContext';
 import { SeriesProvider } from '@/renderer/context/SeriesContext';
 import AppUpdateGlobalUi from "@/renderer/components/AppUpdate/AppUpdateGlobalUi";
+import { ShortcutSettingsProvider } from "@/renderer/context/ShortcutSettingsContext";
 
 const RefreshKeyedApp: React.FC = () => {
   const ctx = useContext(RefreshContext);
@@ -24,10 +25,12 @@ if (container) {
         <TagsProvider>
           <AuthorsProvider>
             <SeriesProvider>
-              <ModalProvider>
-                <AppUpdateGlobalUi />
-                <RefreshKeyedApp />
-              </ModalProvider>
+              <ShortcutSettingsProvider>
+                <ModalProvider>
+                  <AppUpdateGlobalUi />
+                  <RefreshKeyedApp />
+                </ModalProvider>
+              </ShortcutSettingsProvider>
             </SeriesProvider>
           </AuthorsProvider>
         </TagsProvider>

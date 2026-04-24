@@ -93,8 +93,13 @@ const Reader: React.FC = () => {
         selectedBoxes: ocr.selectedBoxes,
         requestTokenCycle: ocr.requestTokenCycle,
         navigateOcrBox: ocr.navigateOcrBox,
+        toggleManualSelection: ocr.toggleManualSelection,
+        openOcrPanel: () => setOcrEnabled(true),
+        toggleOcrPanel: () => setOcrEnabled((value) => !value),
         next: navigation.next,
         prev: navigation.prev,
+        activeOcrEnabled,
+        ocrPanelAvailable: navigation.ocrAvailable,
         requireFreshNavigationInput: navigation.isTransitionPage || navigation.isCompletionPage,
     });
 

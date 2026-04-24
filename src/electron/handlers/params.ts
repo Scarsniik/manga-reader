@@ -6,6 +6,28 @@ import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
 const MAX_READER_PRELOAD_PAGE_COUNT = 10;
+const SHORTCUT_BINDING_SLOT_COUNT = 3;
+
+const defaultShortcutBindings = {
+    readerScrollUp: ["Z", "ArrowUp", "U"],
+    readerScrollDown: ["S", "ArrowDown", "J"],
+    readerPageNext: ["D", "ArrowRight", "P"],
+    readerPagePrevious: ["Q", "ArrowLeft", "I"],
+    readerOcrNavigateUp: ["O", "", ""],
+    readerOcrNavigateDown: ["L", "", ""],
+    readerOcrNavigateLeft: ["K", "", ""],
+    readerOcrNavigateRight: ["M", "", ""],
+    readerOcrManualSelection: ["*", "", ""],
+    readerOcrTogglePanel: ["$", "", ""],
+    readerOcrTokenNavigation: [":", "", ""],
+};
+
+const legacyShortcutSettingByAction: Partial<Record<keyof typeof defaultShortcutBindings, string>> = {
+    readerOcrNavigateUp: "readerOcrShortcutUp",
+    readerOcrNavigateLeft: "readerOcrShortcutLeft",
+    readerOcrNavigateDown: "readerOcrShortcutDown",
+    readerOcrNavigateRight: "readerOcrShortcutRight",
+};
 
 const normalizeReaderPreloadPageCount = (value: unknown): number => {
     const parsed = typeof value === "number"
@@ -19,6 +41,43 @@ const normalizeReaderPreloadPageCount = (value: unknown): number => {
     return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
 };
 
+const normalizeShortcutBinding = (value: unknown): string => {
+    const normalizedValue = typeof value === "string" ? value.trim() : "";
+    return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
+};
+
+const normalizeShortcutSlots = (value: unknown, fallbackSlots: string[]): string[] => {
+    const sourceSlots = Array.isArray(value)
+        ? value
+        : (typeof value === "string" ? [value] : fallbackSlots);
+
+    const normalizedSlots = sourceSlots
+        .slice(0, SHORTCUT_BINDING_SLOT_COUNT)
+        .map((slot) => normalizeShortcutBinding(slot));
+
+    while (normalizedSlots.length < SHORTCUT_BINDING_SLOT_COUNT) {
+        normalizedSlots.push("");
+    }
+
+    return normalizedSlots;
+};
+
+const normalizeShortcutSettings = (settings: Record<string, unknown>) => {
+    const shortcutRecord = settings.shortcuts && typeof settings.shortcuts === "object" && !Array.isArray(settings.shortcuts)
+        ? settings.shortcuts as Record<string, unknown>
+        : {};
+
+    return Object.entries(defaultShortcutBindings).reduce((result, [actionId, fallbackSlots]) => {
+        const typedActionId = actionId as keyof typeof defaultShortcutBindings;
+        const legacySettingKey = legacyShortcutSettingByAction[typedActionId];
+        result[typedActionId] = normalizeShortcutSlots(
+            shortcutRecord[actionId] ?? (legacySettingKey ? settings[legacySettingKey] : undefined),
+            fallbackSlots,
+        );
+        return result;
+    }, {} as Record<keyof typeof defaultShortcutBindings, string[]>);
+};
+
 const defaultSettings = {
     libraryPath: "",
     lastHomeSearch: "",
@@ -26,6 +85,7 @@ const defaultSettings = {
     showHiddens: false,
     titleLineCount: 2,
     readerPreloadPageCount: DEFAULT_READER_PRELOAD_PAGE_COUNT,
+    shortcuts: defaultShortcutBindings,
     readerOcrDetectedSectionOpen: true,
     readerOcrManualSectionOpen: true,
     jpdbApiKey: "",
@@ -64,6 +124,7 @@ const normalizeSettings = (value: unknown) => {
     };
 
     merged.readerPreloadPageCount = normalizeReaderPreloadPageCount(merged.readerPreloadPageCount);
+    merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
 };
 
@@ -230,6 +291,7 @@ export async function saveSettings(event: any, settings: any) {
             ...(settings || {}),
         };
         nextSettings.readerPreloadPageCount = normalizeReaderPreloadPageCount(nextSettings.readerPreloadPageCount);
+        nextSettings.shortcuts = normalizeShortcutSettings(nextSettings);
 
         await writeSettingsAtomically(nextSettings);
         return nextSettings;

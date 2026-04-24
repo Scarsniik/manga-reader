@@ -5,6 +5,7 @@ import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
 import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
+import ShortcutSettingsPanel from '@/renderer/components/ShortcutSettings/ShortcutSettingsPanel'
 
 import '@/renderer/components/Modal/style.scss'
 import '@/renderer/components/Modal/modales/settings-style.scss'
@@ -32,7 +33,7 @@ const normalizeReaderPreloadPageCount = (value: unknown) => {
 
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
-  const [activeTab, setActiveTab] = React.useState<'options' | 'version-installation'>('options')
+  const [activeTab, setActiveTab] = React.useState<'options' | 'shortcuts' | 'version-installation'>('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
 
@@ -162,7 +163,6 @@ export default function SettingsModalContent() {
 
     // convert types
     const toSave: Record<string, any> = {
-      ...(params || {}),
       libraryPath: values.libraryPath || '',
       showPageNumbers: !!values.showPageNumbers,
       showHiddens: !!values.showHiddens,
@@ -176,11 +176,9 @@ export default function SettingsModalContent() {
       ocrAutoAssignJapaneseLanguage: values.ocrAutoAssignJapaneseLanguage !== false,
       persistMangaFilters,
       showSavedLibrarySearches,
-      savedLibrarySearches: params?.savedLibrarySearches ?? [],
       showSavedScraperSearches,
-      savedScraperSearches: params?.savedScraperSearches ?? [],
       stackMangaInSeries,
-      mangaListFilters: persistMangaFilters ? (params?.mangaListFilters ?? null) : null,
+      ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }
     await setParams(toSave)
   }
@@ -217,6 +215,13 @@ export default function SettingsModalContent() {
           onClick={() => setActiveTab('options')}
         >
           Options
+        </button>
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'shortcuts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('shortcuts')}
+        >
+          Raccourcis
         </button>
         <button
           type="button"
@@ -258,12 +263,20 @@ export default function SettingsModalContent() {
               ) : null}
             </section>
           </div>
-        ) : (
+        ) : null}
+
+        {activeTab === 'shortcuts' ? (
+          <div className="settings-modal-panel">
+            <ShortcutSettingsPanel />
+          </div>
+        ) : null}
+
+        {activeTab === 'version-installation' ? (
           <div className="settings-modal-panel">
             <AppUpdateSettingsPanel />
             <OcrRuntimeSettingsPanel />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
