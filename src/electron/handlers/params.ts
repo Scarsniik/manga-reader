@@ -4,8 +4,16 @@ import path from "path";
 import { LEGACY_ROAMING_CONFIG_DIR_NAMES, LEGACY_USER_DATA_DIR_NAMES } from "../appIdentity";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
-const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
-const MAX_READER_PRELOAD_PAGE_COUNT = 10;
+const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
+const MAX_READER_OCR_PRELOAD_PAGE_COUNT = 10;
+const DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT = 2;
+const MAX_READER_IMAGE_PRELOAD_PAGE_COUNT = 10;
+const DEFAULT_READER_IMAGE_MAX_WIDTH = 1100;
+const MIN_READER_IMAGE_MAX_WIDTH = 480;
+const MAX_READER_IMAGE_MAX_WIDTH = 2400;
+const DEFAULT_READER_SCROLL_STRENGTH = 60;
+const MIN_READER_SCROLL_STRENGTH = 10;
+const MAX_READER_SCROLL_STRENGTH = 200;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -29,17 +37,68 @@ const legacyShortcutSettingByAction: Partial<Record<keyof typeof defaultShortcut
     readerOcrNavigateRight: "readerOcrShortcutRight",
 };
 
-const normalizeReaderPreloadPageCount = (value: unknown): number => {
-    const parsed = typeof value === "number"
-        ? value
-        : (typeof value === "string" && value.trim().length > 0 ? Number(value) : Number.NaN);
-
-    if (!Number.isFinite(parsed)) {
-        return DEFAULT_READER_PRELOAD_PAGE_COUNT;
+const parseNumericSetting = (value: unknown): number => {
+    if (typeof value === "number") {
+        return value;
     }
 
-    return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
+    if (typeof value === "string" && value.trim().length > 0) {
+        return Number(value);
+    }
+
+    return Number.NaN;
 };
+
+const normalizeIntegerSetting = (
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+): number => {
+    const parsed = parseNumericSetting(value);
+
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return Math.max(min, Math.min(max, Math.floor(parsed)));
+};
+
+const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT,
+        0,
+        MAX_READER_OCR_PRELOAD_PAGE_COUNT,
+    )
+);
+
+const normalizeReaderImagePreloadPageCount = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT,
+        0,
+        MAX_READER_IMAGE_PRELOAD_PAGE_COUNT,
+    )
+);
+
+const normalizeReaderImageMaxWidth = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_IMAGE_MAX_WIDTH,
+        MIN_READER_IMAGE_MAX_WIDTH,
+        MAX_READER_IMAGE_MAX_WIDTH,
+    )
+);
+
+const normalizeReaderScrollStrength = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_SCROLL_STRENGTH,
+        MIN_READER_SCROLL_STRENGTH,
+        MAX_READER_SCROLL_STRENGTH,
+    )
+);
 
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
@@ -84,7 +143,12 @@ const defaultSettings = {
     showPageNumbers: true,
     showHiddens: false,
     titleLineCount: 2,
-    readerPreloadPageCount: DEFAULT_READER_PRELOAD_PAGE_COUNT,
+    readerOcrPreloadPageCount: DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT,
+    readerImagePreloadPageCount: DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT,
+    readerImageMaxWidth: DEFAULT_READER_IMAGE_MAX_WIDTH,
+    readerShowProgressIndicator: true,
+    readerScrollStrength: DEFAULT_READER_SCROLL_STRENGTH,
+    readerOpenOcrPanelForJapaneseManga: false,
     shortcuts: defaultShortcutBindings,
     readerOcrDetectedSectionOpen: true,
     readerOcrManualSectionOpen: true,
@@ -123,7 +187,19 @@ const normalizeSettings = (value: unknown) => {
         ...(value && typeof value === "object" ? value as Record<string, unknown> : {}),
     };
 
-    merged.readerPreloadPageCount = normalizeReaderPreloadPageCount(merged.readerPreloadPageCount);
+    const legacyReaderPreloadPageCount = (merged as Record<string, unknown>).readerPreloadPageCount;
+    merged.readerOcrPreloadPageCount = normalizeReaderOcrPreloadPageCount(
+        merged.readerOcrPreloadPageCount ?? legacyReaderPreloadPageCount,
+    );
+    merged.readerImagePreloadPageCount = normalizeReaderImagePreloadPageCount(merged.readerImagePreloadPageCount);
+    merged.readerImageMaxWidth = normalizeReaderImageMaxWidth(merged.readerImageMaxWidth);
+    merged.readerShowProgressIndicator = typeof merged.readerShowProgressIndicator === "boolean"
+        ? merged.readerShowProgressIndicator
+        : defaultSettings.readerShowProgressIndicator;
+    merged.readerScrollStrength = normalizeReaderScrollStrength(merged.readerScrollStrength);
+    merged.readerOpenOcrPanelForJapaneseManga = typeof merged.readerOpenOcrPanelForJapaneseManga === "boolean"
+        ? merged.readerOpenOcrPanelForJapaneseManga
+        : defaultSettings.readerOpenOcrPanelForJapaneseManga;
     merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
 };
@@ -290,7 +366,19 @@ export async function saveSettings(event: any, settings: any) {
             ...storedSettings,
             ...(settings || {}),
         };
-        nextSettings.readerPreloadPageCount = normalizeReaderPreloadPageCount(nextSettings.readerPreloadPageCount);
+        const legacyReaderPreloadPageCount = (nextSettings as Record<string, unknown>).readerPreloadPageCount;
+        nextSettings.readerOcrPreloadPageCount = normalizeReaderOcrPreloadPageCount(
+            nextSettings.readerOcrPreloadPageCount ?? legacyReaderPreloadPageCount,
+        );
+        nextSettings.readerImagePreloadPageCount = normalizeReaderImagePreloadPageCount(nextSettings.readerImagePreloadPageCount);
+        nextSettings.readerImageMaxWidth = normalizeReaderImageMaxWidth(nextSettings.readerImageMaxWidth);
+        nextSettings.readerShowProgressIndicator = typeof nextSettings.readerShowProgressIndicator === "boolean"
+            ? nextSettings.readerShowProgressIndicator
+            : defaultSettings.readerShowProgressIndicator;
+        nextSettings.readerScrollStrength = normalizeReaderScrollStrength(nextSettings.readerScrollStrength);
+        nextSettings.readerOpenOcrPanelForJapaneseManga = typeof nextSettings.readerOpenOcrPanelForJapaneseManga === "boolean"
+            ? nextSettings.readerOpenOcrPanelForJapaneseManga
+            : defaultSettings.readerOpenOcrPanelForJapaneseManga;
         nextSettings.shortcuts = normalizeShortcutSettings(nextSettings);
 
         await writeSettingsAtomically(nextSettings);

@@ -14,6 +14,7 @@ type Props = {
     totalPages: number;
     currentPage: number;
     readingProgress: number;
+    showProgressIndicator: boolean;
     progressAriaText: string;
     isLastPage: boolean;
     isTransitionPage: boolean;
@@ -56,6 +57,7 @@ const ReaderStage: React.FC<Props> = ({
     totalPages,
     currentPage,
     readingProgress,
+    showProgressIndicator,
     progressAriaText,
     isLastPage,
     isTransitionPage,
@@ -84,9 +86,9 @@ const ReaderStage: React.FC<Props> = ({
     emptyState,
 }) => {
     return (
-        <div className="reader-view">
+        <div className={`reader-view${showProgressIndicator ? '' : ' reader-view--progress-hidden'}`}>
             <div className="reader-stage">
-                {totalPages > 0 ? (
+                {showProgressIndicator && totalPages > 0 ? (
                     <div
                         className="reader-progress"
                         role="progressbar"

@@ -16,7 +16,15 @@ export const RefreshProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, []);
 
   useEffect(() => {
-    const handler = () => setRefreshKey(String(Date.now()));
+    const handler = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : undefined;
+      if (detail?.remount === false) {
+        return;
+      }
+
+      setRefreshKey(String(Date.now()));
+    };
+
     window.addEventListener('settings-updated', handler as EventListener);
     return () => window.removeEventListener('settings-updated', handler as EventListener);
   }, []);

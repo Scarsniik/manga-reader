@@ -1,17 +1,19 @@
 import React from 'react'
 import AppUpdateSettingsPanel from '@/renderer/components/AppUpdate/AppUpdateSettingsPanel'
 import { FolderExternalLinkIcon } from '@/renderer/components/icons'
+import useModal from '@/renderer/hooks/useModal'
 import useParams from '@/renderer/hooks/useParams'
 import Form from '@/renderer/components/utils/Form/Form'
 import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
+import ReaderSettingsPanel from '@/renderer/components/ReaderSettings/ReaderSettingsPanel'
 import ShortcutSettingsPanel from '@/renderer/components/ShortcutSettings/ShortcutSettingsPanel'
 
 import '@/renderer/components/Modal/style.scss'
 import '@/renderer/components/Modal/modales/settings-style.scss'
 
-const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2
-const MAX_READER_PRELOAD_PAGE_COUNT = 10
+const OPTIONS_SUBMIT_BUTTON_ID = 'settings-options-submit'
+const READER_SUBMIT_BUTTON_ID = 'settings-reader-submit'
 
 declare global {
   interface Window {
@@ -19,23 +21,46 @@ declare global {
   }
 }
 
-const normalizeReaderPreloadPageCount = (value: unknown) => {
-  const parsed = typeof value === 'number'
-    ? value
-    : (typeof value === 'string' && value.trim().length > 0 ? Number(value) : Number.NaN)
-
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_READER_PRELOAD_PAGE_COUNT
-  }
-
-  return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)))
-}
-
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
-  const [activeTab, setActiveTab] = React.useState<'options' | 'shortcuts' | 'version-installation'>('options')
+  const { setModalActions } = useModal()
+  const [activeTab, setActiveTab] = React.useState<'options' | 'reader' | 'shortcuts' | 'version-installation'>('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
+  const activeSubmitButtonId = activeTab === 'options'
+    ? OPTIONS_SUBMIT_BUTTON_ID
+    : activeTab === 'reader'
+      ? READER_SUBMIT_BUTTON_ID
+      : null
+
+  React.useEffect(() => {
+    setModalActions(activeSubmitButtonId ? [
+      {
+        label: 'Enregistrer',
+        variant: 'primary',
+        id: activeSubmitButtonId,
+        closeOnClick: false,
+      },
+      {
+        label: 'Fermer',
+        variant: 'secondary',
+      },
+    ] : [
+      {
+        label: 'Fermer',
+        variant: 'secondary',
+      },
+    ])
+
+    return () => {
+      setModalActions([
+        {
+          label: 'Fermer',
+          variant: 'secondary',
+        },
+      ])
+    }
+  }, [activeSubmitButtonId, setModalActions])
 
   const fields: FormItem[] = [
     {
@@ -79,27 +104,18 @@ export default function SettingsModalContent() {
     },
     {
       type: 'section',
-      id: 'reader',
-      title: 'Lecteur',
+      id: 'library-display',
+      title: 'Affichage bibliothèque',
       fields: [
         {
           name: 'showPageNumbers',
-          label: 'Afficher numéros de page',
+          label: 'Afficher le nombre de pages sur les cartes',
           type: 'checkbox',
         },
         {
           name: 'titleLineCount',
-          label: 'Nombre de lignes pour le titre',
+          label: 'Nombre de lignes pour le titre des cartes',
           type: 'number',
-        },
-        {
-          name: 'readerPreloadPageCount',
-          label: 'Précharger N pages autour de la page actuelle et pré-rendre l\'OCR vers l\'avant puis l\'arrière',
-          type: 'number',
-          min: 0,
-          max: MAX_READER_PRELOAD_PAGE_COUNT,
-          step: 1,
-          placeholder: String(DEFAULT_READER_PRELOAD_PAGE_COUNT),
         },
       ],
     },
@@ -159,7 +175,6 @@ export default function SettingsModalContent() {
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
-    const readerPreloadPageCount = normalizeReaderPreloadPageCount(values.readerPreloadPageCount)
 
     // convert types
     const toSave: Record<string, any> = {
@@ -167,7 +182,6 @@ export default function SettingsModalContent() {
       showPageNumbers: !!values.showPageNumbers,
       showHiddens: !!values.showHiddens,
       titleLineCount: Number(values.titleLineCount) || 1,
-      readerPreloadPageCount,
       jpdbApiKey: values.jpdbApiKey || '',
       ocrPythonPath: values.ocrPythonPath || '',
       ocrRepoPath: values.ocrRepoPath || '',
@@ -180,7 +194,7 @@ export default function SettingsModalContent() {
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }
-    await setParams(toSave)
+    await setParams(toSave, { remount: false })
   }
 
   const handleOpenUserDataDirectory = React.useCallback(async () => {
@@ -218,6 +232,13 @@ export default function SettingsModalContent() {
         </button>
         <button
           type="button"
+          className={`settings-modal-tab ${activeTab === 'reader' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reader')}
+        >
+          Lecteur
+        </button>
+        <button
+          type="button"
           className={`settings-modal-tab ${activeTab === 'shortcuts' ? 'active' : ''}`}
           onClick={() => setActiveTab('shortcuts')}
         >
@@ -241,6 +262,7 @@ export default function SettingsModalContent() {
               initialValues={params || {}}
               submitLabel="Enregistrer"
               formId="settings-form"
+              submitButtonId={OPTIONS_SUBMIT_BUTTON_ID}
             />
             <section className="settings-modal-shortcut">
               <div className="settings-modal-shortcut__content">
@@ -262,6 +284,12 @@ export default function SettingsModalContent() {
                 <div className="settings-modal-shortcut__error">{userDataDirectoryError}</div>
               ) : null}
             </section>
+          </div>
+        ) : null}
+
+        {activeTab === 'reader' ? (
+          <div className="settings-modal-panel">
+            <ReaderSettingsPanel submitButtonId={READER_SUBMIT_BUTTON_ID} />
           </div>
         ) : null}
 

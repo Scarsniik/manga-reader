@@ -12,8 +12,6 @@ type OcrDirectionalCandidateMetrics = {
     secondaryOverlap: number;
 };
 
-const DEFAULT_READER_PRELOAD_PAGE_COUNT = 2;
-const MAX_READER_PRELOAD_PAGE_COUNT = 10;
 const BASE_OCR_PAGE_MEMORY_CACHE = 6;
 
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string): Promise<Blob> => {
@@ -106,18 +104,6 @@ export const copyImageViaBrowserClipboard = async (
 
         throw error;
     }
-};
-
-export const normalizeReaderPreloadPageCount = (value: unknown): number => {
-    const parsed = typeof value === 'number'
-        ? value
-        : (typeof value === 'string' && value.trim().length > 0 ? Number(value) : Number.NaN);
-
-    if (!Number.isFinite(parsed)) {
-        return DEFAULT_READER_PRELOAD_PAGE_COUNT;
-    }
-
-    return Math.max(0, Math.min(MAX_READER_PRELOAD_PAGE_COUNT, Math.floor(parsed)));
 };
 
 export const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => (

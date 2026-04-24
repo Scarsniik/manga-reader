@@ -1,5 +1,6 @@
 
 .reader {
+	--reader-image-max-width: 1100px;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -95,7 +96,7 @@
 }
 
 .reader-body img.reader-image {
-	max-width: 1100px;
+	max-width: var(--reader-image-max-width);
 	width: 100%;
 	height: auto;
 	object-fit: contain;
@@ -175,11 +176,15 @@
 	/* keep the reader at its max width and avoid being shrunk by the OCR panel */
 	flex: 0 0 auto;
 	width: 100%;
-	max-width: 1100px;
+	max-width: calc(var(--reader-image-max-width) + 28px);
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	min-width: 0;
+}
+
+.reader-view--progress-hidden {
+	max-width: var(--reader-image-max-width);
 }
 
 .reader-stage {
@@ -607,7 +612,11 @@
 	}
 	.reader-view {
 		width: 100%;
-		max-width: 1100px;
+		max-width: calc(var(--reader-image-max-width) + 28px);
+	}
+
+	.reader-view--progress-hidden {
+		max-width: var(--reader-image-max-width);
 	}
 }
 

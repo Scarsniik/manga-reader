@@ -9,7 +9,7 @@
 .settings-modal-content {
   display: grid;
   min-height: min(70vh, 720px);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .settings-modal-tabs {

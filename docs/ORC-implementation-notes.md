@@ -95,8 +95,8 @@ Corrections ajoutees apres les premiers tests dans l'application :
 - suppression du texte affiche dans les rectangles de detection
 - alignement du panneau OCR au niveau de la zone image au lieu d'un positionnement fixe trop haut
 - ajout d'un leger debordement du rectangle affiche autour de la box OCR pour qu'il colle moins au texte reconnu, sans dessiner un deuxieme cadre
-- pre-rendu OCR sequentiel base sur `readerPreloadPageCount`, dans l'ordre page courante puis pages suivantes puis pages precedentes
-- cache memoire OCR ajuste selon `readerPreloadPageCount` pour garder plus de pages chaudes lors des allers-retours
+- pre-rendu OCR sequentiel base sur `readerOcrPreloadPageCount`, dans l'ordre page courante puis pages suivantes puis pages precedentes
+- cache memoire OCR ajuste selon `readerOcrPreloadPageCount` pour garder plus de pages chaudes lors des allers-retours
 - enrichissement des metadonnees OCR backend pour chaque bloc : angle, langue, score de masque, aspect ratio
 - filtrage conservateur des faux positifs evidents sur les pages compliquees
 - passage du schema de cache OCR a `mokuro-page-v2` pour forcer le recalcul avec le nouveau filtrage
@@ -323,12 +323,12 @@ Quand le panneau OCR est actif :
 - la page courante est chargee en priorite
 - puis le reader prepare l'OCR des pages suivantes dans l'ordre
 - puis le reader prepare aussi l'OCR des pages precedentes
-- le nombre de pages preparees de chaque cote suit `readerPreloadPageCount`
+- le nombre de pages preparees de chaque cote suit `readerOcrPreloadPageCount`
 - les resultats prepares sont gardes en memoire et en cache disque
 
 Exemple :
 
-- si `readerPreloadPageCount = 3`
+- si `readerOcrPreloadPageCount = 3`
 - le reader tente de garder pretes la page courante, puis les 3 pages suivantes, puis les 3 pages precedentes
 - l'ordre de traitement est strictement sequentiel
 

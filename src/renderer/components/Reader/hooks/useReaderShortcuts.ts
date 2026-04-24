@@ -6,6 +6,10 @@ import {
 } from "@/renderer/utils/shortcutBindings";
 import { findVerticalScrollContainer } from "@/renderer/utils/scrollPosition";
 import { OcrNavigationDirection } from "@/renderer/components/Reader/types";
+import {
+    DEFAULT_READER_SCROLL_STRENGTH,
+    normalizeReaderScrollStrength,
+} from "@/shared/readerSettings";
 
 type Args = {
     copyCurrentImage: () => Promise<void>;
@@ -20,6 +24,7 @@ type Args = {
     activeOcrEnabled: boolean;
     ocrPanelAvailable: boolean;
     requireFreshNavigationInput: boolean;
+    scrollStrength: number;
 };
 
 const OCR_NAVIGATION_ACTIONS: Array<{
@@ -57,6 +62,7 @@ const useReaderShortcuts = ({
     activeOcrEnabled,
     ocrPanelAvailable,
     requireFreshNavigationInput,
+    scrollStrength,
 }: Args) => {
     const { shortcuts } = useShortcutSettings();
 
@@ -85,7 +91,8 @@ const useReaderShortcuts = ({
         };
 
         const scrollCurrentView = (direction: "up" | "down") => {
-            const amount = window.innerHeight * 0.6;
+            const normalizedScrollStrength = normalizeReaderScrollStrength(scrollStrength ?? DEFAULT_READER_SCROLL_STRENGTH);
+            const amount = window.innerHeight * (normalizedScrollStrength / 100);
             const readerElement = document.querySelector(".reader");
             const scrollContainer = readerElement instanceof HTMLElement
                 ? findVerticalScrollContainer(readerElement)
@@ -196,6 +203,7 @@ const useReaderShortcuts = ({
         requestTokenCycle,
         requireFreshNavigationInput,
         selectedBoxes,
+        scrollStrength,
         shortcuts,
         toggleManualSelection,
         toggleOcrPanel,

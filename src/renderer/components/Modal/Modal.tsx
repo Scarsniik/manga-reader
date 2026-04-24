@@ -6,6 +6,7 @@ type Action = {
   onClick?: () => void;
   variant?: 'primary' | 'secondary';
   id?: string;
+  closeOnClick?: boolean;
 };
 
 const Modal: React.FC<{
@@ -67,7 +68,9 @@ const Modal: React.FC<{
                 className={`app-modal-btn ${a.variant === 'primary' ? 'primary' : 'secondary'}`}
                 onClick={() => {
                   a.onClick?.();
-                  onClose?.();
+                  if (a.closeOnClick !== false) {
+                    onClose?.();
+                  }
                 }}
               >
                 {a.label}

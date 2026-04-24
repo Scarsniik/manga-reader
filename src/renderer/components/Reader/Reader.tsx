@@ -8,11 +8,18 @@ import ReaderStage from './ReaderStage';
 import useParams from '@/renderer/hooks/useParams';
 import useTags from '@/renderer/hooks/useTags';
 import {
+    DEFAULT_READER_IMAGE_MAX_WIDTH,
+    DEFAULT_READER_SCROLL_STRENGTH,
+    normalizeReaderImageMaxWidth,
+    normalizeReaderImagePreloadPageCount,
+    normalizeReaderOcrPreloadPageCount,
+    normalizeReaderScrollStrength,
+} from '@/shared/readerSettings';
+import {
     ReaderLocationState,
 } from './types';
 import {
     normalizeBooleanSetting,
-    normalizeReaderPreloadPageCount,
 } from './utils';
 import useReaderData from './hooks/useReaderData';
 import useReaderNavigation from './hooks/useReaderNavigation';
@@ -26,11 +33,23 @@ const Reader: React.FC = () => {
     const { params, loading: settingsLoading, setParams } = useParams();
     const { tags } = useTags();
     const locationState = location.state as ReaderLocationState;
-    const preloadPageCount = settingsLoading
+    const ocrPreloadPageCount = settingsLoading
         ? null
-        : normalizeReaderPreloadPageCount(params?.readerPreloadPageCount);
+        : normalizeReaderOcrPreloadPageCount(params?.readerOcrPreloadPageCount ?? params?.readerPreloadPageCount);
+    const imagePreloadPageCount = settingsLoading
+        ? null
+        : normalizeReaderImagePreloadPageCount(params?.readerImagePreloadPageCount);
+    const readerImageMaxWidth = settingsLoading
+        ? DEFAULT_READER_IMAGE_MAX_WIDTH
+        : normalizeReaderImageMaxWidth(params?.readerImageMaxWidth);
+    const readerScrollStrength = settingsLoading
+        ? DEFAULT_READER_SCROLL_STRENGTH
+        : normalizeReaderScrollStrength(params?.readerScrollStrength);
+    const showProgressIndicator = normalizeBooleanSetting(params?.readerShowProgressIndicator, true);
+    const openOcrPanelForJapaneseManga = normalizeBooleanSetting(params?.readerOpenOcrPanelForJapaneseManga, false);
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
+    const autoOpenedOcrMangaIdRef = React.useRef<string | null>(null);
     const hiddenTagIds = React.useMemo(
         () => tags.filter((tag) => tag.hidden).map((tag) => tag.id),
         [tags],
@@ -52,7 +71,7 @@ const Reader: React.FC = () => {
     } = useReaderData({
         locationSearch: location.search,
         locationState,
-        preloadPageCount,
+        preloadPageCount: imagePreloadPageCount,
     });
 
     const navigation = useReaderNavigation({
@@ -78,7 +97,7 @@ const Reader: React.FC = () => {
         currentIndex,
         images,
         manga,
-        preloadPageCount,
+        preloadPageCount: ocrPreloadPageCount,
         imgRef,
     });
 
@@ -101,10 +120,43 @@ const Reader: React.FC = () => {
         activeOcrEnabled,
         ocrPanelAvailable: navigation.ocrAvailable,
         requireFreshNavigationInput: navigation.isTransitionPage || navigation.isCompletionPage,
+        scrollStrength: readerScrollStrength,
     });
 
+    React.useEffect(() => {
+        if (
+            settingsLoading
+            || !openOcrPanelForJapaneseManga
+            || !navigation.ocrAvailable
+            || !manga
+        ) {
+            return;
+        }
+
+        const mangaLanguage = String(manga.language || '').trim().toLowerCase();
+        if (mangaLanguage !== 'ja') {
+            return;
+        }
+
+        if (autoOpenedOcrMangaIdRef.current === manga.id) {
+            return;
+        }
+
+        autoOpenedOcrMangaIdRef.current = manga.id;
+        setOcrEnabled(true);
+    }, [
+        manga,
+        navigation.ocrAvailable,
+        openOcrPanelForJapaneseManga,
+        settingsLoading,
+    ]);
+
+    const readerStyle = React.useMemo(() => ({
+        '--reader-image-max-width': `${readerImageMaxWidth}px`,
+    } as React.CSSProperties), [readerImageMaxWidth]);
+
     return (
-        <div className="reader">
+        <div className="reader" style={readerStyle}>
             <ReaderHeader
                 manga={manga}
                 bookmarkExcludedFields={bookmarkExcludedFields}
@@ -125,6 +177,7 @@ const Reader: React.FC = () => {
                     totalPages={navigation.totalPages}
                     currentPage={navigation.currentPage}
                     readingProgress={navigation.readingProgress}
+                    showProgressIndicator={showProgressIndicator}
                     progressAriaText={navigation.progressAriaText}
                     isLastPage={navigation.isLastPage}
                     isTransitionPage={navigation.isTransitionPage}
