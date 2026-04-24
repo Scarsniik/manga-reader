@@ -323,6 +323,68 @@
   font-size: $jp-font-size-sm;
 }
 
+.details-skeleton {
+  display: grid;
+  gap: 12px;
+  min-height: 220px;
+}
+
+.details-skeleton__line,
+.details-skeleton__surface,
+.details-skeleton__card {
+  display: block;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255,255,255,0.05) 0%,
+      rgba(255,255,255,0.1) 45%,
+      rgba(255,255,255,0.05) 90%
+    );
+  background-size: 220% 100%;
+  animation: details-skeleton-pulse 1200ms ease-in-out infinite;
+}
+
+.details-skeleton__surface {
+  width: 42%;
+  height: 52px;
+}
+
+.details-skeleton__line {
+  width: 100%;
+  height: 12px;
+}
+
+.details-skeleton__line--medium {
+  width: 68%;
+}
+
+.details-skeleton__line--short {
+  width: 44%;
+}
+
+.details-skeleton__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.details-skeleton__card {
+  height: 96px;
+  border-radius: $jp-radius;
+}
+
+@keyframes details-skeleton-pulse {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 .details-error { color: #ff6b6b }
 
 .details-error--inline {

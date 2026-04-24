@@ -19,7 +19,7 @@ type Props = {
     onToggleOcr: () => void;
 };
 
-const ReaderHeader: React.FC<Props> = ({
+const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
     manga,
     bookmarkExcludedFields,
     pageCounterLabel,
@@ -30,11 +30,11 @@ const ReaderHeader: React.FC<Props> = ({
     onBack,
     onCopyImage,
     onToggleOcr,
-}) => {
+}, ref) => {
     const { openModal } = useModal();
 
     return (
-        <div className="reader-header">
+        <div className="reader-header" ref={ref}>
             <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
             <div className="reader-info">
                 <div className="reader-info__text">
@@ -85,6 +85,8 @@ const ReaderHeader: React.FC<Props> = ({
             </div>
         </div>
     );
-};
+});
+
+ReaderHeader.displayName = 'ReaderHeader';
 
 export default ReaderHeader;

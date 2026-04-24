@@ -21,6 +21,7 @@ type Props = {
   selectedRubyParts: JpdbRubyPart[];
   selectedVocabulary: JpdbVocabularyEntry[];
   kanjiDetails: DisplayKanjiDetail[];
+  loading?: boolean;
   kanjiMeaningsLoading?: boolean;
   showFailReviewButton?: boolean;
   showAddVocabularyButton?: boolean;
@@ -91,6 +92,7 @@ export default function DetailsPanel({
   selectedRubyParts,
   selectedVocabulary,
   kanjiDetails,
+  loading = false,
   kanjiMeaningsLoading = false,
   showFailReviewButton = false,
   showAddVocabularyButton = false,
@@ -119,6 +121,17 @@ export default function DetailsPanel({
       <div className="details-box">
         {jpdbError ? (
           <div className="details-error">{jpdbError}</div>
+        ) : loading ? (
+          <div className="details-skeleton" aria-label="Chargement du détail du token" aria-busy="true">
+            <span className="details-skeleton__surface" />
+            <span className="details-skeleton__line details-skeleton__line--medium" />
+            <span className="details-skeleton__line" />
+            <span className="details-skeleton__line details-skeleton__line--short" />
+            <div className="details-skeleton__cards">
+              <span className="details-skeleton__card" />
+              <span className="details-skeleton__card" />
+            </div>
+          </div>
         ) : selectedSurface ? (
           <div className="details-content">
             <div className="details-token-hero" lang="ja">

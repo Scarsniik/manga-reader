@@ -24,10 +24,13 @@ import {
 import useReaderData from './hooks/useReaderData';
 import useReaderNavigation from './hooks/useReaderNavigation';
 import useReaderOcr from './hooks/useReaderOcr';
+import useReaderOcrPanelLayout from './hooks/useReaderOcrPanelLayout';
 import useReaderShortcuts from './hooks/useReaderShortcuts';
 
 const Reader: React.FC = () => {
     const [ocrEnabled, setOcrEnabled] = React.useState<boolean>(false);
+    const readerHeaderRef = React.useRef<HTMLDivElement | null>(null);
+    const ocrPanelRef = React.useRef<HTMLElement | null>(null);
     const location = useLocation();
     const navigate = useNavigate();
     const { params, loading: settingsLoading, setParams } = useParams();
@@ -73,6 +76,7 @@ const Reader: React.FC = () => {
         locationState,
         preloadPageCount: imagePreloadPageCount,
     });
+    const ocrPanelLayoutStyle = useReaderOcrPanelLayout(readerHeaderRef, ocrPanelRef);
 
     const navigation = useReaderNavigation({
         locationSearch: location.search,
@@ -152,12 +156,14 @@ const Reader: React.FC = () => {
     ]);
 
     const readerStyle = React.useMemo(() => ({
+        ...ocrPanelLayoutStyle,
         '--reader-image-max-width': `${readerImageMaxWidth}px`,
-    } as React.CSSProperties), [readerImageMaxWidth]);
+    } as React.CSSProperties), [ocrPanelLayoutStyle, readerImageMaxWidth]);
 
     return (
         <div className="reader" style={readerStyle}>
             <ReaderHeader
+                ref={readerHeaderRef}
                 manga={manga}
                 bookmarkExcludedFields={bookmarkExcludedFields}
                 pageCounterLabel={navigation.pageCounterLabel}
@@ -226,6 +232,7 @@ const Reader: React.FC = () => {
 
                 {activeOcrEnabled ? (
                     <OcrPanel
+                        ref={ocrPanelRef}
                         detectedBoxes={ocr.detectedBoxes}
                         manualBoxes={ocr.manualBoxes}
                         selectedBoxes={ocr.selectedBoxes}

@@ -30,7 +30,7 @@ type Props = {
     onToggleShowBoxes?: (next: boolean) => void;
 };
 
-const OcrPanel: React.FC<Props> = ({
+const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     detectedBoxes,
     manualBoxes,
     selectedBoxes,
@@ -53,7 +53,7 @@ const OcrPanel: React.FC<Props> = ({
     statusNote,
     showBoxes = true,
     onToggleShowBoxes,
-}) => {
+}, ref) => {
     const allBoxes = [...detectedBoxes, ...manualBoxes];
     const boxMap = new Map(allBoxes.map((box) => [box.id, box] as const));
     const selectedBoxSet = new Set(selectedBoxes);
@@ -92,7 +92,7 @@ const OcrPanel: React.FC<Props> = ({
     const hasStatus = !!loading || !!manualSelectionLoading || !!manualSelectionEnabled || !!error || !!statusNote;
 
     return (
-        <aside className="reader-ocr-panel" aria-label="OCR panel">
+        <aside className="reader-ocr-panel" aria-label="OCR panel" ref={ref}>
             <div className="ocr-panel-inner">
                 <div className="ocr-panel-header">
                     <div>
@@ -245,6 +245,8 @@ const OcrPanel: React.FC<Props> = ({
             </div>
         </aside>
     );
-};
+});
+
+OcrPanel.displayName = 'OcrPanel';
 
 export default OcrPanel;

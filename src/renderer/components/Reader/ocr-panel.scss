@@ -18,11 +18,13 @@
   font-size: 13px;
   color: var(--ocr-panel-text);
   position: sticky;
-  top: 16px;
+  top: var(--reader-ocr-panel-top, 0px);
   align-self: flex-start;
   width: min(560px, 100%);
-  max-height: calc(100vh - 32px);
+  height: var(--reader-ocr-panel-height, calc(100vh - var(--reader-ocr-panel-top, 0px)));
+  max-height: var(--reader-ocr-panel-height, calc(100vh - var(--reader-ocr-panel-top, 0px)));
   overflow: auto;
+  box-sizing: border-box;
   border-radius: 20px;
   backdrop-filter: blur(12px);
 }

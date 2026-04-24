@@ -53,6 +53,33 @@ type Props = {
   onClose?: () => void;
 };
 
+const AnalysisSkeleton = () => (
+  <div className="jp-analysis-skeleton" aria-label="Analyse en cours" aria-busy="true">
+    <div className="jp-analysis-skeleton__translation">
+      <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--short" />
+      <span className="jp-analysis-skeleton__line" />
+      <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--medium" />
+    </div>
+    <div className="jp-analysis-skeleton__tokens">
+      <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--short" />
+      <div className="jp-analysis-skeleton__token-list">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <span key={`analysis-token-skeleton-${index}`} className="jp-analysis-skeleton__token" />
+        ))}
+      </div>
+    </div>
+    <div className="jp-analysis-skeleton__details">
+      <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--short" />
+      <div className="jp-analysis-skeleton__details-box">
+        <span className="jp-analysis-skeleton__surface" />
+        <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--medium" />
+        <span className="jp-analysis-skeleton__line" />
+        <span className="jp-analysis-skeleton__line jp-analysis-skeleton__line--medium" />
+      </div>
+    </div>
+  </div>
+);
+
 export default function JapaneseAnalyse({
   selectedBoxes,
   analysisScrollKey,
@@ -463,44 +490,49 @@ export default function JapaneseAnalyse({
         }}
       />
 
-      {translation ? (
-        <div className="translation">
-          <div className="translation__label">Traduction</div>
-          <div className="translation__text">{translation}</div>
-          {translationTruncated ? (
-            <div className="translation-truncated">Traduction tronquée par JPDB.</div>
+      {analysisLoading ? (
+        <AnalysisSkeleton />
+      ) : (
+        <>
+          {translation ? (
+            <div className="translation">
+              <div className="translation__label">Traduction</div>
+              <div className="translation__text">{translation}</div>
+              {translationTruncated ? (
+                <div className="translation-truncated">Traduction tronquée par JPDB.</div>
+              ) : null}
+            </div>
           ) : null}
-        </div>
-      ) : null}
 
-      <TokensList
-        text={text}
-        sentenceSegments={sentenceSegments}
-        selectedTokenIndex={activeTokenIndex}
-        onTokenClick={(index) => {
-          setActiveTokenIndex(index);
-          setSelectedTokenIndex(index);
-          setShouldScrollToDetails(true);
-        }}
-      />
+          <TokensList
+            text={text}
+            sentenceSegments={sentenceSegments}
+            selectedTokenIndex={activeTokenIndex}
+            onTokenClick={(index) => {
+              setActiveTokenIndex(index);
+              setSelectedTokenIndex(index);
+              setShouldScrollToDetails(true);
+            }}
+          />
 
-      <div ref={detailsRef}>
-        <DetailsPanel
-          jpdbError={jpdbError}
-          reviewError={actionError}
-          selectedSurface={selectedSurface}
-          selectedRubyParts={selectedRubyParts}
-          selectedVocabulary={selectedVocabulary}
-          kanjiDetails={enrichedKanjiDetails}
-          kanjiMeaningsLoading={kanjiMeaningsLoading}
-          showFailReviewButton={canShowFailReviewButton}
-          showAddVocabularyButton={canShowAddVocabularyButton}
-          showRemoveVocabularyButton={canShowRemoveVocabularyButton}
-          addVocabularyButtonDisabled={isPrimaryAddDisabled}
-          addVocabularyButtonLoading={isPrimaryAddSubmitting}
-          removeVocabularyButtonDisabled={isPrimaryRemoveDisabled}
-          removeVocabularyButtonLoading={isPrimaryRemoveSubmitting}
-          onAddVocabulary={async () => {
+          <div ref={detailsRef}>
+            <DetailsPanel
+              jpdbError={jpdbError}
+              reviewError={actionError}
+              selectedSurface={selectedSurface}
+              selectedRubyParts={selectedRubyParts}
+              selectedVocabulary={selectedVocabulary}
+              kanjiDetails={enrichedKanjiDetails}
+              loading={kanjiFetchLoading}
+              kanjiMeaningsLoading={kanjiMeaningsLoading}
+              showFailReviewButton={canShowFailReviewButton}
+              showAddVocabularyButton={canShowAddVocabularyButton}
+              showRemoveVocabularyButton={canShowRemoveVocabularyButton}
+              addVocabularyButtonDisabled={isPrimaryAddDisabled}
+              addVocabularyButtonLoading={isPrimaryAddSubmitting}
+              removeVocabularyButtonDisabled={isPrimaryRemoveDisabled}
+              removeVocabularyButtonLoading={isPrimaryRemoveSubmitting}
+              onAddVocabulary={async () => {
             if (!primaryBaseVocabulary || isPrimaryAddDisabled) {
               return;
             }
@@ -548,8 +580,8 @@ export default function JapaneseAnalyse({
               setActionSubmittingKey(null);
               setActionSubmittingType(null);
             }
-          }}
-          onRemoveVocabulary={async () => {
+              }}
+              onRemoveVocabulary={async () => {
             if (!primaryBaseVocabulary || !primaryReviewKey || isPrimaryRemoveDisabled) {
               return;
             }
@@ -587,10 +619,10 @@ export default function JapaneseAnalyse({
               setActionSubmittingKey(null);
               setActionSubmittingType(null);
             }
-          }}
-          failReviewButtonDisabled={isPrimaryFailReviewDisabled}
-          failReviewButtonLoading={isPrimaryFailReviewSubmitting}
-          onFailReview={async () => {
+              }}
+              failReviewButtonDisabled={isPrimaryFailReviewDisabled}
+              failReviewButtonLoading={isPrimaryFailReviewSubmitting}
+              onFailReview={async () => {
             if (!primaryBaseVocabulary || isPrimaryFailReviewDisabled) {
               return;
             }
@@ -615,9 +647,11 @@ export default function JapaneseAnalyse({
               setActionSubmittingKey(null);
               setActionSubmittingType(null);
             }
-          }}
-        />
-      </div>
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
