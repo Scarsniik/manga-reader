@@ -9,10 +9,14 @@ import useParams from '@/renderer/hooks/useParams';
 import useTags from '@/renderer/hooks/useTags';
 import {
     DEFAULT_READER_IMAGE_MAX_WIDTH,
+    DEFAULT_READER_SCROLL_HOLD_SPEED,
+    DEFAULT_READER_SCROLL_START_BOOST,
     DEFAULT_READER_SCROLL_STRENGTH,
     normalizeReaderImageMaxWidth,
     normalizeReaderImagePreloadPageCount,
     normalizeReaderOcrPreloadPageCount,
+    normalizeReaderScrollHoldSpeed,
+    normalizeReaderScrollStartBoost,
     normalizeReaderScrollStrength,
 } from '@/shared/readerSettings';
 import {
@@ -48,6 +52,12 @@ const Reader: React.FC = () => {
     const readerScrollStrength = settingsLoading
         ? DEFAULT_READER_SCROLL_STRENGTH
         : normalizeReaderScrollStrength(params?.readerScrollStrength);
+    const readerScrollHoldSpeed = settingsLoading
+        ? DEFAULT_READER_SCROLL_HOLD_SPEED
+        : normalizeReaderScrollHoldSpeed(params?.readerScrollHoldSpeed);
+    const readerScrollStartBoost = settingsLoading
+        ? DEFAULT_READER_SCROLL_START_BOOST
+        : normalizeReaderScrollStartBoost(params?.readerScrollStartBoost);
     const showProgressIndicator = normalizeBooleanSetting(params?.readerShowProgressIndicator, true);
     const openOcrPanelForJapaneseManga = normalizeBooleanSetting(params?.readerOpenOcrPanelForJapaneseManga, false);
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
@@ -125,6 +135,8 @@ const Reader: React.FC = () => {
         ocrPanelAvailable: navigation.ocrAvailable,
         requireFreshNavigationInput: navigation.isTransitionPage || navigation.isCompletionPage,
         scrollStrength: readerScrollStrength,
+        scrollHoldSpeed: readerScrollHoldSpeed,
+        scrollStartBoost: readerScrollStartBoost,
     });
 
     React.useEffect(() => {

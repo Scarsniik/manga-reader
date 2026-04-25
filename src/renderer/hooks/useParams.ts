@@ -13,6 +13,8 @@ export type AppParams = {
     readerImageMaxWidth?: number;
     readerShowProgressIndicator?: boolean;
     readerScrollStrength?: number;
+    readerScrollHoldSpeed?: number;
+    readerScrollStartBoost?: number;
     readerOpenOcrPanelForJapaneseManga?: boolean;
     readerPreloadPageCount?: number;
     readerOcrDetectedSectionOpen?: boolean;

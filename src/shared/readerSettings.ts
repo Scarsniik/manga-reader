@@ -8,6 +8,12 @@ export const MAX_READER_IMAGE_MAX_WIDTH = 2400;
 export const DEFAULT_READER_SCROLL_STRENGTH = 60;
 export const MIN_READER_SCROLL_STRENGTH = 10;
 export const MAX_READER_SCROLL_STRENGTH = 200;
+export const DEFAULT_READER_SCROLL_HOLD_SPEED = 280;
+export const MIN_READER_SCROLL_HOLD_SPEED = 50;
+export const MAX_READER_SCROLL_HOLD_SPEED = 500;
+export const DEFAULT_READER_SCROLL_START_BOOST = 90;
+export const MIN_READER_SCROLL_START_BOOST = 0;
+export const MAX_READER_SCROLL_START_BOOST = 250;
 
 const parseNumericSetting = (value: unknown): number => {
     if (typeof value === "number") {
@@ -69,5 +75,23 @@ export const normalizeReaderScrollStrength = (value: unknown): number => (
         DEFAULT_READER_SCROLL_STRENGTH,
         MIN_READER_SCROLL_STRENGTH,
         MAX_READER_SCROLL_STRENGTH,
+    )
+);
+
+export const normalizeReaderScrollHoldSpeed = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_SCROLL_HOLD_SPEED,
+        MIN_READER_SCROLL_HOLD_SPEED,
+        MAX_READER_SCROLL_HOLD_SPEED,
+    )
+);
+
+export const normalizeReaderScrollStartBoost = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_SCROLL_START_BOOST,
+        MIN_READER_SCROLL_START_BOOST,
+        MAX_READER_SCROLL_START_BOOST,
     )
 );

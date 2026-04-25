@@ -8,6 +8,10 @@ import { findVerticalScrollContainer } from "@/renderer/utils/scrollPosition";
 import { OcrNavigationDirection } from "@/renderer/components/Reader/types";
 import {
     DEFAULT_READER_SCROLL_STRENGTH,
+    DEFAULT_READER_SCROLL_HOLD_SPEED,
+    DEFAULT_READER_SCROLL_START_BOOST,
+    normalizeReaderScrollHoldSpeed,
+    normalizeReaderScrollStartBoost,
     normalizeReaderScrollStrength,
 } from "@/shared/readerSettings";
 
@@ -25,7 +29,11 @@ type Args = {
     ocrPanelAvailable: boolean;
     requireFreshNavigationInput: boolean;
     scrollStrength: number;
+    scrollHoldSpeed: number;
+    scrollStartBoost: number;
 };
+
+type ScrollDirection = "up" | "down";
 
 const OCR_NAVIGATION_ACTIONS: Array<{
     actionId: ShortcutActionId;
@@ -63,6 +71,8 @@ const useReaderShortcuts = ({
     ocrPanelAvailable,
     requireFreshNavigationInput,
     scrollStrength,
+    scrollHoldSpeed,
+    scrollStartBoost,
 }: Args) => {
     const { shortcuts } = useShortcutSettings();
 
@@ -90,16 +100,32 @@ const useReaderShortcuts = ({
             } catch {}
         };
 
-        const scrollCurrentView = (direction: "up" | "down") => {
-            const normalizedScrollStrength = normalizeReaderScrollStrength(scrollStrength ?? DEFAULT_READER_SCROLL_STRENGTH);
-            const amount = window.innerHeight * (normalizedScrollStrength / 100);
+        const getScrollContainer = () => {
             const readerElement = document.querySelector(".reader");
-            const scrollContainer = readerElement instanceof HTMLElement
+            return readerElement instanceof HTMLElement
                 ? findVerticalScrollContainer(readerElement)
                 : null;
+        };
+
+        const getScrollSpeed = () => {
+            const normalizedScrollStrength = normalizeReaderScrollStrength(scrollStrength ?? DEFAULT_READER_SCROLL_STRENGTH);
+            const normalizedScrollHoldSpeed = normalizeReaderScrollHoldSpeed(scrollHoldSpeed ?? DEFAULT_READER_SCROLL_HOLD_SPEED);
+            return window.innerHeight * (normalizedScrollStrength / 100) * (normalizedScrollHoldSpeed / 100);
+        };
+
+        const getScrollInitialStepSeconds = () => {
+            const normalizedScrollStartBoost = normalizeReaderScrollStartBoost(
+                scrollStartBoost ?? DEFAULT_READER_SCROLL_START_BOOST,
+            );
+            return normalizedScrollStartBoost / 1000;
+        };
+
+        const scrollCurrentViewBy = (distance: number) => {
+            const scrollContainer = getScrollContainer();
             const scrollOptions = {
-                top: direction === "up" ? -amount : amount,
-                behavior: "smooth",
+                top: distance,
+                left: 0,
+                behavior: "auto",
             } as const;
 
             if (scrollContainer) {
@@ -108,6 +134,110 @@ const useReaderShortcuts = ({
             }
 
             window.scrollBy(scrollOptions);
+        };
+
+        const activeScrollKeys = new Map<string, ScrollDirection>();
+        let activeScrollDirection: ScrollDirection | null = null;
+        let scrollAnimationFrame: number | null = null;
+        let lastScrollTimestamp: number | null = null;
+
+        const getScrollKeyId = (event: KeyboardEvent) => event.code || event.key;
+
+        const getCurrentScrollDirection = () => {
+            if (
+                activeScrollDirection
+                && Array.from(activeScrollKeys.values()).includes(activeScrollDirection)
+            ) {
+                return activeScrollDirection;
+            }
+
+            const activeDirections = Array.from(activeScrollKeys.values());
+            return activeDirections.length > 0
+                ? activeDirections[activeDirections.length - 1]
+                : null;
+        };
+
+        const stopContinuousScroll = () => {
+            if (scrollAnimationFrame !== null) {
+                window.cancelAnimationFrame(scrollAnimationFrame);
+                scrollAnimationFrame = null;
+            }
+
+            lastScrollTimestamp = null;
+        };
+
+        const stepContinuousScroll = (timestamp: number) => {
+            const direction = getCurrentScrollDirection();
+            if (!direction) {
+                stopContinuousScroll();
+                return;
+            }
+
+            if (lastScrollTimestamp === null) {
+                lastScrollTimestamp = timestamp;
+            }
+
+            const elapsedSeconds = Math.min(48, timestamp - lastScrollTimestamp) / 1000;
+            lastScrollTimestamp = timestamp;
+
+            const directionMultiplier = direction === "up" ? -1 : 1;
+            scrollCurrentViewBy(directionMultiplier * getScrollSpeed() * elapsedSeconds);
+            scrollAnimationFrame = window.requestAnimationFrame(stepContinuousScroll);
+        };
+
+        const startContinuousScroll = (event: KeyboardEvent, direction: ScrollDirection) => {
+            const keyId = getScrollKeyId(event);
+            const wasActive = activeScrollKeys.get(keyId) === direction;
+
+            activeScrollKeys.delete(keyId);
+            activeScrollKeys.set(keyId, direction);
+            activeScrollDirection = direction;
+
+            if (!wasActive) {
+                const directionMultiplier = direction === "up" ? -1 : 1;
+                scrollCurrentViewBy(directionMultiplier * getScrollSpeed() * getScrollInitialStepSeconds());
+            }
+
+            if (scrollAnimationFrame === null) {
+                lastScrollTimestamp = window.performance.now();
+                scrollAnimationFrame = window.requestAnimationFrame(stepContinuousScroll);
+            }
+        };
+
+        const stopScrollKey = (event: KeyboardEvent) => {
+            const keyId = getScrollKeyId(event);
+            const direction = activeScrollKeys.get(keyId);
+            if (!direction) {
+                return;
+            }
+
+            activeScrollKeys.delete(keyId);
+            if (activeScrollDirection === direction) {
+                activeScrollDirection = getCurrentScrollDirection();
+            }
+
+            if (activeScrollKeys.size === 0) {
+                activeScrollDirection = null;
+                stopContinuousScroll();
+            }
+        };
+
+        const stopAllScrollKeys = () => {
+            activeScrollKeys.clear();
+            activeScrollDirection = null;
+            stopContinuousScroll();
+        };
+
+        const getScrollShortcutDirection = (event: KeyboardEvent): ScrollDirection | null => {
+            if (matchesShortcut(event, "readerScrollUp")) {
+                return "up";
+            }
+
+            if (matchesShortcut(event, "readerScrollDown")) {
+                return "down";
+            }
+
+            return null;
         };
 
         const onKey = (event: KeyboardEvent) => {
@@ -172,15 +302,10 @@ const useReaderShortcuts = ({
                 return;
             }
 
-            if (matchesShortcut(event, "readerScrollUp")) {
+            const scrollDirection = getScrollShortcutDirection(event);
+            if (scrollDirection) {
                 preventShortcutDefault(event);
-                scrollCurrentView("up");
-                return;
-            }
-
-            if (matchesShortcut(event, "readerScrollDown")) {
-                preventShortcutDefault(event);
-                scrollCurrentView("down");
+                startContinuousScroll(event, scrollDirection);
                 return;
             }
 
@@ -190,8 +315,27 @@ const useReaderShortcuts = ({
             }
         };
 
+        const onKeyUp = (event: KeyboardEvent) => {
+            stopScrollKey(event);
+        };
+
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "hidden") {
+                stopAllScrollKeys();
+            }
+        };
+
         window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
+        window.addEventListener("keyup", onKeyUp);
+        window.addEventListener("blur", stopAllScrollKeys);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            window.removeEventListener("keydown", onKey);
+            window.removeEventListener("keyup", onKeyUp);
+            window.removeEventListener("blur", stopAllScrollKeys);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            stopAllScrollKeys();
+        };
     }, [
         activeOcrEnabled,
         copyCurrentImage,
@@ -203,6 +347,8 @@ const useReaderShortcuts = ({
         requestTokenCycle,
         requireFreshNavigationInput,
         selectedBoxes,
+        scrollHoldSpeed,
+        scrollStartBoost,
         scrollStrength,
         shortcuts,
         toggleManualSelection,

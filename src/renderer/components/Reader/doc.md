@@ -47,4 +47,4 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, et les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché.
 - L'OCR reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones OCR peuvent être détectées automatiquement ou ajoutées manuellement.
-- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, le préchargement image, le pré-rendu OCR et l'ouverture automatique du panneau OCR pour les mangas marqués en japonais (`language = ja`).
+- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image, le pré-rendu OCR et l'ouverture automatique du panneau OCR pour les mangas marqués en japonais (`language = ja`).

@@ -14,6 +14,12 @@ const MAX_READER_IMAGE_MAX_WIDTH = 2400;
 const DEFAULT_READER_SCROLL_STRENGTH = 60;
 const MIN_READER_SCROLL_STRENGTH = 10;
 const MAX_READER_SCROLL_STRENGTH = 200;
+const DEFAULT_READER_SCROLL_HOLD_SPEED = 280;
+const MIN_READER_SCROLL_HOLD_SPEED = 50;
+const MAX_READER_SCROLL_HOLD_SPEED = 500;
+const DEFAULT_READER_SCROLL_START_BOOST = 90;
+const MIN_READER_SCROLL_START_BOOST = 0;
+const MAX_READER_SCROLL_START_BOOST = 250;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -100,6 +106,24 @@ const normalizeReaderScrollStrength = (value: unknown): number => (
     )
 );
 
+const normalizeReaderScrollHoldSpeed = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_SCROLL_HOLD_SPEED,
+        MIN_READER_SCROLL_HOLD_SPEED,
+        MAX_READER_SCROLL_HOLD_SPEED,
+    )
+);
+
+const normalizeReaderScrollStartBoost = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_SCROLL_START_BOOST,
+        MIN_READER_SCROLL_START_BOOST,
+        MAX_READER_SCROLL_START_BOOST,
+    )
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -148,6 +172,8 @@ const defaultSettings = {
     readerImageMaxWidth: DEFAULT_READER_IMAGE_MAX_WIDTH,
     readerShowProgressIndicator: true,
     readerScrollStrength: DEFAULT_READER_SCROLL_STRENGTH,
+    readerScrollHoldSpeed: DEFAULT_READER_SCROLL_HOLD_SPEED,
+    readerScrollStartBoost: DEFAULT_READER_SCROLL_START_BOOST,
     readerOpenOcrPanelForJapaneseManga: false,
     shortcuts: defaultShortcutBindings,
     readerOcrDetectedSectionOpen: true,
@@ -197,6 +223,8 @@ const normalizeSettings = (value: unknown) => {
         ? merged.readerShowProgressIndicator
         : defaultSettings.readerShowProgressIndicator;
     merged.readerScrollStrength = normalizeReaderScrollStrength(merged.readerScrollStrength);
+    merged.readerScrollHoldSpeed = normalizeReaderScrollHoldSpeed(merged.readerScrollHoldSpeed);
+    merged.readerScrollStartBoost = normalizeReaderScrollStartBoost(merged.readerScrollStartBoost);
     merged.readerOpenOcrPanelForJapaneseManga = typeof merged.readerOpenOcrPanelForJapaneseManga === "boolean"
         ? merged.readerOpenOcrPanelForJapaneseManga
         : defaultSettings.readerOpenOcrPanelForJapaneseManga;
@@ -376,6 +404,8 @@ export async function saveSettings(event: any, settings: any) {
             ? nextSettings.readerShowProgressIndicator
             : defaultSettings.readerShowProgressIndicator;
         nextSettings.readerScrollStrength = normalizeReaderScrollStrength(nextSettings.readerScrollStrength);
+        nextSettings.readerScrollHoldSpeed = normalizeReaderScrollHoldSpeed(nextSettings.readerScrollHoldSpeed);
+        nextSettings.readerScrollStartBoost = normalizeReaderScrollStartBoost(nextSettings.readerScrollStartBoost);
         nextSettings.readerOpenOcrPanelForJapaneseManga = typeof nextSettings.readerOpenOcrPanelForJapaneseManga === "boolean"
             ? nextSettings.readerOpenOcrPanelForJapaneseManga
             : defaultSettings.readerOpenOcrPanelForJapaneseManga;
