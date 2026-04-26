@@ -49,6 +49,8 @@ export interface ScraperChapterDownloadConfig {
 export interface ScraperGlobalConfig {
   defaultTagIds: string[];
   defaultLanguage?: string;
+  sourceLanguages: string[];
+  contentTypes: string[];
   homeSearch: ScraperHomeSearchConfig;
   bookmark: ScraperBookmarkConfig;
   chapterDownloads: ScraperChapterDownloadConfig;
@@ -519,6 +521,8 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
   return {
     defaultTagIds: [],
     defaultLanguage: undefined,
+    sourceLanguages: [],
+    contentTypes: [],
     homeSearch: {
       enabled: false,
       query: '',

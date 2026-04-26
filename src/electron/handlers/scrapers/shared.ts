@@ -353,6 +353,8 @@ export const sanitizeGlobalConfig = (
   return {
     defaultTagIds: sanitizeStringList(globalConfig?.defaultTagIds),
     defaultLanguage: defaultLanguage || undefined,
+    sourceLanguages: sanitizeStringList(globalConfig?.sourceLanguages),
+    contentTypes: sanitizeStringList(globalConfig?.contentTypes),
     homeSearch: {
       enabled: Boolean(globalConfig?.homeSearch?.enabled),
       query: homeSearchQuery,

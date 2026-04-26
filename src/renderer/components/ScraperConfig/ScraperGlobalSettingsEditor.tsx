@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Form from '@/renderer/components/utils/Form/Form';
 import { Field } from '@/renderer/components/utils/Form/types';
 import { languages } from '@/renderer/consts/languages';
+import FreeStringListField from '@/renderer/components/ScraperConfig/shared/FreeStringListField';
 import {
   ScraperBookmarkMetadataField,
   ScraperGlobalConfig,
@@ -24,6 +25,16 @@ const sanitizeTagIds = (value: unknown): string[] => (
     ? Array.from(new Set(
       value
         .map((entry) => String(entry ?? '').trim())
+        .filter((entry) => entry.length > 0),
+    ))
+    : []
+);
+
+const sanitizeStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? Array.from(new Set(
+      value
+        .map((entry) => String(entry ?? '').trim().replace(/\s+/g, ' '))
         .filter((entry) => entry.length > 0),
     ))
     : []
@@ -56,9 +67,17 @@ const sanitizeBookmarkExcludedFields = (value: unknown): ScraperBookmarkMetadata
     : []
 );
 
-const buildGlobalConfig = (values: Record<string, unknown>): ScraperGlobalConfig => ({
+const buildGlobalConfig = (
+  values: Record<string, unknown>,
+  metadata: {
+    sourceLanguages: string[];
+    contentTypes: string[];
+  },
+): ScraperGlobalConfig => ({
   defaultTagIds: sanitizeTagIds(values.defaultTagIds),
   defaultLanguage: String(values.defaultLanguage ?? '').trim().toLowerCase() || undefined,
+  sourceLanguages: sanitizeStringList(metadata.sourceLanguages).map((language) => language.toLowerCase()),
+  contentTypes: sanitizeStringList(metadata.contentTypes),
   homeSearch: {
     enabled: Boolean(values.homeSearchEnabled),
     query: String(values.homeSearchQuery ?? '').trim(),
@@ -76,10 +95,18 @@ export default function ScraperGlobalSettingsEditor({
 }: Props) {
   const { scraper, updateScraper } = useScraperConfig();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [sourceLanguages, setSourceLanguages] = useState<string[]>(() => scraper.globalConfig.sourceLanguages ?? []);
+  const [contentTypes, setContentTypes] = useState<string[]>(() => scraper.globalConfig.contentTypes ?? []);
   const hasSearch = useMemo(
     () => scraper.features.some((feature) => feature.kind === 'search' && feature.status !== 'not_configured'),
     [scraper.features],
   );
+  const languageOptions = useMemo(() => (
+    languages.map((language) => ({
+      label: language.frenchName,
+      value: language.code,
+    }))
+  ), []);
   const fields = useMemo<Field[]>(() => ([
     {
       name: 'defaultTagIds',
@@ -130,6 +157,11 @@ export default function ScraperGlobalSettingsEditor({
     homeSearchQuery: scraper.globalConfig.homeSearch.query,
   }), [scraper.globalConfig]);
 
+  useEffect(() => {
+    setSourceLanguages(scraper.globalConfig.sourceLanguages ?? []);
+    setContentTypes(scraper.globalConfig.contentTypes ?? []);
+  }, [scraper.id, scraper.globalConfig.contentTypes, scraper.globalConfig.sourceLanguages]);
+
   const languageLabel = useMemo(() => {
     const code = scraper.globalConfig.defaultLanguage;
     if (!code) {
@@ -138,6 +170,24 @@ export default function ScraperGlobalSettingsEditor({
 
     return languages.find((language) => language.code === code)?.frenchName || code;
   }, [scraper.globalConfig.defaultLanguage]);
+
+  const sourceLanguagesLabel = useMemo(() => {
+    const configuredLanguages = scraper.globalConfig.sourceLanguages ?? [];
+    if (!configuredLanguages.length) {
+      return 'Aucune langue de source renseignee';
+    }
+
+    return configuredLanguages
+      .map((code) => languages.find((language) => language.code === code)?.frenchName || code)
+      .join(', ');
+  }, [scraper.globalConfig.sourceLanguages]);
+
+  const contentTypesLabel = useMemo(() => {
+    const configuredTypes = scraper.globalConfig.contentTypes ?? [];
+    return configuredTypes.length
+      ? configuredTypes.join(', ')
+      : 'Aucun type de contenu renseigne';
+  }, [scraper.globalConfig.contentTypes]);
 
   const homeSearchLabel = useMemo(() => {
     if (!scraper.globalConfig.homeSearch.enabled) {
@@ -182,14 +232,17 @@ export default function ScraperGlobalSettingsEditor({
     try {
       const updatedScraper = await window.api.saveScraperGlobalConfig({
         scraperId: scraper.id,
-        globalConfig: buildGlobalConfig(values),
+        globalConfig: buildGlobalConfig(values, {
+          sourceLanguages,
+          contentTypes,
+        }),
       });
 
       updateScraper(updatedScraper as ScraperRecord);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d\'enregistrer les reglages globaux.');
     }
-  }, [scraper.id, updateScraper]);
+  }, [contentTypes, scraper.id, sourceLanguages, updateScraper]);
 
   return (
     <section className="scraper-config-step">
@@ -216,6 +269,14 @@ export default function ScraperGlobalSettingsEditor({
       </div>
 
       <div className="scraper-config-note">
+        <strong>Recherche multi-sources</strong>
+        <span>
+          Les langues de source et les types de contenu servent uniquement a filtrer les scrappers
+          dans la recherche multi-sources. Ils ne changent pas les metadonnees appliquees aux imports.
+        </span>
+      </div>
+
+      <div className="scraper-config-note">
         <strong>Series et chapitres</strong>
         <span>
           Active cette option pour que les telechargements lances depuis un chapitre soient
@@ -231,6 +292,33 @@ export default function ScraperGlobalSettingsEditor({
           scrapper. Si tu exclus par exemple le resume ou les tags, ces informations ne seront plus
           enregistrees dans la carte bookmark.
         </span>
+      </div>
+
+      <div className="scraper-config-section">
+        <div className="scraper-config-section__header">
+          <h4>Metadonnees de recherche multi-sources</h4>
+          <p>
+            Renseigne ici les informations qui permettent de selectionner ce scrapper depuis la
+            recherche multi-sources.
+          </p>
+        </div>
+
+        <FreeStringListField
+          id="scraper-source-languages"
+          label="Langues du scrapper"
+          value={sourceLanguages}
+          options={languageOptions}
+          placeholder="Ajouter une langue"
+          onChange={setSourceLanguages}
+        />
+
+        <FreeStringListField
+          id="scraper-content-types"
+          label="Types de contenu"
+          value={contentTypes}
+          placeholder="manga, comics, doujinshi..."
+          onChange={setContentTypes}
+        />
       </div>
 
       <div className="scraper-config-note">
@@ -268,6 +356,14 @@ export default function ScraperGlobalSettingsEditor({
         <div className="scraper-config-summary__row">
           <span>Langue par defaut</span>
           <strong>{languageLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Langues du scrapper</span>
+          <strong>{sourceLanguagesLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Types de contenu</span>
+          <strong>{contentTypesLabel}</strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Bookmark</span>

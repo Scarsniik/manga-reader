@@ -680,3 +680,21 @@ La V1 du multi-search repose sur les choix suivants :
 - langue affichée au niveau de la carte et/ou de chaque source ;
 - vue fusionnée par défaut ;
 - vue par scraper disponible en fallback.
+
+---
+
+## Decisions d'implementation V1
+
+- La vue `Recherche multi-sources` est accessible depuis la liste deroulante principale, au meme niveau que la bibliotheque, les bookmarks et les scrapers.
+- La langue utilisee pour filtrer les scrapers est une metadonnee dediee (`sourceLanguages`) et reste distincte de la langue par defaut appliquee aux imports et telechargements (`defaultLanguage`).
+- Les types de contenu sont libres (`contentTypes`) et ne reposent pas sur une liste predefinie. La page multi-search propose les types deja renseignes sur les scrapers.
+- Les scrapers sans langue ou sans type renseignes restent utilisables et apparaissent sous `Non renseigne`.
+- La page conserve le dernier etat de recherche dans la session de l'onglet afin qu'un retour arriere depuis une fiche restaure les resultats charges. Une nouvelle recherche remplace cet etat.
+- Le statut detaille d'un scraper affiche l'adresse de la derniere page chargee quand elle est disponible.
+- Le merge ignore les marqueurs de langue explicites presents dans les titres, par exemple `[EN]`, `VF`, `RAW` ou `English`, et ces marqueurs enrichissent aussi l'affichage des langues detectees.
+- La detection de langue se fait d'abord sur le titre original. Si le titre indique une langue, elle remplace l'inference depuis le scraper. Si le scraper n'a qu'une langue source, elle sert de fallback. Si le scraper en a plusieurs, elles ne sont pas utilisees pour determiner la langue du manga.
+- La normalisation de merge retire ensuite les blocs entre crochets et accolades. En regroupement equilibre ou large, une variante retire aussi les blocs entre parentheses pour comparer le titre coeur sans le contexte de serie.
+- Le merge refuse les titres qui ne portent pas les memes marqueurs numeriques ou romains (`2`, `II`, `III`, etc.), afin d'eviter de fusionner deux volumes distincts.
+- Une erreur de pagination apres au moins une page chargee ferme simplement la pagination de ce scraper et conserve les resultats deja recuperes.
+- Pour chaque scraper, les resultats de recherche multi-sources dedoublonnent les URLs deja vues sur les pages precedentes. Si une page ne contient que des URLs deja vues, la pagination de ce scraper s'arrete.
+- Si la couverture affichee dans une card multi-search ne charge pas, la card essaie les couvertures des autres sources du meme resultat avant d'afficher le placeholder.

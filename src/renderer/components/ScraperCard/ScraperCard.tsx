@@ -41,6 +41,7 @@ type Props = {
   onClick?: () => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
   onMiddleClick?: () => void;
+  onCoverError?: () => void;
   onViewed?: () => void;
   ariaLabel?: string;
 };
@@ -111,6 +112,7 @@ export default function ScraperCard({
   onClick,
   onKeyDown,
   onMiddleClick,
+  onCoverError,
   onViewed,
   ariaLabel,
 }: Props) {
@@ -293,7 +295,7 @@ export default function ScraperCard({
     >
       <div className="scraper-card__media">
         {coverUrl ? (
-          <img src={coverUrl} alt={resolvedCoverAlt} />
+          <img src={coverUrl} alt={resolvedCoverAlt} onError={onCoverError} />
         ) : (
           <div className="scraper-card__placeholder">Pas d&apos;image</div>
         )}
