@@ -44,9 +44,10 @@
 - [ ] Header : il est moche
 - [ ] Lazy loading pour l'acceuil
 - [ ] Détection et fusion de doublons quand un même manga vient de plusieurs scrappers.
-- [ ] Possibilité de configurer plus le reader (UI, raccourcis, etc)
+- [x] Possibilité de configurer plus le reader (UI, raccourcis, etc)
 - [ ] Mode de lecture vertical (pourquoi pas configuration avec tag ou autre)
-- [ ] Navigation de chapitre à chapitre dans le reader
+- [x] Navigation de chapitre à chapitre dans le reader
+- [ ] Auteur : Relier auteur avec ceux de scrappers
 
 ### Reworks
 
@@ -62,24 +63,29 @@
 ### Features
 
 - [ ] Ajouter des tutos dans l'application
-- [ ] Page ou modal de paramètres plus structurée avec sections claires.
-- [ ] Ajouter un changelog dans l'application
-- [ ] Ajout de boutons pour acceder aux dossier et fichier directement depuis l'application
+- [x] Page ou modal de paramètres plus structurée avec sections claires.
+- [x] Ajouter un changelog dans l'application
+- [x] Ajout de boutons pour acceder aux dossier et fichier directement depuis l'application
 
 ### Reworks
 
-- [ ] Modals : moche + pas pratique. Prevoire des sections pour regrouper les choses + revoir visuel
+- [x] Modals : moche + pas pratique. Prevoire des sections pour regrouper les choses + revoir visuel
 - [ ] Modal de tags : visuel + ajout de auteurs et series avec recherche pour chaque type
 - [ ] Faire un tour pour retirer des labels inutiles qui prennet de la place pour rien
+
+### Fixes
+
+- [ ] Onglets : Ne pas concerver le scroll entre les onglets
+- [ ] Onglets : Si on ouvre un lecteur en onglet, on ne voit plus les onglet mais juste le lecteur. Ca reviens quand on fait retour
 
 ## 4. Application et technique
 
 ### Features
 
 - [ ] Possibilité d'ajouter des langues
-- [ ] Systeme de mise à jour auto de l'appli
-- [ ] Séparer l'installation de pytorch et ce genre de chose du packaging de base. On ne devrait pas mbarquer autant.
+- [x] Systeme de mise à jour auto de l'appli
+- [x] Séparer l'installation de pytorch et ce genre de chose du packaging de base. On ne devrait pas mbarquer autant.
 
 ### Reworks
 
-- [ ] Reduire les fichier trop gros (genre 1000 lignes)
+- [x] Reduire les fichier trop gros (genre 1000 lignes)
