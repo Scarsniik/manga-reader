@@ -22,6 +22,12 @@
 - [ ] Gerer le systeme de téléchargement natif du site avec le scrapper (nouveau module)
 - [ ] Gerer les apis
 - [x] Nombre de page dans module fiche
+- [ ] Ajout détection langue (bien étudier type de détéction : titre, drapeau, autre ?)
+- [ ] Recherche multiple : Liste des scrapper dans une card s'ouvre en hover
+- [ ] Recherche multiple : lazy loading
+- [ ] Recherche multiple : Pouvoir mettre plusieurs thermes de recherche
+- [ ] Recherche multiple : Affiche quand un des resultat est déjà dans la bibliotheque ou en bookmark
+- [ ] Bookmark : Tri sur les bookmarks
 
 ### Fixes
 
