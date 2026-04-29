@@ -1,10 +1,10 @@
 import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 import type {
   MultiSearchDepthMode,
-  MultiSearchMergeMode,
   MultiSearchPaceMode,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
+  MultiSearchTermRun,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
 
@@ -18,24 +18,34 @@ export type MultiSearchPersistentFormState = {
   depthMode: MultiSearchDepthMode;
   advancedPages: number;
   paceMode: MultiSearchPaceMode;
-  mergeMode: MultiSearchMergeMode;
   viewMode: MultiSearchViewMode;
 };
 
 type StoredSourceResult = {
   scraperId: string;
   result: ScraperSearchResultItem;
+  searchTerm?: string;
   pageIndex: number;
   sourceLanguageCodes: string[];
   detectedLanguageCodes: string[];
+  tentativeAuthorNames?: string[];
   contentTypes: string[];
   canOpenDetails: boolean;
+};
+
+type StoredTermRun = {
+  term: string;
+  loadedPages: number;
+  hasNextPage: boolean;
+  currentPageUrl?: string;
+  nextPageUrl?: string;
 };
 
 type StoredScraperRun = {
   scraperId: string;
   status: MultiSearchScraperRun["status"];
   results: StoredSourceResult[];
+  searchTerms?: StoredTermRun[];
   loadedPages: number;
   hasNextPage: boolean;
   currentPageUrl?: string;
@@ -65,10 +75,6 @@ const isPaceMode = (value: unknown): value is MultiSearchPaceMode => (
   value === "fast" || value === "careful"
 );
 
-const isMergeMode = (value: unknown): value is MultiSearchMergeMode => (
-  value === "strict" || value === "balanced" || value === "loose"
-);
-
 const isViewMode = (value: unknown): value is MultiSearchViewMode => (
   value === "merged" || value === "byScraper"
 );
@@ -76,17 +82,28 @@ const isViewMode = (value: unknown): value is MultiSearchViewMode => (
 const serializeSource = (source: MultiSearchSourceResult): StoredSourceResult => ({
   scraperId: source.scraper.id,
   result: source.result,
+  searchTerm: source.searchTerm,
   pageIndex: source.pageIndex,
   sourceLanguageCodes: source.sourceLanguageCodes,
   detectedLanguageCodes: source.detectedLanguageCodes,
+  tentativeAuthorNames: source.tentativeAuthorNames,
   contentTypes: source.contentTypes,
   canOpenDetails: source.canOpenDetails,
+});
+
+const serializeTermRun = (termRun: MultiSearchTermRun): StoredTermRun => ({
+  term: termRun.term,
+  loadedPages: termRun.loadedPages,
+  hasNextPage: termRun.hasNextPage,
+  currentPageUrl: termRun.currentPageUrl,
+  nextPageUrl: termRun.nextPageUrl,
 });
 
 const serializeRun = (run: MultiSearchScraperRun): StoredScraperRun => ({
   scraperId: run.scraper.id,
   status: run.status,
   results: run.results.map(serializeSource),
+  searchTerms: run.searchTerms.map(serializeTermRun),
   loadedPages: run.loadedPages,
   hasNextPage: run.hasNextPage,
   currentPageUrl: run.currentPageUrl,
@@ -106,11 +123,27 @@ const restoreSource = (
   return {
     scraper,
     result: source.result,
+    searchTerm: typeof source.searchTerm === "string" ? source.searchTerm : "",
     pageIndex: source.pageIndex,
     sourceLanguageCodes: isStringArray(source.sourceLanguageCodes) ? source.sourceLanguageCodes : [],
     detectedLanguageCodes: isStringArray(source.detectedLanguageCodes) ? source.detectedLanguageCodes : [],
+    tentativeAuthorNames: isStringArray(source.tentativeAuthorNames) ? source.tentativeAuthorNames : [],
     contentTypes: isStringArray(source.contentTypes) ? source.contentTypes : [],
     canOpenDetails: Boolean(source.canOpenDetails),
+  };
+};
+
+const restoreTermRun = (termRun: StoredTermRun): MultiSearchTermRun | null => {
+  if (typeof termRun.term !== "string" || !termRun.term.trim()) {
+    return null;
+  }
+
+  return {
+    term: termRun.term,
+    loadedPages: Number.isFinite(termRun.loadedPages) ? Math.max(0, termRun.loadedPages) : 0,
+    hasNextPage: Boolean(termRun.hasNextPage),
+    currentPageUrl: typeof termRun.currentPageUrl === "string" ? termRun.currentPageUrl : undefined,
+    nextPageUrl: typeof termRun.nextPageUrl === "string" ? termRun.nextPageUrl : undefined,
   };
 };
 
@@ -130,6 +163,11 @@ const restoreRun = (
       ? run.results
         .map((source) => restoreSource(source, scraperById))
         .filter((source): source is MultiSearchSourceResult => Boolean(source))
+      : [],
+    searchTerms: Array.isArray(run.searchTerms)
+      ? run.searchTerms
+        .map(restoreTermRun)
+        .filter((termRun): termRun is MultiSearchTermRun => Boolean(termRun))
       : [],
     loadedPages: Number.isFinite(run.loadedPages) ? Math.max(0, run.loadedPages) : 0,
     hasNextPage: Boolean(run.hasNextPage),
@@ -185,7 +223,6 @@ export const readMultiSearchState = (
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
       advancedPages: Number.isFinite(parsed.advancedPages) ? parsed.advancedPages : 3,
       paceMode: isPaceMode(parsed.paceMode) ? parsed.paceMode : "fast",
-      mergeMode: isMergeMode(parsed.mergeMode) ? parsed.mergeMode : "strict",
       viewMode: isViewMode(parsed.viewMode) ? parsed.viewMode : "merged",
       runs: Array.isArray(parsed.runs)
         ? parsed.runs

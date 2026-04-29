@@ -17,6 +17,7 @@ import * as scrapers from "./handlers/scrapers";
 import * as windowControls from "./handlers/windowControls";
 import * as workspaceWindow from "./handlers/workspaceWindow";
 import * as appUpdate from "./handlers/appUpdate";
+import * as jsonDocuments from "./handlers/jsonDocuments";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -57,6 +58,9 @@ ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
 ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => links.removeLink(event, url));
 ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
+ipcMain.handle("open-json-document", async (_event: IpcMainInvokeEvent, request: any) => (
+    jsonDocuments.openJsonDocument(request)
+));
 
 // Window controls
 ipcMain.handle("window-get-state", async (event: IpcMainInvokeEvent) => windowControls.getWindowState(event));

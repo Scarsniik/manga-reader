@@ -98,6 +98,18 @@
   cursor: pointer;
 }
 
+.multi-search__export-json-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.multi-search__export-json-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .multi-search__query-row button {
   min-height: 46px;
 }
@@ -284,6 +296,14 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.multi-search__section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .multi-search__status-list {

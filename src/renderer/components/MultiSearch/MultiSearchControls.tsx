@@ -1,7 +1,6 @@
 import React, { FormEvent } from "react";
 import type {
   MultiSearchDepthMode,
-  MultiSearchMergeMode,
   MultiSearchPaceMode,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
@@ -11,7 +10,6 @@ type Props = {
   depthMode: MultiSearchDepthMode;
   advancedPages: number;
   paceMode: MultiSearchPaceMode;
-  mergeMode: MultiSearchMergeMode;
   viewMode: MultiSearchViewMode;
   isSearching: boolean;
   canSubmit: boolean;
@@ -20,7 +18,6 @@ type Props = {
   onDepthModeChange: (value: MultiSearchDepthMode) => void;
   onAdvancedPagesChange: (value: number) => void;
   onPaceModeChange: (value: MultiSearchPaceMode) => void;
-  onMergeModeChange: (value: MultiSearchMergeMode) => void;
   onViewModeChange: (value: MultiSearchViewMode) => void;
 };
 
@@ -43,7 +40,6 @@ export default function MultiSearchControls({
   depthMode,
   advancedPages,
   paceMode,
-  mergeMode,
   viewMode,
   isSearching,
   canSubmit,
@@ -52,7 +48,6 @@ export default function MultiSearchControls({
   onDepthModeChange,
   onAdvancedPagesChange,
   onPaceModeChange,
-  onMergeModeChange,
   onViewModeChange,
 }: Props) {
   return (
@@ -62,7 +57,7 @@ export default function MultiSearchControls({
           type="search"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Titre, auteur, mot-cle..."
+          placeholder="One Piece, Naruto, Bleach..."
         />
         <button type="submit" disabled={isSearching || !canSubmit}>
           {isSearching ? "Recherche..." : "Lancer"}
@@ -123,26 +118,6 @@ export default function MultiSearchControls({
               ? "Plus reactif, peut echouer sur certains sites."
               : "Plus lent, mais plus stable sur les sites sensibles."}
           </span>
-        </div>
-
-        <div className="multi-search__control">
-          <strong>Regroupement</strong>
-          <div className="multi-search__segmented">
-            {([
-              ["strict", "Strict"],
-              ["balanced", "Equilibre"],
-              ["loose", "Large"],
-            ] as Array<[MultiSearchMergeMode, string]>).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={mergeMode === value ? "is-active" : ""}
-                onClick={() => onMergeModeChange(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="multi-search__control">

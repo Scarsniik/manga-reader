@@ -7,7 +7,6 @@ import {
   isScraperFeatureConfigured,
 } from "@/renderer/utils/scraperRuntime";
 import type {
-  MultiSearchMergeMode,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
@@ -17,6 +16,23 @@ export const UNKNOWN_MULTI_SEARCH_VALUE = "__multi_search_unknown__";
 export type MultiSearchFilterOption = {
   label: string;
   value: string;
+};
+
+export const parseMultiSearchTerms = (query: string): string[] => {
+  const seen = new Set<string>();
+
+  return query
+    .split(/[\n,;|]+/g)
+    .map((term) => term.trim().replace(/\s+/g, " "))
+    .filter((term) => {
+      const key = term.toLowerCase();
+      if (!term || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
 };
 
 const normalizeListValue = (value: unknown): string => (
@@ -55,7 +71,29 @@ export const getLanguageLabel = (value: string): string => {
     return "Non renseignee";
   }
 
-  return languages.find((language) => language.code === value)?.frenchName || value;
+  return languages.find((language) => language.code === value)?.frenchName || "?";
+};
+
+const LANGUAGE_FLAG_CODES: Record<string, string> = {
+  en: "gb",
+  fr: "fr",
+  ja: "jp",
+  es: "es",
+  de: "de",
+  it: "it",
+  pt: "pt",
+  ko: "kr",
+  zh: "cn",
+  ru: "ru",
+};
+
+export const getLanguageFlagCode = (value: string): string => {
+  if (value === UNKNOWN_MULTI_SEARCH_VALUE) {
+    return "unknown";
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+  return LANGUAGE_FLAG_CODES[normalizedValue] || normalizedValue || "unknown";
 };
 
 export const buildLanguageFilterOptions = (scrapers: ScraperRecord[]): MultiSearchFilterOption[] => {
@@ -145,21 +183,21 @@ const TITLE_LANGUAGE_PATTERNS: Array<{
   code: string;
   pattern: RegExp;
 }> = [
-  { code: "en", pattern: /(?:^|[\s[(\]{}_\-.])(?:en|eng|english|anglais)(?:$|[\s)\]{}_\-.])/i },
-  { code: "fr", pattern: /(?:^|[\s[(\]{}_\-.])(?:fr|fra|fre|french|francais|français|vf|vostfr)(?:$|[\s)\]{}_\-.])/i },
-  { code: "ja", pattern: /(?:^|[\s[(\]{}_\-.])(?:ja|jp|jpn|japanese|japonais|raw)(?:$|[\s)\]{}_\-.])/i },
-  { code: "es", pattern: /(?:^|[\s[(\]{}_\-.])(?:es|esp|spa|spanish|espanol|español)(?:$|[\s)\]{}_\-.])/i },
-  { code: "de", pattern: /(?:^|[\s[(\]{}_\-.])(?:de|ger|deu|german|allemand)(?:$|[\s)\]{}_\-.])/i },
-  { code: "it", pattern: /(?:^|[\s[(\]{}_\-.])(?:it|ita|italian|italien)(?:$|[\s)\]{}_\-.])/i },
-  { code: "pt", pattern: /(?:^|[\s[(\]{}_\-.])(?:pt|por|portuguese|portugais|br|ptbr|pt-br)(?:$|[\s)\]{}_\-.])/i },
-  { code: "ko", pattern: /(?:^|[\s[(\]{}_\-.])(?:ko|kor|korean|coreen|coréen)(?:$|[\s)\]{}_\-.])/i },
-  { code: "zh", pattern: /(?:^|[\s[(\]{}_\-.])(?:zh|chi|zho|cn|chinese|chinois)(?:$|[\s)\]{}_\-.])/i },
-  { code: "ru", pattern: /(?:^|[\s[(\]{}_\-.])(?:ru|rus|russian|russe)(?:$|[\s)\]{}_\-.])/i },
+  { code: "en", pattern: /(?:[\[({]\s*(?:en|eng|english|anglais)\s*[\])}]|(?:^|[\s_\-.])(?:eng|english|anglais)(?:$|[\s_\-.]))/i },
+  { code: "fr", pattern: /(?:[\[({]\s*(?:fr|fra|fre|french|francais|français|vf|vostfr)\s*[\])}]|(?:^|[\s_\-.])(?:fra|fre|french|francais|français|vf|vostfr)(?:$|[\s_\-.]))/i },
+  { code: "ja", pattern: /(?:[\[({]\s*(?:ja|jp|jpn|japanese|japonais|raw)\s*[\])}]|(?:^|[\s_\-.])(?:jpn|japanese|japonais|raw)(?:$|[\s_\-.]))/i },
+  { code: "es", pattern: /(?:[\[({]\s*(?:es|esp|spa|spanish|espanol|español)\s*[\])}]|(?:^|[\s_\-.])(?:esp|spa|spanish|espanol|español)(?:$|[\s_\-.]))/i },
+  { code: "de", pattern: /(?:[\[({]\s*(?:de|ger|deu|german|allemand)\s*[\])}]|(?:^|[\s_\-.])(?:ger|deu|german|allemand)(?:$|[\s_\-.]))/i },
+  { code: "it", pattern: /(?:[\[({]\s*(?:it|ita|italian|italien)\s*[\])}]|(?:^|[\s_\-.])(?:ita|italian|italien)(?:$|[\s_\-.]))/i },
+  { code: "pt", pattern: /(?:[\[({]\s*(?:pt|por|portuguese|portugais|br|ptbr|pt-br)\s*[\])}]|(?:^|[\s_\-.])(?:por|portuguese|portugais|br|ptbr|pt-br)(?:$|[\s_\-.]))/i },
+  { code: "ko", pattern: /(?:[\[({]\s*(?:ko|kor|korean|coreen|coréen)\s*[\])}]|(?:^|[\s_\-.])(?:kor|korean|coreen|coréen)(?:$|[\s_\-.]))/i },
+  { code: "zh", pattern: /(?:[\[({]\s*(?:zh|chi|zho|cn|chinese|chinois)\s*[\])}]|(?:^|[\s_\-.])(?:chi|zho|chinese|chinois)(?:$|[\s_\-.]))/i },
+  { code: "ru", pattern: /(?:[\[({]\s*(?:ru|rus|russian|russe)\s*[\])}]|(?:^|[\s_\-.])(?:rus|russian|russe)(?:$|[\s_\-.]))/i },
 ];
 
 const TITLE_LANGUAGE_MARKER_PATTERN = new RegExp([
   String.raw`[\[({]\s*(?:en|eng|english|anglais|fr|fra|fre|french|francais|français|vf|vostfr|ja|jp|jpn|japanese|japonais|raw|es|esp|spa|spanish|espanol|español|de|ger|deu|german|allemand|it|ita|italian|italien|pt|por|portuguese|portugais|br|ptbr|pt-br|ko|kor|korean|coreen|coréen|zh|chi|zho|cn|chinese|chinois|ru|rus|russian|russe)\s*[\])}]`,
-  String.raw`(?:^|[\s_\-.])(?:en|eng|english|anglais|fr|fra|fre|french|francais|français|vf|vostfr|ja|jp|jpn|japanese|japonais|raw|es|esp|spa|spanish|espanol|español|de|ger|deu|german|allemand|it|ita|italian|italien|pt|por|portuguese|portugais|br|ptbr|pt-br|ko|kor|korean|coreen|coréen|zh|chi|zho|cn|chinese|chinois|ru|rus|russian|russe)(?:$|[\s_\-.])`,
+  String.raw`(?:^|[\s_\-.])(?:eng|english|anglais|fra|fre|french|francais|français|vf|vostfr|jpn|japanese|japonais|raw|esp|spa|spanish|espanol|español|ger|deu|german|allemand|ita|italian|italien|por|portuguese|portugais|br|ptbr|pt-br|kor|korean|coreen|coréen|chi|zho|chinese|chinois|rus|russian|russe)(?:$|[\s_\-.])`,
 ].join("|"), "gi");
 
 export const detectLanguageCodesFromTitle = (title: string): string[] => (
@@ -174,6 +212,79 @@ export const stripTitleLanguageMarkers = (title: string): string => (
     .replace(/\s+/g, " ")
     .trim()
 );
+
+const TENTATIVE_AUTHOR_PREFIX_PATTERN = /^\s*(?:\([^)]*\)\s*)*(?:\[\s*([^\]]+?)\s*]\s*)+/;
+const TENTATIVE_AUTHOR_NAME_PATTERN = /\[\s*([^\]]+?)\s*]/g;
+
+const isLanguageMarker = (value: string): boolean => (
+  TITLE_LANGUAGE_PATTERNS.some(({ pattern }) => {
+    pattern.lastIndex = 0;
+    return pattern.test(value);
+  })
+);
+
+const splitTentativeAuthorName = (value: string): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+
+  Array.from(value).forEach((char) => {
+    if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+    }
+
+    if (char === ")" || char === "]" || char === "}") {
+      depth = Math.max(0, depth - 1);
+    }
+
+    if (char === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+      return;
+    }
+
+    current += char;
+  });
+
+  parts.push(current);
+  return parts.map(normalizeListValue).filter(Boolean);
+};
+
+const collectTentativeAuthorNames = (value: string): string[] => {
+  const author = normalizeListValue(value);
+  if (!author || isLanguageMarker(author)) {
+    return [];
+  }
+
+  const splitAuthors = splitTentativeAuthorName(author)
+    .filter((splitAuthor) => !isLanguageMarker(splitAuthor));
+
+  return Array.from(new Set([author, ...splitAuthors]));
+};
+
+export const extractTentativeAuthorNamesFromTitle = (title: string): string[] => {
+  const prefixMatch = title.match(TENTATIVE_AUTHOR_PREFIX_PATTERN);
+  if (!prefixMatch) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const authors: string[] = [];
+
+  Array.from(prefixMatch[0].matchAll(TENTATIVE_AUTHOR_NAME_PATTERN)).forEach((match) => {
+    collectTentativeAuthorNames(match[1]).forEach((author) => {
+      const key = author.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+
+      seen.add(key);
+      authors.push(author);
+    });
+  });
+
+  return authors;
+};
 
 export const matchesMultiSearchFilters = (
   scraper: ScraperRecord,
@@ -214,6 +325,7 @@ const normalizeTitleText = (value: string, removeParentheses = false): string =>
     .replace(removeParentheses ? /\([^)]*\)/g : /$^/g, " ")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’`]/g, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
@@ -226,6 +338,15 @@ const getMergeTitleVariants = (value: string): string[] => (
     normalizeTitleText(value, true),
   ])).filter(Boolean)
 );
+
+const getTitleAlternatives = (value: string): string[] => {
+  const alternatives = value
+    .split(/[|/]+/g)
+    .map((title) => title.trim())
+    .filter(Boolean);
+
+  return alternatives.length ? Array.from(new Set(alternatives)) : [value];
+};
 
 const SEQUENCE_MARKER_PATTERN = /^(?:\d+|i|ii|iii|iv|v|vi|vii|viii|ix|x)$/;
 
@@ -241,82 +362,61 @@ const hasDifferentSequenceMarkers = (left: string, right: string): boolean => {
     || [...rightMarkers].some((marker) => !leftMarkers.has(marker));
 };
 
-const buildBigrams = (value: string): Set<string> => {
-  const normalized = normalizeTitleText(value);
-  if (normalized.length < 2) {
-    return new Set(normalized ? [normalized] : []);
+const normalizeTentativeAuthorName = (value: string): string => (
+  normalizeTitleText(value)
+);
+
+const haveConflictingTentativeAuthors = (
+  leftAuthors: string[],
+  rightAuthors: string[],
+): boolean => {
+  const leftValues = leftAuthors.map(normalizeTentativeAuthorName).filter(Boolean);
+  const rightValues = rightAuthors.map(normalizeTentativeAuthorName).filter(Boolean);
+  if (!leftValues.length || !rightValues.length) {
+    return false;
   }
 
-  const bigrams = new Set<string>();
-  for (let index = 0; index < normalized.length - 1; index += 1) {
-    bigrams.add(normalized.slice(index, index + 2));
-  }
-
-  return bigrams;
+  const rightSet = new Set(rightValues);
+  return leftValues.every((author) => !rightSet.has(author));
 };
 
-const calculateNormalizedTitleSimilarity = (normalizedLeft: string, normalizedRight: string): number => {
-  if (normalizedLeft === normalizedRight) {
-    return 1;
+const canMergeSourceTitles = (
+  source: MultiSearchSourceResult,
+  groupSource: MultiSearchSourceResult,
+): boolean => {
+  if (haveConflictingTentativeAuthors(source.tentativeAuthorNames, groupSource.tentativeAuthorNames)) {
+    return false;
   }
 
-  const leftBigrams = buildBigrams(normalizedLeft);
-  const rightBigrams = buildBigrams(normalizedRight);
-  let intersectionSize = 0;
-  leftBigrams.forEach((bigram) => {
-    if (rightBigrams.has(bigram)) intersectionSize += 1;
-  });
-
-  return (2 * intersectionSize) / (leftBigrams.size + rightBigrams.size);
+  return doTitleAlternativesMatch(source.result.title, groupSource.result.title);
 };
 
-const calculateTitleSimilarity = (left: string, right: string, useContextVariants: boolean): number => {
-  const leftVariants = useContextVariants ? getMergeTitleVariants(left) : [normalizeTitleText(left)];
-  const rightVariants = useContextVariants ? getMergeTitleVariants(right) : [normalizeTitleText(right)];
-  if (!leftVariants.length || !rightVariants.length) {
-    return 0;
-  }
+const doTitleAlternativesMatch = (
+  left: string,
+  right: string,
+): boolean => {
+  return getTitleAlternatives(left).some((leftAlternative) => (
+    getTitleAlternatives(right).some((rightAlternative) => {
+      if (hasDifferentSequenceMarkers(leftAlternative, rightAlternative)) {
+        return false;
+      }
 
-  return Math.max(...leftVariants.flatMap((normalizedLeft) => (
-    rightVariants.map((normalizedRight) => calculateNormalizedTitleSimilarity(normalizedLeft, normalizedRight))
-  )));
-};
-
-const getMergeThreshold = (mode: MultiSearchMergeMode): number => {
-  if (mode === "loose") {
-    return 0.82;
-  }
-
-  if (mode === "balanced") {
-    return 0.9;
-  }
-
-  return 1;
+      const rightVariants = new Set(getMergeTitleVariants(rightAlternative));
+      return getMergeTitleVariants(leftAlternative).some((leftVariant) => rightVariants.has(leftVariant));
+    })
+  ));
 };
 
 const shouldMergeSourceIntoGroup = (
   source: MultiSearchSourceResult,
   group: MultiSearchMergedResult,
-  mode: MultiSearchMergeMode,
 ): boolean => {
-  const sourceTitle = source.result.title;
-  const threshold = getMergeThreshold(mode);
-
   return group.sources.some((groupSource) => {
     if (source.result.detailUrl && groupSource.result.detailUrl === source.result.detailUrl) {
       return true;
     }
 
-    if (hasDifferentSequenceMarkers(sourceTitle, groupSource.result.title)) {
-      return false;
-    }
-
-    const score = calculateTitleSimilarity(sourceTitle, groupSource.result.title, mode !== "strict");
-    if (mode === "strict") {
-      return score === 1;
-    }
-
-    return score >= threshold;
+    return canMergeSourceTitles(source, groupSource);
   });
 };
 
@@ -334,24 +434,31 @@ const uniqueValues = (values: string[]): string[] => {
   });
 };
 
+const getSourceLanguageValuesForMerge = (source: MultiSearchSourceResult): string[] => (
+  source.sourceLanguageCodes.length ? source.sourceLanguageCodes : [UNKNOWN_MULTI_SEARCH_VALUE]
+);
+
 const buildMergedResultId = (source: MultiSearchSourceResult): string => (
   `${source.scraper.id}::${source.result.detailUrl || source.result.title}`
 );
 
 export const mergeMultiSearchResults = (
   sources: MultiSearchSourceResult[],
-  mode: MultiSearchMergeMode,
 ): MultiSearchMergedResult[] => {
   const groups: MultiSearchMergedResult[] = [];
 
   sources.forEach((source) => {
-    const group = groups.find((candidate) => shouldMergeSourceIntoGroup(source, candidate, mode));
+    const group = groups.find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
 
     if (group) {
       group.sources.push(source);
       group.sourceLanguageCodes = uniqueValues([
         ...group.sourceLanguageCodes,
-        ...source.sourceLanguageCodes,
+        ...getSourceLanguageValuesForMerge(source),
+      ]);
+      group.tentativeAuthorNames = uniqueValues([
+        ...group.tentativeAuthorNames,
+        ...source.tentativeAuthorNames,
       ]);
       group.contentTypes = uniqueValues([
         ...group.contentTypes,
@@ -376,7 +483,8 @@ export const mergeMultiSearchResults = (
       summary: source.result.summary,
       pageCount: source.result.pageCount,
       sources: [source],
-      sourceLanguageCodes: uniqueValues(source.sourceLanguageCodes),
+      sourceLanguageCodes: uniqueValues(getSourceLanguageValuesForMerge(source)),
+      tentativeAuthorNames: uniqueValues(source.tentativeAuthorNames),
       contentTypes: uniqueValues(source.contentTypes),
     });
   });

@@ -205,6 +205,8 @@ app.whenReady()
                 callback({ error: -6 }); // FILE_NOT_FOUND
             }
         });
+        const remoteThumbnails = require("./handlers/remoteThumbnails") as typeof import("./handlers/remoteThumbnails");
+        remoteThumbnails.registerRemoteThumbnailProtocol();
 
         require("./ipc");
         void appUpdate.initializeAppUpdate();

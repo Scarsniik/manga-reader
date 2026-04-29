@@ -295,7 +295,13 @@ export default function ScraperCard({
     >
       <div className="scraper-card__media">
         {coverUrl ? (
-          <img src={coverUrl} alt={resolvedCoverAlt} onError={onCoverError} />
+          <img
+            src={coverUrl}
+            alt={resolvedCoverAlt}
+            loading="lazy"
+            decoding="async"
+            onError={onCoverError}
+          />
         ) : (
           <div className="scraper-card__placeholder">Pas d&apos;image</div>
         )}

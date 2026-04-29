@@ -449,110 +449,14 @@ Cela garde l'interface compacte tout en évitant de cacher l'information.
 
 ## Merge des résultats
 
-Le merge consiste à regrouper plusieurs résultats qui semblent correspondre au même manga.
+Le merge consiste à regrouper plusieurs résultats qui correspondent au même manga.
 
-La logique technique précise sera définie plus tard.
+La V1 retient une fusion déterministe et prudente :
 
-Pour l'instant, le principe retenu est un merge par score.
+- même URL source si elle est disponible ;
+- ou même titre normalisé après découpe des titres alternatifs et suppression des contextes connus.
 
----
-
-## Merge par score
-
-Chaque résultat peut être comparé aux autres avec un score de similarité.
-
-Le score peut prendre en compte :
-
-- titre normalisé ;
-- auteur ;
-- langue ;
-- type ;
-- tags ;
-- nombre de pages ou chapitres, si disponible ;
-- similarité de couverture, éventuellement plus tard.
-
-Plus le score est élevé, plus les résultats sont considérés comme probablement identiques.
-
----
-
-## Force de merge
-
-L'utilisateur peut choisir la force de merge.
-
-Cette option permet de contrôler le niveau d'agressivité du regroupement.
-
-### Options possibles
-
-```txt
-Regroupement des résultats similaires
-
-[ Strict ] [ Équilibré ] [ Large ]
-```
-
-### Strict
-
-Regroupe uniquement les correspondances très sûres.
-
-Exemple :
-
-- même titre normalisé ;
-- même auteur ;
-- même type.
-
-Avantage :
-
-- limite fortement les faux regroupements.
-
-Inconvénient :
-
-- laisse plus de doublons visibles.
-
-### Équilibré
-
-Regroupe les correspondances solides, mais accepte quelques variations.
-
-Exemple :
-
-- titre très proche ;
-- auteur identique ou absent ;
-- type compatible.
-
-Avantage :
-
-- bon compromis pour l'utilisateur moyen.
-
-Inconvénient :
-
-- quelques erreurs restent possibles.
-
-### Large
-
-Regroupe plus agressivement les résultats proches.
-
-Exemple :
-
-- titre similaire ;
-- auteur absent ;
-- type compatible ;
-- tags proches.
-
-Avantage :
-
-- réduit fortement le nombre de cartes.
-
-Inconvénient :
-
-- risque plus élevé de fusionner deux œuvres différentes.
-
-### Recommandation V1
-
-Par défaut :
-
-```txt
-Force de merge : Strict
-```
-
-Le mode strict est plus sûr, car un doublon visible est moins grave qu'un mauvais regroupement.
+Il n'y a pas de score de similarité réglable. Un doublon visible est moins grave qu'un mauvais regroupement.
 
 ---
 
@@ -632,11 +536,10 @@ Vue
 2. Il choisit éventuellement les scrapers, langues et types.
 3. Il garde les options par défaut ou choisit :
    - profondeur de recherche ;
-   - rythme rapide ou prudent ;
-   - force de merge.
+   - rythme rapide ou prudent.
 4. La recherche démarre sur les scrapers sélectionnés.
 5. Les résultats sont affichés dès qu'ils arrivent.
-6. Les cartes sont mergées uniquement selon le niveau de merge choisi.
+6. Les cartes sont mergées par correspondance stricte d'URL ou de titre normalise.
 7. Les statuts des scrapers sont mis à jour en temps réel.
 
 ### Paramètres par défaut
@@ -644,7 +547,6 @@ Vue
 ```txt
 Profondeur : rapide, 1 page par scraper
 Rythme : rapide
-Force de merge : strict
 Vue : fusionnée
 Langues : carte globale avec langues affichées par source
 ```
@@ -653,8 +555,6 @@ Langues : carte globale avec langues affichées par source
 
 ## Points à décider plus tard
 
-- Règles précises du score de merge.
-- Seuils exacts pour les modes strict, équilibré et large.
 - Gestion avancée des titres alternatifs.
 - Gestion des résultats avec plusieurs langues sur un même scraper.
 - Choix final entre carte globale ou carte par langue.
@@ -675,7 +575,7 @@ La V1 du multi-search repose sur les choix suivants :
 - affichage des statuts par scraper ;
 - résultats sous forme de cartes ;
 - cartes pouvant être mergées ;
-- merge par score avec force réglable ;
+- merge strict par URL ou titre normalise ;
 - ouverture d'une carte mergée via un menu de choix du scraper ;
 - langue affichée au niveau de la carte et/ou de chaque source ;
 - vue fusionnée par défaut ;
@@ -692,9 +592,21 @@ La V1 du multi-search repose sur les choix suivants :
 - La page conserve le dernier etat de recherche dans la session de l'onglet afin qu'un retour arriere depuis une fiche restaure les resultats charges. Une nouvelle recherche remplace cet etat.
 - Le statut detaille d'un scraper affiche l'adresse de la derniere page chargee quand elle est disponible.
 - Le merge ignore les marqueurs de langue explicites presents dans les titres, par exemple `[EN]`, `VF`, `RAW` ou `English`, et ces marqueurs enrichissent aussi l'affichage des langues detectees.
+- Les codes de langue courts (`de`, `en`, `fr`, etc.) ne sont detectes dans les titres que lorsqu'ils sont dans un marqueur explicite comme `[DE]` ou `(EN)`, afin d'eviter les faux positifs sur des mots ordinaires.
 - La detection de langue se fait d'abord sur le titre original. Si le titre indique une langue, elle remplace l'inference depuis le scraper. Si le scraper n'a qu'une langue source, elle sert de fallback. Si le scraper en a plusieurs, elles ne sont pas utilisees pour determiner la langue du manga.
-- La normalisation de merge retire ensuite les blocs entre crochets et accolades. En regroupement equilibre ou large, une variante retire aussi les blocs entre parentheses pour comparer le titre coeur sans le contexte de serie.
-- Le merge refuse les titres qui ne portent pas les memes marqueurs numeriques ou romains (`2`, `II`, `III`, etc.), afin d'eviter de fusionner deux volumes distincts.
+- La normalisation de merge retire ensuite les blocs entre crochets et accolades, puis supprime les apostrophes avant comparaison. Une variante retire aussi les blocs entre parentheses pour comparer le titre coeur sans le contexte de serie.
+- Les blocs entre crochets places au tout debut d'un titre sont extraits comme `tentativeAuthorNames`, meme lorsqu'ils sont precedes par un prefixe de convention entre parentheses comme `(SC37)`. Les marqueurs de langue evidents sont ignores. Cette information est exposee dans les exports et sert de veto faible : si deux sources ont des auteurs provisoires differents, elles ne fusionnent pas par titre. Une URL identique reste prioritaire.
+- Les caracteres `|` et `/` dans un titre de resultat sont traites comme des separateurs de titres alternatifs, souvent deux langues pour un meme manga. Chaque alternative est comparee aux autres titres, et une alternative qui ne matche pas n'empeche pas la fusion si une autre alternative matche.
+- Le merge refuse une paire de titres alternatifs qui ne porte pas les memes marqueurs numeriques ou romains (`2`, `II`, `III`, etc.), afin d'eviter de fusionner deux volumes distincts. Ce refus s'applique par paire d'alternatives, pas au titre complet separe par `|` ou `/`.
 - Une erreur de pagination apres au moins une page chargee ferme simplement la pagination de ce scraper et conserve les resultats deja recuperes.
 - Pour chaque scraper, les resultats de recherche multi-sources dedoublonnent les URLs deja vues sur les pages precedentes. Si une page ne contient que des URLs deja vues, la pagination de ce scraper s'arrete.
 - Si la couverture affichee dans une card multi-search ne charge pas, la card essaie les couvertures des autres sources du meme resultat avant d'afficher le placeholder.
+- Le champ de recherche accepte plusieurs termes separes par virgule, point-virgule, barre verticale ou retour a la ligne. La pagination est suivie par terme et par scraper.
+- Dans les cards multi-search, les langues sont affichees sous forme de drapeaux compacts via la librairie `flag-icons`, avec le nom de langue conserve en aide au survol. Le chinois (`zh`) est pris en charge comme langue frequente.
+- Dans les listes de langues, les codes qui ne correspondent pas a une langue connue sont affiches avec `?`.
+- La liste des scrapers associes a une card multi-search et le menu `Ouvrir avec` s'ouvrent au clic comme des menus deroulants en overlay pour ne pas deplacer les cards suivantes, et se ferment quand l'utilisateur clique en dehors.
+- Les couvertures multi-search distantes passent par un protocole local de vignette redimensionnee quand l'application Electron est disponible, avec fallback vers l'image originale.
+- Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque ou a un bookmark scraper.
+- La section de resultats expose un bouton JSON qui ecrit un export temporaire dans le dossier temporaire systeme puis l'ouvre avec l'application associee aux fichiers JSON.
+- En environnement de developpement uniquement, la section de resultats fusionnes expose un bouton `Recharger fusion` qui force le recalcul de la fusion depuis les sources deja chargees.
+- En environnement de developpement uniquement, la section de resultats fusionnes expose aussi un bouton `Merged JSON` qui ouvre un export limite aux `mergedResults`.

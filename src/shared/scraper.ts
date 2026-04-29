@@ -615,6 +615,7 @@ const buildScraperSearchTemplateReplacements = (
     ['{{pageIndex3}}', padPageNumber(pageIndex, 3)],
     ['{{pageIndex4}}', padPageNumber(pageIndex, 4)],
     ['{{rawQuery}}', trimmedQuery],
+    ['{{plusQuery}}', trimmedQuery.split(' ').join('+')],
     ['{{rawSearch}}', trimmedQuery],
     ['{{rawValue}}', trimmedQuery],
   ];

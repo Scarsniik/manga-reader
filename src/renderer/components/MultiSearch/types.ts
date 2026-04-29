@@ -2,7 +2,6 @@ import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 
 export type MultiSearchDepthMode = "quick" | "extended" | "advanced";
 export type MultiSearchPaceMode = "fast" | "careful";
-export type MultiSearchMergeMode = "strict" | "balanced" | "loose";
 export type MultiSearchViewMode = "merged" | "byScraper";
 
 export type MultiSearchScraperStatus =
@@ -16,17 +15,28 @@ export type MultiSearchScraperStatus =
 export type MultiSearchSourceResult = {
   scraper: ScraperRecord;
   result: ScraperSearchResultItem;
+  searchTerm: string;
   pageIndex: number;
   sourceLanguageCodes: string[];
   detectedLanguageCodes: string[];
+  tentativeAuthorNames: string[];
   contentTypes: string[];
   canOpenDetails: boolean;
+};
+
+export type MultiSearchTermRun = {
+  term: string;
+  loadedPages: number;
+  hasNextPage: boolean;
+  currentPageUrl?: string;
+  nextPageUrl?: string;
 };
 
 export type MultiSearchScraperRun = {
   scraper: ScraperRecord;
   status: MultiSearchScraperStatus;
   results: MultiSearchSourceResult[];
+  searchTerms: MultiSearchTermRun[];
   loadedPages: number;
   hasNextPage: boolean;
   currentPageUrl?: string;
@@ -42,5 +52,6 @@ export type MultiSearchMergedResult = {
   pageCount?: string;
   sources: MultiSearchSourceResult[];
   sourceLanguageCodes: string[];
+  tentativeAuthorNames: string[];
   contentTypes: string[];
 };

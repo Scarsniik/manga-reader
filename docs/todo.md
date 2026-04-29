@@ -23,10 +23,10 @@
 - [ ] Gerer les apis
 - [x] Nombre de page dans module fiche
 - [ ] Ajout détection langue (bien étudier type de détéction : titre, drapeau, autre ?)
-- [ ] Recherche multiple : Liste des scrapper dans une card s'ouvre en hover
-- [ ] Recherche multiple : lazy loading
-- [ ] Recherche multiple : Pouvoir mettre plusieurs thermes de recherche
-- [ ] Recherche multiple : Affiche quand un des resultat est déjà dans la bibliotheque ou en bookmark
+- [x] Recherche multiple : Liste des scrapper dans une card s'ouvre en hover pour que ça ne déplace pas ce qu'il y a en dessous
+- [x] Recherche multiple : lazy loading
+- [x] Recherche multiple : Pouvoir mettre plusieurs thermes de recherche
+- [x] Recherche multiple : Affiche quand un des resultat est déjà dans la bibliotheque ou en bookmark
 - [ ] Bookmark : Tri sur les bookmarks
 
 ### Fixes

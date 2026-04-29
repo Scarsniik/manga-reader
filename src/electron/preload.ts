@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld('api', {
     addLink: (link: { url: string; title: string; description?: string }) => ipcRenderer.invoke('add-link', link),
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
     openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
+    openJsonDocument: (request: { filename?: string; content: string }) => ipcRenderer.invoke("open-json-document", request),
     // Window controls
     getAppRuntimeInfo: () => ipcRenderer.invoke("app-runtime-info"),
     getWindowState: () => ipcRenderer.invoke("window-get-state"),

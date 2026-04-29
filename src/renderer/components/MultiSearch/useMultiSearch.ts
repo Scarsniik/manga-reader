@@ -9,10 +9,12 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { parseMultiSearchTerms } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type {
   MultiSearchPaceMode,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
+  MultiSearchTermRun,
 } from "@/renderer/components/MultiSearch/types";
 
 type RunSearchOptions = {
@@ -22,13 +24,65 @@ type RunSearchOptions = {
   paceMode: MultiSearchPaceMode;
 };
 
-const buildInitialRun = (scraper: ScraperRecord): MultiSearchScraperRun => ({
+const buildInitialTermRun = (term: string): MultiSearchTermRun => ({
+  term,
+  loadedPages: 0,
+  hasNextPage: true,
+});
+
+const summarizeTermRuns = (
+  searchTerms: MultiSearchTermRun[],
+): Pick<MultiSearchScraperRun, "loadedPages" | "hasNextPage" | "currentPageUrl" | "nextPageUrl"> => {
+  const activeNextTerm = searchTerms.find((termRun) => termRun.hasNextPage);
+  const lastLoadedTerm = [...searchTerms].reverse().find((termRun) => termRun.currentPageUrl);
+
+  return {
+    loadedPages: searchTerms.reduce((total, termRun) => total + termRun.loadedPages, 0),
+    hasNextPage: Boolean(activeNextTerm),
+    currentPageUrl: lastLoadedTerm?.currentPageUrl,
+    nextPageUrl: activeNextTerm?.nextPageUrl,
+  };
+};
+
+const buildInitialRun = (scraper: ScraperRecord, searchTerms: string[]): MultiSearchScraperRun => ({
   scraper,
   status: "waiting",
   results: [],
+  searchTerms: searchTerms.map(buildInitialTermRun),
   loadedPages: 0,
-  hasNextPage: false,
+  hasNextPage: searchTerms.length > 0,
 });
+
+const ensureRunSearchTerms = (
+  run: MultiSearchScraperRun,
+  fallbackTerms: string[],
+): MultiSearchTermRun[] => {
+  if (run.searchTerms.length) {
+    return run.searchTerms;
+  }
+
+  return fallbackTerms.map((term, index) => ({
+    term,
+    loadedPages: index === 0 ? run.loadedPages : 0,
+    hasNextPage: index === 0 ? run.hasNextPage : false,
+    currentPageUrl: index === 0 ? run.currentPageUrl : undefined,
+    nextPageUrl: index === 0 ? run.nextPageUrl : undefined,
+  }));
+};
+
+const upsertTermRun = (
+  searchTerms: MultiSearchTermRun[],
+  nextTermRun: MultiSearchTermRun,
+): MultiSearchTermRun[] => {
+  const existingIndex = searchTerms.findIndex((termRun) => termRun.term === nextTermRun.term);
+  if (existingIndex === -1) {
+    return [...searchTerms, nextTermRun];
+  }
+
+  return searchTerms.map((termRun, index) => (
+    index === existingIndex ? nextTermRun : termRun
+  ));
+};
 
 const normalizeResultUrl = (source: MultiSearchSourceResult): string => {
   const value = source.result.detailUrl?.trim();
@@ -104,11 +158,16 @@ export default function useMultiSearch() {
 
   const loadNextPageForRun = useCallback(async (
     run: MultiSearchScraperRun,
-    query: string,
+    termRun: MultiSearchTermRun,
     paceConfig: PaceConfig,
     token: number,
   ): Promise<MultiSearchScraperRun | null> => {
     const scraperId = run.scraper.id;
+    const searchTerm = termRun.term.trim();
+
+    if (!searchTerm) {
+      return run;
+    }
 
     patchRun(token, scraperId, (currentRun) => ({
       ...currentRun,
@@ -118,26 +177,33 @@ export default function useMultiSearch() {
 
     try {
       const searchConfig = getSearchConfig(run.scraper);
-      const pageIndex = run.loadedPages;
+      const pageIndex = termRun.loadedPages;
       const page = await fetchSearchPageWithRetry(
         run.scraper,
         searchConfig,
-        query,
+        searchTerm,
         pageIndex,
-        run.nextPageUrl,
+        termRun.nextPageUrl,
         paceConfig,
       );
-      const pageResults = buildSourceResults(run.scraper, page, pageIndex);
+      const pageResults = buildSourceResults(run.scraper, page, pageIndex, searchTerm);
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
-      const nextRun: MultiSearchScraperRun = {
-        ...run,
-        status: "done",
-        results: [...run.results, ...newPageResults],
+      const nextTermRun: MultiSearchTermRun = {
+        ...termRun,
         loadedPages: pageIndex + 1,
         hasNextPage: !hasOnlyDuplicateUrls && resolveHasNextPage(searchConfig, page),
         currentPageUrl: page.currentPageUrl,
         nextPageUrl: page.nextPageUrl,
+      };
+      const nextSearchTerms = upsertTermRun(run.searchTerms, nextTermRun);
+      const paginationSummary = summarizeTermRuns(nextSearchTerms);
+      const nextRun: MultiSearchScraperRun = {
+        ...run,
+        status: "done",
+        results: [...run.results, ...newPageResults],
+        searchTerms: nextSearchTerms,
+        ...paginationSummary,
         error: undefined,
       };
 
@@ -145,39 +211,75 @@ export default function useMultiSearch() {
       return nextRun;
     } catch (loadError) {
       const hasPartialResults = run.loadedPages > 0 || run.results.length > 0;
+      const failedTermRun: MultiSearchTermRun = {
+        ...termRun,
+        hasNextPage: false,
+      };
+      const nextSearchTerms = upsertTermRun(run.searchTerms, failedTermRun);
+      const paginationSummary = summarizeTermRuns(nextSearchTerms);
+
       if (hasPartialResults) {
         const partialRun: MultiSearchScraperRun = {
           ...run,
           status: "done",
-          hasNextPage: false,
+          searchTerms: nextSearchTerms,
+          ...paginationSummary,
           error: undefined,
         };
 
-        patchRun(token, scraperId, (currentRun) => ({
-          ...currentRun,
-          status: "done",
-          hasNextPage: false,
-          error: undefined,
-        }));
+        patchRun(token, scraperId, () => partialRun);
         return partialRun;
       }
 
       const failedRun: MultiSearchScraperRun = {
         ...run,
         status: "error",
-        hasNextPage: false,
+        searchTerms: nextSearchTerms,
+        ...paginationSummary,
         error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
       };
 
-      patchRun(token, scraperId, (currentRun) => ({
-        ...currentRun,
-        status: "error",
-        hasNextPage: false,
-        error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
-      }));
+      patchRun(token, scraperId, () => failedRun);
       return failedRun;
     }
   }, [patchRun]);
+
+  const loadNextPagesForRun = useCallback(async (
+    run: MultiSearchScraperRun,
+    fallbackTerms: string[],
+    paceConfig: PaceConfig,
+    token: number,
+  ): Promise<MultiSearchScraperRun | null> => {
+    let currentRun: MultiSearchScraperRun = {
+      ...run,
+      searchTerms: ensureRunSearchTerms(run, fallbackTerms),
+    };
+    const loadableTerms = currentRun.searchTerms.filter((termRun) => termRun.hasNextPage);
+
+    if (!loadableTerms.length) {
+      return currentRun;
+    }
+
+    for (const termRun of loadableTerms) {
+      if (token !== searchTokenRef.current) {
+        return null;
+      }
+
+      const currentTermRun = currentRun.searchTerms.find((candidate) => candidate.term === termRun.term);
+      if (!currentTermRun?.hasNextPage) {
+        continue;
+      }
+
+      const nextRun = await loadNextPageForRun(currentRun, currentTermRun, paceConfig, token);
+      if (!nextRun) {
+        return null;
+      }
+
+      currentRun = nextRun;
+    }
+
+    return currentRun;
+  }, [loadNextPageForRun]);
 
   const runSearch = useCallback(async ({
     query,
@@ -185,8 +287,8 @@ export default function useMultiSearch() {
     maxPages,
     paceMode,
   }: RunSearchOptions) => {
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery) {
+    const searchTerms = parseMultiSearchTerms(query);
+    if (!searchTerms.length) {
       setError("Saisis une recherche avant de lancer le multi-search.");
       return;
     }
@@ -203,26 +305,30 @@ export default function useMultiSearch() {
     const paceConfig = getPaceConfig(paceMode);
     const pageLimit = Math.max(1, maxPages);
 
-    setRuns(scrapers.map(buildInitialRun));
+    setRuns(scrapers.map((scraper) => buildInitialRun(scraper, searchTerms)));
     setIsSearching(true);
     setError(null);
     setMessage(null);
 
     const tasks = scrapers.map((scraper) => async () => {
-      let currentRun = buildInitialRun(scraper);
+      let currentRun = buildInitialRun(scraper, searchTerms);
 
       for (let pageOffset = 0; pageOffset < pageLimit; pageOffset += 1) {
         if (token !== searchTokenRef.current) {
           return;
         }
 
-        const nextRun = await loadNextPageForRun(currentRun, trimmedQuery, paceConfig, token);
+        const loadedPagesBefore = currentRun.loadedPages;
+        const nextRun = await loadNextPagesForRun(currentRun, searchTerms, paceConfig, token);
 
-        if (!nextRun || nextRun.status === "error" || !nextRun.hasNextPage) {
+        if (!nextRun) {
           return;
         }
 
         currentRun = nextRun;
+        if (currentRun.loadedPages === loadedPagesBefore || !currentRun.hasNextPage) {
+          return;
+        }
       }
     });
 
@@ -236,25 +342,25 @@ export default function useMultiSearch() {
         setIsSearching(false);
       }
     }
-  }, [loadNextPageForRun]);
+  }, [loadNextPagesForRun]);
 
   const loadMoreForScraper = useCallback(async (scraperId: string, query: string) => {
     const run = runs.find((candidate) => candidate.scraper.id === scraperId);
-    const trimmedQuery = query.trim();
-    if (!run || !run.hasNextPage || !trimmedQuery) {
+    const searchTerms = parseMultiSearchTerms(query);
+    if (!run || !run.hasNextPage || !searchTerms.length) {
       return;
     }
 
     const token = searchTokenRef.current;
     setError(null);
     setMessage(null);
-    await loadNextPageForRun(run, trimmedQuery, getPaceConfig(lastPaceModeRef.current), token);
-  }, [loadNextPageForRun, runs]);
+    await loadNextPagesForRun(run, searchTerms, getPaceConfig(lastPaceModeRef.current), token);
+  }, [loadNextPagesForRun, runs]);
 
   const loadMoreForAll = useCallback(async (query: string) => {
-    const trimmedQuery = query.trim();
+    const searchTerms = parseMultiSearchTerms(query);
     const loadableRuns = runs.filter((run) => run.hasNextPage && run.status !== "loading");
-    if (!trimmedQuery || !loadableRuns.length) {
+    if (!searchTerms.length || !loadableRuns.length) {
       return;
     }
 
@@ -267,7 +373,7 @@ export default function useMultiSearch() {
     try {
       await runWithConcurrency(
         loadableRuns.map((run) => async () => {
-          await loadNextPageForRun(run, trimmedQuery, paceConfig, token);
+          await loadNextPagesForRun(run, searchTerms, paceConfig, token);
         }),
         paceConfig.concurrency,
       );
@@ -279,7 +385,7 @@ export default function useMultiSearch() {
         setIsSearching(false);
       }
     }
-  }, [loadNextPageForRun, runs]);
+  }, [loadNextPagesForRun, runs]);
 
   return {
     runs,

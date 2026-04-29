@@ -15,6 +15,7 @@ import {
 import {
   canOpenScraperDetails,
   detectLanguageCodesFromTitle,
+  extractTentativeAuthorNamesFromTitle,
   getScraperContentTypes,
   getScraperSourceLanguages,
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
@@ -154,6 +155,7 @@ export const buildSourceResults = (
   scraper: ScraperRecord,
   page: ScraperRuntimeSearchPageResult,
   pageIndex: number,
+  searchTerm: string,
 ): MultiSearchSourceResult[] => {
   const scraperLanguageCodes = getScraperSourceLanguages(scraper);
   const contentTypes = getScraperContentTypes(scraper);
@@ -162,15 +164,18 @@ export const buildSourceResults = (
   return page.items.map((result) => {
     const detectedLanguageCodes = detectLanguageCodesFromTitle(result.title);
     const fallbackLanguageCodes = scraperLanguageCodes.length === 1 ? scraperLanguageCodes : [];
+    const tentativeAuthorNames = extractTentativeAuthorNamesFromTitle(result.title);
 
     return {
       scraper,
       result,
+      searchTerm,
       pageIndex,
       sourceLanguageCodes: detectedLanguageCodes.length
         ? detectedLanguageCodes
         : fallbackLanguageCodes,
       detectedLanguageCodes,
+      tentativeAuthorNames,
       contentTypes,
       canOpenDetails,
     };

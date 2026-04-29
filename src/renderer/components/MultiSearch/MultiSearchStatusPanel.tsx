@@ -23,6 +23,14 @@ const getStatusLabel = (status: MultiSearchScraperRun["status"]): string => {
   return labels[status];
 };
 
+const formatLoadedPagesLabel = (run: MultiSearchScraperRun): string => {
+  if (run.searchTerms.length <= 1) {
+    return `Page ${run.loadedPages || 0} chargee`;
+  }
+
+  return `${run.loadedPages || 0} page(s) chargee(s) sur ${run.searchTerms.length} terme(s)`;
+};
+
 export default function MultiSearchStatusPanel({
   runs,
   query,
@@ -62,7 +70,7 @@ export default function MultiSearchStatusPanel({
             </div>
             <div>
               <span>{run.results.length} resultat(s)</span>
-              <span>Page {run.loadedPages || 0} chargee</span>
+              <span>{formatLoadedPagesLabel(run)}</span>
               <span>{run.hasNextPage ? "Page suivante disponible" : "Pas de page suivante connue"}</span>
               {run.currentPageUrl ? (
                 <span className="multi-search__status-url">Adresse : {run.currentPageUrl}</span>

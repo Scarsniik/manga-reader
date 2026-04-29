@@ -1,6 +1,8 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ScraperRecord } from "@/shared/scraper";
+import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
+import type { Manga } from "@/renderer/types";
 import MultiSearchControls, { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
 import MultiSearchFilters, {
   type MultiSearchCheckboxOption,
@@ -24,9 +26,12 @@ import {
   readMultiSearchState,
   saveMultiSearchState,
 } from "@/renderer/components/MultiSearch/multiSearchPersistence";
+import {
+  buildMultiSearchExportPayload,
+  buildMultiSearchMergedResultsExportPayload,
+} from "@/renderer/components/MultiSearch/multiSearchExport";
 import type {
   MultiSearchDepthMode,
-  MultiSearchMergeMode,
   MultiSearchPaceMode,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
@@ -64,9 +69,12 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [depthMode, setDepthMode] = useState<MultiSearchDepthMode>("quick");
   const [advancedPages, setAdvancedPages] = useState(3);
   const [paceMode, setPaceMode] = useState<MultiSearchPaceMode>("fast");
-  const [mergeMode, setMergeMode] = useState<MultiSearchMergeMode>("strict");
   const [viewMode, setViewMode] = useState<MultiSearchViewMode>("merged");
   const [openError, setOpenError] = useState<string | null>(null);
+  const [isExportingJson, setIsExportingJson] = useState(false);
+  const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
+  const [mergeRefreshKey, setMergeRefreshKey] = useState(0);
+  const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
     [scrapers],
@@ -82,6 +90,50 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     loadMoreForAll,
     loadMoreForScraper,
   } = useMultiSearch();
+  const { bookmarkMap } = useScraperBookmarks();
+  const bookmarkedSourceKeys = useMemo(
+    () => new Set(bookmarkMap.keys()),
+    [bookmarkMap],
+  );
+
+  useEffect(() => {
+    const loadLibraryMangas = async () => {
+      if (!window.api || typeof window.api.getMangas !== "function") {
+        setLibraryMangas([]);
+        return;
+      }
+
+      try {
+        const data = await window.api.getMangas();
+        setLibraryMangas(Array.isArray(data) ? data as Manga[] : []);
+      } catch (libraryError) {
+        console.warn("Failed to load library mangas for multi-search source matching", libraryError);
+        setLibraryMangas([]);
+      }
+    };
+
+    void loadLibraryMangas();
+
+    const onMangasUpdated = () => {
+      void loadLibraryMangas();
+    };
+
+    window.addEventListener("mangas-updated", onMangasUpdated as EventListener);
+    return () => window.removeEventListener("mangas-updated", onMangasUpdated as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!window.api || typeof window.api.getAppRuntimeInfo !== "function") {
+      setShowMergeReloadButton(window.location.protocol === "http:" || window.location.protocol === "https:");
+      return;
+    }
+
+    void window.api.getAppRuntimeInfo()
+      .then((runtimeInfo: { isDev?: boolean } | null) => {
+        setShowMergeReloadButton(Boolean(runtimeInfo?.isDev));
+      })
+      .catch(() => setShowMergeReloadButton(false));
+  }, []);
 
   useEffect(() => {
     if (!restoredStateRef.current) {
@@ -97,7 +149,6 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         setDepthMode(restoredState.depthMode);
         setAdvancedPages(restoredState.advancedPages);
         setPaceMode(restoredState.paceMode);
-        setMergeMode(restoredState.mergeMode);
         setViewMode(restoredState.viewMode);
         restoreRuns(restoredState.runs, restoredState.paceMode);
         return;
@@ -128,13 +179,11 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       depthMode,
       advancedPages,
       paceMode,
-      mergeMode,
       viewMode,
     }, runs);
   }, [
     advancedPages,
     depthMode,
-    mergeMode,
     paceMode,
     query,
     runs,
@@ -164,8 +213,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     [runs],
   );
   const mergedResults = useMemo(
-    () => mergeMultiSearchResults(allSources, mergeMode),
-    [allSources, mergeMode],
+    () => mergeMultiSearchResults(allSources),
+    [allSources, mergeRefreshKey],
   );
   const statusCounts = useMemo(() => (
     runs.reduce<Record<MultiSearchScraperRun["status"], number>>((counts, run) => {
@@ -289,6 +338,64 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     });
   };
 
+  const handleExportJson = async () => {
+    if (!window.api || typeof window.api.openJsonDocument !== "function") {
+      setOpenError("L'export JSON n'est pas disponible dans cette version.");
+      return;
+    }
+
+    setIsExportingJson(true);
+    setOpenError(null);
+
+    try {
+      const payload = buildMultiSearchExportPayload({
+        query,
+        viewMode,
+        runs,
+        mergedResults,
+        sourceCount: allSources.length,
+      });
+      const result = await window.api.openJsonDocument({
+        filename: "multi-search-results",
+        content: JSON.stringify(payload, null, 2),
+      });
+
+      if (!result?.success) {
+        throw new Error(String(result?.error || "Impossible d'ouvrir le JSON."));
+      }
+    } catch (exportError) {
+      setOpenError(exportError instanceof Error ? exportError.message : String(exportError));
+    } finally {
+      setIsExportingJson(false);
+    }
+  };
+
+  const handleExportMergedResultsJson = async () => {
+    if (!window.api || typeof window.api.openJsonDocument !== "function") {
+      setOpenError("L'export JSON n'est pas disponible dans cette version.");
+      return;
+    }
+
+    setIsExportingJson(true);
+    setOpenError(null);
+
+    try {
+      const payload = buildMultiSearchMergedResultsExportPayload(mergedResults);
+      const result = await window.api.openJsonDocument({
+        filename: "multi-search-merged-results",
+        content: JSON.stringify(payload, null, 2),
+      });
+
+      if (!result?.success) {
+        throw new Error(String(result?.error || "Impossible d'ouvrir le JSON."));
+      }
+    } catch (exportError) {
+      setOpenError(exportError instanceof Error ? exportError.message : String(exportError));
+    } finally {
+      setIsExportingJson(false);
+    }
+  };
+
   return (
     <section className="multi-search">
       <div className="multi-search__hero">
@@ -307,7 +414,6 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         depthMode={depthMode}
         advancedPages={advancedPages}
         paceMode={paceMode}
-        mergeMode={mergeMode}
         viewMode={viewMode}
         isSearching={isSearching}
         canSubmit={selectedScrapers.length > 0}
@@ -316,7 +422,6 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         onDepthModeChange={setDepthMode}
         onAdvancedPagesChange={setAdvancedPages}
         onPaceModeChange={setPaceMode}
-        onMergeModeChange={setMergeMode}
         onViewModeChange={setViewMode}
       />
 
@@ -369,8 +474,15 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         runs={runs}
         mergedResults={mergedResults}
         sourceCount={allSources.length}
+        libraryMangas={libraryMangas}
+        bookmarkedSourceKeys={bookmarkedSourceKeys}
+        isExportingJson={isExportingJson}
+        showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
+        onExportJson={() => void handleExportJson()}
+        onExportMergedResultsJson={() => void handleExportMergedResultsJson()}
+        onReloadMerge={() => setMergeRefreshKey((currentKey) => currentKey + 1)}
       />
     </section>
   );
