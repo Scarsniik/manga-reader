@@ -89,6 +89,9 @@ trois sources :
 - selecteur de langue classique, pour une metadonnee texte comme `English`
 - selecteur de langue processed, pour une metadonnee non textuelle transformee ensuite
 
+Dans `Auteur`, la configuration de langue peut etre copiee depuis `Recherche`, comme les selecteurs
+de scraping. Cela copie aussi la table de correspondance du mode processed.
+
 Pour le mode processed, la normalisation gere pour l'instant le modele 3hentai : une valeur ou une
 classe comme `flag-eng` est convertie en `en`. Le selecteur peut donc etre un CSS comme
 `.title@class` ou une regex comme `\bflag-([a-z]{2,4})\b`.

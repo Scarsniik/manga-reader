@@ -6,6 +6,7 @@ import {
   ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
+  ScraperLanguageDetectionConfig,
   ScraperLanguageValueMapping,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
@@ -22,6 +23,7 @@ import {
   ScraperUrlTemplateFields,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
+import { buildLanguageDetectionConfig } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
@@ -132,6 +134,25 @@ export default function ScraperAuthorFeatureEditor({
       : false,
     [copiedSearchScrapingFields],
   );
+  const copiedSearchLanguageDetection = useMemo(() => {
+    if (!searchFeature?.config || searchFeature.status === 'not_configured') {
+      return null;
+    }
+
+    const searchConfig = searchFeature.config as Partial<ScraperCardListConfig>;
+    const languageDetection = buildLanguageDetectionConfig(
+      searchConfig.languageDetection as Partial<ScraperLanguageDetectionConfig> | null | undefined,
+    );
+    const hasLanguageDetection = Boolean(
+      languageDetection.detectFromTitle
+      || languageDetection.languageSelector
+      || languageDetection.processedLanguageSelector
+      || languageDetection.valueMappings?.length,
+    );
+
+    return hasLanguageDetection ? languageDetection : null;
+  }, [searchFeature]);
+  const canCopySearchLanguageDetection = Boolean(copiedSearchLanguageDetection);
 
   const resolvedTestUrl = useMemo(() => {
     try {
@@ -261,6 +282,24 @@ export default function ScraperAuthorFeatureEditor({
       return next;
     });
   }, [copiedSearchScrapingFields]);
+
+  const handleCopySearchLanguageDetection = useCallback(() => {
+    if (!copiedSearchLanguageDetection) {
+      return;
+    }
+
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...copiedSearchLanguageDetection,
+        valueMappings: copiedSearchLanguageDetection.valueMappings?.map((mapping) => ({ ...mapping })) ?? [],
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage('Configuration langue copiee depuis Recherche. Pense a valider puis enregistrer.');
+    clearFieldErrorsByPrefix('languageDetection.');
+  }, [clearFieldErrorsByPrefix, copiedSearchLanguageDetection, setFormValues]);
 
   const handleValidate = useCallback(async () => {
     const config = buildAuthorConfig(formValues);
@@ -679,6 +718,19 @@ export default function ScraperAuthorFeatureEditor({
               Configure comment detecter la langue de chaque card extraite.
             </p>
           </div>
+
+          {canCopySearchLanguageDetection ? (
+            <div className="scraper-config-section__actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleCopySearchLanguageDetection}
+                disabled={validating || saving}
+              >
+                Copier la langue de Recherche
+              </button>
+            </div>
+          ) : null}
 
           <ScraperLanguageDetectionSection
             value={formValues.languageDetection}
