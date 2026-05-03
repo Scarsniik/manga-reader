@@ -1,6 +1,10 @@
 import { app, BrowserWindow, IpcMainInvokeEvent, shell } from "electron";
 import path from "path";
 import { attachWindowStateListeners } from "./windowControls";
+import {
+    attachWorkspaceWindowStatePersistence,
+    getInitialWorkspaceWindowBounds,
+} from "./workspaceWindowState";
 
 type ScraperConfigWorkspaceTarget = {
     kind: "scraper.config";
@@ -146,10 +150,10 @@ const loadWorkspaceWindow = async (window: BrowserWindow): Promise<void> => {
 
 const createWorkspaceWindow = (): BrowserWindow => {
     const basePath = app.getAppPath();
+    const initialBounds = getInitialWorkspaceWindowBounds();
 
     const window = new BrowserWindow({
-        width: 1120,
-        height: 740,
+        ...initialBounds,
         frame: false,
         webPreferences: {
             preload: path.join(basePath, "dist", "preload.js"),
@@ -162,6 +166,7 @@ const createWorkspaceWindow = (): BrowserWindow => {
 
     workspaceWindow = window;
     attachWindowStateListeners(window);
+    attachWorkspaceWindowStatePersistence(window);
     configureNavigationGuards(window);
 
     window.webContents.once("did-finish-load", flushPendingTargets);

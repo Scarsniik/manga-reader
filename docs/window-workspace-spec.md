@@ -64,6 +64,8 @@ Si aucun workspace secondaire n'est ouvert :
 - l'application cree une nouvelle `BrowserWindow` ;
 - cette fenetre charge l'application React sur une route ou un mode dedie au workspace ;
 - l'onglet demande est ouvert automatiquement.
+- la fenetre reprend sa derniere position et sa derniere taille sauvegardees quand l'ecran correspondant est
+  disponible ; sinon elle utilise sa taille par defaut et le placement Electron standard.
 
 Si le workspace secondaire est deja ouvert :
 
@@ -140,6 +142,7 @@ Ajouter une gestion explicite de la fenetre workspace :
 
 - conserver une reference `workspaceWindow` separee de `mainWindow` ;
 - creer la fenetre avec les memes garanties de preload et de securite que la fenetre principale ;
+- restaurer la derniere geometrie valide de la fenetre workspace et sauvegarder les deplacements/redimensionnements ;
 - charger la meme application Vite ou le meme fichier build selon l'environnement ;
 - envoyer les nouvelles cibles via IPC quand la fenetre existe deja ;
 - nettoyer la reference quand la fenetre est fermee.
