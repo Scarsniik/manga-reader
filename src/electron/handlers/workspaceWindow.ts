@@ -2,8 +2,11 @@ import { app, BrowserWindow, IpcMainInvokeEvent, shell } from "electron";
 import path from "path";
 import { attachWindowStateListeners } from "./windowControls";
 import {
+    applyInitialWorkspaceWindowState,
     attachWorkspaceWindowStatePersistence,
-    getInitialWorkspaceWindowBounds,
+    getInitialWorkspaceWindowState,
+    WORKSPACE_WINDOW_MIN_HEIGHT,
+    WORKSPACE_WINDOW_MIN_WIDTH,
 } from "./workspaceWindowState";
 
 type ScraperConfigWorkspaceTarget = {
@@ -150,10 +153,12 @@ const loadWorkspaceWindow = async (window: BrowserWindow): Promise<void> => {
 
 const createWorkspaceWindow = (): BrowserWindow => {
     const basePath = app.getAppPath();
-    const initialBounds = getInitialWorkspaceWindowBounds();
+    const initialWindowState = getInitialWorkspaceWindowState();
 
     const window = new BrowserWindow({
-        ...initialBounds,
+        ...initialWindowState.bounds,
+        minWidth: WORKSPACE_WINDOW_MIN_WIDTH,
+        minHeight: WORKSPACE_WINDOW_MIN_HEIGHT,
         frame: false,
         webPreferences: {
             preload: path.join(basePath, "dist", "preload.js"),
@@ -167,6 +172,7 @@ const createWorkspaceWindow = (): BrowserWindow => {
     workspaceWindow = window;
     attachWindowStateListeners(window);
     attachWorkspaceWindowStatePersistence(window);
+    applyInitialWorkspaceWindowState(window, initialWindowState);
     configureNavigationGuards(window);
 
     window.webContents.once("did-finish-load", flushPendingTargets);

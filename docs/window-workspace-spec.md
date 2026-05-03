@@ -66,6 +66,8 @@ Si aucun workspace secondaire n'est ouvert :
 - l'onglet demande est ouvert automatiquement.
 - la fenetre reprend sa derniere position et sa derniere taille sauvegardees quand l'ecran correspondant est
   disponible ; sinon elle utilise sa taille par defaut et le placement Electron standard.
+- si elle etait maximisee a la fermeture, elle est restauree maximisee a la prochaine ouverture.
+- une taille sauvegardee trop petite ou transitoire est ignoree pour garder une fenetre workspace utilisable.
 
 Si le workspace secondaire est deja ouvert :
 

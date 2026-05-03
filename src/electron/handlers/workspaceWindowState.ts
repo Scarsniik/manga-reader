@@ -7,8 +7,8 @@ const DEFAULT_WORKSPACE_WINDOW_BOUNDS: Pick<Rectangle, "width" | "height"> = {
     height: 740,
 };
 
-const MIN_RESTORED_WIDTH = 480;
-const MIN_RESTORED_HEIGHT = 320;
+export const WORKSPACE_WINDOW_MIN_WIDTH = 800;
+export const WORKSPACE_WINDOW_MIN_HEIGHT = 560;
 const MIN_VISIBLE_WIDTH = 160;
 const MIN_VISIBLE_HEIGHT = 120;
 const SAVE_WINDOW_BOUNDS_DELAY_MS = 250;
@@ -17,7 +17,13 @@ type InitialWorkspaceWindowBounds = Pick<Rectangle, "width" | "height"> & Partia
 
 type WorkspaceWindowState = {
     bounds: Rectangle;
+    isMaximized: boolean;
     updatedAt: string;
+};
+
+type InitialWorkspaceWindowState = {
+    bounds: InitialWorkspaceWindowBounds;
+    isMaximized: boolean;
 };
 
 let saveWindowBoundsTimeout: NodeJS.Timeout | null = null;
@@ -26,7 +32,11 @@ const isFiniteNumber = (value: unknown): value is number => (
     typeof value === "number" && Number.isFinite(value)
 );
 
-const normalizeBounds = (value: unknown): Rectangle | null => {
+const isUsableWindowSize = (bounds: Pick<Rectangle, "width" | "height">): boolean => (
+    bounds.width >= WORKSPACE_WINDOW_MIN_WIDTH && bounds.height >= WORKSPACE_WINDOW_MIN_HEIGHT
+);
+
+const normalizeSavedBounds = (value: unknown): Rectangle | null => {
     if (!value || typeof value !== "object") {
         return null;
     }
@@ -41,12 +51,21 @@ const normalizeBounds = (value: unknown): Rectangle | null => {
         return null;
     }
 
-    return {
+    const bounds = {
         x: Math.round(candidate.x),
         y: Math.round(candidate.y),
-        width: Math.max(MIN_RESTORED_WIDTH, Math.round(candidate.width)),
-        height: Math.max(MIN_RESTORED_HEIGHT, Math.round(candidate.height)),
+        width: Math.round(candidate.width),
+        height: Math.round(candidate.height),
     };
+
+    if (!isUsableWindowSize(bounds)) {
+        return {
+            ...bounds,
+            ...DEFAULT_WORKSPACE_WINDOW_BOUNDS,
+        };
+    }
+
+    return bounds;
 };
 
 const getIntersectionSize = (left: Rectangle, right: Rectangle): Pick<Rectangle, "width" | "height"> => {
@@ -103,27 +122,53 @@ const restoreUsableBounds = (bounds: Rectangle): Rectangle | null => {
     return workArea ? fitBoundsInsideWorkArea(bounds, workArea) : null;
 };
 
+const normalizeWindowState = (value: unknown): InitialWorkspaceWindowState => {
+    if (!value || typeof value !== "object") {
+        return {
+            bounds: DEFAULT_WORKSPACE_WINDOW_BOUNDS,
+            isMaximized: false,
+        };
+    }
+
+    const candidate = value as Partial<WorkspaceWindowState>;
+    const savedBounds = normalizeSavedBounds(candidate.bounds);
+    const usableBounds = savedBounds ? restoreUsableBounds(savedBounds) : null;
+
+    return {
+        bounds: usableBounds ?? DEFAULT_WORKSPACE_WINDOW_BOUNDS,
+        isMaximized: candidate.isMaximized === true,
+    };
+};
+
 const getPersistableBounds = (window: BrowserWindow): Rectangle => (
-    window.isMaximized() || window.isFullScreen()
+    window.isMaximized() || window.isFullScreen() || window.isMinimized()
         ? window.getNormalBounds()
         : window.getBounds()
 );
 
-export const getInitialWorkspaceWindowBounds = (): InitialWorkspaceWindowBounds => {
+export const getInitialWorkspaceWindowState = (): InitialWorkspaceWindowState => {
     try {
         const rawState = fs.readFileSync(workspaceWindowStateFilePath, "utf8");
-        const parsedState = JSON.parse(rawState) as Partial<WorkspaceWindowState>;
-        const savedBounds = normalizeBounds(parsedState.bounds);
-        const usableBounds = savedBounds ? restoreUsableBounds(savedBounds) : null;
-
-        return usableBounds ?? DEFAULT_WORKSPACE_WINDOW_BOUNDS;
+        return normalizeWindowState(JSON.parse(rawState));
     } catch (error) {
         const errorCode = (error as NodeJS.ErrnoException | null)?.code;
         if (errorCode !== "ENOENT") {
             console.warn("Failed to read workspace window state", error);
         }
 
-        return DEFAULT_WORKSPACE_WINDOW_BOUNDS;
+        return {
+            bounds: DEFAULT_WORKSPACE_WINDOW_BOUNDS,
+            isMaximized: false,
+        };
+    }
+};
+
+export const applyInitialWorkspaceWindowState = (
+    window: BrowserWindow,
+    state: InitialWorkspaceWindowState,
+): void => {
+    if (state.isMaximized) {
+        window.maximize();
     }
 };
 
@@ -132,9 +177,13 @@ export const saveWorkspaceWindowBounds = (window: BrowserWindow): void => {
         return;
     }
 
-    const bounds = getPersistableBounds(window);
+    const bounds = normalizeSavedBounds(getPersistableBounds(window)) ?? {
+        ...window.getBounds(),
+        ...DEFAULT_WORKSPACE_WINDOW_BOUNDS,
+    };
     const state: WorkspaceWindowState = {
         bounds,
+        isMaximized: window.isMaximized(),
         updatedAt: new Date().toISOString(),
     };
 
