@@ -171,6 +171,7 @@ export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   nextPageSelector: undefined,
   languageDetection: {
     detectFromTitle: false,
+    valueMappings: [],
   },
 };
 

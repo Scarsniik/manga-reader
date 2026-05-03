@@ -21,6 +21,7 @@ import {
   ScraperFeatureKind,
   ScraperFeatureValidationCheckKey,
   ScraperLanguageDetectionConfig,
+  ScraperLanguageValueMapping,
   ScraperPagesFeatureConfig,
   ScraperPagesTemplateBase,
   ScraperRequestConfig,
@@ -43,6 +44,7 @@ import {
   usesScraperPagesTemplateChapterContext,
 } from '@/renderer/utils/scraperPages';
 import {
+  detectLanguageCodesFromMappedValues,
   detectLanguageCodesFromProcessedValues,
   detectLanguageCodesFromTextValues,
   detectLanguageCodesFromTitle,
@@ -183,6 +185,28 @@ const trimOptionalFieldSelector = (value: unknown): ScraperFieldSelector | undef
   normalizeScraperFieldSelector(value)
 );
 
+const normalizeLanguageValueMappings = (value: unknown): ScraperLanguageValueMapping[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const raw = item as Record<string, unknown>;
+      const mapping: ScraperLanguageValueMapping = {
+        value: String(raw.value ?? '').trim(),
+        languageCode: String(raw.languageCode ?? '').trim().toLowerCase(),
+      };
+
+      return mapping.value && mapping.languageCode ? mapping : null;
+    })
+    .filter((item): item is ScraperLanguageValueMapping => Boolean(item));
+};
+
 const normalizeLanguageDetectionConfig = (value: unknown): ScraperLanguageDetectionConfig => {
   const raw = value && typeof value === 'object'
     ? value as Record<string, unknown>
@@ -192,6 +216,7 @@ const normalizeLanguageDetectionConfig = (value: unknown): ScraperLanguageDetect
     detectFromTitle: Boolean(raw.detectFromTitle),
     languageSelector: trimOptionalFieldSelector(raw.languageSelector),
     processedLanguageSelector: trimOptionalFieldSelector(raw.processedLanguageSelector),
+    valueMappings: normalizeLanguageValueMappings(raw.valueMappings),
   };
 };
 
@@ -683,9 +708,12 @@ const extractLanguageCodesFromRoot = (
   const selectorLanguageCodes = config.languageSelector
     ? detectLanguageCodesFromTextValues(extractFieldSelectorValuesFromRoot(root, config.languageSelector))
     : [];
-  const processedSelectorLanguageCodes = config.processedLanguageSelector
-    ? detectLanguageCodesFromProcessedValues(extractFieldSelectorValuesFromRoot(root, config.processedLanguageSelector))
+  const processedSelectorValues = config.processedLanguageSelector
+    ? extractFieldSelectorValuesFromRoot(root, config.processedLanguageSelector)
     : [];
+  const processedSelectorLanguageCodes = config.valueMappings?.length
+    ? detectLanguageCodesFromMappedValues(processedSelectorValues, config.valueMappings)
+    : detectLanguageCodesFromProcessedValues(processedSelectorValues);
 
   return uniqueLanguageCodes([
     ...titleLanguageCodes,

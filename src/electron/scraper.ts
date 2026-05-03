@@ -10,10 +10,16 @@ export interface ScraperFieldSelector {
   value: string;
 }
 
+export interface ScraperLanguageValueMapping {
+  value: string;
+  languageCode: string;
+}
+
 export interface ScraperLanguageDetectionConfig {
   detectFromTitle: boolean;
   languageSelector?: ScraperFieldSelector;
   processedLanguageSelector?: ScraperFieldSelector;
+  valueMappings?: ScraperLanguageValueMapping[];
 }
 
 export interface ScraperRegexPattern {

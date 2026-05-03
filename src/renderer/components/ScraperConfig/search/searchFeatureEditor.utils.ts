@@ -195,6 +195,7 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   nextPageSelector: undefined,
   languageDetection: {
     detectFromTitle: false,
+    valueMappings: [],
   },
 };
 

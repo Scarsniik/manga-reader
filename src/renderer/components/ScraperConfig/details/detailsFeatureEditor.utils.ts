@@ -216,6 +216,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   thumbnailsNextPageSelector: undefined,
   languageDetection: {
     detectFromTitle: false,
+    valueMappings: [],
   },
   derivedValues: [],
 };

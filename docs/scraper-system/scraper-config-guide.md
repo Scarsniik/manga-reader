@@ -69,6 +69,9 @@ En mode regex, la regex s'applique uniquement au HTML du bloc courant :
 - pour `Chapitres`, au HTML du chapitre trouve par `chapterItemSelector`
 - pour `Fiche`, `Pages` et les liens de pagination, au HTML du document ou du conteneur courant
 
+Quand le bloc courant est un element, le HTML utilise est son `outerHTML`. Une regex peut donc lire
+les attributs et les classes du conteneur direct, par exemple la `div` qui compose une card.
+
 Si la regex contient un groupe capture, le premier groupe est conserve. Sinon, le match complet est
 conserve. Exemple pour une classe de drapeau 3hentai : `\bflag-([a-z]{2,4})\b` extrait `eng` depuis
 `class="title flag flag-eng"`.
@@ -89,6 +92,13 @@ trois sources :
 Pour le mode processed, la normalisation gere pour l'instant le modele 3hentai : une valeur ou une
 classe comme `flag-eng` est convertie en `en`. Le selecteur peut donc etre un CSS comme
 `.title@class` ou une regex comme `\bflag-([a-z]{2,4})\b`.
+
+La section `Langue` peut aussi contenir une table de correspondance pour le mode processed. Chaque
+ligne associe une valeur extraite a une langue, par exemple `flag-eng -> Anglais` ou
+`translated -> Anglais`. Si la table contient au moins une ligne, le selecteur processed n'utilise
+plus la detection automatique : il parcourt les valeurs extraites dans l'ordre et conserve la
+premiere valeur presente dans la table. Cela permet de gerer les cas ou un selecteur CSS ou une regex
+renvoie plusieurs classes ou metadonnees.
 
 Les langues detectees sont exposees sur les cards et les fiches, puis affichees avec les memes
 drapeaux compacts que dans la recherche multiple. Lors d'un ajout a la bibliotheque ou d'un

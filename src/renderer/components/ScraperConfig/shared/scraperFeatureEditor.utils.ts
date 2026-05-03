@@ -8,6 +8,7 @@ import {
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperLanguageDetectionConfig,
+  ScraperLanguageValueMapping,
 } from '@/shared/scraper';
 import {
   extractSelectorValues,
@@ -61,12 +62,35 @@ export const trimOptionalFieldSelector = (value: unknown): ScraperFieldSelector 
   normalizeScraperFieldSelector(value)
 );
 
+export const normalizeLanguageValueMappings = (value: unknown): ScraperLanguageValueMapping[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const raw = item as Partial<ScraperLanguageValueMapping>;
+      const mapping: ScraperLanguageValueMapping = {
+        value: trimOptional(raw.value) ?? '',
+        languageCode: trimOptional(raw.languageCode)?.toLowerCase() ?? '',
+      };
+
+      return mapping.value || mapping.languageCode ? mapping : null;
+    })
+    .filter((item): item is ScraperLanguageValueMapping => Boolean(item));
+};
+
 export const buildLanguageDetectionConfig = (
   value: Partial<ScraperLanguageDetectionConfig> | null | undefined,
 ): ScraperLanguageDetectionConfig => ({
   detectFromTitle: Boolean(value?.detectFromTitle),
   languageSelector: trimOptionalFieldSelector(value?.languageSelector),
   processedLanguageSelector: trimOptionalFieldSelector(value?.processedLanguageSelector),
+  valueMappings: normalizeLanguageValueMappings(value?.valueMappings),
 });
 
 export const getLanguageDetectionFieldErrors = (
@@ -84,6 +108,16 @@ export const getLanguageDetectionFieldErrors = (
   if (processedLanguageSelectorError) {
     errors[`${prefix}.processedLanguageSelector`] = processedLanguageSelectorError;
   }
+
+  (config?.valueMappings ?? []).forEach((mapping, index) => {
+    if (!mapping.value && mapping.languageCode) {
+      errors[`${prefix}.valueMappings.${index}.value`] = 'La valeur detectee est requise.';
+    }
+
+    if (mapping.value && !mapping.languageCode) {
+      errors[`${prefix}.valueMappings.${index}.languageCode`] = 'La langue est requise.';
+    }
+  });
 
   return errors;
 };

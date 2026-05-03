@@ -7,6 +7,7 @@ import {
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
+  ScraperLanguageValueMapping,
 } from '@/shared/scraper';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
@@ -170,6 +171,18 @@ export default function ScraperDetailsFeatureEditor({
     }));
     clearFieldFeedback(`languageDetection.${fieldName}`);
   }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageValueMappingsChange = useCallback((valueMappings: ScraperLanguageValueMapping[]) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        valueMappings,
+      },
+    }));
+    clearFeedback();
+    clearFieldErrorsByPrefix('languageDetection.valueMappings.');
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const updateDerivedValue = useCallback((
     draftId: string,
@@ -621,6 +634,8 @@ export default function ScraperDetailsFeatureEditor({
             fieldErrors={fieldErrors}
             onDetectFromTitleChange={handleLanguageDetectFromTitleChange}
             onFieldSelectorChange={handleLanguageFieldSelectorChange}
+            onValueMappingsChange={handleLanguageValueMappingsChange}
+            disabled={validating || saving}
           />
         </div>
 

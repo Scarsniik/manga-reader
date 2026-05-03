@@ -382,6 +382,52 @@
   color: #eaf2fb;
 }
 
+.scraper-language-mapping {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scraper-language-mapping__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scraper-language-mapping__header strong {
+  color: #f4f8fc;
+}
+
+.scraper-language-mapping__header button {
+  min-width: auto !important;
+  padding: 8px 12px !important;
+}
+
+.scraper-language-mapping__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scraper-language-mapping__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scraper-language-mapping__remove {
+  min-width: auto !important;
+  min-height: 40px;
+  padding: 8px 12px !important;
+}
+
 .scraper-derived-values {
   display: flex;
   flex-direction: column;
@@ -1147,12 +1193,14 @@
   }
 
   .scraper-config-section__grid,
+  .scraper-language-mapping__row,
   .scraper-fake-details,
   .scraper-fake-search-card,
   .scraper-fake-chapter-card {
     grid-template-columns: 1fr;
   }
 
+  .scraper-language-mapping__header,
   .scraper-derived-value-card__header,
   .scraper-request-field-card__header,
   .scraper-template-context__item,

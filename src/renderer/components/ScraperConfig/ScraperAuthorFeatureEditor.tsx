@@ -6,6 +6,7 @@ import {
   ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
+  ScraperLanguageValueMapping,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
@@ -93,6 +94,8 @@ export default function ScraperAuthorFeatureEditor({
     setSaveError,
     saveMessage,
     setSaveMessage,
+    clearFeedback,
+    clearFieldErrorsByPrefix,
     clearFieldFeedback,
     createTextFieldChangeHandler,
     resetEditorState,
@@ -224,6 +227,18 @@ export default function ScraperAuthorFeatureEditor({
     }));
     clearFieldFeedback(`languageDetection.${fieldName}`);
   }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageValueMappingsChange = useCallback((valueMappings: ScraperLanguageValueMapping[]) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        valueMappings,
+      },
+    }));
+    clearFeedback();
+    clearFieldErrorsByPrefix('languageDetection.valueMappings.');
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleCopySearchSelectors = useCallback(() => {
     if (!copiedSearchScrapingFields) {
@@ -670,6 +685,8 @@ export default function ScraperAuthorFeatureEditor({
             fieldErrors={fieldErrors}
             onDetectFromTitleChange={handleLanguageDetectFromTitleChange}
             onFieldSelectorChange={handleLanguageFieldSelectorChange}
+            onValueMappingsChange={handleLanguageValueMappingsChange}
+            disabled={validating || saving}
           />
         </div>
 

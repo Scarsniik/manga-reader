@@ -1,4 +1,5 @@
 import { languages } from "@/renderer/consts/languages";
+import type { ScraperLanguageValueMapping } from "@/shared/scraper";
 
 export const UNKNOWN_LANGUAGE_CODE = "__language_unknown__";
 
@@ -101,7 +102,7 @@ const TITLE_LANGUAGE_MARKER_PATTERN = new RegExp([
 
 const KNOWN_LANGUAGE_CODES = new Set(languages.map((language) => language.code));
 
-const normalizeLanguageToken = (value: string): string => (
+export const normalizeLanguageToken = (value: string): string => (
   value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -109,6 +110,38 @@ const normalizeLanguageToken = (value: string): string => (
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "")
     .replace(/^pt-br$/, "ptbr")
+);
+
+const getLanguageMappingCandidates = (value: string): string[] => {
+  const normalizedSource = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const tokens = normalizedSource.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) ?? [];
+  const candidates = [
+    normalizeLanguageToken(value),
+    ...tokens.flatMap((token) => {
+      const normalizedToken = normalizeLanguageToken(token);
+      const flagMatch = normalizedToken.match(/^flag-(.+)$/);
+
+      return flagMatch
+        ? [normalizedToken, normalizeLanguageToken(flagMatch[1])]
+        : [normalizedToken];
+    }),
+  ].filter(Boolean);
+
+  return Array.from(new Set(candidates));
+};
+
+const getNormalizedLanguageMappings = (
+  mappings: ScraperLanguageValueMapping[] | undefined,
+): ScraperLanguageValueMapping[] => (
+  (mappings ?? [])
+    .map((mapping) => ({
+      value: normalizeLanguageToken(mapping.value),
+      languageCode: mapping.languageCode.trim().toLowerCase(),
+    }))
+    .filter((mapping) => mapping.value && mapping.languageCode)
 );
 
 export const uniqueLanguageCodes = (values: string[]): string[] => {
@@ -188,4 +221,28 @@ export const detectLanguageCodesFromProcessedValues = (values: string[]): string
   });
 
   return uniqueLanguageCodes(candidates);
+};
+
+export const detectLanguageCodesFromMappedValues = (
+  values: string[],
+  mappings: ScraperLanguageValueMapping[] | undefined,
+): string[] => {
+  const normalizedMappings = getNormalizedLanguageMappings(mappings);
+  if (!normalizedMappings.length) {
+    return [];
+  }
+
+  for (const value of values) {
+    const candidates = getLanguageMappingCandidates(value);
+    const mapping = candidates
+      .map((candidate) => normalizedMappings.find((entry) => entry.value === candidate))
+      .find(Boolean);
+    const languageCodes = mapping ? uniqueLanguageCodes([mapping.languageCode]) : [];
+
+    if (languageCodes.length) {
+      return languageCodes;
+    }
+  }
+
+  return [];
 };

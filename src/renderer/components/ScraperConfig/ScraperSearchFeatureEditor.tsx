@@ -5,6 +5,7 @@ import {
   ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
+  ScraperLanguageValueMapping,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import {
@@ -205,6 +206,18 @@ export default function ScraperSearchFeatureEditor({
     }));
     clearFieldFeedback(`languageDetection.${fieldName}`);
   }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageValueMappingsChange = useCallback((valueMappings: ScraperLanguageValueMapping[]) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        valueMappings,
+      },
+    }));
+    clearFeedback();
+    clearFieldErrorsByPrefix('languageDetection.valueMappings.');
+  }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
 
   const handleRequestMethodChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMethod = event.target.value === 'POST' ? 'POST' : 'GET';
@@ -721,6 +734,8 @@ export default function ScraperSearchFeatureEditor({
             fieldErrors={fieldErrors}
             onDetectFromTitleChange={handleLanguageDetectFromTitleChange}
             onFieldSelectorChange={handleLanguageFieldSelectorChange}
+            onValueMappingsChange={handleLanguageValueMappingsChange}
+            disabled={validating || saving}
           />
         </div>
 
