@@ -15,6 +15,7 @@ export {
 } from "./scrapers/bookmarks";
 export {
   getScraperReaderProgress,
+  getScraperReaderProgressRecords,
   saveScraperReaderProgress,
 } from "./scrapers/readerProgress";
 export {

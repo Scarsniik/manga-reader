@@ -66,6 +66,7 @@ import {
   saveScraperMangaToLibrary,
   saveStandaloneScraperCardToLibrary,
 } from '@/renderer/utils/scraperLibrary';
+import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import {
   buildSearchResultViewHistoryIdentity,
   getScraperCardViewState,
@@ -1075,6 +1076,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     && hasPages
     && canQueueStandaloneScraperDownload(detailsConfig, pagesConfig);
 
+  const getSearchResultLanguageCodes = useCallback((result: ScraperSearchResultItem): string[] => (
+    getScraperBookmarkLanguageCodes({ languageCodes: result.languageCodes }, scraper)
+  ), [scraper]);
+
   const getLinkedMangaForListingSource = useCallback((sourceUrl: string | null | undefined): Manga | null => (
     findMangaLinkedToSource(libraryMangas, {
       scraperId: scraper.id,
@@ -1108,7 +1113,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         pagesConfig,
         sourceUrl: result.detailUrl,
         fallbackTitle: result.title,
-        fallbackLanguageCodes: result.languageCodes,
+        fallbackLanguageCodes: getSearchResultLanguageCodes(result),
         libraryMangas,
         replaceMangaId: linkedManga?.id ?? null,
       });
@@ -1125,6 +1130,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [
     detailsConfig,
     getLinkedMangaForListingSource,
+    getSearchResultLanguageCodes,
     libraryMangas,
     pagesConfig,
     scraper,
@@ -1296,12 +1302,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           cover={result.thumbnailUrl}
           summary={result.summary}
           pageCount={result.pageCount}
+          languageCodes={getSearchResultLanguageCodes(result)}
           excludedFields={scraper.globalConfig.bookmark.excludedFields}
           size="sm"
         />
       ),
     };
-  }, [scraper.globalConfig.bookmark.excludedFields, scraper.id]);
+  }, [getSearchResultLanguageCodes, scraper.globalConfig.bookmark.excludedFields, scraper.id]);
 
   const renderSearchResultAddToLibraryAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction | null => {
     if (!canDownloadListingCards || !result.detailUrl) {
@@ -1332,7 +1339,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           pagesConfig,
           sourceUrl: detailUrl,
           fallbackTitle: result.title,
-          fallbackLanguageCodes: result.languageCodes,
+          fallbackLanguageCodes: getSearchResultLanguageCodes(result),
           libraryMangas,
         })
           .then(async (saveResult) => {
@@ -1357,6 +1364,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     canDownloadListingCards,
     clearFeedback,
     detailsConfig,
+    getSearchResultLanguageCodes,
     getLinkedMangaForListingSource,
     libraryMangas,
     loadLibraryMangas,

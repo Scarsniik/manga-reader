@@ -27,7 +27,7 @@
 - [x] Recherche multiple : lazy loading
 - [x] Recherche multiple : Pouvoir mettre plusieurs thermes de recherche
 - [x] Recherche multiple : Affiche quand un des resultat est déjà dans la bibliotheque ou en bookmark
-- [ ] Bookmark : Tri sur les bookmarks
+- [x] Bookmark : Tri sur les bookmarks
 
 ### Fixes
 

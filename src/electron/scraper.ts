@@ -179,7 +179,8 @@ export type ScraperBookmarkMetadataField =
   | 'authors'
   | 'tags'
   | 'mangaStatus'
-  | 'pageCount';
+  | 'pageCount'
+  | 'languageCodes';
 
 export interface ScraperBookmarkConfig {
   excludedFields: ScraperBookmarkMetadataField[];
@@ -516,6 +517,7 @@ export interface ScraperBookmarkRecord {
   tags: string[];
   mangaStatus?: string;
   pageCount?: string;
+  languageCodes?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -531,6 +533,7 @@ export interface SaveScraperBookmarkRequest {
   tags?: string[];
   mangaStatus?: string;
   pageCount?: string;
+  languageCodes?: string[];
   excludedFields?: ScraperBookmarkMetadataField[];
 }
 

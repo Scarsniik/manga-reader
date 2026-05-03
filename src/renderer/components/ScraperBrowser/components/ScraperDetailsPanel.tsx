@@ -142,6 +142,7 @@ export default function ScraperDetailsPanel({
                 tags={detailsResult.tags}
                 mangaStatus={detailsResult.mangaStatus}
                 pageCount={detailsResult.pageCount}
+                languageCodes={languageCodes}
                 excludedFields={bookmarkExcludedFields}
               />
             </div>

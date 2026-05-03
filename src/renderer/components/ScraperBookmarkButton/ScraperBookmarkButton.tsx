@@ -2,23 +2,20 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ScraperBookmarkMetadataField,
   SaveScraperBookmarkRequest,
-  ScraperBookmarkRecord,
-  ScraperRecord,
 } from '@/shared/scraper';
-import { hasScraperFieldSelectorValue } from '@/shared/scraper';
 import {
   removeScraperBookmark,
   saveScraperBookmark,
   useScraperBookmark,
 } from '@/renderer/stores/scraperBookmarks';
 import {
-  extractScraperDetailsFromDocument,
-  getScraperDetailsFeatureConfig,
-  getScraperFeature,
-  hasRenderableDetails,
-  isScraperFeatureConfigured,
-  resolveScraperDetailsTargetUrl,
-} from '@/renderer/utils/scraperRuntime';
+  enrichScraperBookmarkRequestFromDetails as enrichBookmarkRequestFromDetails,
+  normalizeBookmarkExcludedFields as normalizeExcludedFields,
+  normalizeBookmarkLanguageCodes as normalizeLanguageCodes,
+  normalizeBookmarkOptionalText as normalizeOptional,
+  normalizeBookmarkStringList as normalizeStringList,
+  shouldSyncBookmarkMetadata,
+} from '@/renderer/utils/scraperBookmarkMetadata';
 import { BookmarkRibbonIcon, LoadingSpinnerIcon } from '@/renderer/components/icons';
 import './style.scss';
 
@@ -33,258 +30,13 @@ type Props = {
   tags?: string[];
   mangaStatus?: string | null;
   pageCount?: string | null;
+  languageCodes?: string[];
   excludedFields?: ScraperBookmarkMetadataField[];
   className?: string;
   size?: 'sm' | 'md';
   disabled?: boolean;
   autoSyncWhenBookmarked?: boolean;
   stopPropagation?: boolean;
-};
-
-const normalizeOptional = (value: string | null | undefined): string | undefined => {
-  const trimmed = String(value ?? '').trim();
-  return trimmed || undefined;
-};
-
-const normalizeStringList = (values: string[] | undefined): string[] => (
-  Array.isArray(values)
-    ? Array.from(new Set(
-      values
-        .map((value) => String(value ?? '').trim())
-        .filter((value) => value.length > 0),
-    ))
-    : []
-);
-
-const BOOKMARK_METADATA_FIELDS = new Set<ScraperBookmarkMetadataField>([
-  'cover',
-  'summary',
-  'description',
-  'authors',
-  'tags',
-  'mangaStatus',
-  'pageCount',
-]);
-
-const normalizeExcludedFields = (values: ScraperBookmarkMetadataField[] | undefined): ScraperBookmarkMetadataField[] => (
-  Array.isArray(values)
-    ? Array.from(new Set(
-      values.filter((value): value is ScraperBookmarkMetadataField => (
-        BOOKMARK_METADATA_FIELDS.has(String(value ?? '').trim() as ScraperBookmarkMetadataField)
-      )),
-    ))
-    : []
-);
-
-const areSameStringLists = (left: string[], right: string[]): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
-};
-
-const bookmarkHasExcludedFieldData = (
-  bookmark: ScraperBookmarkRecord,
-  field: ScraperBookmarkMetadataField,
-): boolean => {
-  if (field === 'authors' || field === 'tags') {
-    return bookmark[field].length > 0;
-  }
-
-  return Boolean(bookmark[field]);
-};
-
-const shouldSyncBookmarkMetadata = (
-  bookmark: ScraperBookmarkRecord | null,
-  request: SaveScraperBookmarkRequest,
-): boolean => {
-  if (!bookmark) {
-    return false;
-  }
-
-  const excludedFields = new Set(normalizeExcludedFields(request.excludedFields));
-
-  if (Array.from(excludedFields).some((field) => bookmarkHasExcludedFieldData(bookmark, field))) {
-    return true;
-  }
-
-  const nextTitle = normalizeOptional(request.title);
-  if (nextTitle && nextTitle !== bookmark.title) {
-    return true;
-  }
-
-  const nextCover = normalizeOptional(request.cover);
-  if (!excludedFields.has('cover') && nextCover && nextCover !== bookmark.cover) {
-    return true;
-  }
-
-  const nextSummary = normalizeOptional(request.summary);
-  if (!excludedFields.has('summary') && nextSummary && nextSummary !== bookmark.summary) {
-    return true;
-  }
-
-  const nextDescription = normalizeOptional(request.description);
-  if (!excludedFields.has('description') && nextDescription && nextDescription !== bookmark.description) {
-    return true;
-  }
-
-  const nextMangaStatus = normalizeOptional(request.mangaStatus);
-  if (!excludedFields.has('mangaStatus') && nextMangaStatus && nextMangaStatus !== bookmark.mangaStatus) {
-    return true;
-  }
-
-  const nextPageCount = normalizeOptional(request.pageCount);
-  if (!excludedFields.has('pageCount') && nextPageCount && nextPageCount !== bookmark.pageCount) {
-    return true;
-  }
-
-  const nextAuthors = normalizeStringList(request.authors);
-  if (!excludedFields.has('authors') && nextAuthors.length && !areSameStringLists(nextAuthors, bookmark.authors)) {
-    return true;
-  }
-
-  const nextTags = normalizeStringList(request.tags);
-  if (!excludedFields.has('tags') && nextTags.length && !areSameStringLists(nextTags, bookmark.tags)) {
-    return true;
-  }
-
-  return false;
-};
-
-let scrapersCache: ScraperRecord[] | null = null;
-let scrapersCachePromise: Promise<ScraperRecord[]> | null = null;
-let hasBoundScrapersCacheInvalidation = false;
-
-const getApi = (): any => (
-  typeof window !== 'undefined' ? (window as any).api : null
-);
-
-const invalidateScrapersCache = () => {
-  scrapersCache = null;
-  scrapersCachePromise = null;
-};
-
-const bindScrapersCacheInvalidation = () => {
-  if (hasBoundScrapersCacheInvalidation || typeof window === 'undefined') {
-    return;
-  }
-
-  window.addEventListener('scrapers-updated', invalidateScrapersCache as EventListener);
-  hasBoundScrapersCacheInvalidation = true;
-};
-
-const loadScrapers = async (): Promise<ScraperRecord[]> => {
-  bindScrapersCacheInvalidation();
-
-  if (scrapersCache) {
-    return scrapersCache;
-  }
-
-  if (scrapersCachePromise) {
-    return scrapersCachePromise;
-  }
-
-  const api = getApi();
-  if (!api || typeof api.getScrapers !== 'function') {
-    return [];
-  }
-
-  scrapersCachePromise = (async () => {
-    try {
-      const data = await api.getScrapers();
-      scrapersCache = Array.isArray(data) ? data as ScraperRecord[] : [];
-      return scrapersCache;
-    } finally {
-      scrapersCachePromise = null;
-    }
-  })();
-
-  return scrapersCachePromise;
-};
-
-const loadScraperById = async (scraperId: string): Promise<ScraperRecord | null> => {
-  const scrapers = await loadScrapers();
-  return scrapers.find((scraper) => scraper.id === scraperId) ?? null;
-};
-
-const enrichBookmarkRequestFromDetails = async (
-  request: SaveScraperBookmarkRequest,
-): Promise<SaveScraperBookmarkRequest> => {
-  const scraper = await loadScraperById(request.scraperId);
-  if (!scraper) {
-    return request;
-  }
-
-  const requestWithGlobalConfig: SaveScraperBookmarkRequest = {
-    ...request,
-    excludedFields: normalizeExcludedFields(request.excludedFields).length
-      ? normalizeExcludedFields(request.excludedFields)
-      : scraper.globalConfig.bookmark.excludedFields,
-  };
-
-  const detailsFeature = getScraperFeature(scraper, 'details');
-  if (!isScraperFeatureConfigured(detailsFeature)) {
-    return requestWithGlobalConfig;
-  }
-
-  const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
-  if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
-    return requestWithGlobalConfig;
-  }
-
-  const api = getApi();
-  if (!api || typeof api.fetchScraperDocument !== 'function') {
-    return requestWithGlobalConfig;
-  }
-
-  try {
-    const targetUrl = resolveScraperDetailsTargetUrl(
-      scraper.baseUrl,
-      detailsConfig,
-      requestWithGlobalConfig.sourceUrl,
-    );
-    const documentResult = await api.fetchScraperDocument({
-      baseUrl: scraper.baseUrl,
-      targetUrl,
-    });
-
-    if (!documentResult?.ok || !documentResult.html) {
-      return requestWithGlobalConfig;
-    }
-
-    const parser = new DOMParser();
-    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    const extractedDetails = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
-      requestedUrl: documentResult.requestedUrl,
-      finalUrl: documentResult.finalUrl,
-      status: documentResult.status,
-      contentType: documentResult.contentType,
-      html: documentResult.html,
-    });
-
-    if (!hasRenderableDetails(extractedDetails)) {
-      return requestWithGlobalConfig;
-    }
-
-    return {
-      ...requestWithGlobalConfig,
-      title: normalizeOptional(extractedDetails.title) || requestWithGlobalConfig.title,
-      cover: normalizeOptional(extractedDetails.cover) || requestWithGlobalConfig.cover,
-      description: normalizeOptional(extractedDetails.description) || requestWithGlobalConfig.description,
-      authors: normalizeStringList(extractedDetails.authors).length
-        ? normalizeStringList(extractedDetails.authors)
-        : requestWithGlobalConfig.authors,
-      tags: normalizeStringList(extractedDetails.tags).length
-        ? normalizeStringList(extractedDetails.tags)
-        : requestWithGlobalConfig.tags,
-      mangaStatus: normalizeOptional(extractedDetails.mangaStatus) || requestWithGlobalConfig.mangaStatus,
-      pageCount: normalizeOptional(extractedDetails.pageCount) || requestWithGlobalConfig.pageCount,
-    };
-  } catch (error) {
-    console.warn('Failed to enrich scraper bookmark from details page', error);
-    return requestWithGlobalConfig;
-  }
 };
 
 export default function ScraperBookmarkButton({
@@ -298,6 +50,7 @@ export default function ScraperBookmarkButton({
   tags,
   mangaStatus,
   pageCount,
+  languageCodes,
   excludedFields,
   className = '',
   size = 'md',
@@ -310,6 +63,7 @@ export default function ScraperBookmarkButton({
   const normalizedTitle = normalizeOptional(title) || normalizeOptional(sourceUrl) || 'Bookmark';
   const normalizedAuthors = useMemo(() => normalizeStringList(authors), [authors]);
   const normalizedTags = useMemo(() => normalizeStringList(tags), [tags]);
+  const normalizedLanguageCodes = useMemo(() => normalizeLanguageCodes(languageCodes), [languageCodes]);
   const normalizedExcludedFields = useMemo(() => normalizeExcludedFields(excludedFields), [excludedFields]);
   const bookmarkRequest = useMemo<SaveScraperBookmarkRequest | null>(() => {
     if (!normalizedScraperId || !normalizedSourceUrl) {
@@ -327,6 +81,7 @@ export default function ScraperBookmarkButton({
       tags: normalizedTags,
       mangaStatus: normalizeOptional(mangaStatus),
       pageCount: normalizeOptional(pageCount),
+      languageCodes: normalizedLanguageCodes,
       excludedFields: normalizedExcludedFields,
     };
   }, [
@@ -338,6 +93,7 @@ export default function ScraperBookmarkButton({
     normalizedScraperId,
     normalizedSourceUrl,
     normalizedTags,
+    normalizedLanguageCodes,
     normalizedTitle,
     pageCount,
     summary,

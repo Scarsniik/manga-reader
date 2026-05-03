@@ -213,6 +213,9 @@ ipcMain.handle("save-scraper-global-config", async (event: IpcMainInvokeEvent, r
 ipcMain.handle("get-scraper-reader-progress", async (event: IpcMainInvokeEvent, scraperMangaId: string) => (
     scrapers.getScraperReaderProgress(event, scraperMangaId)
 ));
+ipcMain.handle("get-scraper-reader-progress-records", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
+    scrapers.getScraperReaderProgressRecords(event, scraperId)
+));
 ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => (
     scrapers.saveScraperReaderProgress(event, request)
 ));

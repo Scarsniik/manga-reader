@@ -11,6 +11,14 @@
   gap: 16px;
 }
 
+.scraper-bookmarks-view__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .scraper-bookmarks-view__header h2 {
   margin: 0;
   font-size: 28px;
@@ -82,6 +90,178 @@
   background: rgba(93, 156, 255, 0.12);
 }
 
+.scraper-bookmarks-view__clear:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.scraper-bookmarks-view__filters {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #11151c;
+}
+
+.scraper-bookmarks-view__filters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scraper-bookmarks-view__filters-head strong {
+  color: #edf2fa;
+  font-size: 14px;
+}
+
+.scraper-bookmarks-view__filters-head button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce8f7;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-bookmarks-view__filters-head button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.scraper-bookmarks-view__filters-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 0.8fr) repeat(2, minmax(110px, 0.5fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.scraper-bookmarks-view__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.scraper-bookmarks-view__field.is-wide {
+  min-width: 0;
+}
+
+.scraper-bookmarks-view__field > span,
+.scraper-bookmarks-view__field legend {
+  color: #9fb4cc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scraper-bookmarks-view__field input[type="search"],
+.scraper-bookmarks-view__field input[type="number"],
+.scraper-bookmarks-view__field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  border-radius: 8px;
+  background: #0c121b;
+  color: #edf2fa;
+}
+
+.scraper-bookmarks-view__field input:focus,
+.scraper-bookmarks-view__field select:focus {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.16);
+}
+
+.scraper-bookmarks-view__field-group,
+.scraper-bookmarks-view__language-field {
+  grid-column: span 2;
+}
+
+.scraper-bookmarks-view__checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scraper-bookmarks-view__checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce8f7;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-bookmarks-view__checkboxes input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #5d9cff;
+}
+
+.scraper-bookmarks-view__language-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.scraper-bookmarks-view__language-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #edf2fa;
+  cursor: pointer;
+}
+
+.scraper-bookmarks-view__language-button.is-only {
+  border-color: rgba(95, 173, 122, 0.5);
+  background: rgba(95, 173, 122, 0.18);
+}
+
+.scraper-bookmarks-view__language-button.is-without {
+  border-color: rgba(239, 112, 112, 0.52);
+  background: rgba(239, 112, 112, 0.16);
+  opacity: 0.72;
+}
+
+.scraper-bookmarks-view__language-button:hover,
+.scraper-bookmarks-view__language-button:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.14);
+}
+
+.scraper-bookmarks-view__language-empty {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: #8f9bad;
+  font-size: 13px;
+}
+
 .scraper-bookmarks-view__scraper-label {
   display: inline-flex;
   align-items: center;
@@ -124,5 +304,24 @@
   .scraper-bookmarks-view__header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .scraper-bookmarks-view__header-actions {
+    justify-content: flex-start;
+  }
+
+  .scraper-bookmarks-view__filters-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .scraper-bookmarks-view__filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scraper-bookmarks-view__field-group,
+  .scraper-bookmarks-view__language-field {
+    grid-column: auto;
   }
 }

@@ -224,6 +224,7 @@ const SCRAPER_BOOKMARK_METADATA_FIELDS: ScraperBookmarkMetadataField[] = [
   "tags",
   "mangaStatus",
   "pageCount",
+  "languageCodes",
 ];
 
 export const sanitizeBookmarkMetadataFieldList = (
@@ -401,6 +402,8 @@ export const sanitizeScraperBookmarkRecord = (
   const description = String(record.description ?? "").trim();
   const mangaStatus = String(record.mangaStatus ?? "").trim();
   const pageCount = String(record.pageCount ?? "").trim();
+  const languageCodes = sanitizeStringList(record.languageCodes)
+    .map((languageCode) => languageCode.toLowerCase());
 
   return {
     scraperId,
@@ -413,6 +416,7 @@ export const sanitizeScraperBookmarkRecord = (
     tags: sanitizeStringList(record.tags),
     mangaStatus: mangaStatus || undefined,
     pageCount: pageCount || undefined,
+    languageCodes: languageCodes.length ? languageCodes : undefined,
     createdAt: createdAt || new Date().toISOString(),
     updatedAt: updatedAt || new Date().toISOString(),
   };

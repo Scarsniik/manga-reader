@@ -1398,6 +1398,7 @@ export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): bool
     || (details.thumbnails?.length ?? 0) > 0
     || details.mangaStatus
     || details.pageCount
+    || details.languageCodes.length
   )
 );
 

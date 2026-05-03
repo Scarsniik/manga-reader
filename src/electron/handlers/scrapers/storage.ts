@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import {
   createDefaultScraperFeatures,
@@ -122,7 +123,44 @@ const sortScraperBookmarks = (records: ScraperBookmarkRecord[]): ScraperBookmark
   })
 );
 
-export async function readScraperBookmarksFile(): Promise<ScraperBookmarkRecord[]> {
+type ScraperBookmarksFileUpdate<T> = {
+  records: ScraperBookmarkRecord[];
+  result: T;
+  shouldWrite?: boolean;
+};
+
+let scraperBookmarksFileQueue: Promise<void> = Promise.resolve();
+
+const runScraperBookmarksFileOperation = async <T>(
+  operation: () => Promise<T>,
+): Promise<T> => {
+  const previousOperation = scraperBookmarksFileQueue;
+  let releaseOperation: () => void = () => undefined;
+
+  scraperBookmarksFileQueue = new Promise<void>((resolve) => {
+    releaseOperation = resolve;
+  });
+
+  await previousOperation.catch(() => undefined);
+
+  try {
+    return await operation();
+  } finally {
+    releaseOperation();
+  }
+};
+
+const writeScraperBookmarksFileUnlocked = async (
+  records: ScraperBookmarkRecord[],
+): Promise<void> => {
+  await ensureDataDir();
+
+  const tempFilePath = `${scraperBookmarksFilePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  await fs.writeFile(tempFilePath, JSON.stringify(sortScraperBookmarks(records), null, 2));
+  await fs.rename(tempFilePath, scraperBookmarksFilePath);
+};
+
+const readScraperBookmarksFileUnlocked = async (): Promise<ScraperBookmarkRecord[]> => {
   try {
     const data = await fs.readFile(scraperBookmarksFilePath, "utf-8");
     const parsed = JSON.parse(data) as Partial<ScraperBookmarkRecord>[];
@@ -136,8 +174,7 @@ export async function readScraperBookmarksFile(): Promise<ScraperBookmarkRecord[
     const normalizedRaw = JSON.stringify(parsed, null, 2);
     const normalizedSanitized = JSON.stringify(sorted, null, 2);
     if (normalizedRaw !== normalizedSanitized) {
-      await ensureDataDir();
-      await fs.writeFile(scraperBookmarksFilePath, normalizedSanitized);
+      await writeScraperBookmarksFileUnlocked(sorted);
     }
 
     return sorted;
@@ -151,11 +188,29 @@ export async function readScraperBookmarksFile(): Promise<ScraperBookmarkRecord[
     console.error("Error reading scraper bookmarks file:", error);
     throw new Error("Failed to read scraper bookmarks");
   }
+};
+
+export async function readScraperBookmarksFile(): Promise<ScraperBookmarkRecord[]> {
+  return runScraperBookmarksFileOperation(readScraperBookmarksFileUnlocked);
 }
 
 export async function writeScraperBookmarksFile(records: ScraperBookmarkRecord[]): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(scraperBookmarksFilePath, JSON.stringify(sortScraperBookmarks(records), null, 2));
+  await runScraperBookmarksFileOperation(() => writeScraperBookmarksFileUnlocked(records));
+}
+
+export async function updateScraperBookmarksFile<T>(
+  operation: (records: ScraperBookmarkRecord[]) => Promise<ScraperBookmarksFileUpdate<T>> | ScraperBookmarksFileUpdate<T>,
+): Promise<T> {
+  return runScraperBookmarksFileOperation(async () => {
+    const records = await readScraperBookmarksFileUnlocked();
+    const update = await operation(records);
+
+    if (update.shouldWrite !== false) {
+      await writeScraperBookmarksFileUnlocked(update.records);
+    }
+
+    return update.result;
+  });
 }
 
 export async function readScraperReaderProgressFile(): Promise<ScraperReaderProgressRecord[]> {

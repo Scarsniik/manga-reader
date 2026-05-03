@@ -224,6 +224,7 @@ contextBridge.exposeInMainWorld('api', {
     saveScraperFeatureConfig: (request: SaveScraperFeatureRequest) => ipcRenderer.invoke('save-scraper-feature-config', request),
     saveScraperGlobalConfig: (request: SaveScraperGlobalConfigRequest) => ipcRenderer.invoke('save-scraper-global-config', request),
     getScraperReaderProgress: (scraperMangaId: string) => ipcRenderer.invoke('get-scraper-reader-progress', scraperMangaId),
+    getScraperReaderProgressRecords: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-reader-progress-records', scraperId),
     saveScraperReaderProgress: (request: SaveScraperReaderProgressRequest) => ipcRenderer.invoke('save-scraper-reader-progress', request),
     downloadScraperManga: (request: DownloadScraperMangaRequest) => ipcRenderer.invoke('download-scraper-manga', request),
     queueScraperDownload: (request: DownloadScraperMangaRequest) => ipcRenderer.invoke('download-scraper-manga', request),

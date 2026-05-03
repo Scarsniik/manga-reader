@@ -12,10 +12,9 @@ import {
 import { sanitizeGlobalConfig } from "./shared";
 import {
   hydrateScraperFeatures,
-  readScraperBookmarksFile,
   readScraperReaderProgressFile,
   readScrapersFile,
-  writeScraperBookmarksFile,
+  updateScraperBookmarksFile,
   writeScraperReaderProgressFile,
   writeScrapersFile,
 } from "./storage";
@@ -37,11 +36,16 @@ export async function deleteScraper(
 
   await writeScrapersFile(filtered);
 
-  const bookmarkRecords = await readScraperBookmarksFile();
-  const filteredBookmarkRecords = bookmarkRecords.filter((record) => record.scraperId !== String(scraperId));
-  if (filteredBookmarkRecords.length !== bookmarkRecords.length) {
-    await writeScraperBookmarksFile(filteredBookmarkRecords);
-  }
+  await updateScraperBookmarksFile((bookmarkRecords) => {
+    const filteredBookmarkRecords = bookmarkRecords.filter((record) => record.scraperId !== String(scraperId));
+    const removedBookmarks = filteredBookmarkRecords.length !== bookmarkRecords.length;
+
+    return {
+      records: removedBookmarks ? filteredBookmarkRecords : bookmarkRecords,
+      result: undefined,
+      shouldWrite: removedBookmarks,
+    };
+  });
 
   const progressRecords = await readScraperReaderProgressFile();
   const filteredProgressRecords = progressRecords.filter((record) => record.scraperId !== String(scraperId));

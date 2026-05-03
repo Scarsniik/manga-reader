@@ -17,6 +17,20 @@ export async function getScraperReaderProgress(
   return records.find((record) => record.id === String(scraperMangaId)) ?? null;
 }
 
+export async function getScraperReaderProgressRecords(
+  _event?: IpcMainInvokeEvent,
+  scraperId?: string | null,
+): Promise<ScraperReaderProgressRecord[]> {
+  const records = await readScraperReaderProgressFile();
+  const normalizedScraperId = String(scraperId ?? "").trim();
+
+  if (!normalizedScraperId) {
+    return records;
+  }
+
+  return records.filter((record) => record.scraperId === normalizedScraperId);
+}
+
 export async function saveScraperReaderProgress(
   _event: IpcMainInvokeEvent,
   request: SaveScraperReaderProgressRequest,

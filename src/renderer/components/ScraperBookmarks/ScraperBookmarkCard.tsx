@@ -2,13 +2,16 @@ import React from 'react';
 import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { DetailsCardIcon } from '@/renderer/components/icons';
+import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
+import { buildRemoteThumbnailUrl } from '@/renderer/utils/remoteThumbnails';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
   scraper?: ScraperRecord | null;
+  languageCodes?: string[];
   viewState: ScraperCardViewState;
   readAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
@@ -32,9 +35,32 @@ const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
   );
 };
 
+const buildBookmarkCoverUrls = (
+  coverUrl?: string | null,
+  refererUrl?: string | null,
+): string[] => {
+  const normalizedCoverUrl = String(coverUrl ?? '').trim();
+  if (!normalizedCoverUrl) {
+    return [];
+  }
+
+  return [
+    buildRemoteThumbnailUrl(normalizedCoverUrl, refererUrl),
+    normalizedCoverUrl,
+  ].reduce<string[]>((urls, url) => {
+    const normalizedUrl = String(url ?? '').trim();
+    if (normalizedUrl && !urls.includes(normalizedUrl)) {
+      urls.push(normalizedUrl);
+    }
+
+    return urls;
+  }, []);
+};
+
 export default function ScraperBookmarkCard({
   bookmark,
   scraper = null,
+  languageCodes = [],
   viewState,
   readAction = null,
   addToLibraryAction = null,
@@ -45,6 +71,12 @@ export default function ScraperBookmarkCard({
 }: Props) {
   const canOpenBookmark = Boolean(scraper);
   const pageCountLabel = formatScraperPageCountForDisplay(bookmark.pageCount);
+  const coverUrls = React.useMemo(() => (
+    buildBookmarkCoverUrls(bookmark.cover, bookmark.sourceUrl || scraper?.baseUrl)
+  ), [bookmark.cover, bookmark.sourceUrl, scraper?.baseUrl]);
+  const coverUrlsKey = coverUrls.join('\n');
+  const [coverIndex, setCoverIndex] = React.useState(0);
+  const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : null;
   const actions: ScraperCardAction[] = [
     ...(readAction ? [readAction] : []),
     {
@@ -63,8 +95,10 @@ export default function ScraperBookmarkCard({
           tags={bookmark.tags}
           mangaStatus={bookmark.mangaStatus}
           pageCount={bookmark.pageCount}
+          languageCodes={languageCodes}
           excludedFields={scraper?.globalConfig.bookmark.excludedFields}
           size="sm"
+          autoSyncWhenBookmarked={false}
         />
       ),
     },
@@ -85,10 +119,14 @@ export default function ScraperBookmarkCard({
       },
   ];
 
+  React.useEffect(() => {
+    setCoverIndex(0);
+  }, [coverUrlsKey]);
+
   return (
     <ScraperCard
       title={bookmark.title}
-      coverUrl={bookmark.cover}
+      coverUrl={activeCoverUrl}
       coverAlt={bookmark.title}
       eyebrow={(
         <span className="scraper-bookmarks-view__scraper-label">
@@ -101,6 +139,11 @@ export default function ScraperBookmarkCard({
           {pageCountLabel ? (
             <div className="scraper-card__metadata">
               <span>{pageCountLabel}</span>
+            </div>
+          ) : null}
+          {languageCodes.length ? (
+            <div className="scraper-card__metadata">
+              <span>Langue <LanguageFlags languageCodes={languageCodes} /></span>
             </div>
           ) : null}
           {renderChipGroup(bookmark.authors, 'author')}
@@ -124,6 +167,7 @@ export default function ScraperBookmarkCard({
         onOpenBookmark(bookmark);
       } : undefined}
       onViewed={onViewed ? () => onViewed(bookmark) : undefined}
+      onCoverError={() => setCoverIndex((currentIndex) => currentIndex + 1)}
       ariaLabel={canOpenBookmark ? `Ouvrir la fiche ${bookmark.title}` : undefined}
     />
   );

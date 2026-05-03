@@ -51,6 +51,7 @@ const BOOKMARK_FIELD_OPTIONS: Array<{
   { label: 'Tags', value: 'tags' },
   { label: 'Statut', value: 'mangaStatus' },
   { label: 'Nombre de pages', value: 'pageCount' },
+  { label: 'Langues', value: 'languageCodes' },
 ];
 
 const BOOKMARK_FIELD_LABELS = new Map(
@@ -271,8 +272,9 @@ export default function ScraperGlobalSettingsEditor({
       <div className="scraper-config-note">
         <strong>Recherche multi-sources</strong>
         <span>
-          Les langues de source et les types de contenu servent uniquement a filtrer les scrappers
-          dans la recherche multi-sources. Ils ne changent pas les metadonnees appliquees aux imports.
+          Les langues de source servent a filtrer les scrappers dans la recherche multi-sources.
+          Quand une seule langue est configuree, elle sert aussi de langue par defaut pour les
+          bookmarks de ce scrapper. Les types de contenu restent dedies a la recherche multi-sources.
         </span>
       </div>
 
