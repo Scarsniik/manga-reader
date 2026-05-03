@@ -1,6 +1,8 @@
 import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 import type {
   MultiSearchDepthMode,
+  MultiSearchLanguageFilterMode,
+  MultiSearchLanguageFilterModes,
   MultiSearchPaceMode,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
@@ -15,6 +17,7 @@ export type MultiSearchPersistentFormState = {
   selectedScraperIds: string[];
   selectedLanguageCodes: string[];
   selectedContentTypes: string[];
+  resultLanguageFilterModes: MultiSearchLanguageFilterModes;
   depthMode: MultiSearchDepthMode;
   advancedPages: number;
   paceMode: MultiSearchPaceMode;
@@ -78,6 +81,27 @@ const isPaceMode = (value: unknown): value is MultiSearchPaceMode => (
 const isViewMode = (value: unknown): value is MultiSearchViewMode => (
   value === "merged" || value === "byScraper"
 );
+
+const isLanguageFilterMode = (value: unknown): value is MultiSearchLanguageFilterMode => (
+  value === "default" || value === "only" || value === "without"
+);
+
+const restoreLanguageFilterModes = (value: unknown): MultiSearchLanguageFilterModes => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<MultiSearchLanguageFilterModes>((modes, entry) => {
+    const [languageCode, mode] = entry;
+
+    if (mode === "default" || !isLanguageFilterMode(mode)) {
+      return modes;
+    }
+
+    modes[languageCode] = mode;
+    return modes;
+  }, {});
+};
 
 const serializeSource = (source: MultiSearchSourceResult): StoredSourceResult => ({
   scraperId: source.scraper.id,
@@ -220,6 +244,7 @@ export const readMultiSearchState = (
       selectedScraperIds: isStringArray(parsed.selectedScraperIds) ? parsed.selectedScraperIds : [],
       selectedLanguageCodes: isStringArray(parsed.selectedLanguageCodes) ? parsed.selectedLanguageCodes : [],
       selectedContentTypes: isStringArray(parsed.selectedContentTypes) ? parsed.selectedContentTypes : [],
+      resultLanguageFilterModes: restoreLanguageFilterModes(parsed.resultLanguageFilterModes),
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
       advancedPages: Number.isFinite(parsed.advancedPages) ? parsed.advancedPages : 3,
       paceMode: isPaceMode(parsed.paceMode) ? parsed.paceMode : "fast",

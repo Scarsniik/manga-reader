@@ -1,8 +1,11 @@
 import React from "react";
+import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import { DownloadArrowIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
 import type {
+  MultiSearchLanguageFilterMode,
+  MultiSearchLanguageFilterModes,
   MultiSearchMergedResult,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
@@ -14,7 +17,10 @@ type Props = {
   viewMode: MultiSearchViewMode;
   runs: MultiSearchScraperRun[];
   mergedResults: MultiSearchMergedResult[];
-  sourceCount: number;
+  visibleSourceCount: number;
+  loadedSourceCount: number;
+  resultLanguageCodes: string[];
+  languageFilterModes: MultiSearchLanguageFilterModes;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   isExportingJson: boolean;
@@ -24,6 +30,10 @@ type Props = {
   onExportJson: () => void;
   onExportMergedResultsJson: () => void;
   onReloadMerge: () => void;
+  onToggleLanguageFilterMode: (
+    languageCode: string,
+    mode: Exclude<MultiSearchLanguageFilterMode, "default">,
+  ) => void;
 };
 
 const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
@@ -42,7 +52,10 @@ export default function MultiSearchResultsSection({
   viewMode,
   runs,
   mergedResults,
-  sourceCount,
+  visibleSourceCount,
+  loadedSourceCount,
+  resultLanguageCodes,
+  languageFilterModes,
   libraryMangas,
   bookmarkedSourceKeys,
   isExportingJson,
@@ -52,6 +65,7 @@ export default function MultiSearchResultsSection({
   onExportJson,
   onExportMergedResultsJson,
   onReloadMerge,
+  onToggleLanguageFilterMode,
 }: Props) {
   if (viewMode === "merged") {
     return (
@@ -59,7 +73,12 @@ export default function MultiSearchResultsSection({
         <div className="multi-search__section-head">
           <div>
             <h3>Resultats fusionnes</h3>
-            <p>{mergedResults.length} carte(s), {sourceCount} source(s) chargee(s).</p>
+            <p>{mergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s).</p>
+            <MultiSearchLanguageFilterBar
+              languageCodes={resultLanguageCodes}
+              filterModes={languageFilterModes}
+              onToggleFilterMode={onToggleLanguageFilterMode}
+            />
           </div>
           <div className="multi-search__section-actions">
             {showMergeReloadButton ? (
@@ -68,7 +87,7 @@ export default function MultiSearchResultsSection({
                   type="button"
                   className="multi-search__reload-merge-button"
                   onClick={onReloadMerge}
-                  disabled={sourceCount === 0}
+                  disabled={loadedSourceCount === 0}
                   title="Recalculer la fusion depuis les resultats charges"
                 >
                   Recharger fusion
@@ -77,7 +96,7 @@ export default function MultiSearchResultsSection({
                   type="button"
                   className="multi-search__export-json-button"
                   onClick={onExportMergedResultsJson}
-                  disabled={isExportingJson || sourceCount === 0}
+                  disabled={isExportingJson || loadedSourceCount === 0}
                   title="Ouvrir seulement les mergedResults en JSON"
                 >
                   <DownloadArrowIcon aria-hidden="true" focusable="false" />
@@ -89,7 +108,7 @@ export default function MultiSearchResultsSection({
               type="button"
               className="multi-search__export-json-button"
               onClick={onExportJson}
-              disabled={isExportingJson || sourceCount === 0}
+              disabled={isExportingJson || loadedSourceCount === 0}
               title="Ouvrir les resultats JSON"
             >
               <DownloadArrowIcon aria-hidden="true" focusable="false" />
@@ -119,14 +138,19 @@ export default function MultiSearchResultsSection({
       <div className="multi-search__section-head">
         <div>
           <h3>Resultats par scrapper</h3>
-          <p>{sourceCount} source(s) chargee(s) sans fusion.</p>
+          <p>{visibleSourceCount} source(s) chargee(s) sans fusion.</p>
+          <MultiSearchLanguageFilterBar
+            languageCodes={resultLanguageCodes}
+            filterModes={languageFilterModes}
+            onToggleFilterMode={onToggleLanguageFilterMode}
+          />
         </div>
         <div className="multi-search__section-actions">
           <button
             type="button"
             className="multi-search__export-json-button"
             onClick={onExportJson}
-            disabled={isExportingJson || sourceCount === 0}
+            disabled={isExportingJson || loadedSourceCount === 0}
             title="Ouvrir les resultats JSON"
           >
             <DownloadArrowIcon aria-hidden="true" focusable="false" />

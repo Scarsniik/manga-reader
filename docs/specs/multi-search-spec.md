@@ -604,6 +604,7 @@ La V1 du multi-search repose sur les choix suivants :
 - Le champ de recherche accepte plusieurs termes separes par virgule, point-virgule, barre verticale ou retour a la ligne. La pagination est suivie par terme et par scraper.
 - Dans les cards multi-search, les langues sont affichees sous forme de drapeaux compacts via la librairie `flag-icons`, avec le nom de langue conserve en aide au survol. Le chinois (`zh`) est pris en charge comme langue frequente.
 - Dans les listes de langues, les codes qui ne correspondent pas a une langue connue sont affiches avec `?`.
+- La section de resultats affiche sous le compteur un drapeau par langue trouvee dans les resultats charges. Chaque drapeau filtre seulement l'affichage et les compteurs, sans supprimer les resultats charges. Le clic gauche alterne `only` et `default`, le clic droit alterne `without` et `default`.
 - La liste des scrapers associes a une card multi-search et le menu `Ouvrir avec` s'ouvrent au clic comme des menus deroulants en overlay pour ne pas deplacer les cards suivantes, et se ferment quand l'utilisateur clique en dehors.
 - Les couvertures multi-search distantes passent par un protocole local de vignette redimensionnee quand l'application Electron est disponible, avec fallback vers l'image originale.
 - Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque ou a un bookmark scraper.

@@ -306,6 +306,58 @@
   gap: 8px;
 }
 
+.multi-search__language-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.multi-search__section-head .multi-search__language-filter-button {
+  display: inline-flex;
+  width: 32px;
+  min-height: 0;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.multi-search__section-head .multi-search__language-filter-button .language-flags {
+  gap: 0;
+  margin-left: 0;
+}
+
+.multi-search__section-head .multi-search__language-filter-button .language-flags__flag,
+.multi-search__section-head .multi-search__language-filter-button .language-flags__unknown {
+  width: 32px;
+  height: 24px;
+  box-shadow: none;
+}
+
+.multi-search__section-head .multi-search__language-filter-button.is-only .language-flags__flag,
+.multi-search__section-head .multi-search__language-filter-button.is-only .language-flags__unknown {
+  box-shadow:
+    0 0 0 2px #d9aa3a,
+    0 0 0 3px rgba(0, 0, 0, 0.34);
+}
+
+.multi-search__section-head .multi-search__language-filter-button.is-without .language-flags {
+  filter: brightness(0.45) saturate(0.7);
+  opacity: 0.5;
+}
+
+.multi-search__section-head .multi-search__language-filter-button:focus-visible {
+  outline: none;
+}
+
 .multi-search__status-list {
   display: grid;
   gap: 10px;

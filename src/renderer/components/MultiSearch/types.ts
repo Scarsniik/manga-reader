@@ -3,6 +3,8 @@ import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 export type MultiSearchDepthMode = "quick" | "extended" | "advanced";
 export type MultiSearchPaceMode = "fast" | "careful";
 export type MultiSearchViewMode = "merged" | "byScraper";
+export type MultiSearchLanguageFilterMode = "default" | "only" | "without";
+export type MultiSearchLanguageFilterModes = Record<string, MultiSearchLanguageFilterMode>;
 
 export type MultiSearchScraperStatus =
   | "idle"
