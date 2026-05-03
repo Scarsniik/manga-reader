@@ -1,6 +1,7 @@
 import {
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  hasScraperFieldSelectorValue,
   ScraperDetailsFeatureConfig,
   ScraperPagesFeatureConfig,
   ScraperRecord,
@@ -39,6 +40,7 @@ type SaveStandaloneScraperCardToLibraryOptions = {
   pagesConfig: ScraperPagesFeatureConfig | null;
   sourceUrl: string;
   fallbackTitle?: string | null;
+  fallbackLanguageCodes?: string[] | null;
   libraryMangas?: Manga[];
 };
 
@@ -115,6 +117,7 @@ export async function saveScraperMangaToLibrary({
   });
   const title = normalizeTitle(details, sourceUrl, chapter);
   const thumbnailUrl = String(pageUrls[0] || chapter?.image || details.cover || '').trim() || undefined;
+  const detectedLanguage = details.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null;
   const fallbackTagIds = Array.isArray(scraper.globalConfig.defaultTagIds)
     ? [...scraper.globalConfig.defaultTagIds]
     : [];
@@ -124,7 +127,7 @@ export async function saveScraperMangaToLibrary({
       id: linkedManga.id,
       title,
       pages: pageUrls.length,
-      language: linkedManga.language || scraper.globalConfig.defaultLanguage || null,
+      language: linkedManga.language || detectedLanguage,
       tagIds: Array.isArray(linkedManga.tagIds) && linkedManga.tagIds.length > 0
         ? [...linkedManga.tagIds]
         : fallbackTagIds,
@@ -154,7 +157,7 @@ export async function saveScraperMangaToLibrary({
     createdAt: new Date().toISOString(),
     currentPage: null,
     pages: pageUrls.length,
-    language: scraper.globalConfig.defaultLanguage || null,
+    language: detectedLanguage,
     authorIds: [],
     tagIds: fallbackTagIds,
     seriesId: null,
@@ -182,13 +185,14 @@ export async function saveStandaloneScraperCardToLibrary({
   pagesConfig,
   sourceUrl,
   fallbackTitle,
+  fallbackLanguageCodes = [],
   libraryMangas = [],
 }: SaveStandaloneScraperCardToLibraryOptions): Promise<SaveScraperMangaToLibraryResult> {
   if (!sourceUrl.trim()) {
     throw new Error('Aucune URL source n\'est disponible pour ce manga.');
   }
 
-  if (!detailsConfig?.titleSelector || !pagesConfig) {
+  if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector) || !pagesConfig) {
     throw new Error('L\'ajout direct depuis une card requiert `Fiche` et `Pages`.');
   }
 
@@ -233,10 +237,16 @@ export async function saveStandaloneScraperCardToLibrary({
       ...details,
       title: normalizeFallbackTitle(fallbackTitle),
     };
+  const detailsWithFallbackLanguage = normalizedDetails.languageCodes?.length
+    ? normalizedDetails
+    : {
+      ...normalizedDetails,
+      languageCodes: fallbackLanguageCodes ?? [],
+    };
 
   return saveScraperMangaToLibrary({
     scraper,
-    details: normalizedDetails,
+    details: detailsWithFallbackLanguage,
     pageUrls,
     libraryMangas,
   });

@@ -2,6 +2,7 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } f
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   buildScraperViewHistoryCardId,
+  hasScraperFieldSelectorValue,
   ScraperRecord,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
@@ -228,8 +229,14 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     return availableModes[0] ?? 'manga';
   }, [availableModes, initialState?.detailsResult, initialState?.listingMode]);
 
-  const canOpenSearchResultsAsDetails = Boolean(hasDetails && detailsConfig?.titleSelector);
-  const canOpenSearchResultsAsAuthor = Boolean(hasAuthor && authorConfig?.titleSelector && authorConfig?.resultItemSelector);
+  const canOpenSearchResultsAsDetails = Boolean(
+    hasDetails && hasScraperFieldSelectorValue(detailsConfig?.titleSelector),
+  );
+  const canOpenSearchResultsAsAuthor = Boolean(
+    hasAuthor
+    && hasScraperFieldSelectorValue(authorConfig?.titleSelector)
+    && authorConfig?.resultItemSelector,
+  );
   const usesSearchTemplatePaging = hasSearchPagePlaceholder(searchConfig);
   const usesAuthorTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
   const hasConfiguredHomeSearch = useMemo(
@@ -719,8 +726,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     mode,
     usesSearchTemplatePaging,
     usesAuthorTemplatePaging,
-    hasSearchNextPageSelector: Boolean(searchConfig?.nextPageSelector),
-    hasAuthorNextPageSelector: Boolean(authorConfig?.nextPageSelector),
+    hasSearchNextPageSelector: hasScraperFieldSelectorValue(searchConfig?.nextPageSelector),
+    hasAuthorNextPageSelector: hasScraperFieldSelectorValue(authorConfig?.nextPageSelector),
     canOpenSearchResultsAsDetails,
     canOpenSearchResultsAsAuthor,
     hasDetails,
@@ -909,7 +916,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [detailsResult, location.pathname, location.search, locationState, navigate, scraper.id]);
 
   const handleOpenAuthorFromDetailsInWorkspace = useCallback((value: string, authorTitle: string) => {
-    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+    if (!hasScraperFieldSelectorValue(authorConfig?.titleSelector) || !authorConfig?.resultItemSelector) {
       setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
       return;
     }
@@ -1005,7 +1012,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return;
     }
 
-    if (!authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+    if (!hasScraperFieldSelectorValue(authorConfig?.titleSelector) || !authorConfig?.resultItemSelector) {
       setRuntimeError('Le composant Auteur doit etre configure pour ouvrir cette page dans le workspace.');
       return;
     }
@@ -1101,6 +1108,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         pagesConfig,
         sourceUrl: result.detailUrl,
         fallbackTitle: result.title,
+        fallbackLanguageCodes: result.languageCodes,
         libraryMangas,
         replaceMangaId: linkedManga?.id ?? null,
       });
@@ -1324,6 +1332,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
           pagesConfig,
           sourceUrl: detailUrl,
           fallbackTitle: result.title,
+          fallbackLanguageCodes: result.languageCodes,
           libraryMangas,
         })
           .then(async (saveResult) => {

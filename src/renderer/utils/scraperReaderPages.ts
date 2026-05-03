@@ -1,5 +1,6 @@
 import {
   buildScraperContextTemplateUrl,
+  hasScraperFieldSelectorValue,
   ScraperPagesFeatureConfig,
   ScraperRecord,
 } from "@/shared/scraper";
@@ -74,7 +75,7 @@ const canBuildSequentialTemplateReaderPages = (
   pagesConfig: ScraperPagesFeatureConfig,
 ): boolean => Boolean(
   !usesScraperPagesSelectorSource(pagesConfig)
-  && !pagesConfig.pageImageSelector
+  && !hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)
   && pagesConfig.urlTemplate
   && hasPagePlaceholder(pagesConfig.urlTemplate)
 );

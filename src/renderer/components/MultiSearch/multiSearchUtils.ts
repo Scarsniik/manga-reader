@@ -1,5 +1,11 @@
-import { ScraperRecord } from "@/shared/scraper";
-import { languages } from "@/renderer/consts/languages";
+import { hasScraperFieldSelectorValue, ScraperRecord } from "@/shared/scraper";
+import {
+  detectLanguageCodesFromTitle,
+  getLanguageFlagCode,
+  getLanguageLabel,
+  isTitleLanguageMarker,
+  stripTitleLanguageMarkers,
+} from "@/renderer/utils/languageDetection";
 import {
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -66,34 +72,10 @@ export const getScraperContentTypes = (scraper: ScraperRecord): string[] => (
   normalizeList(scraper.globalConfig.contentTypes)
 );
 
-export const getLanguageLabel = (value: string): string => {
-  if (value === UNKNOWN_MULTI_SEARCH_VALUE) {
-    return "Non renseignee";
-  }
-
-  return languages.find((language) => language.code === value)?.frenchName || "?";
-};
-
-const LANGUAGE_FLAG_CODES: Record<string, string> = {
-  en: "gb",
-  fr: "fr",
-  ja: "jp",
-  es: "es",
-  de: "de",
-  it: "it",
-  pt: "pt",
-  ko: "kr",
-  zh: "cn",
-  ru: "ru",
-};
-
-export const getLanguageFlagCode = (value: string): string => {
-  if (value === UNKNOWN_MULTI_SEARCH_VALUE) {
-    return "unknown";
-  }
-
-  const normalizedValue = value.trim().toLowerCase();
-  return LANGUAGE_FLAG_CODES[normalizedValue] || normalizedValue || "unknown";
+export {
+  detectLanguageCodesFromTitle,
+  getLanguageFlagCode,
+  getLanguageLabel,
 };
 
 export const buildLanguageFilterOptions = (scrapers: ScraperRecord[]): MultiSearchFilterOption[] => {
@@ -168,7 +150,7 @@ export const isSearchableScraper = (scraper: ScraperRecord): boolean => {
     isScraperFeatureConfigured(searchFeature)
     && searchConfig?.urlTemplate
     && searchConfig.resultItemSelector
-    && searchConfig.titleSelector,
+    && hasScraperFieldSelectorValue(searchConfig.titleSelector),
   );
 };
 
@@ -176,52 +158,14 @@ export const canOpenScraperDetails = (scraper: ScraperRecord): boolean => {
   const detailsFeature = getScraperFeature(scraper, "details");
   const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
 
-  return Boolean(isScraperFeatureConfigured(detailsFeature) && detailsConfig?.titleSelector);
+  return Boolean(
+    isScraperFeatureConfigured(detailsFeature)
+    && hasScraperFieldSelectorValue(detailsConfig?.titleSelector),
+  );
 };
-
-const TITLE_LANGUAGE_PATTERNS: Array<{
-  code: string;
-  pattern: RegExp;
-}> = [
-  { code: "en", pattern: /(?:[\[({]\s*(?:en|eng|english|anglais)\s*[\])}]|(?:^|[\s_\-.])(?:eng|english|anglais)(?:$|[\s_\-.]))/i },
-  { code: "fr", pattern: /(?:[\[({]\s*(?:fr|fra|fre|french|francais|français|vf|vostfr)\s*[\])}]|(?:^|[\s_\-.])(?:fra|fre|french|francais|français|vf|vostfr)(?:$|[\s_\-.]))/i },
-  { code: "ja", pattern: /(?:[\[({]\s*(?:ja|jp|jpn|japanese|japonais|raw)\s*[\])}]|(?:^|[\s_\-.])(?:jpn|japanese|japonais|raw)(?:$|[\s_\-.]))/i },
-  { code: "es", pattern: /(?:[\[({]\s*(?:es|esp|spa|spanish|espanol|español)\s*[\])}]|(?:^|[\s_\-.])(?:esp|spa|spanish|espanol|español)(?:$|[\s_\-.]))/i },
-  { code: "de", pattern: /(?:[\[({]\s*(?:de|ger|deu|german|allemand)\s*[\])}]|(?:^|[\s_\-.])(?:ger|deu|german|allemand)(?:$|[\s_\-.]))/i },
-  { code: "it", pattern: /(?:[\[({]\s*(?:it|ita|italian|italien)\s*[\])}]|(?:^|[\s_\-.])(?:ita|italian|italien)(?:$|[\s_\-.]))/i },
-  { code: "pt", pattern: /(?:[\[({]\s*(?:pt|por|portuguese|portugais|br|ptbr|pt-br)\s*[\])}]|(?:^|[\s_\-.])(?:por|portuguese|portugais|br|ptbr|pt-br)(?:$|[\s_\-.]))/i },
-  { code: "ko", pattern: /(?:[\[({]\s*(?:ko|kor|korean|coreen|coréen)\s*[\])}]|(?:^|[\s_\-.])(?:kor|korean|coreen|coréen)(?:$|[\s_\-.]))/i },
-  { code: "zh", pattern: /(?:[\[({]\s*(?:zh|chi|zho|cn|chinese|chinois)\s*[\])}]|(?:^|[\s_\-.])(?:chi|zho|chinese|chinois)(?:$|[\s_\-.]))/i },
-  { code: "ru", pattern: /(?:[\[({]\s*(?:ru|rus|russian|russe)\s*[\])}]|(?:^|[\s_\-.])(?:rus|russian|russe)(?:$|[\s_\-.]))/i },
-];
-
-const TITLE_LANGUAGE_MARKER_PATTERN = new RegExp([
-  String.raw`[\[({]\s*(?:en|eng|english|anglais|fr|fra|fre|french|francais|français|vf|vostfr|ja|jp|jpn|japanese|japonais|raw|es|esp|spa|spanish|espanol|español|de|ger|deu|german|allemand|it|ita|italian|italien|pt|por|portuguese|portugais|br|ptbr|pt-br|ko|kor|korean|coreen|coréen|zh|chi|zho|cn|chinese|chinois|ru|rus|russian|russe)\s*[\])}]`,
-  String.raw`(?:^|[\s_\-.])(?:eng|english|anglais|fra|fre|french|francais|français|vf|vostfr|jpn|japanese|japonais|raw|esp|spa|spanish|espanol|español|ger|deu|german|allemand|ita|italian|italien|por|portuguese|portugais|br|ptbr|pt-br|kor|korean|coreen|coréen|chi|zho|chinese|chinois|rus|russian|russe)(?:$|[\s_\-.])`,
-].join("|"), "gi");
-
-export const detectLanguageCodesFromTitle = (title: string): string[] => (
-  TITLE_LANGUAGE_PATTERNS
-    .filter(({ pattern }) => pattern.test(title))
-    .map(({ code }) => code)
-);
-
-export const stripTitleLanguageMarkers = (title: string): string => (
-  title
-    .replace(TITLE_LANGUAGE_MARKER_PATTERN, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-);
 
 const TENTATIVE_AUTHOR_PREFIX_PATTERN = /^\s*(?:\([^)]*\)\s*)*(?:\[\s*([^\]]+?)\s*]\s*)+/;
 const TENTATIVE_AUTHOR_NAME_PATTERN = /\[\s*([^\]]+?)\s*]/g;
-
-const isLanguageMarker = (value: string): boolean => (
-  TITLE_LANGUAGE_PATTERNS.some(({ pattern }) => {
-    pattern.lastIndex = 0;
-    return pattern.test(value);
-  })
-);
 
 const splitTentativeAuthorName = (value: string): string[] => {
   const parts: string[] = [];
@@ -252,12 +196,12 @@ const splitTentativeAuthorName = (value: string): string[] => {
 
 const collectTentativeAuthorNames = (value: string): string[] => {
   const author = normalizeListValue(value);
-  if (!author || isLanguageMarker(author)) {
+  if (!author || isTitleLanguageMarker(author)) {
     return [];
   }
 
   const splitAuthors = splitTentativeAuthorName(author)
-    .filter((splitAuthor) => !isLanguageMarker(splitAuthor));
+    .filter((splitAuthor) => !isTitleLanguageMarker(splitAuthor));
 
   return Array.from(new Set([author, ...splitAuthors]));
 };

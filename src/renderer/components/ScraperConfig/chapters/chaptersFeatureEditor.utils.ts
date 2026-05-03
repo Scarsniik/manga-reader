@@ -12,8 +12,12 @@ import {
   CHECK_LABELS,
   FEATURE_STATUS_META,
   getConfigSignature,
+  getInvalidRegexFieldSelectorError,
+  hasScraperFieldSelectorValue,
   normalizeSelectorInput,
+  normalizeRequiredFieldSelector,
   trimOptional,
+  trimOptionalFieldSelector,
   trimOptionalSelector,
 } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
@@ -109,6 +113,12 @@ export const CHAPTER_IMAGE_SELECTOR_FIELD: Field = {
   placeholder: 'Exemple : img@src',
 };
 
+export const CHAPTER_FIELD_SELECTOR_NAMES = [
+  'chapterUrlSelector',
+  'chapterLabelSelector',
+  'chapterImageSelector',
+] as const;
+
 export const REVERSE_ORDER_FIELD: Field = {
   name: 'reverseOrder',
   label: 'Inverser l\'ordre de la liste',
@@ -121,9 +131,9 @@ export const DEFAULT_CHAPTERS_CONFIG: ScraperChaptersFeatureConfig = {
   templateBase: 'scraper_base',
   chapterListSelector: '',
   chapterItemSelector: '',
-  chapterUrlSelector: '',
-  chapterImageSelector: '',
-  chapterLabelSelector: '',
+  chapterUrlSelector: { kind: 'css', value: '' },
+  chapterImageSelector: undefined,
+  chapterLabelSelector: { kind: 'css', value: '' },
   reverseOrder: false,
 };
 
@@ -139,9 +149,9 @@ export const buildChaptersConfig = (
   templateBase: values.templateBase === 'details_page' ? 'details_page' : 'scraper_base',
   chapterListSelector: trimOptionalSelector(values.chapterListSelector),
   chapterItemSelector: normalizeSelectorInput(String(values.chapterItemSelector ?? '')),
-  chapterUrlSelector: normalizeSelectorInput(String(values.chapterUrlSelector ?? '')),
-  chapterImageSelector: trimOptionalSelector(values.chapterImageSelector),
-  chapterLabelSelector: normalizeSelectorInput(String(values.chapterLabelSelector ?? '')),
+  chapterUrlSelector: normalizeRequiredFieldSelector(values.chapterUrlSelector),
+  chapterImageSelector: trimOptionalFieldSelector(values.chapterImageSelector),
+  chapterLabelSelector: normalizeRequiredFieldSelector(values.chapterLabelSelector),
   reverseOrder: Boolean(values.reverseOrder),
 });
 
@@ -156,9 +166,9 @@ export const getInitialConfig = (
     templateBase: raw.templateBase === 'details_page' ? 'details_page' : 'scraper_base',
     chapterListSelector: trimOptionalSelector(raw.chapterListSelector),
     chapterItemSelector: normalizeSelectorInput(String(raw.chapterItemSelector ?? '')),
-    chapterUrlSelector: normalizeSelectorInput(String(raw.chapterUrlSelector ?? '')),
-    chapterImageSelector: trimOptionalSelector(raw.chapterImageSelector),
-    chapterLabelSelector: normalizeSelectorInput(String(raw.chapterLabelSelector ?? '')),
+    chapterUrlSelector: normalizeRequiredFieldSelector(raw.chapterUrlSelector),
+    chapterImageSelector: trimOptionalFieldSelector(raw.chapterImageSelector),
+    chapterLabelSelector: normalizeRequiredFieldSelector(raw.chapterLabelSelector),
     reverseOrder: Boolean(raw.reverseOrder),
   };
 };
@@ -176,13 +186,20 @@ export const getSaveFieldErrors = (
     errors.chapterItemSelector = 'Le bloc chapitre est requis.';
   }
 
-  if (!config.chapterUrlSelector) {
+  if (!hasScraperFieldSelectorValue(config.chapterUrlSelector)) {
     errors.chapterUrlSelector = 'Le selecteur de l\'URL du chapitre est requis.';
   }
 
-  if (!config.chapterLabelSelector) {
+  if (!hasScraperFieldSelectorValue(config.chapterLabelSelector)) {
     errors.chapterLabelSelector = 'Le selecteur du label du chapitre est requis.';
   }
+
+  CHAPTER_FIELD_SELECTOR_NAMES.forEach((fieldName) => {
+    const error = getInvalidRegexFieldSelectorError(config[fieldName]);
+    if (error) {
+      errors[fieldName] = error;
+    }
+  });
 
   return errors;
 };

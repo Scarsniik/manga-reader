@@ -16,7 +16,10 @@ import {
   extractSelectorValues,
   FEATURE_STATUS_META,
   getConfigSignature,
+  getInvalidRegexFieldSelectorError,
+  hasScraperFieldSelectorValue,
   normalizeSelectorInput,
+  trimOptionalFieldSelector,
   parseSelectorExpression,
   trimOptional,
 } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
@@ -99,7 +102,7 @@ export const DEFAULT_PAGES_CONFIG: ScraperPagesFeatureConfig = {
   urlStrategy: 'details_page',
   urlTemplate: '',
   templateBase: 'scraper_base',
-  pageImageSelector: '',
+  pageImageSelector: undefined,
   linkedToChapters: false,
 };
 
@@ -136,7 +139,7 @@ export const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): Sc
     urlStrategy,
     urlTemplate: trimOptional(values.urlTemplate),
     templateBase: normalizeTemplateBase(values.templateBase),
-    pageImageSelector: trimOptional(normalizeSelectorInput(String(values.pageImageSelector ?? ''))),
+    pageImageSelector: trimOptionalFieldSelector(values.pageImageSelector),
     linkedToChapters: urlStrategy === 'template'
       ? Boolean(values.linkedToChapters)
       : false,
@@ -150,7 +153,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPage
     urlStrategy: getInitialPagesUrlStrategy(raw),
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: normalizeTemplateBase(raw.templateBase),
-    pageImageSelector: trimOptional(normalizeSelectorInput(String(raw.pageImageSelector ?? ''))),
+    pageImageSelector: trimOptionalFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === 'template'
       ? Boolean(raw.linkedToChapters)
       : false,
@@ -168,8 +171,13 @@ export const toAbsoluteUrl = (value: string, baseUrl: string): string => {
 export const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<string, string> => {
   const errors: Record<string, string> = {};
 
-  if (usesScraperPagesSelectorSource(config) && !config.pageImageSelector) {
+  if (usesScraperPagesSelectorSource(config) && !hasScraperFieldSelectorValue(config.pageImageSelector)) {
     errors.pageImageSelector = 'Le selecteur des pages est requis.';
+  }
+
+  const pageImageSelectorError = getInvalidRegexFieldSelectorError(config.pageImageSelector);
+  if (pageImageSelectorError) {
+    errors.pageImageSelector = pageImageSelectorError;
   }
 
   if (config.urlStrategy === 'template' && !config.urlTemplate) {

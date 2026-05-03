@@ -14,10 +14,15 @@ import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/val
 import { Field } from '@/renderer/components/utils/Form/types';
 import {
   buildDocumentFailure,
+  buildLanguageDetectionConfig,
   FEATURE_STATUS_META,
   getConfigSignature,
-  normalizeSelectorInput,
+  getInvalidRegexFieldSelectorError,
+  getLanguageDetectionFieldErrors,
+  hasScraperFieldSelectorValue,
+  normalizeRequiredFieldSelector,
   trimOptional,
+  trimOptionalFieldSelector,
   trimOptionalSelector,
 } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
@@ -157,6 +162,16 @@ export const SCRAPING_FIELDS: Field[] = [
   },
 ];
 
+export const SCRAPING_FIELD_SELECTOR_NAMES = [
+  'titleSelector',
+  'detailUrlSelector',
+  'authorUrlSelector',
+  'thumbnailSelector',
+  'summarySelector',
+  'pageCountSelector',
+  'nextPageSelector',
+] as const;
+
 const DEFAULT_REQUEST_FORM_STATE: SearchRequestFormState = {
   method: 'GET',
   bodyMode: 'form',
@@ -171,13 +186,16 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   request: DEFAULT_REQUEST_FORM_STATE,
   resultListSelector: '',
   resultItemSelector: '',
-  titleSelector: '',
-  detailUrlSelector: '',
-  authorUrlSelector: '',
-  thumbnailSelector: '',
-  summarySelector: '',
-  pageCountSelector: '',
-  nextPageSelector: '',
+  titleSelector: { kind: 'css', value: '' },
+  detailUrlSelector: undefined,
+  authorUrlSelector: undefined,
+  thumbnailSelector: undefined,
+  summarySelector: undefined,
+  pageCountSelector: undefined,
+  nextPageSelector: undefined,
+  languageDetection: {
+    detectFromTitle: false,
+  },
 };
 
 const createDraftId = (): string => `search-request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -243,14 +261,15 @@ export const buildSearchConfig = (
   testQuery: trimOptional(values.testQuery),
   request: buildSearchRequestConfig(values.request),
   resultListSelector: trimOptionalSelector(values.resultListSelector),
-  resultItemSelector: normalizeSelectorInput(String(values.resultItemSelector ?? '')),
-  titleSelector: normalizeSelectorInput(String(values.titleSelector ?? '')),
-  detailUrlSelector: trimOptionalSelector(values.detailUrlSelector),
-  authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
-  thumbnailSelector: trimOptionalSelector(values.thumbnailSelector),
-  summarySelector: trimOptionalSelector(values.summarySelector),
-  pageCountSelector: trimOptionalSelector(values.pageCountSelector),
-  nextPageSelector: trimOptionalSelector(values.nextPageSelector),
+  resultItemSelector: trimOptionalSelector(values.resultItemSelector) ?? '',
+  titleSelector: normalizeRequiredFieldSelector(values.titleSelector),
+  detailUrlSelector: trimOptionalFieldSelector(values.detailUrlSelector),
+  authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
+  thumbnailSelector: trimOptionalFieldSelector(values.thumbnailSelector),
+  summarySelector: trimOptionalFieldSelector(values.summarySelector),
+  pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
+  nextPageSelector: trimOptionalFieldSelector(values.nextPageSelector),
+  languageDetection: buildLanguageDetectionConfig(values.languageDetection),
 });
 
 export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatureFormState => {
@@ -273,14 +292,15 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatu
       contentType: trimOptional(request.contentType) ?? '',
     },
     resultListSelector: trimOptionalSelector(raw.resultListSelector),
-    resultItemSelector: normalizeSelectorInput(String(raw.resultItemSelector ?? '')),
-    titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
-    detailUrlSelector: trimOptionalSelector(raw.detailUrlSelector),
-    authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
-    thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
-    summarySelector: trimOptionalSelector(raw.summarySelector),
-    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
-    nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
+    resultItemSelector: trimOptionalSelector(raw.resultItemSelector) ?? '',
+    titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
+    detailUrlSelector: trimOptionalFieldSelector(raw.detailUrlSelector),
+    authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
+    thumbnailSelector: trimOptionalFieldSelector(raw.thumbnailSelector),
+    summarySelector: trimOptionalFieldSelector(raw.summarySelector),
+    pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
+    nextPageSelector: trimOptionalFieldSelector(raw.nextPageSelector),
+    languageDetection: buildLanguageDetectionConfig(raw.languageDetection as Record<string, unknown> | undefined),
   };
 };
 
@@ -298,9 +318,18 @@ export const getSaveFieldErrors = (
     errors.resultItemSelector = 'Le bloc resultat est requis.';
   }
 
-  if (!config.titleSelector) {
+  if (!hasScraperFieldSelectorValue(config.titleSelector)) {
     errors.titleSelector = 'Le selecteur du titre est requis.';
   }
+
+  SCRAPING_FIELD_SELECTOR_NAMES.forEach((fieldName) => {
+    const error = getInvalidRegexFieldSelectorError(config[fieldName]);
+    if (error) {
+      errors[fieldName] = error;
+    }
+  });
+
+  Object.assign(errors, getLanguageDetectionFieldErrors(config.languageDetection));
 
   if (formValues.request.method === 'POST' && formValues.request.bodyMode === 'form') {
     getConfiguredRequestFieldItems(formValues.request.bodyFields).forEach(({ draftId, config: requestField }) => {
@@ -330,6 +359,7 @@ export const buildValidationPresentation = (
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
   const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
+  const languageCheck = validationResult.checks.find((check) => check.key === 'language');
 
   if (validationResult.requestedUrl) {
     details.push(`URL demandee : ${formatDisplayUrl(validationResult.requestedUrl)}`);
@@ -372,6 +402,10 @@ export const buildValidationPresentation = (
 
   if (pageCountCheck?.matchedCount) {
     details.push(`Nombre de pages detecte(s) : ${pageCountCheck.matchedCount}`);
+  }
+
+  if (languageCheck?.matchedCount) {
+    details.push(`Langues detectees : ${languageCheck.samples?.join(', ') || languageCheck.sample}`);
   }
 
   if (previewPage?.nextPageUrl) {

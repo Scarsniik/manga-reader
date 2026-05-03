@@ -1,0 +1,46 @@
+.language-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.language-flags__flag {
+  display: block;
+  width: 18px;
+  height: 13px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+  object-fit: cover;
+}
+
+.language-flags__unknown {
+  display: inline-flex;
+  width: 18px;
+  height: 13px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8d8d8;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.scraper-card__metadata .language-flags,
+.scraper-browser__status-pill .language-flags {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.scraper-card__metadata .language-flags__unknown,
+.scraper-browser__status-pill .language-flags__unknown {
+  min-height: 13px;
+  padding: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+}

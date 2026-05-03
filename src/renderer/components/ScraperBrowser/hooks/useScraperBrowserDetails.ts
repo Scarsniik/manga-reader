@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useCallback, useMemo } from 'react';
 import { NavigateFunction } from 'react-router-dom';
 import {
+  hasScraperFieldSelectorValue,
   ScraperChaptersFeatureConfig,
   ScraperDetailsFeatureConfig,
   ScraperPagesFeatureConfig,
@@ -130,7 +131,7 @@ export function useScraperBrowserDetails({
     resetListingState();
     resetDetailsState();
 
-    if (!detailsConfig || !detailsConfig.titleSelector) {
+    if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
       setRuntimeError('Le composant Fiche n\'est pas encore suffisamment configure pour etre execute.');
       return;
     }
@@ -240,7 +241,7 @@ export function useScraperBrowserDetails({
 
     setListingReturnState(null);
 
-    if (!detailsConfig || !detailsConfig.titleSelector) {
+    if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
       setRuntimeError('Le composant Fiche n\'est pas encore suffisamment configure pour etre execute.');
       return;
     }
@@ -319,7 +320,7 @@ export function useScraperBrowserDetails({
         sourceChapterLabel: normalizedChapter?.label,
         replaceMangaId: options?.replaceMangaId || undefined,
         defaultTagIds: scraper.globalConfig.defaultTagIds,
-        defaultLanguage: scraper.globalConfig.defaultLanguage,
+        defaultLanguage: detailsResult?.languageCodes?.[0] || scraper.globalConfig.defaultLanguage,
         autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
         seriesTitle: detailsResult?.title || query.trim() || 'manga',
         chapterLabel: normalizedChapter?.label,
@@ -390,7 +391,7 @@ export function useScraperBrowserDetails({
         return;
       }
 
-      if (!detailsConfig?.thumbnailsSelector) {
+      if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.thumbnailsSelector)) {
         setRuntimeError('Le selecteur des vignettes est requis pour charger la suite.');
         return;
       }

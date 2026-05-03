@@ -1,5 +1,6 @@
 import {
   FetchScraperDocumentResult,
+  hasScraperFieldSelectorValue,
   ScraperRecord,
   ScraperSearchFeatureConfig,
 } from "@/shared/scraper";
@@ -72,7 +73,11 @@ export const runWithConcurrency = async (
 
 export const getSearchConfig = (scraper: ScraperRecord): ScraperSearchFeatureConfig => {
   const searchConfig = getScraperSearchFeatureConfig(getScraperFeature(scraper, "search"));
-  if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
+  if (
+    !searchConfig?.urlTemplate
+    || !searchConfig.resultItemSelector
+    || !hasScraperFieldSelectorValue(searchConfig.titleSelector)
+  ) {
     throw new Error("Le composant Recherche n'est pas suffisamment configure.");
   }
 
@@ -162,7 +167,10 @@ export const buildSourceResults = (
   const canOpenDetails = canOpenScraperDetails(scraper);
 
   return page.items.map((result) => {
-    const detectedLanguageCodes = detectLanguageCodesFromTitle(result.title);
+    const configuredLanguageCodes = result.languageCodes ?? [];
+    const detectedLanguageCodes = configuredLanguageCodes.length
+      ? configuredLanguageCodes
+      : detectLanguageCodesFromTitle(result.title);
     const fallbackLanguageCodes = scraperLanguageCodes.length === 1 ? scraperLanguageCodes : [];
     const tentativeAuthorNames = extractTentativeAuthorNamesFromTitle(result.title);
 
@@ -187,7 +195,7 @@ export const resolveHasNextPage = (
   page: ScraperRuntimeSearchPageResult,
 ): boolean => (
   hasSearchPagePlaceholder(searchConfig)
-    ? searchConfig.nextPageSelector
+    ? hasScraperFieldSelectorValue(searchConfig.nextPageSelector)
       ? Boolean(page.nextPageUrl)
       : page.items.length > 0
     : Boolean(page.nextPageUrl)

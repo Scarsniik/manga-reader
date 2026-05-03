@@ -1,5 +1,6 @@
 import {
   applyScraperSearchTemplate,
+  buildScraperRegexFromInput,
   buildScraperSearchUrl,
   ScraperChapterItem,
   ScraperAuthorFeatureConfig,
@@ -8,13 +9,18 @@ import {
   buildScraperContextTemplateUrl,
   buildScraperTemplateUrl,
   FetchScraperDocumentResult,
+  hasScraperFieldSelectorValue,
+  normalizeScraperCssSelectorInput,
+  normalizeScraperFieldSelector,
   resolveScraperUrl,
   ScraperDetailsDerivedValueConfig,
   ScraperDetailsDerivedValueResult,
   ScraperDetailsFeatureConfig,
+  ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureKind,
   ScraperFeatureValidationCheckKey,
+  ScraperLanguageDetectionConfig,
   ScraperPagesFeatureConfig,
   ScraperPagesTemplateBase,
   ScraperRequestConfig,
@@ -36,6 +42,12 @@ import {
   usesScraperPagesSelectorSource,
   usesScraperPagesTemplateChapterContext,
 } from '@/renderer/utils/scraperPages';
+import {
+  detectLanguageCodesFromProcessedValues,
+  detectLanguageCodesFromTextValues,
+  detectLanguageCodesFromTitle,
+  uniqueLanguageCodes,
+} from '@/renderer/utils/languageDetection';
 
 type DetailsFieldKey = Extract<
   ScraperFeatureValidationCheckKey,
@@ -59,6 +71,7 @@ export type ScraperRuntimeDetailsResult = {
   thumbnailsNextPageUrl?: string;
   mangaStatus?: string;
   pageCount?: string;
+  languageCodes: string[];
   derivedValues: Record<string, string>;
 };
 
@@ -126,10 +139,8 @@ const RESERVED_SCRAPER_DISPLAY_CHARACTERS = new Set([
 ]);
 
 export const normalizeSelectorInput = (input: string): string => input
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
+  ? normalizeScraperCssSelectorInput(input)
+  : '';
 
 export const formatScraperValueForDisplay = (value: string | undefined): string => {
   if (typeof value !== 'string' || !value.length) {
@@ -159,9 +170,29 @@ export const formatScraperPageCountForDisplay = (value: string | undefined): str
     : normalizedValue;
 };
 
-const trimOptionalSelector = (value: unknown): string | undefined => {
+const trimOptionalBlockSelector = (value: unknown): string | undefined => {
   const normalized = normalizeSelectorInput(String(value ?? ''));
   return normalized ? normalized : undefined;
+};
+
+const normalizeRequiredFieldSelector = (value: unknown): ScraperFieldSelector => (
+  normalizeScraperFieldSelector(value) ?? { kind: 'css', value: '' }
+);
+
+const trimOptionalFieldSelector = (value: unknown): ScraperFieldSelector | undefined => (
+  normalizeScraperFieldSelector(value)
+);
+
+const normalizeLanguageDetectionConfig = (value: unknown): ScraperLanguageDetectionConfig => {
+  const raw = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {};
+
+  return {
+    detectFromTitle: Boolean(raw.detectFromTitle),
+    languageSelector: trimOptionalFieldSelector(raw.languageSelector),
+    processedLanguageSelector: trimOptionalFieldSelector(raw.processedLanguageSelector),
+  };
 };
 
 const normalizePagesTemplateBase = (value: unknown): ScraperPagesTemplateBase => (
@@ -171,15 +202,16 @@ const normalizePagesTemplateBase = (value: unknown): ScraperPagesTemplateBase =>
 const buildCardListConfig = (
   raw: Record<string, unknown>,
 ): ScraperCardListConfig => ({
-  resultListSelector: trimOptionalSelector(raw.resultListSelector),
+  resultListSelector: trimOptionalBlockSelector(raw.resultListSelector),
   resultItemSelector: normalizeSelectorInput(String(raw.resultItemSelector ?? '')),
-  titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
-  detailUrlSelector: trimOptionalSelector(raw.detailUrlSelector),
-  authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
-  thumbnailSelector: trimOptionalSelector(raw.thumbnailSelector),
-  summarySelector: trimOptionalSelector(raw.summarySelector),
-  pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
-  nextPageSelector: trimOptionalSelector(raw.nextPageSelector),
+  titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
+  detailUrlSelector: trimOptionalFieldSelector(raw.detailUrlSelector),
+  authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
+  thumbnailSelector: trimOptionalFieldSelector(raw.thumbnailSelector),
+  summarySelector: trimOptionalFieldSelector(raw.summarySelector),
+  pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
+  nextPageSelector: trimOptionalFieldSelector(raw.nextPageSelector),
+  languageDetection: normalizeLanguageDetectionConfig(raw.languageDetection),
 });
 
 const normalizeRequestField = (value: unknown): ScraperRequestField | null => {
@@ -266,7 +298,7 @@ const normalizeDerivedValueConfig = (
       ? raw.sourceType
       : 'field',
     sourceField: isDetailsFieldKey(raw.sourceField) ? raw.sourceField : undefined,
-    selector: trimOptionalSelector(raw.selector),
+    selector: trimOptionalFieldSelector(raw.selector),
     pattern: trimOptional(raw.pattern),
   };
 };
@@ -325,24 +357,23 @@ export const getScraperDetailsFeatureConfig = (
   }
 
   const raw = feature.config as Record<string, unknown>;
-  const titleSelector = normalizeSelectorInput(String(raw.titleSelector ?? ''));
-
   return {
     urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'result_url',
     urlTemplate: trimOptional(raw.urlTemplate),
     testUrl: trimOptional(raw.testUrl),
     testValue: trimOptional(raw.testValue),
-    titleSelector,
-    coverSelector: trimOptionalSelector(raw.coverSelector),
-    descriptionSelector: trimOptionalSelector(raw.descriptionSelector),
-    authorsSelector: trimOptionalSelector(raw.authorsSelector),
-    authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
-    tagsSelector: trimOptionalSelector(raw.tagsSelector),
-    statusSelector: trimOptionalSelector(raw.statusSelector),
-    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
-    thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
-    thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
-    thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
+    titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
+    coverSelector: trimOptionalFieldSelector(raw.coverSelector),
+    descriptionSelector: trimOptionalFieldSelector(raw.descriptionSelector),
+    authorsSelector: trimOptionalFieldSelector(raw.authorsSelector),
+    authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
+    tagsSelector: trimOptionalFieldSelector(raw.tagsSelector),
+    statusSelector: trimOptionalFieldSelector(raw.statusSelector),
+    pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
+    thumbnailsListSelector: trimOptionalBlockSelector(raw.thumbnailsListSelector),
+    thumbnailsSelector: trimOptionalFieldSelector(raw.thumbnailsSelector),
+    thumbnailsNextPageSelector: trimOptionalFieldSelector(raw.thumbnailsNextPageSelector),
+    languageDetection: normalizeLanguageDetectionConfig(raw.languageDetection),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => normalizeDerivedValueConfig(value))
@@ -360,18 +391,15 @@ export const getScraperChaptersFeatureConfig = (
 
   const raw = feature.config as Record<string, unknown>;
   const chapterItemSelector = normalizeSelectorInput(String(raw.chapterItemSelector ?? ''));
-  const chapterUrlSelector = normalizeSelectorInput(String(raw.chapterUrlSelector ?? ''));
-  const chapterLabelSelector = normalizeSelectorInput(String(raw.chapterLabelSelector ?? ''));
-
   return {
     urlStrategy: raw.urlStrategy === 'template' ? 'template' : 'details_page',
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: normalizePagesTemplateBase(raw.templateBase),
-    chapterListSelector: trimOptionalSelector(raw.chapterListSelector),
+    chapterListSelector: trimOptionalBlockSelector(raw.chapterListSelector),
     chapterItemSelector,
-    chapterUrlSelector,
-    chapterImageSelector: trimOptionalSelector(raw.chapterImageSelector),
-    chapterLabelSelector,
+    chapterUrlSelector: normalizeRequiredFieldSelector(raw.chapterUrlSelector),
+    chapterImageSelector: trimOptionalFieldSelector(raw.chapterImageSelector),
+    chapterLabelSelector: normalizeRequiredFieldSelector(raw.chapterLabelSelector),
     reverseOrder: Boolean(raw.reverseOrder),
   };
 };
@@ -393,7 +421,7 @@ export const getScraperPagesFeatureConfig = (
         : 'details_page',
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: normalizePagesTemplateBase(raw.templateBase),
-    pageImageSelector: trimOptionalSelector(raw.pageImageSelector),
+    pageImageSelector: trimOptionalFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === 'template'
       ? Boolean(raw.linkedToChapters)
       : false,
@@ -563,8 +591,120 @@ const extractUrlSelectorValuesFromRoot = (root: ParentNode, input: string): stri
     .filter(Boolean);
 };
 
-export const extractSelectorValues = (doc: Document, input: string): string[] => (
-  extractSelectorValuesFromRoot(doc, input)
+const getRootHtml = (root: ParentNode): string => {
+  if (root instanceof Document) {
+    return root.documentElement?.outerHTML ?? '';
+  }
+
+  if (root instanceof Element) {
+    return root.outerHTML;
+  }
+
+  return root.textContent ?? '';
+};
+
+const extractRegexValuesFromRoot = (root: ParentNode, pattern: string): string[] => {
+  if (!pattern.trim()) {
+    return [];
+  }
+
+  const regex = buildScraperRegexFromInput(pattern, 'g');
+  const html = getRootHtml(root);
+  const values: string[] = [];
+  let match: RegExpExecArray | null;
+
+  do {
+    match = regex.exec(html);
+    if (!match) {
+      break;
+    }
+
+    const value = String(match[1] ?? match[0] ?? '').trim();
+    if (value) {
+      values.push(value);
+    }
+
+    if (match[0] === '') {
+      regex.lastIndex += 1;
+    }
+  } while (regex.lastIndex <= html.length);
+
+  return values;
+};
+
+const extractFieldSelectorValuesFromRoot = (
+  root: ParentNode,
+  input: ScraperFieldSelector | string,
+): string[] => {
+  const selector = normalizeScraperFieldSelector(input);
+  if (!selector) {
+    return [];
+  }
+
+  return selector.kind === 'regex'
+    ? extractRegexValuesFromRoot(root, selector.value)
+    : extractSelectorValuesFromRoot(root, selector.value);
+};
+
+const extractUrlFieldSelectorValuesFromRoot = (
+  root: ParentNode,
+  input: ScraperFieldSelector | string,
+): string[] => {
+  const selector = normalizeScraperFieldSelector(input);
+  if (!selector) {
+    return [];
+  }
+
+  return selector.kind === 'regex'
+    ? extractRegexValuesFromRoot(root, selector.value)
+    : extractUrlSelectorValuesFromRoot(root, selector.value);
+};
+
+const hasLanguageDetectionConfig = (
+  config: ScraperLanguageDetectionConfig | undefined,
+): config is ScraperLanguageDetectionConfig => Boolean(
+  config?.detectFromTitle
+  || hasScraperFieldSelectorValue(config?.languageSelector)
+  || hasScraperFieldSelectorValue(config?.processedLanguageSelector),
+);
+
+const extractLanguageCodesFromRoot = (
+  root: ParentNode,
+  config: ScraperLanguageDetectionConfig | undefined,
+  title: string | undefined,
+): string[] => {
+  if (!hasLanguageDetectionConfig(config)) {
+    return [];
+  }
+
+  const titleLanguageCodes = config.detectFromTitle && title
+    ? detectLanguageCodesFromTitle(title)
+    : [];
+  const selectorLanguageCodes = config.languageSelector
+    ? detectLanguageCodesFromTextValues(extractFieldSelectorValuesFromRoot(root, config.languageSelector))
+    : [];
+  const processedSelectorLanguageCodes = config.processedLanguageSelector
+    ? detectLanguageCodesFromProcessedValues(extractFieldSelectorValuesFromRoot(root, config.processedLanguageSelector))
+    : [];
+
+  return uniqueLanguageCodes([
+    ...titleLanguageCodes,
+    ...selectorLanguageCodes,
+    ...processedSelectorLanguageCodes,
+  ]);
+};
+
+export const extractScraperLanguageCodesFromRoot = (
+  root: ParentNode,
+  config: ScraperLanguageDetectionConfig | undefined,
+  title: string | undefined,
+): string[] => extractLanguageCodesFromRoot(root, config, title);
+
+export const extractSelectorValues = (
+  doc: Document,
+  input: ScraperFieldSelector | string,
+): string[] => (
+  extractFieldSelectorValuesFromRoot(doc, input)
 );
 
 export const toAbsoluteScraperUrl = (value: string, baseUrl: string): string => {
@@ -770,26 +910,27 @@ export const extractScraperSearchPageFromDocument = (
   );
 
   const results = resultItems.reduce<ScraperSearchResultItem[]>((accumulator, item) => {
-    const title = extractSelectorValuesFromRoot(item, config.titleSelector)[0];
+    const title = extractFieldSelectorValuesFromRoot(item, config.titleSelector)[0];
     if (!title) {
       return accumulator;
     }
 
     const detailUrlValue = config.detailUrlSelector
-      ? extractUrlSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
+      ? extractUrlFieldSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
       : undefined;
     const authorUrlValue = config.authorUrlSelector
-      ? extractUrlSelectorValuesFromRoot(item, config.authorUrlSelector)[0]
+      ? extractUrlFieldSelectorValuesFromRoot(item, config.authorUrlSelector)[0]
       : undefined;
     const thumbnailValue = config.thumbnailSelector
-      ? extractSelectorValuesFromRoot(item, config.thumbnailSelector)[0]
+      ? extractFieldSelectorValuesFromRoot(item, config.thumbnailSelector)[0]
       : undefined;
     const summaryValue = config.summarySelector
-      ? extractSelectorValuesFromRoot(item, config.summarySelector)[0]
+      ? extractFieldSelectorValuesFromRoot(item, config.summarySelector)[0]
       : undefined;
     const pageCountValue = config.pageCountSelector
-      ? extractSelectorValuesFromRoot(item, config.pageCountSelector)[0]
+      ? extractFieldSelectorValuesFromRoot(item, config.pageCountSelector)[0]
       : undefined;
+    const languageCodes = extractLanguageCodesFromRoot(item, config.languageDetection, title);
 
     accumulator.push({
       title,
@@ -804,13 +945,14 @@ export const extractScraperSearchPageFromDocument = (
         : undefined,
       summary: summaryValue,
       pageCount: pageCountValue,
+      languageCodes,
     });
 
     return accumulator;
   }, []);
 
   const nextPageValue = config.nextPageSelector
-    ? extractUrlSelectorValuesFromRoot(doc, config.nextPageSelector)[0]
+    ? extractUrlFieldSelectorValuesFromRoot(doc, config.nextPageSelector)[0]
     : undefined;
 
   return {
@@ -848,16 +990,16 @@ export type ScraperRuntimeDetailsThumbnailsPageResult = {
 
 export const extractScraperAuthorUrlsFromDocument = (
   doc: Document,
-  selector: string | undefined,
+  selector: ScraperFieldSelector | undefined,
   requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, 'requestedUrl' | 'finalUrl'>,
 ): string[] => {
-  if (!selector) {
+  if (!selector || !hasScraperFieldSelectorValue(selector)) {
     return [];
   }
 
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   return uniqueValues(
-    extractUrlSelectorValuesFromRoot(doc, selector).map((value) => toAbsoluteScraperUrl(value, documentUrl)),
+    extractUrlFieldSelectorValuesFromRoot(doc, selector).map((value) => toAbsoluteScraperUrl(value, documentUrl)),
   );
 };
 
@@ -876,13 +1018,13 @@ export const extractScraperDetailsThumbnailsPageFromDocument = (
 ): ScraperRuntimeDetailsThumbnailsPageResult => {
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   const nextPageValue = config.thumbnailsNextPageSelector
-    ? extractUrlSelectorValuesFromRoot(doc, config.thumbnailsNextPageSelector)[0]
+    ? extractUrlFieldSelectorValuesFromRoot(doc, config.thumbnailsNextPageSelector)[0]
     : undefined;
   const nextPageUrl = nextPageValue
     ? toAbsoluteScraperUrl(nextPageValue, documentUrl)
     : undefined;
 
-  if (!config.thumbnailsSelector) {
+  if (!config.thumbnailsSelector || !hasScraperFieldSelectorValue(config.thumbnailsSelector)) {
     return {
       thumbnails: [],
       nextPageUrl,
@@ -896,7 +1038,7 @@ export const extractScraperDetailsThumbnailsPageFromDocument = (
 
   return {
     thumbnails: thumbnailRoots.flatMap((root) => (
-      extractSelectorValuesFromRoot(root, thumbnailsSelector)
+      extractFieldSelectorValuesFromRoot(root, thumbnailsSelector)
         .map((value) => toAbsoluteScraperUrl(value, documentUrl))
     )),
     nextPageUrl,
@@ -911,7 +1053,7 @@ export const extractScraperDetailsFieldValues = (
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   const fieldValuesByKey: ScraperRuntimeDetailsFieldValues = {};
 
-  const selectorMap: Partial<Record<DetailsFieldKey, string | undefined>> = {
+  const selectorMap: Partial<Record<DetailsFieldKey, ScraperFieldSelector | undefined>> = {
     title: config.titleSelector,
     cover: config.coverSelector,
     description: config.descriptionSelector,
@@ -923,7 +1065,7 @@ export const extractScraperDetailsFieldValues = (
 
   DETAILS_FIELD_KEYS.forEach((fieldKey) => {
     const selector = selectorMap[fieldKey];
-    if (!selector) {
+    if (!selector || !hasScraperFieldSelectorValue(selector)) {
       fieldValuesByKey[fieldKey] = [];
       return;
     }
@@ -1014,7 +1156,8 @@ export const extractScraperDetailsDerivedValueResults = (
   }
 
   try {
-    const match = sourceValues[0].match(new RegExp(derivedValue.pattern));
+    const regex = buildScraperRegexFromInput(derivedValue.pattern);
+    const match = regex.exec(sourceValues[0]);
     if (!match) {
       return {
         ...baseResult,
@@ -1046,6 +1189,8 @@ export const extractScraperDetailsFromDocument = (
   const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
   const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta);
   const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta);
+  const title = fieldValuesByKey.title?.[0];
+  const languageCodes = extractLanguageCodesFromRoot(doc, config.languageDetection, title);
   const derivedValues = derivedValueResults.reduce<Record<string, string>>((accumulator, derivedValue) => {
     if (derivedValue.value) {
       accumulator[derivedValue.key] = derivedValue.value;
@@ -1059,16 +1204,19 @@ export const extractScraperDetailsFromDocument = (
     finalUrl: requestMeta.finalUrl,
     status: requestMeta.status,
     contentType: requestMeta.contentType,
-    title: fieldValuesByKey.title?.[0],
+    title,
     cover: fieldValuesByKey.cover?.[0],
     description: fieldValuesByKey.description?.[0],
     authors: uniqueValues(fieldValuesByKey.authors ?? []),
     authorUrls,
     tags: uniqueValues(fieldValuesByKey.tags ?? []),
-    thumbnails: config.thumbnailsSelector ? thumbnailsPage.thumbnails : undefined,
+    thumbnails: config.thumbnailsSelector && hasScraperFieldSelectorValue(config.thumbnailsSelector)
+      ? thumbnailsPage.thumbnails
+      : undefined,
     thumbnailsNextPageUrl: thumbnailsPage.nextPageUrl,
     mangaStatus: fieldValuesByKey.status?.[0],
     pageCount: fieldValuesByKey.pageCount?.[0],
+    languageCodes,
     derivedValues,
   };
 };
@@ -1092,10 +1240,10 @@ export const extractScraperChaptersFromDocument = (
   );
 
   const chapters = chapterItems.reduce<ScraperRuntimeChapterResult[]>((accumulator, item, index) => {
-    const chapterUrl = extractUrlSelectorValuesFromRoot(item, config.chapterUrlSelector)[0];
-    const chapterLabel = extractSelectorValuesFromRoot(item, config.chapterLabelSelector)[0];
+    const chapterUrl = extractUrlFieldSelectorValuesFromRoot(item, config.chapterUrlSelector)[0];
+    const chapterLabel = extractFieldSelectorValuesFromRoot(item, config.chapterLabelSelector)[0];
     const chapterImage = config.chapterImageSelector
-      ? extractSelectorValuesFromRoot(item, config.chapterImageSelector)[0]
+      ? extractFieldSelectorValuesFromRoot(item, config.chapterImageSelector)[0]
       : undefined;
 
     if (!chapterUrl || !chapterLabel) {
@@ -1257,7 +1405,7 @@ export async function resolveScraperPageUrls(
   }
 
   if (usesScraperPagesSelectorSource(pagesConfig)) {
-    if (!pagesConfig.pageImageSelector) {
+    if (!pagesConfig.pageImageSelector || !hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)) {
       throw new Error('Le composant Pages doit avoir un selecteur pour lire les pages depuis la fiche ou un chapitre.');
     }
 
@@ -1295,7 +1443,7 @@ export async function resolveScraperPageUrls(
 
   const templateContext = buildScraperTemplateContextFromDetails(details, chapter);
 
-  if (pagesConfig.pageImageSelector) {
+  if (pagesConfig.pageImageSelector && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)) {
     const targetUrl = buildScraperContextTemplateUrl(
       scraper.baseUrl,
       pagesConfig.urlTemplate,

@@ -1,6 +1,7 @@
 import React, { Dispatch, SetStateAction, useCallback } from 'react';
 import { NavigateFunction } from 'react-router-dom';
 import {
+  hasScraperFieldSelectorValue,
   ScraperAuthorFeatureConfig,
   ScraperDetailsFeatureConfig,
   ScraperRecord,
@@ -221,7 +222,11 @@ export function useScraperBrowserSearch({
       pageIndex?: number;
     },
   ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
+    if (
+      !searchConfig?.urlTemplate
+      || !searchConfig.resultItemSelector
+      || !hasScraperFieldSelectorValue(searchConfig.titleSelector)
+    ) {
       throw new Error('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
     }
 
@@ -258,7 +263,7 @@ export function useScraperBrowserSearch({
   const fetchAuthorPage = useCallback(async (
     targetUrl: string,
   ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (!authorConfig?.resultItemSelector || !authorConfig.titleSelector) {
+    if (!authorConfig?.resultItemSelector || !hasScraperFieldSelectorValue(authorConfig.titleSelector)) {
       throw new Error('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
     }
 
@@ -396,11 +401,15 @@ export function useScraperBrowserSearch({
     }
 
     if (listingMode === 'search') {
-      if (!searchConfig?.urlTemplate || !searchConfig.resultItemSelector || !searchConfig.titleSelector) {
+      if (
+        !searchConfig?.urlTemplate
+        || !searchConfig.resultItemSelector
+        || !hasScraperFieldSelectorValue(searchConfig.titleSelector)
+      ) {
         setRuntimeError('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
         return;
       }
-    } else if (!authorConfig?.resultItemSelector || !authorConfig.titleSelector) {
+    } else if (!authorConfig?.resultItemSelector || !hasScraperFieldSelectorValue(authorConfig.titleSelector)) {
       setRuntimeError('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
       return;
     }
@@ -629,7 +638,7 @@ export function useScraperBrowserSearch({
       return;
     }
 
-    if (!detailsConfig || !detailsConfig.titleSelector) {
+    if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
       setRuntimeMessage('Pour ouvrir un resultat, configure d\'abord le composant `Fiche`.');
       return;
     }
@@ -689,7 +698,11 @@ export function useScraperBrowserSearch({
       return;
     }
 
-    if (!authorConfig || !authorConfig.titleSelector || !authorConfig.resultItemSelector) {
+    if (
+      !authorConfig
+      || !hasScraperFieldSelectorValue(authorConfig.titleSelector)
+      || !authorConfig.resultItemSelector
+    ) {
       setRuntimeMessage('Pour ouvrir une page auteur, configure d\'abord le composant `Auteur`.');
       return;
     }

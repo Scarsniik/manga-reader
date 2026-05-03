@@ -55,8 +55,45 @@ Le module `Recherche` peut aussi envoyer un `POST`. Les autres modules chargent 
 
 ## Regles communes des selecteurs
 
-Les selecteurs sont des selecteurs CSS executes avec `querySelectorAll`. Le JavaScript du site n'est
-pas execute : il faut donc viser le HTML present dans la reponse HTTP.
+Les selecteurs de bloc restent toujours des selecteurs CSS executes avec `querySelectorAll`.
+Cela concerne les champs qui delimitent une liste ou un item, par exemple `resultListSelector`,
+`resultItemSelector`, `thumbnailsListSelector`, `chapterListSelector` et `chapterItemSelector`.
+
+Les champs d'extraction, eux, peuvent etre en mode CSS ou en mode regex via le bouton `.*` affiche
+a gauche du champ dans l'interface. Le JavaScript du site n'est pas execute : il faut donc viser le
+HTML present dans la reponse HTTP.
+
+En mode regex, la regex s'applique uniquement au HTML du bloc courant :
+
+- pour `Recherche` et `Auteur`, au HTML de la card trouvee par `resultItemSelector`
+- pour `Chapitres`, au HTML du chapitre trouve par `chapterItemSelector`
+- pour `Fiche`, `Pages` et les liens de pagination, au HTML du document ou du conteneur courant
+
+Si la regex contient un groupe capture, le premier groupe est conserve. Sinon, le match complet est
+conserve. Exemple pour une classe de drapeau 3hentai : `\bflag-([a-z]{2,4})\b` extrait `eng` depuis
+`class="title flag flag-eng"`.
+
+La regex peut etre saisie comme motif brut (`Pages:[\s\S]*?(\d+)`) ou sous forme de litteral
+JavaScript (`/Pages:[\s\S]*?(\d+)/i`). Les flags du litteral sont conserves ; l'extraction ajoute
+automatiquement le flag global pour recuperer toutes les correspondances.
+
+## Detection de langue
+
+Les modules `Recherche`, `Auteur` et `Fiche` ont une section `Langue` separee. Elle peut combiner
+trois sources :
+
+- detection dans le titre, avec les marqueurs explicites comme `[EN]`, `(FR)`, `English`, `RAW`
+- selecteur de langue classique, pour une metadonnee texte comme `English`
+- selecteur de langue processed, pour une metadonnee non textuelle transformee ensuite
+
+Pour le mode processed, la normalisation gere pour l'instant le modele 3hentai : une valeur ou une
+classe comme `flag-eng` est convertie en `en`. Le selecteur peut donc etre un CSS comme
+`.title@class` ou une regex comme `\bflag-([a-z]{2,4})\b`.
+
+Les langues detectees sont exposees sur les cards et les fiches, puis affichees avec les memes
+drapeaux compacts que dans la recherche multiple. Lors d'un ajout a la bibliotheque ou d'un
+telechargement depuis une fiche, la premiere langue detectee sert de langue par defaut avant la
+langue globale du scrapper.
 
 Syntaxe supportee :
 

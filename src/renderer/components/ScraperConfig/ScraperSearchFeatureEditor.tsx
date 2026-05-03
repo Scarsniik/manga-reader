@@ -1,6 +1,8 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FetchScraperDocumentResult,
+  formatScraperFieldSelectorForDisplay,
+  ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperSearchResultItem,
@@ -15,6 +17,7 @@ import {
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperLanguageDetectionSection from '@/renderer/components/ScraperConfig/shared/ScraperLanguageDetectionSection';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
   ScraperConfigFieldGrid,
@@ -36,6 +39,7 @@ import {
   getInitialConfig,
   getSaveFieldErrors,
   getValidationFieldErrors,
+  SCRAPING_FIELD_SELECTOR_NAMES,
   SCRAPING_FIELDS,
   SearchFeatureFormState,
   TEST_QUERY_FIELD,
@@ -79,6 +83,7 @@ export default function ScraperSearchFeatureEditor({
     clearFeedback,
     clearFieldError,
     clearFieldErrorsByPrefix,
+    clearFieldFeedback,
     createTextFieldChangeHandler,
     resetEditorState,
   } = useScraperFeatureEditorState<SearchFeatureFormState>({
@@ -159,9 +164,47 @@ export default function ScraperSearchFeatureEditor({
     });
   }, [scraper.baseUrl]);
 
-  const handleFieldChange = useCallback((fieldName: Exclude<keyof SearchFeatureFormState, 'request'>) => (
+  const handleFieldChange = useCallback((fieldName: Exclude<keyof SearchFeatureFormState, 'request' | 'languageDetection'>) => (
     createTextFieldChangeHandler(fieldName)
   ), [createTextFieldChangeHandler]);
+
+  const handleFieldSelectorChange = useCallback((
+    fieldName: Exclude<keyof SearchFeatureFormState, 'request' | 'languageDetection'>,
+  ) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      [fieldName]: nextValue,
+    }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageDetectFromTitleChange = useCallback((enabled: boolean) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        detectFromTitle: enabled,
+      },
+    }));
+    clearFieldFeedback('languageDetection.detectFromTitle');
+  }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageFieldSelectorChange = useCallback((
+    fieldName: 'languageSelector' | 'processedLanguageSelector',
+  ) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        [fieldName]: nextValue,
+      },
+    }));
+    clearFieldFeedback(`languageDetection.${fieldName}`);
+  }, [clearFieldFeedback, setFormValues]);
 
   const handleRequestMethodChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMethod = event.target.value === 'POST' ? 'POST' : 'GET';
@@ -322,12 +365,15 @@ export default function ScraperSearchFeatureEditor({
       const thumbnails = extractedResults.map((result) => result.thumbnailUrl).filter(Boolean) as string[];
       const summaries = extractedResults.map((result) => result.summary).filter(Boolean) as string[];
       const pageCounts = extractedResults.map((result) => result.pageCount).filter(Boolean) as string[];
+      const languageCodes = Array.from(new Set(
+        extractedResults.flatMap((result) => result.languageCodes ?? []),
+      ));
 
       const checks = [
         titles.length > 0
           ? {
             key: 'title' as const,
-            selector: config.titleSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.titleSelector),
             required: true,
             matchedCount: titles.length,
             sample: titles[0],
@@ -335,7 +381,7 @@ export default function ScraperSearchFeatureEditor({
           }
           : {
             key: 'title' as const,
-            selector: config.titleSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.titleSelector),
             required: true,
             matchedCount: 0,
             issueCode: 'no_match' as const,
@@ -344,7 +390,7 @@ export default function ScraperSearchFeatureEditor({
           ? [thumbnails.length > 0
             ? {
               key: 'cover' as const,
-              selector: config.thumbnailSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.thumbnailSelector),
               required: false,
               matchedCount: thumbnails.length,
               sample: thumbnails[0],
@@ -352,7 +398,7 @@ export default function ScraperSearchFeatureEditor({
             }
             : {
               key: 'cover' as const,
-              selector: config.thumbnailSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.thumbnailSelector),
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,
@@ -362,7 +408,7 @@ export default function ScraperSearchFeatureEditor({
           ? [authorUrls.length > 0
             ? {
               key: 'authorUrl' as const,
-              selector: config.authorUrlSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.authorUrlSelector),
               required: false,
               matchedCount: authorUrls.length,
               sample: authorUrls[0],
@@ -370,7 +416,7 @@ export default function ScraperSearchFeatureEditor({
             }
             : {
               key: 'authorUrl' as const,
-              selector: config.authorUrlSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.authorUrlSelector),
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,
@@ -380,7 +426,7 @@ export default function ScraperSearchFeatureEditor({
           ? [summaries.length > 0
             ? {
               key: 'description' as const,
-              selector: config.summarySelector,
+              selector: formatScraperFieldSelectorForDisplay(config.summarySelector),
               required: false,
               matchedCount: summaries.length,
               sample: summaries[0],
@@ -388,7 +434,7 @@ export default function ScraperSearchFeatureEditor({
             }
             : {
               key: 'description' as const,
-              selector: config.summarySelector,
+              selector: formatScraperFieldSelectorForDisplay(config.summarySelector),
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,
@@ -398,7 +444,7 @@ export default function ScraperSearchFeatureEditor({
           ? [pageCounts.length > 0
             ? {
               key: 'pageCount' as const,
-              selector: config.pageCountSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.pageCountSelector),
               required: false,
               matchedCount: pageCounts.length,
               sample: pageCounts[0],
@@ -406,7 +452,27 @@ export default function ScraperSearchFeatureEditor({
             }
             : {
               key: 'pageCount' as const,
-              selector: config.pageCountSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.pageCountSelector),
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match' as const,
+            }]
+          : []),
+        ...(config.languageDetection?.detectFromTitle
+          || config.languageDetection?.languageSelector
+          || config.languageDetection?.processedLanguageSelector
+          ? [languageCodes.length > 0
+            ? {
+              key: 'language' as const,
+              selector: 'Langue',
+              required: false,
+              matchedCount: languageCodes.length,
+              sample: languageCodes[0],
+              samples: languageCodes,
+            }
+            : {
+              key: 'language' as const,
+              selector: 'Langue',
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,
@@ -628,13 +694,33 @@ export default function ScraperSearchFeatureEditor({
 
           <ScraperConfigFieldGrid
             fields={SCRAPING_FIELDS}
+            fieldSelectorNames={SCRAPING_FIELD_SELECTOR_NAMES}
             getValue={(fieldName) => (
-              formValues[fieldName as Exclude<keyof SearchFeatureFormState, 'request'>] ?? ''
+              formValues[fieldName as Exclude<keyof SearchFeatureFormState, 'request' | 'languageDetection'>] ?? ''
             )}
             getError={(fieldName) => fieldErrors[fieldName]}
             onFieldChange={(fieldName) => (
-              handleFieldChange(fieldName as Exclude<keyof SearchFeatureFormState, 'request'>)
+              handleFieldChange(fieldName as Exclude<keyof SearchFeatureFormState, 'request' | 'languageDetection'>)
             )}
+            onFieldSelectorChange={(fieldName) => (
+              handleFieldSelectorChange(fieldName as Exclude<keyof SearchFeatureFormState, 'request' | 'languageDetection'>)
+            )}
+          />
+        </div>
+
+        <div className="scraper-config-section">
+          <div className="scraper-config-section__header">
+            <h4>Langue</h4>
+            <p>
+              Configure comment detecter la langue de chaque card extraite.
+            </p>
+          </div>
+
+          <ScraperLanguageDetectionSection
+            value={formValues.languageDetection}
+            fieldErrors={fieldErrors}
+            onDetectFromTitleChange={handleLanguageDetectFromTitleChange}
+            onFieldSelectorChange={handleLanguageFieldSelectorChange}
           />
         </div>
 

@@ -2,6 +2,7 @@ import {
   DownloadScraperMangaRequest,
   FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
+  hasScraperFieldSelectorValue,
   QueueScraperDownloadResult,
   ScraperDetailsFeatureConfig,
   ScraperPagesFeatureConfig,
@@ -31,6 +32,7 @@ type QueueStandaloneScraperCardDownloadOptions = {
   pagesConfig: ScraperPagesFeatureConfig | null;
   sourceUrl: string;
   fallbackTitle?: string | null;
+  fallbackLanguageCodes?: string[] | null;
   libraryMangas?: Manga[];
   replaceMangaId?: string | null;
 };
@@ -84,7 +86,7 @@ export const canQueueStandaloneScraperDownload = (
   detailsConfig: ScraperDetailsFeatureConfig | null,
   pagesConfig: ScraperPagesFeatureConfig | null,
 ): boolean => Boolean(
-  detailsConfig?.titleSelector
+  hasScraperFieldSelectorValue(detailsConfig?.titleSelector)
   && pagesConfig
   && !usesScraperPagesChapters(pagesConfig),
 );
@@ -112,6 +114,7 @@ export async function queueStandaloneScraperCardDownload({
   pagesConfig,
   sourceUrl,
   fallbackTitle,
+  fallbackLanguageCodes = [],
   libraryMangas = [],
   replaceMangaId = null,
 }: QueueStandaloneScraperCardDownloadOptions): Promise<QueueStandaloneScraperCardDownloadResult> {
@@ -168,6 +171,8 @@ export async function queueStandaloneScraperCardDownload({
     });
   const resolvedReplaceMangaId = replaceMangaId || linkedManga?.id || null;
   const title = details.title || normalizeFallbackTitle(fallbackTitle);
+  const languageCodes = details.languageCodes?.length ? details.languageCodes : fallbackLanguageCodes ?? [];
+  const defaultLanguage = languageCodes[0] || scraper.globalConfig.defaultLanguage;
 
   const queueResult = await queueScraperDownload({
     title,
@@ -178,7 +183,7 @@ export async function queueStandaloneScraperCardDownload({
     sourceUrl: resolvedSourceUrl,
     replaceMangaId: resolvedReplaceMangaId || undefined,
     defaultTagIds: scraper.globalConfig.defaultTagIds,
-    defaultLanguage: scraper.globalConfig.defaultLanguage,
+    defaultLanguage,
     autoAssignSeriesOnChapterDownload: scraper.globalConfig.chapterDownloads.autoAssignSeries,
     seriesTitle: title,
   });

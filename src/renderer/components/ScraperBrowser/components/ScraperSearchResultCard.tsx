@@ -1,5 +1,6 @@
 import React from 'react';
 import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
+import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { ScraperSearchResultItem } from '@/shared/scraper';
 import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
@@ -48,6 +49,7 @@ export default function ScraperSearchResultCard({
 }: Props) {
   const actions: ScraperCardAction[] = [];
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
+  const hasLanguageCodes = Boolean(result.languageCodes?.length);
 
   if (readAction) {
     actions.push(readAction);
@@ -113,9 +115,14 @@ export default function ScraperSearchResultCard({
       coverUrl={result.thumbnailUrl}
       coverAlt={result.title}
       summary={result.summary}
-      metadata={pageCountLabel ? (
+      metadata={pageCountLabel || hasLanguageCodes ? (
         <div className="scraper-card__metadata">
-          <span>{pageCountLabel}</span>
+          {hasLanguageCodes ? (
+            <span>
+              Langue <LanguageFlags languageCodes={result.languageCodes} />
+            </span>
+          ) : null}
+          {pageCountLabel ? <span>{pageCountLabel}</span> : null}
         </div>
       ) : undefined}
       actions={actions}

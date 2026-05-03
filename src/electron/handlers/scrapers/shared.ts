@@ -1,5 +1,6 @@
 import {
   buildScraperViewHistoryCardId,
+  normalizeScraperFieldSelector,
   type DownloadScraperMangaResult,
   type ScraperAccessValidationResult,
   type ScraperBookmarkMetadataField,
@@ -90,6 +91,7 @@ const sanitizeFeatureValidationCheck = (
     "tags",
     "status",
     "pageCount",
+    "language",
     "thumbnails",
     "thumbnailsNextPage",
     "chapters",
@@ -156,7 +158,7 @@ const sanitizeDerivedValueResult = (
     sourceField: allowedFieldKeys.includes(String(derivedValue.sourceField))
       ? derivedValue.sourceField as ScraperDetailsDerivedValueResult["sourceField"]
       : undefined,
-    selector: typeof derivedValue.selector === "string" ? derivedValue.selector : undefined,
+    selector: normalizeScraperFieldSelector(derivedValue.selector),
     pattern: typeof derivedValue.pattern === "string" ? derivedValue.pattern : undefined,
     sourceSample: typeof derivedValue.sourceSample === "string" ? derivedValue.sourceSample : undefined,
     value: typeof derivedValue.value === "string" ? derivedValue.value : undefined,

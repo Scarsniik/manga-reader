@@ -1,4 +1,5 @@
 import {
+  buildScraperRegexFromInput,
   buildScraperTemplateUrl,
   resolveScraperUrl,
   ScraperDetailsDerivedValueConfig,
@@ -12,12 +13,18 @@ import { ScraperValidationPresentation } from '@/renderer/components/ScraperConf
 import { formatDisplayUrl, formatValidationDisplayValue } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 import {
   buildDocumentFailure,
+  buildLanguageDetectionConfig,
   CHECK_LABELS,
   extractSelectorValues,
   FEATURE_STATUS_META,
   getConfigSignature,
+  getInvalidRegexFieldSelectorError,
+  getLanguageDetectionFieldErrors,
+  hasScraperFieldSelectorValue,
   normalizeSelectorInput,
+  normalizeRequiredFieldSelector,
   trimOptional,
+  trimOptionalFieldSelector,
   trimOptionalSelector,
 } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
@@ -45,6 +52,7 @@ export type FakeDetailsPreview = {
   tags?: string;
   status?: string;
   pageCount?: string;
+  languageCodes: string[];
   derivedValues: Array<{ key: string; value: string }>;
 };
 
@@ -159,6 +167,19 @@ export const SELECTOR_FIELDS: Field[] = [
   },
 ];
 
+export const FIELD_SELECTOR_FIELD_NAMES = [
+  'titleSelector',
+  'coverSelector',
+  'descriptionSelector',
+  'authorsSelector',
+  'authorUrlSelector',
+  'tagsSelector',
+  'statusSelector',
+  'pageCountSelector',
+  'thumbnailsSelector',
+  'thumbnailsNextPageSelector',
+] as const;
+
 export const DERIVED_VALUE_SOURCE_OPTIONS = [
   { value: 'field', label: 'Champ deja extrait' },
   { value: 'selector', label: 'Selecteur personnalise' },
@@ -182,17 +203,20 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   urlTemplate: '',
   testUrl: '',
   testValue: '',
-  titleSelector: '',
-  coverSelector: '',
-  descriptionSelector: '',
-  authorsSelector: '',
-  authorUrlSelector: '',
-  tagsSelector: '',
-  statusSelector: '',
-  pageCountSelector: '',
+  titleSelector: { kind: 'css', value: '' },
+  coverSelector: undefined,
+  descriptionSelector: undefined,
+  authorsSelector: undefined,
+  authorUrlSelector: undefined,
+  tagsSelector: undefined,
+  statusSelector: undefined,
+  pageCountSelector: undefined,
   thumbnailsListSelector: '',
-  thumbnailsSelector: '',
-  thumbnailsNextPageSelector: '',
+  thumbnailsSelector: undefined,
+  thumbnailsNextPageSelector: undefined,
+  languageDetection: {
+    detectFromTitle: false,
+  },
   derivedValues: [],
 };
 
@@ -221,7 +245,7 @@ export const createDerivedValueFormItem = (
     ? value.sourceType
     : 'field',
   sourceField: isFieldKey(value?.sourceField) ? value.sourceField : undefined,
-  selector: trimOptionalSelector(value?.selector),
+  selector: trimOptionalFieldSelector(value?.selector),
   pattern: trimOptional(value?.pattern),
 });
 
@@ -236,12 +260,18 @@ export const buildDerivedValueConfig = (
     ? value.sourceType
     : 'field',
   sourceField: isFieldKey(value.sourceField) ? value.sourceField : undefined,
-  selector: trimOptionalSelector(value.selector),
+  selector: trimOptionalFieldSelector(value.selector),
   pattern: trimOptional(value.pattern),
 });
 
 export const hasDerivedValueContent = (value: ScraperDetailsDerivedValueConfig): boolean => (
-  Boolean(value.key || value.selector || value.pattern || value.sourceField || value.sourceType !== 'field')
+  Boolean(
+    value.key
+    || hasScraperFieldSelectorValue(value.selector)
+    || value.pattern
+    || value.sourceField
+    || value.sourceType !== 'field',
+  )
 );
 
 export const getConfiguredDerivedValueItems = (
@@ -258,17 +288,18 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   urlTemplate: trimOptional(values.urlTemplate),
   testUrl: trimOptional(values.testUrl),
   testValue: trimOptional(values.testValue),
-  titleSelector: normalizeSelectorInput(String(values.titleSelector ?? '')),
-  coverSelector: trimOptionalSelector(values.coverSelector),
-  descriptionSelector: trimOptionalSelector(values.descriptionSelector),
-  authorsSelector: trimOptionalSelector(values.authorsSelector),
-  authorUrlSelector: trimOptionalSelector(values.authorUrlSelector),
-  tagsSelector: trimOptionalSelector(values.tagsSelector),
-  statusSelector: trimOptionalSelector(values.statusSelector),
-  pageCountSelector: trimOptionalSelector(values.pageCountSelector),
+  titleSelector: normalizeRequiredFieldSelector(values.titleSelector),
+  coverSelector: trimOptionalFieldSelector(values.coverSelector),
+  descriptionSelector: trimOptionalFieldSelector(values.descriptionSelector),
+  authorsSelector: trimOptionalFieldSelector(values.authorsSelector),
+  authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
+  tagsSelector: trimOptionalFieldSelector(values.tagsSelector),
+  statusSelector: trimOptionalFieldSelector(values.statusSelector),
+  pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
   thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
-  thumbnailsSelector: trimOptionalSelector(values.thumbnailsSelector),
-  thumbnailsNextPageSelector: trimOptionalSelector(values.thumbnailsNextPageSelector),
+  thumbnailsSelector: trimOptionalFieldSelector(values.thumbnailsSelector),
+  thumbnailsNextPageSelector: trimOptionalFieldSelector(values.thumbnailsNextPageSelector),
+  languageDetection: buildLanguageDetectionConfig(values.languageDetection),
   derivedValues: getConfiguredDerivedValueItems(values.derivedValues ?? []).map(({ config }) => config),
 });
 
@@ -286,17 +317,18 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
           : '',
     ),
     testValue: trimOptional(raw.testValue),
-    titleSelector: normalizeSelectorInput(String(raw.titleSelector ?? '')),
-    coverSelector: trimOptionalSelector(raw.coverSelector),
-    descriptionSelector: trimOptionalSelector(raw.descriptionSelector),
-    authorsSelector: trimOptionalSelector(raw.authorsSelector),
-    authorUrlSelector: trimOptionalSelector(raw.authorUrlSelector),
-    tagsSelector: trimOptionalSelector(raw.tagsSelector),
-    statusSelector: trimOptionalSelector(raw.statusSelector),
-    pageCountSelector: trimOptionalSelector(raw.pageCountSelector),
+    titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
+    coverSelector: trimOptionalFieldSelector(raw.coverSelector),
+    descriptionSelector: trimOptionalFieldSelector(raw.descriptionSelector),
+    authorsSelector: trimOptionalFieldSelector(raw.authorsSelector),
+    authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
+    tagsSelector: trimOptionalFieldSelector(raw.tagsSelector),
+    statusSelector: trimOptionalFieldSelector(raw.statusSelector),
+    pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
-    thumbnailsSelector: trimOptionalSelector(raw.thumbnailsSelector),
-    thumbnailsNextPageSelector: trimOptionalSelector(raw.thumbnailsNextPageSelector),
+    thumbnailsSelector: trimOptionalFieldSelector(raw.thumbnailsSelector),
+    thumbnailsNextPageSelector: trimOptionalFieldSelector(raw.thumbnailsNextPageSelector),
+    languageDetection: buildLanguageDetectionConfig(raw.languageDetection as Record<string, unknown> | undefined),
     derivedValues: Array.isArray(raw.derivedValues)
       ? raw.derivedValues
         .map((value) => buildDerivedValueConfig(value as Partial<ScraperDetailsDerivedValueConfig>))
@@ -448,6 +480,7 @@ export const buildPreviewFromValidation = (
     tags: getSample('tags'),
     status: getSample('status'),
     pageCount: getSample('pageCount'),
+    languageCodes: validationResult.checks.find((check) => check.key === 'language')?.samples ?? [],
     derivedValues: validationResult.derivedValues
       .filter((derivedValue) => Boolean(derivedValue.value))
       .map((derivedValue) => ({
@@ -469,7 +502,7 @@ export const getSaveFieldErrors = (
   const configuredDerivedValues = getConfiguredDerivedValueItems(formValues.derivedValues);
   const seenKeys = new Map<string, string[]>();
 
-  if (!config.titleSelector) {
+  if (!hasScraperFieldSelectorValue(config.titleSelector)) {
     errors.titleSelector = 'Le selecteur du titre est requis.';
   }
 
@@ -477,13 +510,23 @@ export const getSaveFieldErrors = (
     errors.urlTemplate = 'Le template d\'URL est requis pour ce mode.';
   }
 
-  if (config.thumbnailsListSelector && !config.thumbnailsSelector) {
+  if (config.thumbnailsListSelector && !hasScraperFieldSelectorValue(config.thumbnailsSelector)) {
     errors.thumbnailsSelector = 'Le selecteur des vignettes est requis quand un conteneur est defini.';
   }
 
-  if (config.thumbnailsNextPageSelector && !config.thumbnailsSelector) {
+  if (hasScraperFieldSelectorValue(config.thumbnailsNextPageSelector)
+    && !hasScraperFieldSelectorValue(config.thumbnailsSelector)) {
     errors.thumbnailsSelector = 'Le selecteur des vignettes est requis quand une page suivante est definie.';
   }
+
+  Object.assign(errors, getLanguageDetectionFieldErrors(config.languageDetection));
+
+  FIELD_SELECTOR_FIELD_NAMES.forEach((fieldName) => {
+    const error = getInvalidRegexFieldSelectorError(config[fieldName]);
+    if (error) {
+      errors[fieldName] = error;
+    }
+  });
 
   configuredDerivedValues.forEach(({ draftId, config: derivedValue }) => {
     if (!derivedValue.key) {
@@ -496,8 +539,15 @@ export const getSaveFieldErrors = (
       errors[`derivedValues.${draftId}.sourceField`] = 'Choisis le champ source a reutiliser.';
     }
 
-    if (derivedValue.sourceType === 'selector' && !derivedValue.selector) {
+    if (derivedValue.sourceType === 'selector' && !hasScraperFieldSelectorValue(derivedValue.selector)) {
       errors[`derivedValues.${draftId}.selector`] = 'Le selecteur source est requis.';
+    }
+
+    if (derivedValue.sourceType === 'selector') {
+      const selectorError = getInvalidRegexFieldSelectorError(derivedValue.selector);
+      if (selectorError) {
+        errors[`derivedValues.${draftId}.selector`] = selectorError;
+      }
     }
 
     if (derivedValue.sourceType === 'html' && !derivedValue.pattern) {
@@ -506,7 +556,7 @@ export const getSaveFieldErrors = (
 
     if (derivedValue.pattern) {
       try {
-        new RegExp(derivedValue.pattern);
+        buildScraperRegexFromInput(derivedValue.pattern);
       } catch {
         errors[`derivedValues.${draftId}.pattern`] = 'Regex invalide.';
       }

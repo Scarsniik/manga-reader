@@ -1,4 +1,5 @@
 import React from 'react';
+import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { FakeDetailsPreview as FakeDetailsPreviewData } from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
@@ -38,6 +39,11 @@ export default function FakeDetailsPreview({ preview }: Props) {
           ) : null}
           {pageCountLabel ? (
             <span className="scraper-feature-pill">{pageCountLabel}</span>
+          ) : null}
+          {preview.languageCodes.length ? (
+            <span className="scraper-feature-pill">
+              Langue <LanguageFlags languageCodes={preview.languageCodes} />
+            </span>
           ) : null}
         </div>
 

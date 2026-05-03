@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ScraperChapterItem,
   FetchScraperDocumentResult,
+  formatScraperFieldSelectorForDisplay,
+  ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
@@ -26,6 +28,7 @@ import {
   buildChaptersConfig,
   buildPreviewFromValidation,
   buildValidationPresentation,
+  CHAPTER_FIELD_SELECTOR_NAMES,
   CHAPTER_IMAGE_SELECTOR_FIELD,
   CHAPTER_ITEM_SELECTOR_FIELD,
   CHAPTER_LABEL_SELECTOR_FIELD,
@@ -60,6 +63,7 @@ export default function ScraperChaptersFeatureEditor({
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const {
     formValues,
+    setFormValues,
     fieldErrors,
     setFieldErrors,
     validationResult,
@@ -76,6 +80,7 @@ export default function ScraperChaptersFeatureEditor({
     setSaveError,
     saveMessage,
     setSaveMessage,
+    clearFieldFeedback,
     createTextFieldChangeHandler,
     createCheckboxChangeHandler,
     resetEditorState,
@@ -132,6 +137,16 @@ export default function ScraperChaptersFeatureEditor({
   const handleFieldChange = useCallback((fieldName: keyof typeof initialConfig) => (
     createTextFieldChangeHandler(fieldName)
   ), [createTextFieldChangeHandler]);
+
+  const handleFieldSelectorChange = useCallback((fieldName: keyof typeof initialConfig) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      [fieldName]: nextValue,
+    }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, setFormValues]);
 
   const handleCheckboxChange = useCallback((fieldName: keyof typeof initialConfig) => (
     createCheckboxChangeHandler(fieldName)
@@ -209,7 +224,7 @@ export default function ScraperChaptersFeatureEditor({
           }
           : {
             key: 'chapters',
-            selector: config.chapterItemSelector,
+            selector: `${config.chapterItemSelector} -> ${formatScraperFieldSelectorForDisplay(config.chapterUrlSelector)}, ${formatScraperFieldSelectorForDisplay(config.chapterLabelSelector)}`,
             required: true,
             matchedCount: 0,
             issueCode: 'no_match',
@@ -217,7 +232,7 @@ export default function ScraperChaptersFeatureEditor({
       } catch {
         chaptersCheck = {
           key: 'chapters',
-          selector: config.chapterItemSelector,
+          selector: `${config.chapterItemSelector} -> ${formatScraperFieldSelectorForDisplay(config.chapterUrlSelector)}, ${formatScraperFieldSelectorForDisplay(config.chapterLabelSelector)}`,
           required: true,
           matchedCount: 0,
           issueCode: 'invalid_selector',
@@ -342,9 +357,13 @@ export default function ScraperChaptersFeatureEditor({
               CHAPTER_LABEL_SELECTOR_FIELD,
               CHAPTER_IMAGE_SELECTOR_FIELD,
             ]}
+            fieldSelectorNames={CHAPTER_FIELD_SELECTOR_NAMES}
             getValue={(fieldName) => formValues[fieldName as keyof typeof initialConfig] ?? ''}
             getError={(fieldName) => fieldErrors[fieldName]}
             onFieldChange={(fieldName) => handleFieldChange(fieldName as keyof typeof initialConfig)}
+            onFieldSelectorChange={(fieldName) => (
+              handleFieldSelectorChange(fieldName as keyof typeof initialConfig)
+            )}
           />
 
           <ScraperConfigField

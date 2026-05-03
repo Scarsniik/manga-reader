@@ -3,6 +3,143 @@ export type ScraperFeatureKind = 'search' | 'details' | 'author' | 'chapters' | 
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
 export type ScraperRequestMethod = 'GET' | 'POST';
 export type ScraperRequestBodyMode = 'form' | 'raw';
+export type ScraperFieldSelectorKind = 'css' | 'regex';
+
+export interface ScraperFieldSelector {
+  kind: ScraperFieldSelectorKind;
+  value: string;
+}
+
+export interface ScraperLanguageDetectionConfig {
+  detectFromTitle: boolean;
+  languageSelector?: ScraperFieldSelector;
+  processedLanguageSelector?: ScraperFieldSelector;
+}
+
+export interface ScraperRegexPattern {
+  source: string;
+  flags: string;
+}
+
+export type ScraperFieldSelectorInput = string | Partial<ScraperFieldSelector> | null | undefined;
+
+const SCRAPER_REGEX_FLAGS_PATTERN = /^[dgimsuvy]*$/;
+
+function isRegexSlashEscaped(value: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let position = index - 1; position >= 0 && value[position] === '\\'; position -= 1) {
+    backslashCount += 1;
+  }
+
+  return backslashCount % 2 === 1;
+}
+
+function findRegexLiteralClosingSlash(value: string): number {
+  for (let index = value.length - 1; index > 0; index -= 1) {
+    if (value[index] === '/' && !isRegexSlashEscaped(value, index)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+export function parseScraperRegexPatternInput(input: string): ScraperRegexPattern {
+  const trimmed = input.trim();
+
+  if (trimmed.startsWith('/')) {
+    const closingSlashIndex = findRegexLiteralClosingSlash(trimmed);
+    const flags = closingSlashIndex > 0 ? trimmed.slice(closingSlashIndex + 1) : '';
+
+    if (closingSlashIndex > 0 && SCRAPER_REGEX_FLAGS_PATTERN.test(flags)) {
+      return {
+        source: trimmed.slice(1, closingSlashIndex),
+        flags,
+      };
+    }
+  }
+
+  return {
+    source: trimmed,
+    flags: '',
+  };
+}
+
+function appendMissingRegexFlags(flags: string, defaultFlags: string): string {
+  return defaultFlags.split('').reduce((nextFlags, flag) => (
+    nextFlags.includes(flag) ? nextFlags : `${nextFlags}${flag}`
+  ), flags);
+}
+
+export function buildScraperRegexFromInput(input: string, defaultFlags = ''): RegExp {
+  const pattern = parseScraperRegexPatternInput(input);
+  return new RegExp(pattern.source, appendMissingRegexFlags(pattern.flags, defaultFlags));
+}
+
+export function normalizeScraperCssSelectorInput(input: string): string {
+  return input
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function createScraperFieldSelector(
+  kind: ScraperFieldSelectorKind = 'css',
+  value = '',
+): ScraperFieldSelector {
+  return {
+    kind,
+    value,
+  };
+}
+
+export function normalizeScraperFieldSelector(input: unknown): ScraperFieldSelector | undefined {
+  if (typeof input === 'string') {
+    const value = normalizeScraperCssSelectorInput(input);
+    return value ? createScraperFieldSelector('css', value) : undefined;
+  }
+
+  if (!input || typeof input !== 'object') {
+    return undefined;
+  }
+
+  const raw = input as Record<string, unknown>;
+  const kind = raw.kind === 'regex' || raw.mode === 'regex' ? 'regex' : 'css';
+  const rawValue = typeof raw.value === 'string'
+    ? raw.value
+    : typeof raw.selector === 'string'
+      ? raw.selector
+      : '';
+  const value = kind === 'css'
+    ? normalizeScraperCssSelectorInput(rawValue)
+    : rawValue.trim();
+
+  return value ? createScraperFieldSelector(kind, value) : undefined;
+}
+
+export function getScraperFieldSelectorValue(input: ScraperFieldSelectorInput): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  return typeof input?.value === 'string' ? input.value : '';
+}
+
+export function hasScraperFieldSelectorValue(input: ScraperFieldSelectorInput): boolean {
+  return getScraperFieldSelectorValue(input).trim().length > 0;
+}
+
+export function formatScraperFieldSelectorForDisplay(input: ScraperFieldSelectorInput): string {
+  const normalized = normalizeScraperFieldSelector(input);
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.kind === 'regex'
+    ? `regex: ${normalized.value}`
+    : normalized.value;
+}
 
 export interface ScraperRequestField {
   key: string;
@@ -82,6 +219,7 @@ export type ScraperFeatureValidationCheckKey =
   | 'tags'
   | 'status'
   | 'pageCount'
+  | 'language'
   | 'thumbnails'
   | 'thumbnailsNextPage'
   | 'chapters'
@@ -120,7 +258,7 @@ export interface ScraperDetailsDerivedValueConfig {
   key: string;
   sourceType: ScraperDetailsDerivedValueSourceType;
   sourceField?: ScraperFeatureValidationCheckKey;
-  selector?: string;
+  selector?: ScraperFieldSelector;
   pattern?: string;
 }
 
@@ -128,7 +266,7 @@ export interface ScraperDetailsDerivedValueResult {
   key: string;
   sourceType: ScraperDetailsDerivedValueSourceType;
   sourceField?: ScraperFeatureValidationCheckKey;
-  selector?: string;
+  selector?: ScraperFieldSelector;
   pattern?: string;
   sourceSample?: string;
   value?: string;
@@ -151,13 +289,14 @@ export interface ScraperFeatureValidationResult {
 export interface ScraperCardListConfig {
   resultListSelector?: string;
   resultItemSelector: string;
-  titleSelector: string;
-  detailUrlSelector?: string;
-  authorUrlSelector?: string;
-  thumbnailSelector?: string;
-  summarySelector?: string;
-  pageCountSelector?: string;
-  nextPageSelector?: string;
+  titleSelector: ScraperFieldSelector;
+  detailUrlSelector?: ScraperFieldSelector;
+  authorUrlSelector?: ScraperFieldSelector;
+  thumbnailSelector?: ScraperFieldSelector;
+  summarySelector?: ScraperFieldSelector;
+  pageCountSelector?: ScraperFieldSelector;
+  nextPageSelector?: ScraperFieldSelector;
+  languageDetection: ScraperLanguageDetectionConfig;
 }
 
 export interface ScraperSearchFeatureConfig extends ScraperCardListConfig {
@@ -180,6 +319,7 @@ export interface ScraperSearchResultItem {
   thumbnailUrl?: string;
   summary?: string;
   pageCount?: string;
+  languageCodes?: string[];
 }
 
 export interface ScraperDetailsFeatureConfig {
@@ -187,17 +327,18 @@ export interface ScraperDetailsFeatureConfig {
   urlTemplate?: string;
   testUrl?: string;
   testValue?: string;
-  titleSelector: string;
-  coverSelector?: string;
-  descriptionSelector?: string;
-  authorsSelector?: string;
-  authorUrlSelector?: string;
-  tagsSelector?: string;
-  statusSelector?: string;
-  pageCountSelector?: string;
+  titleSelector: ScraperFieldSelector;
+  coverSelector?: ScraperFieldSelector;
+  descriptionSelector?: ScraperFieldSelector;
+  authorsSelector?: ScraperFieldSelector;
+  authorUrlSelector?: ScraperFieldSelector;
+  tagsSelector?: ScraperFieldSelector;
+  statusSelector?: ScraperFieldSelector;
+  pageCountSelector?: ScraperFieldSelector;
   thumbnailsListSelector?: string;
-  thumbnailsSelector?: string;
-  thumbnailsNextPageSelector?: string;
+  thumbnailsSelector?: ScraperFieldSelector;
+  thumbnailsNextPageSelector?: ScraperFieldSelector;
+  languageDetection: ScraperLanguageDetectionConfig;
   derivedValues: ScraperDetailsDerivedValueConfig[];
 }
 
@@ -207,9 +348,9 @@ export interface ScraperChaptersFeatureConfig {
   templateBase?: ScraperPagesTemplateBase;
   chapterListSelector?: string;
   chapterItemSelector: string;
-  chapterUrlSelector: string;
-  chapterImageSelector?: string;
-  chapterLabelSelector: string;
+  chapterUrlSelector: ScraperFieldSelector;
+  chapterImageSelector?: ScraperFieldSelector;
+  chapterLabelSelector: ScraperFieldSelector;
   reverseOrder?: boolean;
 }
 
@@ -217,7 +358,7 @@ export interface ScraperPagesFeatureConfig {
   urlStrategy: ScraperPagesUrlStrategy;
   urlTemplate?: string;
   templateBase?: ScraperPagesTemplateBase;
-  pageImageSelector?: string;
+  pageImageSelector?: ScraperFieldSelector;
   linkedToChapters?: boolean;
 }
 

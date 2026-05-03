@@ -5,6 +5,7 @@ import type {
   ScraperBookmarkRecord,
   ScraperRecord,
 } from '@/shared/scraper';
+import { hasScraperFieldSelectorValue } from '@/shared/scraper';
 import {
   removeScraperBookmark,
   saveScraperBookmark,
@@ -228,7 +229,7 @@ const enrichBookmarkRequestFromDetails = async (
   }
 
   const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
-  if (!detailsConfig?.titleSelector) {
+  if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
     return requestWithGlobalConfig;
   }
 

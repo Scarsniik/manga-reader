@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   FetchScraperDocumentResult,
+  formatScraperFieldSelectorForDisplay,
   ScraperDetailsDerivedValueResult,
+  ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
@@ -9,6 +11,7 @@ import {
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperLanguageDetectionSection from '@/renderer/components/ScraperConfig/shared/ScraperLanguageDetectionSection';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
   ScraperConfigFieldGrid,
@@ -32,6 +35,7 @@ import {
   DerivedValueFormItem,
   extractSelectorValues,
   FEATURE_STATUS_META,
+  FIELD_SELECTOR_FIELD_NAMES,
   getConfigSignature,
   getInitialConfig,
   getSaveFieldErrors,
@@ -50,6 +54,7 @@ import {
   extractScraperDetailsFieldValues,
   extractScraperDetailsThumbnailsFromDocument,
   extractScraperDetailsThumbnailsPageFromDocument,
+  extractScraperLanguageCodesFromRoot,
 } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
@@ -90,6 +95,7 @@ export default function ScraperDetailsFeatureEditor({
     clearFieldError,
     clearFieldErrorsByPrefix,
     clearFieldErrorsWhere,
+    clearFieldFeedback,
     createTextFieldChangeHandler,
     resetEditorState,
   } = useScraperFeatureEditorState<DetailsFormState>({
@@ -123,14 +129,52 @@ export default function ScraperDetailsFeatureEditor({
     [validationResult],
   );
 
-  const handleFieldChange = useCallback((fieldName: Exclude<keyof DetailsFormState, 'derivedValues'>) => (
+  const handleFieldChange = useCallback((fieldName: Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>) => (
     createTextFieldChangeHandler(fieldName)
   ), [createTextFieldChangeHandler]);
+
+  const handleFieldSelectorChange = useCallback((
+    fieldName: Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>,
+  ) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      [fieldName]: nextValue,
+    }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageDetectFromTitleChange = useCallback((enabled: boolean) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        detectFromTitle: enabled,
+      },
+    }));
+    clearFieldFeedback('languageDetection.detectFromTitle');
+  }, [clearFieldFeedback, setFormValues]);
+
+  const handleLanguageFieldSelectorChange = useCallback((
+    fieldName: 'languageSelector' | 'processedLanguageSelector',
+  ) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...previous.languageDetection,
+        [fieldName]: nextValue,
+      },
+    }));
+    clearFieldFeedback(`languageDetection.${fieldName}`);
+  }, [clearFieldFeedback, setFormValues]);
 
   const updateDerivedValue = useCallback((
     draftId: string,
     field: keyof Omit<DerivedValueFormItem, 'draftId'>,
-    nextValue: string,
+    nextValue: string | ScraperFieldSelector,
   ) => {
     setFormValues((previous) => ({
       ...previous,
@@ -158,7 +202,7 @@ export default function ScraperDetailsFeatureEditor({
         if (field === 'sourceField') {
           return {
             ...item,
-            sourceField: isFieldKey(nextValue) ? nextValue : undefined,
+            sourceField: typeof nextValue === 'string' && isFieldKey(nextValue) ? nextValue : undefined,
           };
         }
 
@@ -251,7 +295,7 @@ export default function ScraperDetailsFeatureEditor({
 
       const testSelector = (
         key: ScraperFeatureValidationCheck['key'],
-        selector: string | undefined,
+        selector: ScraperFieldSelector | undefined,
         required: boolean,
       ) => {
         if (!selector) {
@@ -266,7 +310,7 @@ export default function ScraperDetailsFeatureEditor({
             }
             checks.push({
               key,
-              selector,
+              selector: formatScraperFieldSelectorForDisplay(selector),
               required,
               matchedCount: values.length,
               sample: values[0],
@@ -276,7 +320,7 @@ export default function ScraperDetailsFeatureEditor({
 
           checks.push({
             key,
-            selector,
+            selector: formatScraperFieldSelectorForDisplay(selector),
             required,
             matchedCount: 0,
             issueCode: 'no_match',
@@ -288,7 +332,7 @@ export default function ScraperDetailsFeatureEditor({
         } catch {
           checks.push({
             key,
-            selector,
+            selector: formatScraperFieldSelectorForDisplay(selector),
             required,
             matchedCount: 0,
             issueCode: 'invalid_selector',
@@ -313,7 +357,7 @@ export default function ScraperDetailsFeatureEditor({
           if (authorUrls.length > 0) {
             checks.push({
               key: 'authorUrl',
-              selector: config.authorUrlSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.authorUrlSelector),
               required: false,
               matchedCount: authorUrls.length,
               sample: authorUrls[0],
@@ -321,7 +365,7 @@ export default function ScraperDetailsFeatureEditor({
           } else {
             checks.push({
               key: 'authorUrl',
-              selector: config.authorUrlSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.authorUrlSelector),
               required: false,
               matchedCount: 0,
               issueCode: 'no_match',
@@ -330,7 +374,7 @@ export default function ScraperDetailsFeatureEditor({
         } catch {
           checks.push({
             key: 'authorUrl',
-            selector: config.authorUrlSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.authorUrlSelector),
             required: false,
             matchedCount: 0,
             issueCode: 'invalid_selector',
@@ -340,10 +384,42 @@ export default function ScraperDetailsFeatureEditor({
       testSelector('tags', config.tagsSelector, false);
       testSelector('status', config.statusSelector, false);
       testSelector('pageCount', config.pageCountSelector, false);
+      if (
+        config.languageDetection?.detectFromTitle
+        || config.languageDetection?.languageSelector
+        || config.languageDetection?.processedLanguageSelector
+      ) {
+        try {
+          const languageCodes = extractScraperLanguageCodesFromRoot(
+            doc,
+            config.languageDetection,
+            extractedValuesByKey.title?.[0],
+          );
+
+          checks.push({
+            key: 'language',
+            selector: 'Langue',
+            required: false,
+            matchedCount: languageCodes.length,
+            sample: languageCodes[0],
+            samples: languageCodes,
+            issueCode: languageCodes.length > 0 ? undefined : 'no_match',
+          });
+        } catch {
+          checks.push({
+            key: 'language',
+            selector: 'Langue',
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
       if (config.thumbnailsSelector) {
+        const thumbnailsSelectorLabel = formatScraperFieldSelectorForDisplay(config.thumbnailsSelector);
         const selectorLabel = config.thumbnailsListSelector
-          ? `${config.thumbnailsListSelector} -> ${config.thumbnailsSelector}`
-          : config.thumbnailsSelector;
+          ? `${config.thumbnailsListSelector} -> ${thumbnailsSelectorLabel}`
+          : thumbnailsSelectorLabel;
 
         try {
           const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, {
@@ -384,7 +460,7 @@ export default function ScraperDetailsFeatureEditor({
 
           checks.push({
             key: 'thumbnailsNextPage',
-            selector: config.thumbnailsNextPageSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.thumbnailsNextPageSelector),
             required: false,
             matchedCount: thumbnailsPage.nextPageUrl ? 1 : 0,
             sample: thumbnailsPage.nextPageUrl,
@@ -393,7 +469,7 @@ export default function ScraperDetailsFeatureEditor({
         } catch {
           checks.push({
             key: 'thumbnailsNextPage',
-            selector: config.thumbnailsNextPageSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.thumbnailsNextPageSelector),
             required: false,
             matchedCount: 0,
             issueCode: 'invalid_selector',
@@ -518,13 +594,33 @@ export default function ScraperDetailsFeatureEditor({
 
           <ScraperConfigFieldGrid
             fields={SELECTOR_FIELDS}
+            fieldSelectorNames={FIELD_SELECTOR_FIELD_NAMES}
             getValue={(fieldName) => (
-              formValues[fieldName as Exclude<keyof DetailsFormState, 'derivedValues'>] ?? ''
+              formValues[fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>] ?? ''
             )}
             getError={(fieldName) => fieldErrors[fieldName]}
             onFieldChange={(fieldName) => (
-              handleFieldChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues'>)
+              handleFieldChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>)
             )}
+            onFieldSelectorChange={(fieldName) => (
+              handleFieldSelectorChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>)
+            )}
+          />
+        </div>
+
+        <div className="scraper-config-section">
+          <div className="scraper-config-section__header">
+            <h4>Langue</h4>
+            <p>
+              Configure comment detecter la langue de la fiche.
+            </p>
+          </div>
+
+          <ScraperLanguageDetectionSection
+            value={formValues.languageDetection}
+            fieldErrors={fieldErrors}
+            onDetectFromTitleChange={handleLanguageDetectFromTitleChange}
+            onFieldSelectorChange={handleLanguageFieldSelectorChange}
           />
         </div>
 

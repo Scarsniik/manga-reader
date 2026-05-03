@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScraperSearchResultItem } from '@/shared/scraper';
+import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import {
   formatScraperPageCountForDisplay,
   ScraperRuntimeSearchPageResult,
@@ -83,6 +84,11 @@ export default function SearchFeaturePreview({
                 {result.summary ? <p>{result.summary}</p> : null}
                 {pageCountLabel ? (
                   <div className="scraper-fake-search-card__meta">{pageCountLabel}</div>
+                ) : null}
+                {result.languageCodes?.length ? (
+                  <div className="scraper-fake-search-card__meta">
+                    Langue <LanguageFlags languageCodes={result.languageCodes} />
+                  </div>
                 ) : null}
                 {result.detailUrl ? (
                   <div className="scraper-fake-search-card__meta">Lien de fiche detecte</div>

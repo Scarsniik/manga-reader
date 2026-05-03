@@ -1,4 +1,6 @@
 import React from 'react';
+import { ScraperFieldSelector } from '@/shared/scraper';
+import ScraperFieldSelectorField from '@/renderer/components/ScraperConfig/shared/ScraperFieldSelectorField';
 import {
   DERIVED_VALUE_FIELD_OPTIONS,
   DERIVED_VALUE_SOURCE_OPTIONS,
@@ -15,7 +17,7 @@ type Props = {
   onUpdate: (
     draftId: string,
     field: keyof Omit<DerivedValueFormItem, 'draftId'>,
-    nextValue: string,
+    nextValue: string | ScraperFieldSelector,
   ) => void;
 };
 
@@ -76,7 +78,7 @@ type DerivedValueCardProps = {
   onUpdate: (
     draftId: string,
     field: keyof Omit<DerivedValueFormItem, 'draftId'>,
-    nextValue: string,
+    nextValue: string | ScraperFieldSelector,
   ) => void;
 };
 
@@ -167,21 +169,18 @@ function DerivedValueCard({
         ) : null}
 
         {isSelectorSource ? (
-          <div className="mh-form__field">
-            <label htmlFor={`derived-selector-${derivedValue.draftId}`}>Selecteur source *</label>
-            <input
-              id={`derived-selector-${derivedValue.draftId}`}
-              type="text"
-              placeholder="Exemple : #cif .iw img@src"
-              value={derivedValue.selector ?? ''}
-              onChange={(event) => onUpdate(derivedValue.draftId, 'selector', event.target.value)}
-            />
-            {fieldErrors[`derivedValues.${derivedValue.draftId}.selector`] ? (
-              <div className="mh-form__field-error">
-                {fieldErrors[`derivedValues.${derivedValue.draftId}.selector`]}
-              </div>
-            ) : null}
-          </div>
+          <ScraperFieldSelectorField
+            field={{
+              name: `derived-selector-${derivedValue.draftId}`,
+              label: 'Selecteur source',
+              type: 'text',
+              required: true,
+              placeholder: 'Exemple : #cif .iw img@src',
+            }}
+            value={derivedValue.selector}
+            error={fieldErrors[`derivedValues.${derivedValue.draftId}.selector`]}
+            onChange={(nextValue) => onUpdate(derivedValue.draftId, 'selector', nextValue)}
+          />
         ) : null}
 
         <div className="mh-form__field">

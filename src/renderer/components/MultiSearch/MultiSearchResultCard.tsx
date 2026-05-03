@@ -1,11 +1,9 @@
 import React from "react";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
+import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import { getScraperBookmarkKey } from "@/renderer/stores/scraperBookmarks";
 import type { Manga } from "@/renderer/types";
-import {
-  getLanguageFlagCode,
-  getLanguageLabel,
-} from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { getLanguageLabel } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type {
   MultiSearchMergedResult,
   MultiSearchSourceResult,
@@ -13,16 +11,6 @@ import type {
 import { findMangaLinkedToSource } from "@/renderer/utils/mangaSource";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
-import chinaFlag from "flag-icons/flags/4x3/cn.svg";
-import germanyFlag from "flag-icons/flags/4x3/de.svg";
-import spainFlag from "flag-icons/flags/4x3/es.svg";
-import franceFlag from "flag-icons/flags/4x3/fr.svg";
-import unitedKingdomFlag from "flag-icons/flags/4x3/gb.svg";
-import italyFlag from "flag-icons/flags/4x3/it.svg";
-import japanFlag from "flag-icons/flags/4x3/jp.svg";
-import southKoreaFlag from "flag-icons/flags/4x3/kr.svg";
-import portugalFlag from "flag-icons/flags/4x3/pt.svg";
-import russiaFlag from "flag-icons/flags/4x3/ru.svg";
 import "./card.scss";
 
 type Props = {
@@ -51,53 +39,6 @@ const closeDetails = (details: HTMLDetailsElement | null) => {
   if (details) {
     details.open = false;
   }
-};
-
-const flagAssetsByCode: Record<string, string> = {
-  cn: chinaFlag,
-  de: germanyFlag,
-  es: spainFlag,
-  fr: franceFlag,
-  gb: unitedKingdomFlag,
-  it: italyFlag,
-  jp: japanFlag,
-  kr: southKoreaFlag,
-  pt: portugalFlag,
-  ru: russiaFlag,
-};
-
-const renderLanguageFlags = (languageCodes: string[]): React.ReactNode => {
-  const codes = languageCodes.length ? languageCodes : ["unknown"];
-
-  return (
-    <span className="multi-search-card__language-flags" aria-hidden="true">
-      {codes.map((languageCode) => {
-        const flagCode = getLanguageFlagCode(languageCode);
-        const languageLabel = getLanguageLabel(languageCode);
-        const flagAsset = flagAssetsByCode[flagCode];
-
-        return flagAsset ? (
-          <img
-            key={`${languageCode}-${flagCode}`}
-            className="multi-search-card__language-flag"
-            src={flagAsset}
-            alt=""
-            title={languageLabel}
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <span
-            key={languageCode}
-            className="multi-search-card__language-unknown"
-            title={languageLabel}
-          >
-            ?
-          </span>
-        );
-      })}
-    </span>
-  );
 };
 
 type CoverCandidate = {
@@ -180,7 +121,7 @@ export default function MultiSearchResultCard({
   const metadata = (
     <div className="multi-search-card__metadata">
       <span title={formatValues(languageLabels, "Non renseignee")}>
-        Langues : {renderLanguageFlags(result.sourceLanguageCodes)}
+        Langues : <LanguageFlags languageCodes={result.sourceLanguageCodes} />
       </span>
       <span>Types : {formatValues(result.contentTypes, "Non renseigne")}</span>
       {pageCountLabel ? <span>{pageCountLabel}</span> : null}
@@ -212,7 +153,7 @@ export default function MultiSearchResultCard({
                   <div>
                     <strong>{source.scraper.name}</strong>
                     <span title={getSourceLanguageTitle(source)}>
-                      {renderLanguageFlags(source.sourceLanguageCodes)}
+                      <LanguageFlags languageCodes={source.sourceLanguageCodes} />
                     </span>
                   </div>
                   <div className="multi-search-card__source-states">
@@ -305,7 +246,7 @@ export default function MultiSearchResultCard({
               >
                 <strong>{source.scraper.name}</strong>
                 <span title={getSourceLanguageTitle(source)}>
-                  {renderLanguageFlags(source.sourceLanguageCodes)}
+                  <LanguageFlags languageCodes={source.sourceLanguageCodes} />
                 </span>
               </button>
             ))}

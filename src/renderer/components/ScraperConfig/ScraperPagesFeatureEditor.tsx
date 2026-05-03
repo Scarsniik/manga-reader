@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FetchScraperDocumentResult,
+  formatScraperFieldSelectorForDisplay,
+  hasScraperFieldSelectorValue,
+  ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationCheck,
   ScraperFeatureValidationResult,
   ScraperPagesFeatureConfig,
 } from '@/shared/scraper';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
+import ScraperFieldSelectorField from '@/renderer/components/ScraperConfig/shared/ScraperFieldSelectorField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
@@ -61,6 +65,7 @@ export default function ScraperPagesFeatureEditor({
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const {
     formValues,
+    setFormValues,
     fieldErrors,
     setFieldErrors,
     validationResult,
@@ -77,6 +82,7 @@ export default function ScraperPagesFeatureEditor({
     setSaveError,
     saveMessage,
     setSaveMessage,
+    clearFieldFeedback,
     createTextFieldChangeHandler,
     createCheckboxChangeHandler,
     resetEditorState,
@@ -216,6 +222,16 @@ export default function ScraperPagesFeatureEditor({
     createTextFieldChangeHandler(fieldName)
   ), [createTextFieldChangeHandler]);
 
+  const handleFieldSelectorChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
+    nextValue: ScraperFieldSelector,
+  ) => {
+    setFormValues((previous) => ({
+      ...previous,
+      [fieldName]: nextValue,
+    }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, setFormValues]);
+
   const handleCheckboxChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
     createCheckboxChangeHandler(fieldName)
   ), [createCheckboxChangeHandler]);
@@ -301,7 +317,7 @@ export default function ScraperPagesFeatureEditor({
       }
 
       let pagesCheck: ScraperFeatureValidationCheck;
-      if (!config.pageImageSelector) {
+      if (!hasScraperFieldSelectorValue(config.pageImageSelector)) {
         if (config.urlStrategy === 'template' && hasPagePlaceholder(config.urlTemplate)) {
           const directPageUrls: string[] = [];
           const templateBaseUrl = resolveTemplateBaseUrl(
@@ -376,7 +392,7 @@ export default function ScraperPagesFeatureEditor({
       } else if (!typedDocumentResult.html) {
         pagesCheck = {
           key: 'pages',
-          selector: config.pageImageSelector,
+          selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
           required: true,
           matchedCount: 0,
           issueCode: 'no_match',
@@ -384,15 +400,19 @@ export default function ScraperPagesFeatureEditor({
       } else {
         const parser = new DOMParser();
         const doc = parser.parseFromString(typedDocumentResult.html, 'text/html');
+        const pageImageSelector = config.pageImageSelector;
+        if (!pageImageSelector) {
+          throw new Error('Le selecteur des pages est requis.');
+        }
 
         try {
           const pageDocumentUrl = typedDocumentResult.finalUrl || typedDocumentResult.requestedUrl;
-          const values = extractSelectorValues(doc, config.pageImageSelector)
+          const values = extractSelectorValues(doc, pageImageSelector)
             .map((value) => toAbsoluteUrl(value, pageDocumentUrl));
           pagesCheck = values.length > 0
             ? {
               key: 'pages',
-              selector: config.pageImageSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
               required: true,
               matchedCount: values.length,
               sample: values[0],
@@ -400,7 +420,7 @@ export default function ScraperPagesFeatureEditor({
             }
             : {
               key: 'pages',
-              selector: config.pageImageSelector,
+              selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
               required: true,
               matchedCount: 0,
               issueCode: 'no_match',
@@ -408,7 +428,7 @@ export default function ScraperPagesFeatureEditor({
         } catch {
           pagesCheck = {
             key: 'pages',
-            selector: config.pageImageSelector,
+            selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
             required: true,
             matchedCount: 0,
             issueCode: 'invalid_selector',
@@ -576,11 +596,11 @@ export default function ScraperPagesFeatureEditor({
           </div>
 
           <div className="scraper-config-section__grid">
-            <ScraperConfigField
+            <ScraperFieldSelectorField
               field={PAGE_IMAGE_SELECTOR_FIELD}
               value={formValues.pageImageSelector}
               error={fieldErrors.pageImageSelector}
-              onChange={handleFieldChange('pageImageSelector')}
+              onChange={handleFieldSelectorChange('pageImageSelector')}
             />
           </div>
         </div>

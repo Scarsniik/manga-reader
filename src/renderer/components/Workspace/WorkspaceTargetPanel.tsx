@@ -8,7 +8,7 @@ import {
   writeWorkspaceBrowserTabCache,
 } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTarget } from "@/renderer/types/workspace";
-import type { ScraperRecord } from "@/shared/scraper";
+import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
   extractScraperDetailsFromDocument,
   getScraperChaptersFeatureConfig,
@@ -177,7 +177,9 @@ function ScraperDetailsPanel({
 
       const detailsFeature = getScraperFeature(nextScraper, "details");
       const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
-      if (!isScraperFeatureConfigured(detailsFeature) || !detailsConfig?.titleSelector) {
+      if (!isScraperFeatureConfigured(detailsFeature)
+        || !detailsConfig
+        || !hasScraperFieldSelectorValue(detailsConfig.titleSelector)) {
         setScraper(nextScraper);
         setInitialState(null);
         setError("Le composant Fiche de ce scrapper n'est pas assez configure pour ouvrir cette card.");

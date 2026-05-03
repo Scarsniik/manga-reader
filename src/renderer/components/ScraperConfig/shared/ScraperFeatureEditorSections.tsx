@@ -1,6 +1,8 @@
 import React, { ChangeEvent } from 'react';
+import { ScraperFieldSelector } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
+import ScraperFieldSelectorField from '@/renderer/components/ScraperConfig/shared/ScraperFieldSelectorField';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
 
 type ScraperFeatureActionsProps = {
@@ -56,28 +58,48 @@ export function ScraperResolvedUrlPreview({
 
 type ScraperConfigFieldGridProps = {
   fields: Field[];
-  getValue: (fieldName: string) => string | boolean | undefined;
+  fieldSelectorNames?: readonly string[];
+  getValue: (fieldName: string) => string | boolean | ScraperFieldSelector | undefined;
   getError: (fieldName: string) => string | undefined;
   onFieldChange: (fieldName: string) => (event: ChangeEvent<HTMLInputElement>) => void;
+  onFieldSelectorChange?: (fieldName: string) => (value: ScraperFieldSelector) => void;
 };
 
 export function ScraperConfigFieldGrid({
   fields,
+  fieldSelectorNames = [],
   getValue,
   getError,
   onFieldChange,
+  onFieldSelectorChange,
 }: ScraperConfigFieldGridProps) {
+  const fieldSelectorNameSet = new Set(fieldSelectorNames);
+
   return (
     <div className="scraper-config-section__grid">
-      {fields.map((field) => (
-        <ScraperConfigField
-          key={field.name}
-          field={field}
-          value={getValue(field.name) ?? ''}
-          error={getError(field.name)}
-          onChange={onFieldChange(field.name)}
-        />
-      ))}
+      {fields.map((field) => {
+        if (fieldSelectorNameSet.has(field.name) && onFieldSelectorChange) {
+          return (
+            <ScraperFieldSelectorField
+              key={field.name}
+              field={field}
+              value={getValue(field.name) as ScraperFieldSelector | string | undefined}
+              error={getError(field.name)}
+              onChange={onFieldSelectorChange(field.name)}
+            />
+          );
+        }
+
+        return (
+          <ScraperConfigField
+            key={field.name}
+            field={field}
+            value={getValue(field.name) as string | boolean | undefined ?? ''}
+            error={getError(field.name)}
+            onChange={onFieldChange(field.name)}
+          />
+        );
+      })}
     </div>
   );
 }

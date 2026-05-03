@@ -5,7 +5,7 @@ import {
   readWorkspaceBrowserTabCache,
   writeWorkspaceBrowserTabCache,
 } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
-import type { ScraperRecord } from "@/shared/scraper";
+import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocument,
   formatScraperValueForDisplay,
@@ -91,7 +91,10 @@ export default function WorkspaceScraperAuthorPanel({
 
       const authorFeature = getScraperFeature(nextScraper, "author");
       const authorConfig = getScraperAuthorFeatureConfig(authorFeature);
-      if (!isScraperFeatureConfigured(authorFeature) || !authorConfig?.titleSelector || !authorConfig.resultItemSelector) {
+      if (!isScraperFeatureConfigured(authorFeature)
+        || !authorConfig
+        || !hasScraperFieldSelectorValue(authorConfig.titleSelector)
+        || !authorConfig.resultItemSelector) {
         setScraper(nextScraper);
         setInitialState(null);
         setError("Le composant Auteur de ce scrapper n'est pas assez configure pour ouvrir cette page.");

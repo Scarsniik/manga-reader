@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
+import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { Manga } from '@/renderer/types';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
@@ -85,6 +86,7 @@ export default function ScraperDetailsPanel({
   const linkedStandaloneLocalManga = getLinkedLocalMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
   const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
+  const languageCodes = detailsResult.languageCodes ?? [];
   const downloadLabel = linkedStandaloneLocalManga
     ? 'Retelecharger'
     : 'Telecharger';
@@ -124,6 +126,11 @@ export default function ScraperDetailsPanel({
               ) : null}
               {pageCountLabel ? (
                 <span className="scraper-browser__status-pill">{pageCountLabel}</span>
+              ) : null}
+              {languageCodes.length ? (
+                <span className="scraper-browser__status-pill">
+                  Langue <LanguageFlags languageCodes={languageCodes} />
+                </span>
               ) : null}
               <ScraperBookmarkButton
                 scraperId={scraperId}
