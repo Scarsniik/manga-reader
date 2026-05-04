@@ -1,0 +1,141 @@
+.scraper-author-favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d9d9d9;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.scraper-author-favorite-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.scraper-author-favorite-button:hover,
+.scraper-author-favorite-button:focus-visible {
+  border-color: rgba(233, 194, 97, 0.6);
+  background: rgba(233, 194, 97, 0.14);
+  color: #ffe08a;
+}
+
+.scraper-author-favorite-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(233, 194, 97, 0.18);
+}
+
+.scraper-author-favorite-button.is-favorite {
+  border-color: rgba(233, 194, 97, 0.72);
+  background: rgba(233, 194, 97, 0.22);
+  color: #f4c84f;
+}
+
+.scraper-author-favorite-button.is-favorite svg path {
+  fill: currentColor;
+}
+
+.scraper-author-favorite-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.scraper-author-favorite-dialog {
+  display: grid;
+  gap: 16px;
+  min-width: min(420px, 78vw);
+}
+
+.scraper-author-favorite-dialog__modes {
+  display: inline-flex;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scraper-author-favorite-dialog__modes button,
+.scraper-author-favorite-dialog__actions button {
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ededed;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-author-favorite-dialog__modes button {
+  padding: 0 12px;
+}
+
+.scraper-author-favorite-dialog__modes button.is-active {
+  border-color: rgba(93, 156, 255, 0.45);
+  background: rgba(93, 156, 255, 0.16);
+  color: #dcebff;
+}
+
+.scraper-author-favorite-dialog__modes button:disabled,
+.scraper-author-favorite-dialog__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.scraper-author-favorite-dialog__field {
+  display: grid;
+  gap: 8px;
+}
+
+.scraper-author-favorite-dialog__field span {
+  color: #d7d7d7;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scraper-author-favorite-dialog__field input,
+.scraper-author-favorite-dialog__field select {
+  min-height: 38px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #111;
+  color: #f1f1f1;
+  padding: 0 12px;
+}
+
+.scraper-author-favorite-dialog__field input:focus,
+.scraper-author-favorite-dialog__field select:focus {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-author-favorite-dialog__error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 107, 107, 0.28);
+  background: rgba(255, 107, 107, 0.1);
+  color: #ffc2c2;
+  font-size: 13px;
+}
+
+.scraper-author-favorite-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.scraper-author-favorite-dialog__actions button {
+  padding: 0 14px;
+}
+
+.scraper-author-favorite-dialog__actions button[type="submit"] {
+  border-color: rgba(93, 156, 255, 0.45);
+  background: rgba(93, 156, 255, 0.18);
+  color: #dcebff;
+}

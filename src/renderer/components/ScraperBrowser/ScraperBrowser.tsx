@@ -22,6 +22,7 @@ import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hoo
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import ScraperAuthorFavoriteButton from '@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton';
 import { DownloadArrowIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
 import {
   ScraperBrowseMode,
@@ -274,6 +275,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const [detailsResult, setDetailsResult] = useState<ScraperRuntimeDetailsResult | null>(null);
   const [chaptersResult, setChaptersResult] = useState<ScraperRuntimeChapterResult[]>([]);
   const [authorTemplateContext, setAuthorTemplateContext] = useState<ScraperTemplateContext | null>(null);
+  const [authorSourceNameHint, setAuthorSourceNameHint] = useState<{ query: string; name: string } | null>(null);
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -774,6 +776,25 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     ? buildBackLabel(historySourceKind, null)
     : null;
   const usesActiveTemplatePaging = mode === 'author' ? usesAuthorTemplatePaging : usesSearchTemplatePaging;
+  const initialAuthorDisplayQuery = initialState?.listingMode === 'author'
+    ? formatScraperValueForDisplay(initialState.query || '')
+    : '';
+  const authorSourceName = authorSourceNameHint?.query === query
+    ? authorSourceNameHint.name
+    : initialAuthorDisplayQuery && initialAuthorDisplayQuery === query && initialState?.authorDisplayName
+      ? initialState.authorDisplayName
+      : formatScraperValueForDisplay(query) || query;
+  const authorFavoriteAction = mode === 'author' && query.trim() ? (
+    <ScraperAuthorFavoriteButton
+      scraperId={scraper.id}
+      scraperName={scraper.name}
+      authorUrl={query}
+      sourceName={authorSourceName}
+      cover={listingResults[0]?.thumbnailUrl}
+      templateContext={authorTemplateContext ?? undefined}
+      disabled={loading}
+    />
+  ) : null;
   const shouldShowSearchPagination = Boolean(
     listingPage && (listingPageIndex > 0 || listingPage.nextPageUrl || usesActiveTemplatePaging),
   );
@@ -883,9 +904,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     navigate(-1);
   }, [canNavigateBack, navigate]);
 
-  const handleOpenAuthorFromDetails = useCallback((value: string) => {
+  const handleOpenAuthorFromDetails = useCallback((value: string, authorTitle: string) => {
     setAuthorTemplateContext(detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : null);
     const nextAuthorQuery = formatScraperValueForDisplay(value);
+    setAuthorSourceNameHint(authorTitle ? { query: nextAuthorQuery, name: authorTitle } : null);
     const routeState = parseScraperRouteState(location.search);
     const nextSearch = writeScraperRouteState(location.search, {
       scraperId: scraper.id,
@@ -1460,6 +1482,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         paginationInfoLabel={paginationInfoLabel}
         loading={loading}
         usesSearchTemplatePaging={usesActiveTemplatePaging}
+        headerAction={authorFavoriteAction}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
         getViewState={getSearchResultViewState}
@@ -1497,8 +1520,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         getLinkedMangaForSource={getLinkedMangaForSource}
         getLinkedLocalMangaForSource={getLinkedLocalMangaForSource}
         onBack={canNavigateBack ? handleNavigateBack : () => void handleBackToListing()}
-        onOpenAuthor={(value) => {
-          handleOpenAuthorFromDetails(value);
+        onOpenAuthor={(value, title) => {
+          handleOpenAuthorFromDetails(value, title);
         }}
         onOpenAuthorInWorkspace={handleOpenAuthorFromDetailsInWorkspace}
         onOpenReader={(options) => void handleOpenReader(options)}

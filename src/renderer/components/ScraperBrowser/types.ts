@@ -29,6 +29,7 @@ export type ScraperBrowserInitialState = {
   listingResults?: ScraperSearchResultItem[];
   hasExecutedListing?: boolean;
   authorTemplateContext?: ScraperTemplateContext | null;
+  authorDisplayName?: string | null;
 };
 
 export type ScraperBrowserReturnState = {

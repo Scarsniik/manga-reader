@@ -139,6 +139,7 @@ export default function WorkspaceScraperAuthorPanel({
         hasExecutedListing: true,
         listingReturnState: null,
         authorTemplateContext: templateContext ?? null,
+        authorDisplayName: title || displayQuery,
       };
       const resolvedTitle = title || displayQuery || "Page auteur";
 

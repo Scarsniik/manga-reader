@@ -13,4 +13,5 @@ export { default as LoadingSpinnerIcon } from './loading-spinner.svg?react';
 export { default as MagnifyingGlassIcon } from './magnifying-glass.svg?react';
 export { default as OpenBookIcon } from './open-book.svg?react';
 export { default as PlusSignIcon } from './plus-sign.svg?react';
+export { default as StarIcon } from './star.svg?react';
 export { default as TrashCanIcon } from './trash-can.svg?react';

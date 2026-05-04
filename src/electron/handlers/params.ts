@@ -20,6 +20,9 @@ const MAX_READER_SCROLL_HOLD_SPEED = 500;
 const DEFAULT_READER_SCROLL_START_BOOST = 90;
 const MIN_READER_SCROLL_START_BOOST = 0;
 const MAX_READER_SCROLL_START_BOOST = 250;
+const DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
+const MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
+const MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 20;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -124,6 +127,15 @@ const normalizeReaderScrollStartBoost = (value: unknown): number => (
     )
 );
 
+const normalizeScraperAuthorFavoritePageCount = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
+        MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
+        MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
+    )
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -189,6 +201,7 @@ const defaultSettings = {
     savedLibrarySearches: [],
     showSavedScraperSearches: true,
     savedScraperSearches: [],
+    scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     stackMangaInSeries: true,
     mangaListFilters: null,
     appUpdateAutoCheck: true,
@@ -228,6 +241,7 @@ const normalizeSettings = (value: unknown) => {
     merged.readerOpenOcrPanelForJapaneseManga = typeof merged.readerOpenOcrPanelForJapaneseManga === "boolean"
         ? merged.readerOpenOcrPanelForJapaneseManga
         : defaultSettings.readerOpenOcrPanelForJapaneseManga;
+    merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
 };
@@ -409,6 +423,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.readerOpenOcrPanelForJapaneseManga = typeof nextSettings.readerOpenOcrPanelForJapaneseManga === "boolean"
             ? nextSettings.readerOpenOcrPanelForJapaneseManga
             : defaultSettings.readerOpenOcrPanelForJapaneseManga;
+        nextSettings.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(
+            nextSettings.scraperAuthorFavoritePageCount,
+        );
         nextSettings.shortcuts = normalizeShortcutSettings(nextSettings);
 
         await writeSettingsAtomically(nextSettings);

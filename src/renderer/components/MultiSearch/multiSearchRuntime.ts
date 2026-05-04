@@ -1,16 +1,20 @@
 import {
   FetchScraperDocumentResult,
   hasScraperFieldSelectorValue,
+  ScraperAuthorFeatureConfig,
   ScraperRecord,
   ScraperSearchFeatureConfig,
 } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocument,
   getScraperFeature,
+  getScraperAuthorFeatureConfig,
   getScraperSearchFeatureConfig,
+  hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
+  resolveScraperAuthorTargetUrl,
   ScraperRuntimeSearchPageResult,
 } from "@/renderer/utils/scraperRuntime";
 import {
@@ -24,6 +28,7 @@ import type {
   MultiSearchPaceMode,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
+import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 
 export type PaceConfig = {
   concurrency: number;
@@ -82,6 +87,18 @@ export const getSearchConfig = (scraper: ScraperRecord): ScraperSearchFeatureCon
   }
 
   return searchConfig;
+};
+
+export const getAuthorConfig = (scraper: ScraperRecord): ScraperAuthorFeatureConfig => {
+  const authorConfig = getScraperAuthorFeatureConfig(getScraperFeature(scraper, "author"));
+  if (
+    !authorConfig?.resultItemSelector
+    || !hasScraperFieldSelectorValue(authorConfig.titleSelector)
+  ) {
+    throw new Error("Le composant Auteur n'est pas suffisamment configure.");
+  }
+
+  return authorConfig;
 };
 
 const fetchSearchPage = async (
@@ -156,6 +173,89 @@ export const fetchSearchPageWithRetry = async (
   throw lastError instanceof Error ? lastError : new Error("Impossible de charger la page de recherche.");
 };
 
+const fetchAuthorPage = async (
+  scraper: ScraperRecord,
+  authorConfig: ScraperAuthorFeatureConfig,
+  query: string,
+  pageIndex: number,
+  nextPageUrl?: string,
+  templateContext?: ScraperTemplateContext | null,
+): Promise<ScraperRuntimeSearchPageResult> => {
+  const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+  if (typeof fetchScraperDocument !== "function") {
+    throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
+  }
+
+  const usesTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
+  const targetUrl = usesTemplatePaging || pageIndex === 0
+    ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig, query, {
+      pageIndex,
+      templateContext: templateContext ?? undefined,
+    })
+    : nextPageUrl;
+
+  if (!targetUrl) {
+    throw new Error("Aucune page suivante n'est disponible pour ce scrapper.");
+  }
+
+  const documentResult = await fetchScraperDocument({
+    baseUrl: scraper.baseUrl,
+    targetUrl,
+  }) as FetchScraperDocumentResult;
+
+  if (!documentResult?.ok || !documentResult.html) {
+    throw new Error(
+      documentResult?.error
+      || (typeof documentResult?.status === "number"
+        ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
+        : "Impossible de charger la page auteur."),
+    );
+  }
+
+  const parser = new DOMParser();
+  const documentNode = parser.parseFromString(documentResult.html, "text/html");
+  return extractScraperSearchPageFromDocument(documentNode, authorConfig, {
+    requestedUrl: documentResult.requestedUrl,
+    finalUrl: documentResult.finalUrl,
+  });
+};
+
+export const fetchAuthorPageWithRetry = async (
+  scraper: ScraperRecord,
+  authorConfig: ScraperAuthorFeatureConfig,
+  query: string,
+  pageIndex: number,
+  nextPageUrl: string | undefined,
+  paceConfig: PaceConfig,
+  templateContext?: ScraperTemplateContext | null,
+): Promise<ScraperRuntimeSearchPageResult> => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
+    try {
+      if (attempt > 0 || pageIndex > 0) {
+        await wait(paceConfig.pageDelayMs);
+      }
+
+      return await fetchAuthorPage(
+        scraper,
+        authorConfig,
+        query,
+        pageIndex,
+        nextPageUrl,
+        templateContext,
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt < paceConfig.retryCount) {
+        await wait(paceConfig.pageDelayMs);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Impossible de charger la page auteur.");
+};
+
 export const buildSourceResults = (
   scraper: ScraperRecord,
   page: ScraperRuntimeSearchPageResult,
@@ -196,6 +296,17 @@ export const resolveHasNextPage = (
 ): boolean => (
   hasSearchPagePlaceholder(searchConfig)
     ? hasScraperFieldSelectorValue(searchConfig.nextPageSelector)
+      ? Boolean(page.nextPageUrl)
+      : page.items.length > 0
+    : Boolean(page.nextPageUrl)
+);
+
+export const resolveHasNextAuthorPage = (
+  authorConfig: ScraperAuthorFeatureConfig,
+  page: ScraperRuntimeSearchPageResult,
+): boolean => (
+  hasAuthorPagePlaceholder(authorConfig)
+    ? hasScraperFieldSelectorValue(authorConfig.nextPageSelector)
       ? Boolean(page.nextPageUrl)
       : page.items.length > 0
     : Boolean(page.nextPageUrl)

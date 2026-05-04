@@ -16,6 +16,7 @@ import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
 import ScraperBookmarksView from '@/renderer/components/ScraperBookmarks/ScraperBookmarksView';
+import ScraperAuthorFavoritesView from '@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView';
 import MultiSearchBrowser from '@/renderer/components/MultiSearch/MultiSearchBrowser';
 import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 import {
@@ -35,6 +36,7 @@ declare global {
 }
 
 const MULTI_SEARCH_VIEW_ID = 'multi-search';
+const AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
 
 const MangaManager: React.FC = () => {
     const location = useLocation();
@@ -352,6 +354,7 @@ const MangaManager: React.FC = () => {
     const isLibraryView = activeViewId === 'library';
     const isBookmarksView = activeViewId === 'bookmarks';
     const isMultiSearchView = activeViewId === MULTI_SEARCH_VIEW_ID;
+    const isAuthorFavoritesView = activeViewId === AUTHOR_FAVORITES_VIEW_ID;
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -438,7 +441,12 @@ const MangaManager: React.FC = () => {
     }, [location.key, location.state]);
 
     useEffect(() => {
-        if (activeViewId === 'library' || activeViewId === 'bookmarks' || activeViewId === MULTI_SEARCH_VIEW_ID) {
+        if (
+            activeViewId === 'library'
+            || activeViewId === 'bookmarks'
+            || activeViewId === MULTI_SEARCH_VIEW_ID
+            || activeViewId === AUTHOR_FAVORITES_VIEW_ID
+        ) {
             return;
         }
 
@@ -606,6 +614,7 @@ const MangaManager: React.FC = () => {
                     >
                         <option value="library">Bibliotheque</option>
                         <option value={MULTI_SEARCH_VIEW_ID}>Recherche multi-sources</option>
+                        <option value={AUTHOR_FAVORITES_VIEW_ID}>Auteurs favoris</option>
                         <option value="bookmarks">Tous les bookmarks</option>
                         {sortedScrapers.map((scraper) => (
                             <option key={scraper.id} value={scraper.id}>
@@ -684,6 +693,8 @@ const MangaManager: React.FC = () => {
                         <div className="empty">{isBookmarksView ? 'Chargement des bookmarks...' : 'Chargement du scrapper...'}</div>
                     ) : isMultiSearchView ? (
                         <MultiSearchBrowser scrapers={sortedScrapers} />
+                    ) : isAuthorFavoritesView ? (
+                        <ScraperAuthorFavoritesView scrapers={sortedScrapers} />
                     ) : isBookmarksView ? (
                         <ScraperBookmarksView
                             scrapers={sortedScrapers}

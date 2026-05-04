@@ -70,6 +70,7 @@ const MANAGED_DATA_FILE_NAMES = [
     "mangas.json",
     "ocr-runtime.json",
     "params.json",
+    "scraper-author-favorites.json",
     "scraper-bookmarks.json",
     "scraper-reader-progress.json",
     "scraper-view-history.json",

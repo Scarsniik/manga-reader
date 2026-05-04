@@ -14,6 +14,12 @@ export {
   saveScraperBookmark,
 } from "./scrapers/bookmarks";
 export {
+  getScraperAuthorFavorites,
+  removeScraperAuthorFavorite,
+  removeScraperAuthorFavoriteSource,
+  saveScraperAuthorFavorite,
+} from "./scrapers/authorFavorites";
+export {
   getScraperReaderProgress,
   getScraperReaderProgressRecords,
   saveScraperReaderProgress,

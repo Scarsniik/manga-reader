@@ -29,7 +29,7 @@ type Props = {
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   getLinkedLocalMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   onBack?: () => void;
-  onOpenAuthor: (value: string) => void;
+  onOpenAuthor: (value: string, title: string) => void;
   onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onAddToLibrary: (chapter?: ScraperRuntimeChapterResult) => void;
@@ -223,7 +223,7 @@ export default function ScraperDetailsPanel({
                     key={`${author}-${index}`}
                     type="button"
                     className="scraper-card__chip is-author is-clickable"
-                    onClick={() => onOpenAuthor(authorTarget)}
+                    onClick={() => onOpenAuthor(authorTarget, author)}
                     onMouseDown={onOpenAuthorInWorkspace ? (event) => {
                       if (event.button !== 1) {
                         return;

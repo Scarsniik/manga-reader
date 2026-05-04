@@ -4,7 +4,10 @@ import type {
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
     RecordScraperCardsSeenRequest,
+    RemoveScraperAuthorFavoriteRequest,
+    RemoveScraperAuthorFavoriteSourceRequest,
     RemoveScraperBookmarkRequest,
+    SaveScraperAuthorFavoriteRequest,
     SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
     SaveScraperReaderProgressRequest,
@@ -107,6 +110,14 @@ ipcRenderer.on('scraper-bookmarks-updated', () => {
         window.dispatchEvent(new CustomEvent('scraper-bookmarks-updated'));
     } catch (error) {
         console.warn('preload: failed to dispatch scraper-bookmarks-updated event', error);
+    }
+});
+
+ipcRenderer.on('scraper-author-favorites-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-author-favorites-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-author-favorites-updated event', error);
     }
 });
 
@@ -215,6 +226,10 @@ contextBridge.exposeInMainWorld('api', {
     getScraperBookmarks: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-bookmarks', scraperId),
     saveScraperBookmark: (request: SaveScraperBookmarkRequest) => ipcRenderer.invoke('save-scraper-bookmark', request),
     removeScraperBookmark: (request: RemoveScraperBookmarkRequest) => ipcRenderer.invoke('remove-scraper-bookmark', request),
+    getScraperAuthorFavorites: () => ipcRenderer.invoke('get-scraper-author-favorites'),
+    saveScraperAuthorFavorite: (request: SaveScraperAuthorFavoriteRequest) => ipcRenderer.invoke('save-scraper-author-favorite', request),
+    removeScraperAuthorFavorite: (request: RemoveScraperAuthorFavoriteRequest) => ipcRenderer.invoke('remove-scraper-author-favorite', request),
+    removeScraperAuthorFavoriteSource: (request: RemoveScraperAuthorFavoriteSourceRequest) => ipcRenderer.invoke('remove-scraper-author-favorite-source', request),
     getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),
     recordScraperCardsSeen: (request: RecordScraperCardsSeenRequest) => ipcRenderer.invoke('record-scraper-cards-seen', request),
     setScraperCardRead: (request: SetScraperCardReadRequest) => ipcRenderer.invoke('set-scraper-card-read', request),

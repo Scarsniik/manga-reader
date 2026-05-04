@@ -522,6 +522,48 @@ export interface ScraperBookmarkRecord {
   updatedAt: string;
 }
 
+export interface ScraperAuthorFavoriteSource {
+  scraperId: string;
+  authorUrl: string;
+  name: string;
+  cover?: string;
+  templateContext?: Record<string, string | undefined>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScraperAuthorFavoriteRecord {
+  id: string;
+  name: string;
+  cover?: string;
+  sources: ScraperAuthorFavoriteSource[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveScraperAuthorFavoriteRequest {
+  favoriteId?: string;
+  name: string;
+  cover?: string;
+  source: {
+    scraperId: string;
+    authorUrl: string;
+    name: string;
+    cover?: string;
+    templateContext?: Record<string, string | undefined>;
+  };
+}
+
+export interface RemoveScraperAuthorFavoriteRequest {
+  favoriteId: string;
+}
+
+export interface RemoveScraperAuthorFavoriteSourceRequest {
+  favoriteId: string;
+  scraperId: string;
+  authorUrl: string;
+}
+
 export interface SaveScraperBookmarkRequest {
   scraperId: string;
   sourceUrl: string;

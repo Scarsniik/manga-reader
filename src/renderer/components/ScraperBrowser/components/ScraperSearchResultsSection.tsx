@@ -19,6 +19,7 @@ type Props = {
   paginationInfoLabel: string;
   loading: boolean;
   usesSearchTemplatePaging: boolean;
+  headerAction?: React.ReactNode;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
   getViewState?: (result: ScraperSearchResultItem) => ScraperCardViewState;
@@ -52,6 +53,7 @@ export default function ScraperSearchResultsSection({
   paginationInfoLabel,
   loading,
   usesSearchTemplatePaging,
+  headerAction,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
   getViewState,
@@ -115,6 +117,7 @@ export default function ScraperSearchResultsSection({
         </div>
 
         <div className="scraper-browser__results-side">
+          {headerAction}
           {searchPage ? (
             <span className="scraper-browser__results-count">
               Page {searchPageIndex + 1}
