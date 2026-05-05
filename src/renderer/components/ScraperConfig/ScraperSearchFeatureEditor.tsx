@@ -5,6 +5,7 @@ import {
   ScraperFieldSelector,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
+  ScraperLanguageDetectionConfig,
   ScraperLanguageValueMapping,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
@@ -25,6 +26,7 @@ import {
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
+import { buildLanguageDetectionConfig } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
@@ -33,6 +35,7 @@ import SearchRequestSection from '@/renderer/components/ScraperConfig/search/Sea
 import {
   buildDocumentFailure,
   buildSearchConfig,
+  buildSearchScrapingFields,
   buildValidationPresentation,
   createSearchRequestFieldFormItem,
   FEATURE_STATUS_META,
@@ -42,6 +45,7 @@ import {
   getValidationFieldErrors,
   SCRAPING_FIELD_SELECTOR_NAMES,
   SCRAPING_FIELDS,
+  SEARCH_SCRAPING_FIELD_NAMES,
   SearchFeatureFormState,
   TEST_QUERY_FIELD,
   URL_TEMPLATE_FIELD,
@@ -50,13 +54,29 @@ import {
 type Props = {
   feature: ScraperFeatureDefinition;
   onBack: () => void;
+  variant?: 'search' | 'homepage';
 };
+
+const normalizeConfigForListingKind = (
+  config: ReturnType<typeof buildSearchConfig>,
+  listingKind: 'search' | 'homepage',
+): ReturnType<typeof buildSearchConfig> => (
+  listingKind === 'homepage'
+    ? {
+      ...config,
+      testQuery: undefined,
+    }
+    : config
+);
 
 export default function ScraperSearchFeatureEditor({
   feature,
   onBack,
+  variant = 'search',
 }: Props) {
   const { scraper } = useScraperConfig();
+  const listingKind = feature.kind === 'homepage' || variant === 'homepage' ? 'homepage' : 'search';
+  const isHomepage = listingKind === 'homepage';
   const initialConfig = useMemo(() => getInitialConfig(feature), [feature]);
   const [previewPage, setPreviewPage] = useState<ScraperRuntimeSearchPageResult | null>(null);
   const [previewVisitedPageUrls, setPreviewVisitedPageUrls] = useState<string[]>([]);
@@ -90,7 +110,9 @@ export default function ScraperSearchFeatureEditor({
   } = useScraperFeatureEditorState<SearchFeatureFormState>({
     initialFormValues: initialConfig,
     initialValidationResult: feature.validation,
-    initialValidatedSignature: feature.validation?.ok ? getConfigSignature(buildSearchConfig(initialConfig)) : null,
+    initialValidatedSignature: feature.validation?.ok
+      ? getConfigSignature(normalizeConfigForListingKind(buildSearchConfig(initialConfig), listingKind))
+      : null,
   });
 
   useEffect(() => {
@@ -104,30 +126,112 @@ export default function ScraperSearchFeatureEditor({
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildSearchConfig(formValues), [formValues]);
   const usesTemplatePaging = hasSearchPagePlaceholder(currentConfig);
+  const searchFeature = useMemo(
+    () => scraper.features.find((candidate) => candidate.kind === 'search') || null,
+    [scraper.features],
+  );
+  const copiedSearchScrapingFields = useMemo(() => {
+    if (!isHomepage || !searchFeature?.config || searchFeature.status === 'not_configured') {
+      return null;
+    }
+
+    return buildSearchScrapingFields(searchFeature.config as Record<string, unknown>);
+  }, [isHomepage, searchFeature]);
+  const canCopySearchSelectors = useMemo(
+    () => copiedSearchScrapingFields
+      ? SEARCH_SCRAPING_FIELD_NAMES.some((fieldName) => Boolean(copiedSearchScrapingFields[fieldName]))
+      : false,
+    [copiedSearchScrapingFields],
+  );
+  const copiedSearchLanguageDetection = useMemo(() => {
+    if (!isHomepage || !searchFeature?.config || searchFeature.status === 'not_configured') {
+      return null;
+    }
+
+    const searchConfig = searchFeature.config as Partial<{
+      languageDetection: Partial<ScraperLanguageDetectionConfig>;
+    }>;
+    const languageDetection = buildLanguageDetectionConfig(searchConfig.languageDetection);
+    const hasLanguageDetection = Boolean(
+      languageDetection.detectFromTitle
+      || languageDetection.languageSelector
+      || languageDetection.processedLanguageSelector
+      || languageDetection.valueMappings?.length,
+    );
+
+    return hasLanguageDetection ? languageDetection : null;
+  }, [isHomepage, searchFeature]);
+  const canCopySearchLanguageDetection = Boolean(copiedSearchLanguageDetection);
+
+  const testQuery = isHomepage ? '' : currentConfig.testQuery || '';
+  const editorCopy = useMemo(() => ({
+    title: isHomepage ? 'Configurer la homepage' : 'Configurer la recherche',
+    description: isHomepage
+      ? 'Definis ici comment charger la page d\'accueil du scraper et comment extraire les cards a afficher.'
+      : 'Definis ici comment lancer une recherche sur le site et comment extraire les cartes de '
+        + 'resultats qui serviront ensuite dans l\'affichage du scraper.',
+    noteTitle: isHomepage ? 'Affichage runtime' : 'Connexion avec la fiche',
+    noteText: isHomepage
+      ? 'La homepage s\'affiche avec les memes cards que la recherche, mais sans champ de recherche a injecter.'
+      : 'Si tu veux ouvrir un resultat directement dans `Fiche`, renseigne le selecteur du lien '
+        + 'de fiche puis configure simplement le composant `Fiche` pour parser correctement la page.',
+    urlSectionTitle: isHomepage ? 'URL de homepage' : 'URL de recherche',
+    urlSectionDescription: isHomepage
+      ? 'Indique l\'URL ou le chemin qui charge la page d\'accueil du scraper. Aucun terme de recherche ne sera demande.'
+      : 'Indique comment l\'application construit l\'URL a partir de la requete du user. '
+        + 'La requete peut rester vide si le site accepte une recherche globale.',
+    requestSectionDescription: isHomepage
+      ? 'Choisis si la homepage doit etre chargee en `GET` ou en `POST`, puis configure le body si le site attend une requete specifique.'
+      : 'Choisis si la recherche doit etre envoyee en `GET` ou en `POST`, puis configure le '
+        + 'body si le site attend un formulaire ou une charge utile specifique.',
+    scrapingSectionDescription: isHomepage
+      ? 'Definis les selecteurs a utiliser pour parcourir les cards de homepage et extraire les informations utiles.'
+      : 'Definis les selecteurs a utiliser pour parcourir les cartes de resultats et extraire '
+        + 'les informations utiles.',
+    testSectionDescription: isHomepage
+      ? 'Charge la homepage puis verifie l\'apercu des cards extraites.'
+      : 'Lance une recherche de test puis verifie l\'apercu des resultats extraits.',
+    resolvedUrlEmptyMessage: isHomepage
+      ? 'Complete le template pour voir l\'apercu de la homepage.'
+      : 'Complete le template pour voir l\'apercu. La requete de test est optionnelle.',
+    resolvedRequestLabel: isHomepage ? 'Requete resolue' : 'Requete de test resolue',
+    validateLabel: isHomepage ? 'Valider la homepage' : 'Valider la recherche',
+  }), [isHomepage]);
+  const urlTemplateField = useMemo(() => (
+    isHomepage
+      ? {
+        ...URL_TEMPLATE_FIELD,
+        label: 'Template d\'URL de homepage',
+        placeholder: 'Exemple : /, /manga, /popular',
+      }
+      : URL_TEMPLATE_FIELD
+  ), [isHomepage]);
 
   const resolvedTestUrl = useMemo(() => {
     try {
-      return resolveScraperSearchTargetUrl(scraper.baseUrl, currentConfig, currentConfig.testQuery || '', {
+      return resolveScraperSearchTargetUrl(scraper.baseUrl, currentConfig, testQuery, {
         pageIndex: 0,
       });
     } catch {
       return null;
     }
-  }, [currentConfig, scraper.baseUrl]);
+  }, [currentConfig, scraper.baseUrl, testQuery]);
 
   const resolvedTestRequestConfig = useMemo(() => {
     try {
-      return resolveScraperSearchRequestConfig(currentConfig, currentConfig.testQuery || '', {
+      return resolveScraperSearchRequestConfig(currentConfig, testQuery, {
         pageIndex: 0,
       });
     } catch {
       return null;
     }
-  }, [currentConfig]);
+  }, [currentConfig, testQuery]);
 
   const validationPresentation = useMemo(
-    () => (validationResult ? buildValidationPresentation(validationResult, previewResults, previewPage) : null),
-    [previewPage, previewResults, validationResult],
+    () => (validationResult
+      ? buildValidationPresentation(validationResult, previewResults, previewPage, listingKind)
+      : null),
+    [listingKind, previewPage, previewResults, validationResult],
   );
 
   const previewCards = useMemo(
@@ -316,6 +420,53 @@ export default function ScraperSearchFeatureEditor({
     clearFeedback();
   }, [clearFeedback, setFormValues]);
 
+  const handleCopySearchSelectors = useCallback(() => {
+    if (!copiedSearchScrapingFields) {
+      return;
+    }
+
+    setFormValues((previous) => ({
+      ...previous,
+      ...copiedSearchScrapingFields,
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage('Selecteurs copies depuis Recherche. Pense a valider puis enregistrer.');
+
+    setFieldErrors((previous) => {
+      const next = { ...previous };
+      SEARCH_SCRAPING_FIELD_NAMES.forEach((fieldName) => {
+        delete next[fieldName];
+      });
+      return next;
+    });
+  }, [copiedSearchScrapingFields, setFieldErrors, setFormValues, setSaveError, setSaveMessage, setValidationUiError]);
+
+  const handleCopySearchLanguageDetection = useCallback(() => {
+    if (!copiedSearchLanguageDetection) {
+      return;
+    }
+
+    setFormValues((previous) => ({
+      ...previous,
+      languageDetection: {
+        ...copiedSearchLanguageDetection,
+        valueMappings: copiedSearchLanguageDetection.valueMappings?.map((mapping) => ({ ...mapping })) ?? [],
+      },
+    }));
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage('Configuration langue copiee depuis Recherche. Pense a valider puis enregistrer.');
+    clearFieldErrorsByPrefix('languageDetection.');
+  }, [
+    clearFieldErrorsByPrefix,
+    copiedSearchLanguageDetection,
+    setFormValues,
+    setSaveError,
+    setSaveMessage,
+    setValidationUiError,
+  ]);
+
   const handleValidate = useCallback(async () => {
     const config = buildSearchConfig(formValues);
     const errors = getValidationFieldErrors(formValues, config);
@@ -333,11 +484,18 @@ export default function ScraperSearchFeatureEditor({
 
     let targetUrl = '';
     try {
-      targetUrl = resolveScraperSearchTargetUrl(scraper.baseUrl, config, config.testQuery || '', {
+      const validationQuery = isHomepage ? '' : config.testQuery || '';
+      targetUrl = resolveScraperSearchTargetUrl(scraper.baseUrl, config, validationQuery, {
         pageIndex: 0,
       });
     } catch (error) {
-      setValidationUiError(error instanceof Error ? error.message : 'Impossible de construire l\'URL de recherche.');
+      setValidationUiError(
+        error instanceof Error
+          ? error.message
+          : isHomepage
+            ? 'Impossible de construire l\'URL de homepage.'
+            : 'Impossible de construire l\'URL de recherche.',
+      );
       return;
     }
 
@@ -347,10 +505,11 @@ export default function ScraperSearchFeatureEditor({
     setSaveMessage(null);
 
     try {
+      const validationQuery = isHomepage ? '' : config.testQuery || '';
       const documentResult = await (window as any).api.fetchScraperDocument({
         baseUrl: scraper.baseUrl,
         targetUrl,
-        requestConfig: resolveScraperSearchRequestConfig(config, config.testQuery || '', {
+        requestConfig: resolveScraperSearchRequestConfig(config, validationQuery, {
           pageIndex: 0,
         }),
       });
@@ -510,18 +669,24 @@ export default function ScraperSearchFeatureEditor({
       setPreviewResults(extractedResults);
       setValidationResult(nextResult);
       if (nextResult.ok) {
-        setLastValidatedSignature(getConfigSignature(config));
+        setLastValidatedSignature(getConfigSignature(normalizeConfigForListingKind(config, listingKind)));
       }
     } catch (error) {
       setPreviewPage(null);
       setPreviewVisitedPageUrls([]);
       setPreviewPageIndex(0);
       setPreviewResults([]);
-      setValidationUiError(error instanceof Error ? error.message : 'Echec de la validation de la recherche.');
+      setValidationUiError(
+        error instanceof Error
+          ? error.message
+          : isHomepage
+            ? 'Echec de la validation de la homepage.'
+            : 'Echec de la validation de la recherche.',
+      );
     } finally {
       setValidating(false);
     }
-  }, [formValues, scraper.baseUrl]);
+  }, [formValues, isHomepage, listingKind, scraper.baseUrl]);
 
   const handlePreviewNextPage = useCallback(async () => {
     const config = buildSearchConfig(formValues);
@@ -530,8 +695,9 @@ export default function ScraperSearchFeatureEditor({
     }
 
     const nextPageIndex = previewPageIndex + 1;
+    const previewQuery = isHomepage ? '' : config.testQuery || '';
     const nextTargetUrl = usesTemplatePaging
-      ? resolveScraperSearchTargetUrl(scraper.baseUrl, config, config.testQuery || '', {
+      ? resolveScraperSearchTargetUrl(scraper.baseUrl, config, previewQuery, {
         pageIndex: nextPageIndex,
       })
       : previewPage.nextPageUrl;
@@ -544,7 +710,7 @@ export default function ScraperSearchFeatureEditor({
     setValidationUiError(null);
 
     try {
-      const nextPage = await fetchPreviewPage(config.testQuery || '', nextTargetUrl, config, nextPageIndex);
+      const nextPage = await fetchPreviewPage(previewQuery, nextTargetUrl, config, nextPageIndex);
       if (!nextPage.items.length) {
         setValidationUiError('Aucun resultat exploitable n\'a ete trouve sur la page suivante.');
         return;
@@ -562,7 +728,7 @@ export default function ScraperSearchFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [fetchPreviewPage, formValues, previewPage, previewPageIndex, scraper.baseUrl, usesTemplatePaging]);
+  }, [fetchPreviewPage, formValues, isHomepage, previewPage, previewPageIndex, scraper.baseUrl, usesTemplatePaging]);
 
   const handlePreviewPreviousPage = useCallback(async () => {
     const config = buildSearchConfig(formValues);
@@ -579,8 +745,9 @@ export default function ScraperSearchFeatureEditor({
     setValidationUiError(null);
 
     try {
+      const previewQuery = isHomepage ? '' : config.testQuery || '';
       const previousPage = await fetchPreviewPage(
-        config.testQuery || '',
+        previewQuery,
         previousTargetUrl,
         config,
         previewPageIndex - 1,
@@ -598,16 +765,17 @@ export default function ScraperSearchFeatureEditor({
     } finally {
       setValidating(false);
     }
-  }, [fetchPreviewPage, formValues, previewPageIndex, previewVisitedPageUrls]);
+  }, [fetchPreviewPage, formValues, isHomepage, previewPageIndex, previewVisitedPageUrls]);
 
   const buildSaveConfig = useCallback(() => {
-    const config = buildSearchConfig(formValues);
+    const baseConfig = buildSearchConfig(formValues);
+    const config = normalizeConfigForListingKind(baseConfig, listingKind);
     return {
       config,
       errors: getSaveFieldErrors(formValues, config),
       signature: getConfigSignature(config),
     };
-  }, [formValues]);
+  }, [formValues, listingKind]);
 
   const handleSave = useSaveScraperFeatureConfig({
     featureKind: feature.kind,
@@ -623,16 +791,10 @@ export default function ScraperSearchFeatureEditor({
   return (
     <section className="scraper-config-step">
       <ScraperFeatureEditorHeader
-        title="Configurer la recherche"
-        description={
-          'Definis ici comment lancer une recherche sur le site et comment extraire les cartes de '
-          + 'resultats qui serviront ensuite dans l\'affichage du scraper.'
-        }
-        noteTitle="Connexion avec la fiche"
-        noteText={
-          'Si tu veux ouvrir un resultat directement dans `Fiche`, renseigne le selecteur du lien '
-          + 'de fiche puis configure simplement le composant `Fiche` pour parser correctement la page.'
-        }
+        title={editorCopy.title}
+        description={editorCopy.description}
+        noteTitle={editorCopy.noteTitle}
+        noteText={editorCopy.noteText}
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
         onBack={onBack}
@@ -641,16 +803,13 @@ export default function ScraperSearchFeatureEditor({
       <div className="mh-form">
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
-            <h4>URL de recherche</h4>
-            <p>
-              Indique comment l&apos;application construit l&apos;URL a partir de la requete du user.
-              La requete peut rester vide si le site accepte une recherche globale.
-            </p>
+            <h4>{editorCopy.urlSectionTitle}</h4>
+            <p>{editorCopy.urlSectionDescription}</p>
           </div>
 
           <div className="scraper-config-section__grid">
             <ScraperConfigField
-              field={URL_TEMPLATE_FIELD}
+              field={urlTemplateField}
               value={formValues.urlTemplate}
               error={fieldErrors.urlTemplate}
               onChange={handleFieldChange('urlTemplate')}
@@ -658,20 +817,27 @@ export default function ScraperSearchFeatureEditor({
           </div>
 
           <div className="scraper-config-hint">
-            Placeholders supportes : <code>{'{{query}}'}</code>, <code>{'{{rawQuery}}'}</code>,
-            <code>{' {{page}}'}</code>, <code>{'{{page3}}'}</code>, <code>{'{{pageIndex}}'}</code>.
-            Les variantes <code>{'{{value}}'}</code> et <code>{'{{rawValue}}'}</code> restent
-            aussi acceptees pour garder la meme logique que les autres composants.
+            {isHomepage ? (
+              <>
+                Placeholders supportes : <code>{'{{page}}'}</code>, <code>{'{{page3}}'}</code>,
+                <code>{' {{pageIndex}}'}</code>. Les placeholders de recherche restent resolus a
+                vide pour compatibilite, mais la homepage ne demande jamais de terme utilisateur.
+              </>
+            ) : (
+              <>
+                Placeholders supportes : <code>{'{{query}}'}</code>, <code>{'{{rawQuery}}'}</code>,
+                <code>{' {{page}}'}</code>, <code>{'{{page3}}'}</code>, <code>{'{{pageIndex}}'}</code>.
+                Les variantes <code>{'{{value}}'}</code> et <code>{'{{rawValue}}'}</code> restent
+                aussi acceptees pour garder la meme logique que les autres composants.
+              </>
+            )}
           </div>
         </div>
 
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
             <h4>Requete HTTP</h4>
-            <p>
-              Choisis si la recherche doit etre envoyee en `GET` ou en `POST`, puis configure le
-              body si le site attend un formulaire ou une charge utile specifique.
-            </p>
+            <p>{editorCopy.requestSectionDescription}</p>
           </div>
 
           <SearchRequestSection
@@ -679,6 +845,7 @@ export default function ScraperSearchFeatureEditor({
             fieldErrors={fieldErrors}
             validating={validating}
             saving={saving}
+            allowQueryPlaceholders={!isHomepage}
             onMethodChange={handleRequestMethodChange}
             onBodyModeChange={handleRequestBodyModeChange}
             onBodyChange={handleRequestBodyChange}
@@ -692,18 +859,39 @@ export default function ScraperSearchFeatureEditor({
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
             <h4>Scraping</h4>
-            <p>
-              Definis les selecteurs a utiliser pour parcourir les cartes de resultats et extraire
-              les informations utiles.
-            </p>
+            <p>{editorCopy.scrapingSectionDescription}</p>
           </div>
 
           <div className="scraper-config-hint">
-            Le conteneur de resultats est optionnel. Il sert surtout a limiter la zone de parsing
-            si la page contient plusieurs listes ou des cartes hors recherche. Si le site est
-            pagine, tu peux soit utiliser <code>{'{{page}}'}</code> dans l&apos;URL, soit renseigner
-            le selecteur de page suivante, soit combiner les deux.
+            {isHomepage ? (
+              <>
+                Le conteneur de cards est optionnel. Il sert surtout a limiter la zone de parsing
+                si la page contient plusieurs listes. Si la homepage est paginee, tu peux soit
+                utiliser <code>{'{{page}}'}</code> dans l&apos;URL, soit renseigner le selecteur de
+                page suivante, soit combiner les deux.
+              </>
+            ) : (
+              <>
+                Le conteneur de resultats est optionnel. Il sert surtout a limiter la zone de parsing
+                si la page contient plusieurs listes ou des cartes hors recherche. Si le site est
+                pagine, tu peux soit utiliser <code>{'{{page}}'}</code> dans l&apos;URL, soit renseigner
+                le selecteur de page suivante, soit combiner les deux.
+              </>
+            )}
           </div>
+
+          {isHomepage && canCopySearchSelectors ? (
+            <div className="scraper-config-section__actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleCopySearchSelectors}
+                disabled={validating || saving}
+              >
+                Copier les selecteurs de Recherche
+              </button>
+            </div>
+          ) : null}
 
           <ScraperConfigFieldGrid
             fields={SCRAPING_FIELDS}
@@ -729,6 +917,19 @@ export default function ScraperSearchFeatureEditor({
             </p>
           </div>
 
+          {isHomepage && canCopySearchLanguageDetection ? (
+            <div className="scraper-config-section__actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleCopySearchLanguageDetection}
+                disabled={validating || saving}
+              >
+                Copier la langue de Recherche
+              </button>
+            </div>
+          ) : null}
+
           <ScraperLanguageDetectionSection
             value={formValues.languageDetection}
             fieldErrors={fieldErrors}
@@ -742,26 +943,26 @@ export default function ScraperSearchFeatureEditor({
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
             <h4>Test</h4>
-            <p>
-              Lance une recherche de test puis verifie l&apos;apercu des resultats extraits.
-            </p>
+            <p>{editorCopy.testSectionDescription}</p>
           </div>
 
-          <ScraperConfigField
-            field={TEST_QUERY_FIELD}
-            value={formValues.testQuery}
-            error={fieldErrors.testQuery}
-            onChange={handleFieldChange('testQuery')}
-          />
+          {!isHomepage ? (
+            <ScraperConfigField
+              field={TEST_QUERY_FIELD}
+              value={formValues.testQuery}
+              error={fieldErrors.testQuery}
+              onChange={handleFieldChange('testQuery')}
+            />
+          ) : null}
 
           <ScraperResolvedUrlPreview
             url={resolvedTestUrl}
-            emptyMessage="Complete le template pour voir l'apercu. La requete de test est optionnelle."
+            emptyMessage={editorCopy.resolvedUrlEmptyMessage}
           />
 
           {resolvedTestRequestConfig?.method === 'POST' ? (
             <div className="scraper-config-preview">
-              <span>Requete de test resolue</span>
+              <span>{editorCopy.resolvedRequestLabel}</span>
               <strong>
                 {resolvedTestRequestConfig.bodyMode === 'raw'
                   ? resolvedTestRequestConfig.contentType
@@ -784,7 +985,7 @@ export default function ScraperSearchFeatureEditor({
           <ScraperFeatureActions
             validating={validating}
             saving={saving}
-            validateLabel="Valider la recherche"
+            validateLabel={editorCopy.validateLabel}
             onBack={onBack}
             onValidate={() => void handleValidate()}
             onSave={() => void handleSave()}

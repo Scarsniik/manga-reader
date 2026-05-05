@@ -12,6 +12,7 @@ type Props = {
   fieldErrors: Record<string, string>;
   validating: boolean;
   saving: boolean;
+  allowQueryPlaceholders?: boolean;
   onMethodChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onBodyModeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onBodyChange: (value: string) => void;
@@ -30,6 +31,7 @@ export default function SearchRequestSection({
   fieldErrors,
   validating,
   saving,
+  allowQueryPlaceholders = true,
   onMethodChange,
   onBodyModeChange,
   onBodyChange,
@@ -48,9 +50,18 @@ export default function SearchRequestSection({
       />
 
       <div className="scraper-config-hint">
-        Tu peux reutiliser dans l&apos;URL et dans le body les placeholders
-        <code>{' {{query}}'}</code>, <code>{'{{rawQuery}}'}</code>, <code>{'{{page}}'}</code>,
-        <code>{'{{pageIndex}}'}</code> et leurs variantes deja supportees par la recherche.
+        {allowQueryPlaceholders ? (
+          <>
+            Tu peux reutiliser dans l&apos;URL et dans le body les placeholders
+            <code>{' {{query}}'}</code>, <code>{'{{rawQuery}}'}</code>, <code>{'{{page}}'}</code>,
+            <code>{'{{pageIndex}}'}</code> et leurs variantes deja supportees par la recherche.
+          </>
+        ) : (
+          <>
+            La homepage n&apos;injecte pas de terme de recherche. Seuls les placeholders de pagination
+            comme <code>{' {{page}}'}</code> et <code>{'{{pageIndex}}'}</code> sont utiles ici.
+          </>
+        )}
       </div>
 
       {request.method === 'POST' ? (

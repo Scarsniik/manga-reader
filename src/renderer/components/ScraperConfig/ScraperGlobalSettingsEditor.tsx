@@ -138,7 +138,7 @@ export default function ScraperGlobalSettingsEditor({
     },
     {
       name: 'homeSearchEnabled',
-      label: 'Jouer une recherche d\'accueil automatiquement',
+      label: 'Jouer une recherche automatique a l\'ouverture',
       type: 'checkbox',
     },
     {
@@ -192,7 +192,7 @@ export default function ScraperGlobalSettingsEditor({
 
   const homeSearchLabel = useMemo(() => {
     if (!scraper.globalConfig.homeSearch.enabled) {
-      return 'Aucune page d\'accueil automatique';
+      return 'Aucune recherche d\'accueil automatique';
     }
 
     return scraper.globalConfig.homeSearch.query
@@ -324,10 +324,10 @@ export default function ScraperGlobalSettingsEditor({
       </div>
 
       <div className="scraper-config-note">
-        <strong>Page d&apos;accueil</strong>
+        <strong>Recherche d&apos;accueil</strong>
         <span>
-          Quand la recherche d&apos;accueil est active, elle se lance a l&apos;arrivee sur la page du
-          scrapper uniquement s&apos;il n&apos;y a pas d&apos;etat precedent a relancer.
+          Ce reglage lance le module `Recherche` a l&apos;arrivee sur le scrapper. Si le module
+          `Homepage` est configure, il sert d&apos;accueil prioritaire.
         </span>
       </div>
 
@@ -376,7 +376,7 @@ export default function ScraperGlobalSettingsEditor({
           <strong>{chapterDownloadsLabel}</strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
-          <span>Page d&apos;accueil</span>
+          <span>Recherche d&apos;accueil</span>
           <strong>{homeSearchLabel}</strong>
         </div>
       </div>

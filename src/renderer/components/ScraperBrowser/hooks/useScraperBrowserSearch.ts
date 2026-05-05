@@ -4,6 +4,7 @@ import {
   hasScraperFieldSelectorValue,
   ScraperAuthorFeatureConfig,
   ScraperDetailsFeatureConfig,
+  ScraperHomepageFeatureConfig,
   ScraperRecord,
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
@@ -23,6 +24,8 @@ import {
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   resolveScraperAuthorTargetUrl,
+  resolveScraperHomepageRequestConfig,
+  resolveScraperHomepageTargetUrl,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
   ScraperRuntimeDetailsResult,
@@ -54,10 +57,12 @@ type UseScraperBrowserSearchOptions = {
   query: string;
   mode: ScraperBrowseMode;
   defaultMode: ScraperBrowseMode;
+  hasHomepage: boolean;
   hasSearch: boolean;
   hasAuthor: boolean;
   hasConfiguredHomeSearch: boolean;
   homeSearchQuery: string;
+  homepageConfig: ScraperHomepageFeatureConfig | null;
   searchConfig: ScraperSearchFeatureConfig | null;
   authorConfig: ScraperAuthorFeatureConfig | null;
   detailsConfig: ScraperDetailsFeatureConfig | null;
@@ -94,11 +99,11 @@ type UseScraperBrowserSearchOptions = {
 };
 
 const isListingMode = (value: ScraperBrowseMode): value is ScraperListingMode => (
-  value === 'search' || value === 'author'
+  value === 'homepage' || value === 'search' || value === 'author'
 );
 
 const getListingModeLabel = (mode: ScraperListingMode): string => (
-  mode === 'author' ? 'page auteur' : 'recherche'
+  mode === 'author' ? 'page auteur' : mode === 'homepage' ? 'homepage' : 'recherche'
 );
 
 const getRouteStateForNavigation = (options: {
@@ -125,6 +130,15 @@ const getRouteStateForNavigation = (options: {
   } = options;
   const currentRouteState = parseScraperRouteState(routeSearch);
   const currentPage = Math.max(1, sourcePageIndex + 1);
+  const persistedHomepageState = sourceMode === 'homepage'
+    ? {
+      active: hasExecutedSourceListing,
+      page: currentPage,
+    }
+    : {
+      active: Boolean(currentRouteState.homepageActive),
+      page: currentRouteState.homepagePage ?? 1,
+    };
   const persistedSearchState = sourceMode === 'search'
     ? {
       active: hasExecutedSourceListing,
@@ -151,6 +165,8 @@ const getRouteStateForNavigation = (options: {
   return writeScraperRouteState(routeSearch, {
     scraperId,
     mode: nextMode,
+    homepageActive: persistedHomepageState.active,
+    homepagePage: persistedHomepageState.page,
     searchActive: persistedSearchState.active,
     searchQuery: persistedSearchState.query,
     searchPage: persistedSearchState.page,
@@ -177,10 +193,12 @@ export function useScraperBrowserSearch({
   query,
   mode,
   defaultMode,
+  hasHomepage,
   hasSearch,
   hasAuthor,
   hasConfiguredHomeSearch,
   homeSearchQuery,
+  homepageConfig,
   searchConfig,
   authorConfig,
   detailsConfig,
@@ -215,6 +233,50 @@ export function useScraperBrowserSearch({
   setLoading,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserSearchOptions) {
+  const fetchHomepagePage = useCallback(async (
+    targetUrl: string,
+    options?: {
+      pageIndex?: number;
+    },
+  ): Promise<ScraperRuntimeSearchPageResult> => {
+    if (
+      !homepageConfig?.urlTemplate
+      || !homepageConfig.resultItemSelector
+      || !hasScraperFieldSelectorValue(homepageConfig.titleSelector)
+    ) {
+      throw new Error('Le composant Homepage n\'est pas encore suffisamment configure pour etre execute.');
+    }
+
+    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+    if (typeof fetchScraperDocument !== 'function') {
+      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
+    }
+
+    const documentResult = await fetchScraperDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+      requestConfig: resolveScraperHomepageRequestConfig(homepageConfig, {
+        pageIndex: options?.pageIndex ?? 0,
+      }),
+    });
+
+    if (!documentResult?.ok || !documentResult.html) {
+      throw new Error(
+        documentResult?.error
+          || (typeof documentResult?.status === 'number'
+            ? `La homepage a repondu avec le code HTTP ${documentResult.status}.`
+            : 'Impossible de charger la homepage.'),
+      );
+    }
+
+    const parser = new DOMParser();
+    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
+    return extractScraperSearchPageFromDocument(documentNode, homepageConfig, {
+      requestedUrl: documentResult.requestedUrl,
+      finalUrl: documentResult.finalUrl,
+    });
+  }, [homepageConfig, scraper.baseUrl]);
+
   const fetchSearchPage = useCallback(async (
     targetUrl: string,
     options?: {
@@ -297,8 +359,10 @@ export function useScraperBrowserSearch({
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
     listingMode === 'author'
       ? hasAuthorPagePlaceholder(authorConfig)
+      : listingMode === 'homepage'
+        ? hasSearchPagePlaceholder(homepageConfig)
       : hasSearchPagePlaceholder(searchConfig)
-  ), [authorConfig, searchConfig]);
+  ), [authorConfig, homepageConfig, searchConfig]);
 
   const loadListingResultsPage = useCallback(async (
     listingMode: ScraperListingMode,
@@ -320,6 +384,8 @@ export function useScraperBrowserSearch({
     ): Promise<ScraperRuntimeSearchPageResult> => (
       listingMode === 'author'
         ? fetchAuthorPage(targetUrl)
+        : listingMode === 'homepage'
+          ? fetchHomepagePage(targetUrl, { pageIndex })
         : fetchSearchPage(targetUrl, {
           query: nextQuery,
           pageIndex,
@@ -332,6 +398,8 @@ export function useScraperBrowserSearch({
           pageIndex,
           templateContext: templateContextOverride ?? authorTemplateContext ?? undefined,
         })
+        : listingMode === 'homepage'
+          ? resolveScraperHomepageTargetUrl(scraper.baseUrl, homepageConfig!, { pageIndex })
         : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex })
     );
 
@@ -372,7 +440,17 @@ export function useScraperBrowserSearch({
       pageIndex: currentPageIndex,
       items: currentPage.items,
     };
-  }, [authorConfig, authorTemplateContext, fetchAuthorPage, fetchSearchPage, getUsesTemplatePaging, scraper.baseUrl, searchConfig]);
+  }, [
+    authorConfig,
+    authorTemplateContext,
+    fetchAuthorPage,
+    fetchHomepagePage,
+    fetchSearchPage,
+    getUsesTemplatePaging,
+    homepageConfig,
+    scraper.baseUrl,
+    searchConfig,
+  ]);
 
   const runListingLookup = useCallback(async (
     listingMode: ScraperListingMode,
@@ -400,7 +478,16 @@ export function useScraperBrowserSearch({
       setListingReturnState(null);
     }
 
-    if (listingMode === 'search') {
+    if (listingMode === 'homepage') {
+      if (
+        !homepageConfig?.urlTemplate
+        || !homepageConfig.resultItemSelector
+        || !hasScraperFieldSelectorValue(homepageConfig.titleSelector)
+      ) {
+        setRuntimeError('Le composant Homepage n\'est pas encore suffisamment configure pour etre execute.');
+        return;
+      }
+    } else if (listingMode === 'search') {
       if (
         !searchConfig?.urlTemplate
         || !searchConfig.resultItemSelector
@@ -435,7 +522,9 @@ export function useScraperBrowserSearch({
         setRuntimeMessage(
           listingMode === 'author'
             ? 'La page auteur a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
-            : 'La recherche a bien ete lancee, mais aucun resultat exploitable n\'a ete extrait avec la configuration actuelle.',
+            : listingMode === 'homepage'
+              ? 'La homepage a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
+              : 'La recherche a bien ete lancee, mais aucun resultat exploitable n\'a ete extrait avec la configuration actuelle.',
         );
         return;
       }
@@ -461,6 +550,7 @@ export function useScraperBrowserSearch({
     canOpenSearchResultsAsDetails,
     clearFeedback,
     getUsesTemplatePaging,
+    homepageConfig,
     loadListingResultsPage,
     resetDetailsState,
     resetListingState,
@@ -483,6 +573,12 @@ export function useScraperBrowserSearch({
     await runListingLookup('search', nextQuery, options);
   }, [runListingLookup]);
 
+  const runHomepageLookup = useCallback(async (
+    options?: ListingLookupOptions,
+  ) => {
+    await runListingLookup('homepage', '', options);
+  }, [runListingLookup]);
+
   const runAuthorLookup = useCallback(async (
     nextQuery: string,
     options?: ListingLookupOptions,
@@ -503,6 +599,10 @@ export function useScraperBrowserSearch({
           pageIndex: nextPageIndex,
           templateContext: authorTemplateContext ?? undefined,
         })
+        : mode === 'homepage'
+          ? resolveScraperHomepageTargetUrl(scraper.baseUrl, homepageConfig!, {
+            pageIndex: nextPageIndex,
+          })
         : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, query, {
           pageIndex: nextPageIndex,
         })
@@ -519,6 +619,10 @@ export function useScraperBrowserSearch({
     try {
       const nextPage = mode === 'author'
         ? await fetchAuthorPage(nextPageTargetUrl)
+        : mode === 'homepage'
+          ? await fetchHomepagePage(nextPageTargetUrl, {
+            pageIndex: nextPageIndex,
+          })
         : await fetchSearchPage(nextPageTargetUrl, {
           query,
           pageIndex: nextPageIndex,
@@ -527,7 +631,9 @@ export function useScraperBrowserSearch({
         setRuntimeMessage(
           mode === 'author'
             ? 'Aucune card exploitable n\'a ete trouvee sur la page auteur suivante.'
-            : 'Aucun resultat exploitable n\'a ete trouve sur la page suivante.',
+            : mode === 'homepage'
+              ? 'Aucune card exploitable n\'a ete trouvee sur la page homepage suivante.'
+              : 'Aucun resultat exploitable n\'a ete trouve sur la page suivante.',
         );
         return;
       }
@@ -544,6 +650,7 @@ export function useScraperBrowserSearch({
         nextPageIndex,
         usesTemplatePaging,
         Boolean(nextPage.nextPageUrl),
+        getListingModeLabel(mode),
       ));
       scrollToBrowserTop();
     } catch (error) {
@@ -555,6 +662,7 @@ export function useScraperBrowserSearch({
     authorConfig,
     authorTemplateContext,
     fetchAuthorPage,
+    fetchHomepagePage,
     fetchSearchPage,
     getUsesTemplatePaging,
     listingPage,
@@ -564,6 +672,7 @@ export function useScraperBrowserSearch({
     scraper.baseUrl,
     scrollToBrowserTop,
     searchConfig,
+    homepageConfig,
     setHasExecutedListing,
     setListingPage,
     setListingPageIndex,
@@ -591,6 +700,10 @@ export function useScraperBrowserSearch({
     try {
       const previousPage = mode === 'author'
         ? await fetchAuthorPage(previousPageUrl)
+        : mode === 'homepage'
+          ? await fetchHomepagePage(previousPageUrl, {
+            pageIndex: Math.max(0, listingPageIndex - 1),
+          })
         : await fetchSearchPage(previousPageUrl, {
           query,
           pageIndex: Math.max(0, listingPageIndex - 1),
@@ -613,6 +726,7 @@ export function useScraperBrowserSearch({
     }
   }, [
     fetchAuthorPage,
+    fetchHomepagePage,
     fetchSearchPage,
     listingPageIndex,
     listingVisitedPageUrls,
@@ -785,9 +899,16 @@ export function useScraperBrowserSearch({
     }
 
     if (listingReturnState.hasExecutedListing) {
-      const rerunLookup = listingReturnState.mode === 'author'
-        ? runAuthorLookup
-        : runSearchLookup;
+      if (listingReturnState.mode === 'homepage') {
+        await runHomepageLookup({
+          pageIndex: listingReturnState.pageIndex,
+          preserveListingReturnState: true,
+        });
+        restoreSearchScrollPosition(listingReturnState.scrollTop);
+        return;
+      }
+
+      const rerunLookup = listingReturnState.mode === 'author' ? runAuthorLookup : runSearchLookup;
       await rerunLookup(listingReturnState.query, {
         pageIndex: listingReturnState.pageIndex,
         preserveListingReturnState: true,
@@ -806,6 +927,7 @@ export function useScraperBrowserSearch({
     resetListingState,
     restoreSearchScrollPosition,
     runAuthorLookup,
+    runHomepageLookup,
     runSearchLookup,
     setHasExecutedListing,
     setListingPage,
@@ -821,6 +943,14 @@ export function useScraperBrowserSearch({
     clearFeedback();
     resetAsyncState();
     setListingReturnState(null);
+
+    if (hasHomepage) {
+      setMode('homepage');
+      setQuery('');
+      resetDetailsState();
+      await runHomepageLookup();
+      return;
+    }
 
     if (!hasSearch) {
       setMode(defaultMode);
@@ -847,11 +977,13 @@ export function useScraperBrowserSearch({
     clearFeedback,
     defaultMode,
     hasConfiguredHomeSearch,
+    hasHomepage,
     hasSearch,
     homeSearchQuery,
     resetAsyncState,
     resetDetailsState,
     resetListingState,
+    runHomepageLookup,
     runSearchLookup,
     setListingReturnState,
     setMode,
@@ -864,13 +996,42 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    if (nextMode === 'homepage') {
+      if (detailsResult && listingReturnState?.mode === 'homepage') {
+        await handleBackToListing();
+        return;
+      }
+
+      clearFeedback();
+      resetAsyncState();
+      resetDetailsState();
+      setListingReturnState(null);
+      setMode('homepage');
+      setQuery('');
+      await runHomepageLookup();
+      return;
+    }
+
     if (nextMode === 'search') {
       if (detailsResult && listingReturnState?.mode === 'search') {
         await handleBackToListing();
         return;
       }
 
-      await handleGoToHome();
+      clearFeedback();
+      resetAsyncState();
+      resetDetailsState();
+      resetListingState();
+      setListingReturnState(null);
+      setMode('search');
+
+      if (hasConfiguredHomeSearch) {
+        setQuery(homeSearchQuery);
+        await runSearchLookup(homeSearchQuery);
+        return;
+      }
+
+      setQuery('');
       return;
     }
 
@@ -897,6 +1058,8 @@ export function useScraperBrowserSearch({
     detailsResult,
     handleBackToListing,
     handleGoToHome,
+    hasConfiguredHomeSearch,
+    homeSearchQuery,
     listingReturnState,
     mode,
     resetAsyncState,
@@ -906,9 +1069,12 @@ export function useScraperBrowserSearch({
     setListingReturnState,
     setMode,
     setQuery,
+    runHomepageLookup,
+    runSearchLookup,
   ]);
 
   return {
+    runHomepageLookup,
     runSearchLookup,
     runAuthorLookup,
     handleListingNextPage,

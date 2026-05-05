@@ -207,11 +207,29 @@ scraper.
 | `defaultLanguage` | langue appliquee aux mangas telecharges |
 | `bookmark.excludedFields` | metadonnees a ne pas enregistrer dans les bookmarks |
 | `chapterDownloads.autoAssignSeries` | rattache les telechargements de chapitre a une serie creee depuis le titre de la fiche |
-| `homeSearch.enabled` | lance une recherche automatiquement a l'ouverture du scraper |
+| `homeSearch.enabled` | lance une recherche automatiquement a l'ouverture du scraper, si le module `Homepage` n'est pas utilise comme accueil |
 | `homeSearch.query` | requete utilisee pour cette recherche d'accueil, vide pour une recherche globale |
 
 Les champs de bookmark excluables sont : `cover`, `summary`, `description`, `authors`, `tags`,
 `mangaStatus`, `pageCount`.
+
+## Module Homepage
+
+`Homepage` charge une page fixe du scraper, puis extrait une liste de cards avec le meme modele
+d'affichage que `Recherche`.
+
+La configuration reprend les champs de `Recherche`, avec ces differences :
+
+- aucun terme de recherche n'est demande en configuration ni en runtime
+- `testQuery` n'existe pas pour ce module
+- les placeholders de recherche sont resolus a vide pour compatibilite, mais seuls les placeholders
+  de pagination comme `{{page}}` et `{{pageIndex}}` sont utiles en pratique
+- l'ecran de configuration peut recopier les selecteurs et la detection de langue depuis `Recherche`
+- quand `Homepage` est configure, l'ouverture du scraper privilegie ce module comme accueil
+
+La validation et la pagination suivent les memes regles que `Recherche` : au moins un titre doit
+etre extrait, `urlTemplate` peut porter les variables de page, et `nextPageSelector` peut fournir
+une pagination HTML.
 
 ## Module Recherche
 

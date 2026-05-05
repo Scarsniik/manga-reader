@@ -6,7 +6,7 @@ import {
 } from '@/renderer/utils/scraperRuntime';
 import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 
-export type ScraperListingMode = 'search' | 'author';
+export type ScraperListingMode = 'homepage' | 'search' | 'author';
 export type ScraperBrowseMode = ScraperListingMode | 'manga';
 export type ScraperBrowserHistorySourceKind = ScraperBrowseMode | 'bookmarks';
 

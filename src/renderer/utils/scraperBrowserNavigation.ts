@@ -1,8 +1,10 @@
-export type ScraperRouteMode = 'search' | 'manga' | 'author';
+export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author';
 
 export type ScraperRouteState = {
   scraperId: string | null;
   mode: ScraperRouteMode;
+  homepageActive?: boolean;
+  homepagePage?: number;
   searchActive: boolean;
   searchQuery: string;
   searchPage: number;
@@ -16,6 +18,8 @@ export type ScraperRouteState = {
 
 const SCRAPER_PARAM = 'scraper';
 const SCRAPER_MODE_PARAM = 'scraperMode';
+const SCRAPER_HOMEPAGE_ACTIVE_PARAM = 'scraperHomepageActive';
+const SCRAPER_HOMEPAGE_PAGE_PARAM = 'scraperHomepagePage';
 const SCRAPER_SEARCH_ACTIVE_PARAM = 'scraperSearchActive';
 const SCRAPER_SEARCH_QUERY_PARAM = 'scraperSearchQuery';
 const SCRAPER_SEARCH_PAGE_PARAM = 'scraperSearchPage';
@@ -51,11 +55,15 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     ? 'manga'
     : rawMode === 'author'
       ? 'author'
-      : 'search';
+      : rawMode === 'homepage'
+        ? 'homepage'
+        : 'search';
 
   return {
     scraperId,
     mode,
+    homepageActive: params.get(SCRAPER_HOMEPAGE_ACTIVE_PARAM) === '1',
+    homepagePage: normalizePage(params.get(SCRAPER_HOMEPAGE_PAGE_PARAM)),
     searchActive: params.get(SCRAPER_SEARCH_ACTIVE_PARAM) === '1',
     searchQuery: params.get(SCRAPER_SEARCH_QUERY_PARAM) ?? '',
     searchPage: normalizePage(params.get(SCRAPER_SEARCH_PAGE_PARAM)),
@@ -76,6 +84,8 @@ export const writeScraperRouteState = (
 
   params.delete(SCRAPER_PARAM);
   params.delete(SCRAPER_MODE_PARAM);
+  params.delete(SCRAPER_HOMEPAGE_ACTIVE_PARAM);
+  params.delete(SCRAPER_HOMEPAGE_PAGE_PARAM);
   params.delete(SCRAPER_SEARCH_ACTIVE_PARAM);
   params.delete(SCRAPER_SEARCH_QUERY_PARAM);
   params.delete(SCRAPER_SEARCH_PAGE_PARAM);
@@ -93,6 +103,11 @@ export const writeScraperRouteState = (
 
   params.set(SCRAPER_PARAM, state.scraperId);
   params.set(SCRAPER_MODE_PARAM, state.mode);
+
+  if (state.homepageActive) {
+    params.set(SCRAPER_HOMEPAGE_ACTIVE_PARAM, '1');
+    params.set(SCRAPER_HOMEPAGE_PAGE_PARAM, String(Math.max(1, state.homepagePage ?? 1)));
+  }
 
   if (state.searchActive) {
     params.set(SCRAPER_SEARCH_ACTIVE_PARAM, '1');
@@ -134,6 +149,8 @@ export const clearScraperRouteState = (search: string): string => (
   writeScraperRouteState(search, {
     scraperId: null,
     mode: 'search',
+    homepageActive: false,
+    homepagePage: 1,
     searchActive: false,
     searchQuery: '',
     searchPage: 1,

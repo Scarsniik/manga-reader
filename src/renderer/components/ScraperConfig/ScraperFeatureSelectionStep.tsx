@@ -61,6 +61,16 @@ export default function ScraperFeatureSelectionStep({
   }
 
   if (activeFeature) {
+    if (activeFeature.kind === 'homepage') {
+      return (
+        <ScraperSearchFeatureEditor
+          feature={activeFeature}
+          variant="homepage"
+          onBack={() => setActiveFeatureKind(null)}
+        />
+      );
+    }
+
     if (activeFeature.kind === 'search') {
       return (
         <ScraperSearchFeatureEditor
@@ -147,7 +157,7 @@ export default function ScraperFeatureSelectionStep({
         <h3>Choisir les composants du scraper</h3>
         <p>
           Commence par les reglages globaux si tu veux preconfigurer les telechargements ou la
-          page d&apos;accueil, puis configure les composants executables du scrapper.
+          recherche automatique d&apos;accueil, puis configure les composants executables du scrapper.
         </p>
       </div>
 
@@ -168,7 +178,7 @@ export default function ScraperFeatureSelectionStep({
               {globalSettingsStatus.label}
             </span>
             <span className="scraper-feature-card__description">
-              Tags par defaut, langue par defaut, regles de bookmark et recherche d&apos;accueil du scrapper.
+              Tags par defaut, langue par defaut, regles de bookmark et recherche automatique d&apos;accueil.
             </span>
           </button>
         </div>

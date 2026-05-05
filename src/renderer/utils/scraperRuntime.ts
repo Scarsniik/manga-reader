@@ -6,6 +6,7 @@ import {
   ScraperAuthorFeatureConfig,
   ScraperCardListConfig,
   ScraperChaptersFeatureConfig,
+  ScraperHomepageFeatureConfig,
   buildScraperContextTemplateUrl,
   buildScraperTemplateUrl,
   FetchScraperDocumentResult,
@@ -352,6 +353,22 @@ export const getScraperSearchFeatureConfig = (
   };
 };
 
+export const getScraperHomepageFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperHomepageFeatureConfig | null => {
+  if (!feature?.config) {
+    return null;
+  }
+
+  const raw = feature.config as Record<string, unknown>;
+
+  return {
+    ...buildCardListConfig(raw),
+    urlTemplate: trimOptional(raw.urlTemplate) ?? '',
+    request: normalizeRequestConfig(raw.request),
+  };
+};
+
 export const getScraperAuthorFeatureConfig = (
   feature: ScraperFeatureDefinition | null | undefined,
 ): ScraperAuthorFeatureConfig | null => {
@@ -483,6 +500,14 @@ export const resolveScraperSearchTargetUrl = (
   },
 ): string => buildScraperSearchUrl(baseUrl, config.urlTemplate || '', query, options);
 
+export const resolveScraperHomepageTargetUrl = (
+  baseUrl: string,
+  config: ScraperHomepageFeatureConfig,
+  options?: {
+    pageIndex?: number;
+  },
+): string => buildScraperSearchUrl(baseUrl, config.urlTemplate || '', '', options);
+
 export const resolveScraperAuthorTargetUrl = (
   baseUrl: string,
   config: ScraperAuthorFeatureConfig,
@@ -519,7 +544,7 @@ export const resolveScraperAuthorTargetUrl = (
 };
 
 export const resolveScraperSearchRequestConfig = (
-  config: ScraperSearchFeatureConfig,
+  config: ScraperSearchFeatureConfig | ScraperHomepageFeatureConfig,
   query: string,
   options?: {
     pageIndex?: number;
@@ -553,6 +578,13 @@ export const resolveScraperSearchRequestConfig = (
     contentType: request.contentType,
   };
 };
+
+export const resolveScraperHomepageRequestConfig = (
+  config: ScraperHomepageFeatureConfig,
+  options?: {
+    pageIndex?: number;
+  },
+): ScraperRequestConfig | undefined => resolveScraperSearchRequestConfig(config, '', options);
 
 export const parseSelectorExpression = (
   input: string,
@@ -820,7 +852,7 @@ const hasPagePlaceholder = (template: string | undefined): boolean => (
 );
 
 export const hasSearchPagePlaceholder = (
-  config: ScraperSearchFeatureConfig | null | undefined,
+  config: ScraperSearchFeatureConfig | ScraperHomepageFeatureConfig | null | undefined,
 ): boolean => hasPagePlaceholder(config?.urlTemplate);
 
 export const hasAuthorPagePlaceholder = (

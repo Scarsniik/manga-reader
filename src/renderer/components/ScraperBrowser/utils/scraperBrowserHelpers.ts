@@ -55,7 +55,18 @@ export const readScraperListingReturnStateCache = (
 export const buildListingReturnStateFromRoute = (
   routeState: ScraperRouteState,
 ): ScraperListingReturnState | null => (
-  routeState.authorActive
+  routeState.mode === 'homepage' && routeState.homepageActive
+    ? {
+      mode: 'homepage',
+      hasExecutedListing: true,
+      query: '',
+      page: null,
+      visitedPageUrls: [],
+      pageIndex: Math.max(0, (routeState.homepagePage ?? 1) - 1),
+      results: [],
+      scrollTop: null,
+    }
+    : routeState.authorActive
     ? {
       mode: 'author',
       hasExecutedListing: true,
@@ -77,6 +88,17 @@ export const buildListingReturnStateFromRoute = (
       results: [],
       scrollTop: null,
     }
+    : routeState.homepageActive
+    ? {
+      mode: 'homepage',
+      hasExecutedListing: true,
+      query: '',
+      page: null,
+      visitedPageUrls: [],
+      pageIndex: Math.max(0, (routeState.homepagePage ?? 1) - 1),
+      results: [],
+      scrollTop: null,
+    }
     : null
 );
 
@@ -87,6 +109,10 @@ export const buildQueryPlaceholder = (
   hasAuthor: boolean,
   authorMode: 'template' | 'result_url' | null,
 ): string => {
+  if (mode === 'homepage') {
+    return 'Homepage sans terme de recherche';
+  }
+
   if (mode === 'search') {
     return 'Optionnel : rechercher un manga ou laisser vide pour tout afficher';
   }
@@ -118,9 +144,10 @@ export const buildSearchPageLoadedMessage = (
   nextPageIndex: number,
   usesSearchTemplatePaging: boolean,
   hasNextPage: boolean,
+  listingLabel = 'recherche',
 ): string => {
   if (usesSearchTemplatePaging) {
-    return `Page ${nextPageIndex + 1} chargee via le template de recherche.`;
+    return `Page ${nextPageIndex + 1} chargee via le template de ${listingLabel}.`;
   }
 
   if (hasNextPage) {
@@ -143,11 +170,27 @@ export const buildScraperBrowserHelperText = (options: {
 }): string | undefined => {
   const {
     mode,
+    usesSearchTemplatePaging,
+    hasSearchNextPageSelector,
     usesAuthorTemplatePaging,
     hasAuthorNextPageSelector,
     hasDetails,
     hasAuthor,
   } = options;
+
+  if (mode === 'homepage') {
+    if (usesSearchTemplatePaging && hasSearchNextPageSelector) {
+      return 'Cette vue charge la homepage configuree. La pagination peut venir du template `{{page}}` ou du lien HTML de page suivante.';
+    }
+
+    if (usesSearchTemplatePaging) {
+      return 'Cette vue charge la homepage configuree. La pagination est pilotee via le template `{{page}}`.';
+    }
+
+    if (hasSearchNextPageSelector) {
+      return 'Cette vue charge la homepage configuree. La pagination HTML est detectee pour parcourir plusieurs pages.';
+    }
+  }
 
   if (mode === 'author') {
     if (usesAuthorTemplatePaging && hasAuthorNextPageSelector) {
@@ -175,11 +218,13 @@ export const buildScraperBrowserHelperText = (options: {
 };
 
 export const buildScraperCapabilities = (options: {
+  homepageFeature: ScraperFeatureDefinition | null;
   searchFeature: ScraperFeatureDefinition | null;
   detailsFeature: ScraperFeatureDefinition | null;
   authorFeature: ScraperFeatureDefinition | null;
   chaptersFeature: ScraperFeatureDefinition | null;
   pagesFeature: ScraperFeatureDefinition | null;
+  hasHomepage: boolean;
   hasSearch: boolean;
   hasDetails: boolean;
   hasAuthor: boolean;
@@ -187,11 +232,13 @@ export const buildScraperCapabilities = (options: {
   hasPages: boolean;
 }): ScraperCapability[] => {
   const {
+    homepageFeature,
     searchFeature,
     detailsFeature,
     authorFeature,
     chaptersFeature,
     pagesFeature,
+    hasHomepage,
     hasSearch,
     hasDetails,
     hasAuthor,
@@ -200,6 +247,7 @@ export const buildScraperCapabilities = (options: {
   } = options;
 
   return [
+    { label: 'Homepage', feature: homepageFeature, enabled: hasHomepage },
     { label: 'Recherche', feature: searchFeature, enabled: hasSearch },
     { label: 'Fiche', feature: detailsFeature, enabled: hasDetails },
     { label: 'Auteur', feature: authorFeature, enabled: hasAuthor },

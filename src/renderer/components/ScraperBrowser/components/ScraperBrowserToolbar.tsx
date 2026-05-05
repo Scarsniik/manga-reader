@@ -32,10 +32,12 @@ export default function ScraperBrowserToolbar({
   onQueryChange,
 }: Props) {
   const modeLabels: Record<ScraperBrowseMode, string> = {
+    homepage: 'Homepage',
     search: 'Recherche',
     manga: 'Manga',
     author: 'Auteur',
   };
+  const isHomepageMode = mode === 'homepage';
 
   return (
     <div className="scraper-browser__panel">
@@ -55,9 +57,14 @@ export default function ScraperBrowserToolbar({
         <input
           className="scraper-browser__query"
           type="search"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
+          value={isHomepageMode ? '' : query}
+          onChange={(event) => {
+            if (!isHomepageMode) {
+              onQueryChange(event.target.value);
+            }
+          }}
           placeholder={activePlaceholder}
+          disabled={isHomepageMode}
         />
 
         {canSaveSearch ? (
@@ -73,7 +80,7 @@ export default function ScraperBrowserToolbar({
         ) : null}
 
         <button type="submit" className="scraper-browser__submit" disabled={loading}>
-          {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : 'Lancer'}
+          {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : 'Lancer'}
         </button>
       </form>
 

@@ -38,6 +38,12 @@ declare global {
 const MULTI_SEARCH_VIEW_ID = 'multi-search';
 const AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
 
+const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 'homepage' | 'search' => (
+    scraper?.features.some((feature) => feature.kind === 'homepage' && feature.status !== 'not_configured')
+        ? 'homepage'
+        : 'search'
+);
+
 const MangaManager: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -513,11 +519,12 @@ const MangaManager: React.FC = () => {
             setScraperBrowserSeed(null);
         }
 
+        const nextScraper = sortedScrapers.find((scraper) => scraper.id === nextViewId) ?? null;
         const nextSearch = nextViewId === 'library'
             ? clearScraperRouteState(location.search)
             : writeScraperRouteState(location.search, {
                 scraperId: nextViewId,
-                mode: 'search',
+                mode: getInitialScraperRouteMode(nextScraper),
                 searchActive: false,
                 searchQuery: '',
                 searchPage: 1,
@@ -545,7 +552,7 @@ const MangaManager: React.FC = () => {
                 }
                 : { replace: true }
         );
-    }, [activeViewId, location.pathname, location.search, navigate]);
+    }, [activeViewId, location.pathname, location.search, navigate, sortedScrapers]);
 
     useEffect(() => {
         if (!hasLoadedMangas) return;

@@ -7,7 +7,7 @@ import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/compon
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
-  mode: 'search' | 'author';
+  mode: 'homepage' | 'search' | 'author';
   backLabel?: string | null;
   visibleSearchResults: ScraperSearchResultItem[];
   searchResultsCount: number;
@@ -78,6 +78,7 @@ export default function ScraperSearchResultsSection({
   }
 
   const isAuthorMode = mode === 'author';
+  const isHomepageMode = mode === 'homepage';
 
   return (
     <section className="scraper-browser__results">
@@ -94,7 +95,9 @@ export default function ScraperSearchResultsSection({
               </button>
             </div>
           ) : null}
-          <h3>{isAuthorMode ? 'Resultats auteur' : 'Resultats de recherche'}</h3>
+          <h3>
+            {isAuthorMode ? 'Resultats auteur' : isHomepageMode ? 'Homepage' : 'Resultats de recherche'}
+          </h3>
           <p>
             {query.trim()
               ? (
@@ -108,6 +111,12 @@ export default function ScraperSearchResultsSection({
                     {searchResultsCount} resultat(s) extrait(s) depuis la page auteur courante.
                   </>
                 )
+                : isHomepageMode
+                  ? (
+                    <>
+                      {searchResultsCount} resultat(s) extrait(s) depuis la homepage.
+                    </>
+                  )
                 : (
                 <>
                   {searchResultsCount} resultat(s) extrait(s) sans terme de recherche.

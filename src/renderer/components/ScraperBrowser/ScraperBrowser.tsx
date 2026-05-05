@@ -85,6 +85,7 @@ import {
   getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
+  getScraperHomepageFeatureConfig,
   getScraperPagesFeatureConfig,
   getScraperSearchFeatureConfig,
   hasAuthorPagePlaceholder,
@@ -125,12 +126,20 @@ const buildBackLabel = (
     return 'Retour a la recherche';
   }
 
+  if (sourceKind === 'homepage') {
+    return 'Retour a la homepage';
+  }
+
   if (fallbackListingMode === 'author') {
     return 'Retour a la page auteur';
   }
 
   if (fallbackListingMode === 'search') {
     return 'Retour a la recherche';
+  }
+
+  if (fallbackListingMode === 'homepage') {
+    return 'Retour a la homepage';
   }
 
   return null;
@@ -180,17 +189,20 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
   const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
+  const homepageFeature = useMemo(() => getScraperFeature(scraper, 'homepage'), [scraper]);
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
   const authorFeature = useMemo(() => getScraperFeature(scraper, 'author'), [scraper]);
   const chaptersFeature = useMemo(() => getScraperFeature(scraper, 'chapters'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
+  const homepageConfig = useMemo(() => getScraperHomepageFeatureConfig(homepageFeature), [homepageFeature]);
   const searchConfig = useMemo(() => getScraperSearchFeatureConfig(searchFeature), [searchFeature]);
   const detailsConfig = useMemo(() => getScraperDetailsFeatureConfig(detailsFeature), [detailsFeature]);
   const authorConfig = useMemo(() => getScraperAuthorFeatureConfig(authorFeature), [authorFeature]);
   const chaptersConfig = useMemo(() => getScraperChaptersFeatureConfig(chaptersFeature), [chaptersFeature]);
   const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
 
+  const hasHomepage = isScraperFeatureConfigured(homepageFeature);
   const hasSearch = isScraperFeatureConfigured(searchFeature);
   const hasDetails = isScraperFeatureConfigured(detailsFeature);
   const hasAuthor = isScraperFeatureConfigured(authorFeature);
@@ -199,6 +211,9 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const usesChaptersForPages = usesScraperPagesChapters(pagesConfig);
   const availableModes = useMemo<ScraperBrowseMode[]>(() => {
     const nextModes: ScraperBrowseMode[] = [];
+    if (hasHomepage) {
+      nextModes.push('homepage');
+    }
     if (hasSearch) {
       nextModes.push('search');
     }
@@ -209,7 +224,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       nextModes.push('author');
     }
     return nextModes;
-  }, [hasAuthor, hasDetails, hasSearch]);
+  }, [hasAuthor, hasDetails, hasHomepage, hasSearch]);
 
   const defaultMode = useMemo<ScraperBrowseMode>(() => {
     if (initialState?.listingMode && availableModes.includes(initialState.listingMode)) {
@@ -218,6 +233,10 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
 
     if (initialState?.detailsResult && availableModes.includes('manga')) {
       return 'manga';
+    }
+
+    if (availableModes.includes('homepage')) {
+      return 'homepage';
     }
 
     if (availableModes.includes('search')) {
@@ -240,6 +259,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     && authorConfig?.resultItemSelector,
   );
   const usesSearchTemplatePaging = hasSearchPagePlaceholder(searchConfig);
+  const usesHomepageTemplatePaging = hasSearchPagePlaceholder(homepageConfig);
   const usesAuthorTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
   const hasConfiguredHomeSearch = useMemo(
     () => Boolean(scraper.globalConfig.homeSearch.enabled && hasSearch),
@@ -454,6 +474,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   });
 
   const {
+    runHomepageLookup,
     runSearchLookup,
     runAuthorLookup,
     handleListingNextPage,
@@ -472,10 +493,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     query,
     mode,
     defaultMode,
+    hasHomepage,
     hasSearch,
     hasAuthor,
     hasConfiguredHomeSearch,
     homeSearchQuery,
+    homepageConfig,
     searchConfig,
     authorConfig,
     detailsConfig,
@@ -520,6 +543,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     navigate,
     availableModes,
     defaultMode,
+    hasHomepage,
     hasSearch,
     hasAuthor,
     hasDetails,
@@ -548,6 +572,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     setDetailsResult,
     setChaptersResult,
     restoreSearchScrollPosition,
+    runHomepageLookup,
     runSearchLookup,
     runAuthorLookup,
     runDetailsLookup,
@@ -563,6 +588,12 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return;
     }
 
+    if (mode === 'homepage') {
+      setQuery('');
+      await runHomepageLookup();
+      return;
+    }
+
     if (mode === 'author') {
       await runAuthorLookup(trimmedQuery);
       return;
@@ -574,7 +605,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     }
 
     await runDetailsLookup(trimmedQuery);
-  }, [mode, query, runAuthorLookup, runDetailsLookup, runSearchLookup]);
+  }, [mode, query, runAuthorLookup, runDetailsLookup, runHomepageLookup, runSearchLookup, setQuery]);
 
   const canSaveScraperSearch = showSavedScraperSearches
     && (mode === 'search' || mode === 'author')
@@ -702,11 +733,13 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   );
 
   const capabilities = useMemo<ScraperCapability[]>(() => buildScraperCapabilities({
+    homepageFeature,
     searchFeature,
     detailsFeature,
     authorFeature,
     chaptersFeature,
     pagesFeature,
+    hasHomepage,
     hasSearch,
     hasDetails,
     hasAuthor,
@@ -719,17 +752,21 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     hasAuthor,
     hasChapters,
     hasDetails,
+    hasHomepage,
     hasPages,
     hasSearch,
+    homepageFeature,
     pagesFeature,
     searchFeature,
   ]);
 
   const helperText = useMemo(() => buildScraperBrowserHelperText({
     mode,
-    usesSearchTemplatePaging,
+    usesSearchTemplatePaging: mode === 'homepage' ? usesHomepageTemplatePaging : usesSearchTemplatePaging,
     usesAuthorTemplatePaging,
-    hasSearchNextPageSelector: hasScraperFieldSelectorValue(searchConfig?.nextPageSelector),
+    hasSearchNextPageSelector: hasScraperFieldSelectorValue(
+      mode === 'homepage' ? homepageConfig?.nextPageSelector : searchConfig?.nextPageSelector,
+    ),
     hasAuthorNextPageSelector: hasScraperFieldSelectorValue(authorConfig?.nextPageSelector),
     canOpenSearchResultsAsDetails,
     canOpenSearchResultsAsAuthor,
@@ -741,9 +778,11 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     canOpenSearchResultsAsDetails,
     hasAuthor,
     hasDetails,
+    homepageConfig?.nextPageSelector,
     mode,
     searchConfig?.nextPageSelector,
     usesAuthorTemplatePaging,
+    usesHomepageTemplatePaging,
     usesSearchTemplatePaging,
   ]);
 
@@ -775,7 +814,11 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   const authorResultsBackLabel = mode === 'author' && canNavigateBack
     ? buildBackLabel(historySourceKind, null)
     : null;
-  const usesActiveTemplatePaging = mode === 'author' ? usesAuthorTemplatePaging : usesSearchTemplatePaging;
+  const usesActiveTemplatePaging = mode === 'author'
+    ? usesAuthorTemplatePaging
+    : mode === 'homepage'
+      ? usesHomepageTemplatePaging
+      : usesSearchTemplatePaging;
   const initialAuthorDisplayQuery = initialState?.listingMode === 'author'
     ? formatScraperValueForDisplay(initialState.query || '')
     : '';
@@ -802,7 +845,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     () => buildPaginationInfoLabel(
       listingPage,
       usesActiveTemplatePaging,
-      mode === 'author' ? 'page auteur' : 'recherche',
+      mode === 'author' ? 'page auteur' : mode === 'homepage' ? 'homepage' : 'recherche',
     ),
     [listingPage, mode, usesActiveTemplatePaging],
   );
@@ -812,7 +855,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   );
 
   const buildCurrentListingReturnState = useCallback((): ScraperListingReturnState | null => {
-    if ((mode !== 'search' && mode !== 'author') || !hasExecutedListing) {
+    if ((mode !== 'homepage' && mode !== 'search' && mode !== 'author') || !hasExecutedListing) {
       return null;
     }
 
@@ -912,6 +955,8 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     const nextSearch = writeScraperRouteState(location.search, {
       scraperId: scraper.id,
       mode: 'author',
+      homepageActive: routeState.homepageActive,
+      homepagePage: routeState.homepagePage,
       searchActive: routeState.searchActive,
       searchQuery: routeState.searchQuery,
       searchPage: routeState.searchPage,
@@ -1470,7 +1515,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       />
 
       <ScraperSearchResultsSection
-        mode={mode === 'author' ? 'author' : 'search'}
+        mode={mode === 'author' ? 'author' : mode === 'homepage' ? 'homepage' : 'search'}
         backLabel={authorResultsBackLabel}
         visibleSearchResults={visibleSearchResults}
         searchResultsCount={listingResults.length}

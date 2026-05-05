@@ -138,6 +138,7 @@ Il ne doit pas stocker :
 
 L'etape `Composants` expose pour le moment :
 
+- `Homepage`
 - `Recherche`
 - `Fiche`
 - `Auteur`
@@ -162,7 +163,7 @@ Les reglages globaux du scraper couvrent maintenant :
 
 - les tags appliques automatiquement au telechargement
 - la langue par defaut des mangas importes
-- la recherche d'accueil eventuelle
+- la recherche d'accueil eventuelle, distincte du module executable `Homepage`
 - les metadonnees de bookmark a exclure du stockage local
 
 Pour les bookmarks, une section dediee permet de choisir plusieurs informations a ne pas conserver, par exemple :
@@ -384,15 +385,24 @@ Elements conserves hors `Bibliotheque` :
 La vue temporaire du scraper affiche :
 
 - son identite
-- l'etat de `Recherche`, `Fiche`, `Auteur`, `Chapitres` et `Pages`
+- l'etat de `Homepage`, `Recherche`, `Fiche`, `Auteur`, `Chapitres` et `Pages`
 - une barre de saisie runtime
-- un select `Recherche / Manga / Auteur` selon les composants utilisables
+- un select `Homepage / Recherche / Manga / Auteur` selon les composants utilisables
 
 Dans la V1 actuelle, le runtime reel branche est surtout :
 
+- `Homepage`
 - `Recherche`
 - `Manga` via `Fiche`
 - `Auteur`
+
+Le mode `Homepage` permet deja :
+
+- de charger une page fixe sans terme de recherche
+- d'extraire les cards avec la meme configuration que `Recherche`
+- de recopier les selecteurs et la detection de langue depuis `Recherche` dans l'ecran de configuration
+- de naviguer entre les pages via template ou lien HTML
+- d'ouvrir `Fiche` ou `Auteur` depuis les cards quand les liens sont disponibles
 
 Le mode `Recherche` permet deja :
 

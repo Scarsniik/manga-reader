@@ -1,5 +1,5 @@
 export type ScraperSourceKind = 'site' | 'api';
-export type ScraperFeatureKind = 'search' | 'details' | 'author' | 'chapters' | 'pages';
+export type ScraperFeatureKind = 'homepage' | 'search' | 'details' | 'author' | 'chapters' | 'pages';
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
 export type ScraperRequestMethod = 'GET' | 'POST';
 export type ScraperRequestBodyMode = 'form' | 'raw';
@@ -309,6 +309,11 @@ export interface ScraperCardListConfig {
 export interface ScraperSearchFeatureConfig extends ScraperCardListConfig {
   urlTemplate: string;
   testQuery?: string;
+  request?: ScraperRequestConfig;
+}
+
+export interface ScraperHomepageFeatureConfig extends ScraperCardListConfig {
+  urlTemplate: string;
   request?: ScraperRequestConfig;
 }
 
@@ -682,6 +687,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
   label: string;
   description: string;
 }> = [
+  {
+    kind: 'homepage',
+    label: 'Homepage',
+    description: 'Definir comment charger la page d\'accueil du scraper et extraire ses cards.',
+  },
   {
     kind: 'search',
     label: 'Recherche',

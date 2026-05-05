@@ -45,6 +45,7 @@ type UseScraperBrowserRouteSyncOptions = {
   navigate: NavigateFunction;
   availableModes: ScraperBrowseMode[];
   defaultMode: ScraperBrowseMode;
+  hasHomepage: boolean;
   hasSearch: boolean;
   hasAuthor: boolean;
   hasDetails: boolean;
@@ -73,6 +74,7 @@ type UseScraperBrowserRouteSyncOptions = {
   setDetailsResult: Dispatch<SetStateAction<ScraperRuntimeDetailsResult | null>>;
   setChaptersResult: Dispatch<SetStateAction<ScraperRuntimeChapterResult[]>>;
   restoreSearchScrollPosition: (scrollTop: number | null | undefined) => void;
+  runHomepageLookup: (options?: ListingLookupOptions) => Promise<void>;
   runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runAuthorLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runDetailsLookup: (query: string, options?: DetailsLookupOptions) => Promise<void>;
@@ -88,6 +90,7 @@ export function useScraperBrowserRouteSync({
   navigate,
   availableModes,
   defaultMode,
+  hasHomepage,
   hasSearch,
   hasAuthor,
   hasDetails,
@@ -116,6 +119,7 @@ export function useScraperBrowserRouteSync({
   setDetailsResult,
   setChaptersResult,
   restoreSearchScrollPosition,
+  runHomepageLookup,
   runSearchLookup,
   runAuthorLookup,
   runDetailsLookup,
@@ -264,6 +268,32 @@ export function useScraperBrowserRouteSync({
       : defaultMode;
     setMode(nextMode);
 
+    if (nextMode === 'homepage') {
+      setQuery('');
+
+      if (hasHomepage) {
+        const cachedHomepageState = restoredListingReturnState?.mode === 'homepage'
+          ? restoredListingReturnState
+          : null;
+        if (cachedHomepageState?.page && cachedHomepageState.results.length > 0) {
+          restoreListingReturnState(cachedHomepageState);
+          return;
+        }
+
+        await runHomepageLookup({
+          pageIndex: Math.max(0, (routeState.homepagePage ?? 1) - 1),
+          canCommit,
+        });
+        return;
+      }
+
+      setListingReturnState(null);
+      resetDetailsState();
+      resetListingState();
+      clearFeedback();
+      return;
+    }
+
     if (nextMode === 'search') {
       setQuery(routeState.searchQuery);
 
@@ -363,6 +393,7 @@ export function useScraperBrowserRouteSync({
     clearFeedback,
     defaultMode,
     hasAuthor,
+    hasHomepage,
     hasConfiguredHomeSearch,
     hasDetails,
     hasSearch,
@@ -380,6 +411,7 @@ export function useScraperBrowserRouteSync({
     routeStateSignature,
     runAuthorLookup,
     runDetailsLookup,
+    runHomepageLookup,
     runSearchLookup,
     scraperId,
     setListingReturnState,
@@ -442,6 +474,21 @@ export function useScraperBrowserRouteSync({
       return;
     }
 
+    const persistedHomepageState = mode === 'homepage'
+      ? {
+        active: hasExecutedListing,
+        page: listingPageIndex + 1,
+      }
+      : listingReturnState?.mode === 'homepage' && listingReturnState.hasExecutedListing
+        ? {
+          active: true,
+          page: listingReturnState.pageIndex + 1,
+        }
+        : {
+          active: false,
+          page: 1,
+        };
+
     const persistedSearchState = mode === 'search'
       ? {
         active: hasExecutedListing,
@@ -481,6 +528,8 @@ export function useScraperBrowserRouteSync({
     const nextSearch = writeScraperRouteState(locationSearch, {
       scraperId,
       mode,
+      homepageActive: persistedHomepageState.active,
+      homepagePage: persistedHomepageState.page,
       searchActive: persistedSearchState.active,
       searchQuery: persistedSearchState.query,
       searchPage: persistedSearchState.page,

@@ -48,6 +48,20 @@ export type SearchFeatureFormState = Omit<ScraperSearchFeatureConfig, 'request'>
   request: SearchRequestFormState;
 };
 
+export const SEARCH_SCRAPING_FIELD_NAMES = [
+  'resultListSelector',
+  'resultItemSelector',
+  'titleSelector',
+  'detailUrlSelector',
+  'authorUrlSelector',
+  'thumbnailSelector',
+  'summarySelector',
+  'pageCountSelector',
+  'nextPageSelector',
+] as const;
+
+export type SearchScrapingFieldName = typeof SEARCH_SCRAPING_FIELD_NAMES[number];
+
 export const URL_TEMPLATE_FIELD: Field = {
   name: 'urlTemplate',
   label: 'Template d\'URL de recherche',
@@ -255,12 +269,9 @@ export const buildSearchRequestConfig = (
   };
 };
 
-export const buildSearchConfig = (
-  values: Partial<SearchFeatureFormState>,
-): ScraperSearchFeatureConfig => ({
-  urlTemplate: trimOptional(values.urlTemplate) ?? '',
-  testQuery: trimOptional(values.testQuery),
-  request: buildSearchRequestConfig(values.request),
+export const buildSearchScrapingFields = (
+  values: Partial<Record<SearchScrapingFieldName, unknown>>,
+): Pick<SearchFeatureFormState, SearchScrapingFieldName> => ({
   resultListSelector: trimOptionalSelector(values.resultListSelector),
   resultItemSelector: trimOptionalSelector(values.resultItemSelector) ?? '',
   titleSelector: normalizeRequiredFieldSelector(values.titleSelector),
@@ -270,7 +281,16 @@ export const buildSearchConfig = (
   summarySelector: trimOptionalFieldSelector(values.summarySelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
   nextPageSelector: trimOptionalFieldSelector(values.nextPageSelector),
+});
+
+export const buildSearchConfig = (
+  values: Partial<SearchFeatureFormState>,
+): ScraperSearchFeatureConfig => ({
+  urlTemplate: trimOptional(values.urlTemplate) ?? '',
+  testQuery: trimOptional(values.testQuery),
+  request: buildSearchRequestConfig(values.request),
   languageDetection: buildLanguageDetectionConfig(values.languageDetection),
+  ...buildSearchScrapingFields(values),
 });
 
 export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatureFormState => {
@@ -292,16 +312,8 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): SearchFeatu
       body: typeof request.body === 'string' ? request.body : '',
       contentType: trimOptional(request.contentType) ?? '',
     },
-    resultListSelector: trimOptionalSelector(raw.resultListSelector),
-    resultItemSelector: trimOptionalSelector(raw.resultItemSelector) ?? '',
-    titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
-    detailUrlSelector: trimOptionalFieldSelector(raw.detailUrlSelector),
-    authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
-    thumbnailSelector: trimOptionalFieldSelector(raw.thumbnailSelector),
-    summarySelector: trimOptionalFieldSelector(raw.summarySelector),
-    pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
-    nextPageSelector: trimOptionalFieldSelector(raw.nextPageSelector),
     languageDetection: buildLanguageDetectionConfig(raw.languageDetection as Record<string, unknown> | undefined),
+    ...buildSearchScrapingFields(raw),
   };
 };
 
@@ -352,6 +364,7 @@ export const buildValidationPresentation = (
   validationResult: ScraperFeatureValidationResult,
   previewResults: ScraperSearchResultItem[],
   previewPage: ScraperRuntimeSearchPageResult | null,
+  listingKind: 'search' | 'homepage' = 'search',
 ): ScraperValidationPresentation => {
   const details: string[] = [];
   const warnings: string[] = [];
@@ -415,16 +428,26 @@ export const buildValidationPresentation = (
 
   return {
     summary: validationResult.ok
-      ? 'La recherche de test renvoie des resultats exploitables.'
+      ? listingKind === 'homepage'
+        ? 'La homepage renvoie des cards exploitables.'
+        : 'La recherche de test renvoie des resultats exploitables.'
       : validationResult.failureCode === 'http_error'
         ? typeof validationResult.status === 'number'
-          ? `La page de recherche a repondu avec le code HTTP ${validationResult.status}.`
-          : 'La page de recherche a repondu avec une erreur HTTP.'
+          ? listingKind === 'homepage'
+            ? `La homepage a repondu avec le code HTTP ${validationResult.status}.`
+            : `La page de recherche a repondu avec le code HTTP ${validationResult.status}.`
+          : listingKind === 'homepage'
+            ? 'La homepage a repondu avec une erreur HTTP.'
+            : 'La page de recherche a repondu avec une erreur HTTP.'
         : validationResult.failureCode === 'request_failed'
-          ? 'Impossible de recuperer la page de recherche.'
+          ? listingKind === 'homepage'
+            ? 'Impossible de recuperer la homepage.'
+            : 'Impossible de recuperer la page de recherche.'
           : titleCheck?.issueCode === 'no_match'
             ? 'Aucun resultat exploitable n\'a ete trouve avec la configuration actuelle.'
-            : 'La validation de la recherche a echoue.',
+            : listingKind === 'homepage'
+              ? 'La validation de la homepage a echoue.'
+              : 'La validation de la recherche a echoue.',
     details,
     warning: warnings.length ? warnings.join(' ') : undefined,
   };
