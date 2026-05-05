@@ -1,9 +1,9 @@
 import React from 'react';
-import { Manga } from '@/renderer/types';
 import ImageViewer from './ImageViewer';
 import ReaderChapterTransition from './ReaderChapterTransition';
 import ReaderCompletion from './ReaderCompletion';
 import ReaderEmptyState from './ReaderEmptyState';
+import type { EndOfReadingRecommendation } from '@/renderer/components/Reader/endOfReadingRecommendations';
 import {
     ManualSelection,
     ReaderAdjacentTarget,
@@ -21,7 +21,8 @@ type Props = {
     isCompletionPage: boolean;
     transitionDirection: 'previous' | 'next' | null;
     activeTransitionTarget: ReaderAdjacentTarget | null;
-    completionRecommendations: Manga[];
+    completionRecommendations: EndOfReadingRecommendation[];
+    completionRandomRecommendation: EndOfReadingRecommendation | null;
     completionSourceUrl: string | null;
     continuationCoverSrc: string | null;
     continuationLoading: boolean;
@@ -29,7 +30,8 @@ type Props = {
     onContinue: (direction: 'previous' | 'next') => void;
     onReturnToLibrary: () => void;
     onOpenSource: () => void;
-    onOpenRecommendation: (manga: Manga) => void;
+    onOpenRecommendation: (manga: EndOfReadingRecommendation) => void;
+    onOpenRandomRecommendation: (manga: EndOfReadingRecommendation) => void;
     currentImageSrc: string | null;
     activeOcrEnabled: boolean;
     showBoxes: boolean;
@@ -65,6 +67,7 @@ const ReaderStage: React.FC<Props> = ({
     transitionDirection,
     activeTransitionTarget,
     completionRecommendations,
+    completionRandomRecommendation,
     completionSourceUrl,
     continuationCoverSrc,
     continuationLoading,
@@ -73,6 +76,7 @@ const ReaderStage: React.FC<Props> = ({
     onReturnToLibrary,
     onOpenSource,
     onOpenRecommendation,
+    onOpenRandomRecommendation,
     currentImageSrc,
     activeOcrEnabled,
     showBoxes,
@@ -112,10 +116,12 @@ const ReaderStage: React.FC<Props> = ({
                     {isCompletionPage ? (
                         <ReaderCompletion
                             recommendations={completionRecommendations}
+                            randomRecommendation={completionRandomRecommendation}
                             sourceUrl={completionSourceUrl}
                             onReturnToLibrary={onReturnToLibrary}
                             onOpenSource={onOpenSource}
                             onOpenRecommendation={onOpenRecommendation}
+                            onOpenRandomRecommendation={onOpenRandomRecommendation}
                         />
                     ) : isTransitionPage && activeTransitionTarget ? (
                         <ReaderChapterTransition

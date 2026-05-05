@@ -16,6 +16,7 @@ export type AppParams = {
     readerScrollHoldSpeed?: number;
     readerScrollStartBoost?: number;
     readerOpenOcrPanelForJapaneseManga?: boolean;
+    readerRecommendBookmarks?: boolean;
     readerPreloadPageCount?: number;
     readerOcrDetectedSectionOpen?: boolean;
     readerOcrManualSectionOpen?: boolean;

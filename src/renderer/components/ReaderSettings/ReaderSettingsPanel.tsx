@@ -110,6 +110,18 @@ const readerSettingsFields: FormItem[] = [
       },
     ],
   },
+  {
+    type: 'section',
+    id: 'reader-completion',
+    title: 'Fin de lecture',
+    fields: [
+      {
+        name: 'readerRecommendBookmarks',
+        label: 'Inclure les bookmarks dans les recommandations et le manga aléatoire',
+        type: 'checkbox',
+      },
+    ],
+  },
 ]
 
 export default function ReaderSettingsPanel({ submitButtonId }: Props) {
@@ -126,6 +138,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
       readerScrollHoldSpeed: DEFAULT_READER_SCROLL_HOLD_SPEED,
       readerScrollStartBoost: DEFAULT_READER_SCROLL_START_BOOST,
       readerOpenOcrPanelForJapaneseManga: false,
+      readerRecommendBookmarks: false,
       ...sourceParams,
       readerOcrPreloadPageCount: sourceParams.readerOcrPreloadPageCount
         ?? sourceParams.readerPreloadPageCount
@@ -143,6 +156,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
       readerScrollHoldSpeed: normalizeReaderScrollHoldSpeed(values.readerScrollHoldSpeed),
       readerScrollStartBoost: normalizeReaderScrollStartBoost(values.readerScrollStartBoost),
       readerOpenOcrPanelForJapaneseManga: !!values.readerOpenOcrPanelForJapaneseManga,
+      readerRecommendBookmarks: !!values.readerRecommendBookmarks,
     }, {
       remount: false,
     })

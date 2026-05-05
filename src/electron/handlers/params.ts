@@ -187,6 +187,7 @@ const defaultSettings = {
     readerScrollHoldSpeed: DEFAULT_READER_SCROLL_HOLD_SPEED,
     readerScrollStartBoost: DEFAULT_READER_SCROLL_START_BOOST,
     readerOpenOcrPanelForJapaneseManga: false,
+    readerRecommendBookmarks: false,
     shortcuts: defaultShortcutBindings,
     readerOcrDetectedSectionOpen: true,
     readerOcrManualSectionOpen: true,
@@ -241,6 +242,9 @@ const normalizeSettings = (value: unknown) => {
     merged.readerOpenOcrPanelForJapaneseManga = typeof merged.readerOpenOcrPanelForJapaneseManga === "boolean"
         ? merged.readerOpenOcrPanelForJapaneseManga
         : defaultSettings.readerOpenOcrPanelForJapaneseManga;
+    merged.readerRecommendBookmarks = typeof merged.readerRecommendBookmarks === "boolean"
+        ? merged.readerRecommendBookmarks
+        : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
@@ -423,6 +427,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.readerOpenOcrPanelForJapaneseManga = typeof nextSettings.readerOpenOcrPanelForJapaneseManga === "boolean"
             ? nextSettings.readerOpenOcrPanelForJapaneseManga
             : defaultSettings.readerOpenOcrPanelForJapaneseManga;
+        nextSettings.readerRecommendBookmarks = typeof nextSettings.readerRecommendBookmarks === "boolean"
+            ? nextSettings.readerRecommendBookmarks
+            : defaultSettings.readerRecommendBookmarks;
         nextSettings.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(
             nextSettings.scraperAuthorFavoritePageCount,
         );

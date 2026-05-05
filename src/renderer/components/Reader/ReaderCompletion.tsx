@@ -1,13 +1,15 @@
 import React from "react";
-import { Manga } from "@/renderer/types";
 import { normalizeReaderAssetSrc } from "@/renderer/components/Reader/utils";
+import type { EndOfReadingRecommendation } from "@/renderer/components/Reader/endOfReadingRecommendations";
 
 type Props = {
-    recommendations: Manga[];
+    recommendations: EndOfReadingRecommendation[];
+    randomRecommendation: EndOfReadingRecommendation | null;
     sourceUrl: string | null;
     onReturnToLibrary: () => void;
     onOpenSource: () => void;
-    onOpenRecommendation: (manga: Manga) => void;
+    onOpenRecommendation: (manga: EndOfReadingRecommendation) => void;
+    onOpenRandomRecommendation: (manga: EndOfReadingRecommendation) => void;
 };
 
 type RecommendationProgress = {
@@ -16,7 +18,7 @@ type RecommendationProgress = {
     percent: number;
 };
 
-const getRecommendationProgress = (manga: Manga): RecommendationProgress | null => {
+const getRecommendationProgress = (manga: EndOfReadingRecommendation): RecommendationProgress | null => {
     const currentPage = typeof manga.currentPage === "number" && Number.isFinite(manga.currentPage)
         ? Math.floor(manga.currentPage)
         : null;
@@ -39,10 +41,12 @@ const getRecommendationProgress = (manga: Manga): RecommendationProgress | null 
 
 const ReaderCompletion: React.FC<Props> = ({
     recommendations,
+    randomRecommendation,
     sourceUrl,
     onReturnToLibrary,
     onOpenSource,
     onOpenRecommendation,
+    onOpenRandomRecommendation,
 }) => (
     <section className="reader-completion" aria-label="Fin de lecture">
         <div className="reader-completion__eyebrow">Lecture terminée</div>
@@ -62,6 +66,15 @@ const ReaderCompletion: React.FC<Props> = ({
                     onClick={onOpenSource}
                 >
                     Source du manga
+                </button>
+            ) : null}
+            {randomRecommendation ? (
+                <button
+                    type="button"
+                    className="reader-completion__button secondary"
+                    onClick={() => onOpenRandomRecommendation(randomRecommendation)}
+                >
+                    Manga aléatoire
                 </button>
             ) : null}
         </div>

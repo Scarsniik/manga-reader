@@ -18,7 +18,15 @@ import {
 import { findNextSeriesManga, findPreviousSeriesManga } from '@/renderer/utils/seriesChapters';
 import { getMangaSourceUrl } from '@/renderer/utils/mangaSource';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
-import { getEndOfReadingRecommendations } from '@/renderer/components/Reader/endOfReadingRecommendations';
+import {
+    type EndOfReadingRecommendation,
+    getEndOfReadingRecommendations,
+    getRandomStandaloneEndOfReadingRecommendation,
+} from '@/renderer/components/Reader/endOfReadingRecommendations';
+import {
+    findLinkedLibraryMangaForRecommendation,
+    resolveBookmarkRecommendationForReader,
+} from '@/renderer/components/Reader/readerBookmarkReader';
 import {
     ReaderAdjacentTarget,
     ReaderCopyFeedback,
@@ -38,6 +46,8 @@ type Args = {
     libraryMangas: Manga[];
     hiddenTagIds: string[];
     showHiddenContent: boolean;
+    bookmarkRecommendationMangas: EndOfReadingRecommendation[];
+    bookmarkRecommendationScrapersById: Map<string, ScraperRecord>;
     images: string[];
     currentIndex: number;
     setCurrentIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -54,6 +64,8 @@ const useReaderNavigation = ({
     libraryMangas,
     hiddenTagIds,
     showHiddenContent,
+    bookmarkRecommendationMangas,
+    bookmarkRecommendationScrapersById,
     images,
     currentIndex,
     setCurrentIndex,
@@ -174,29 +186,54 @@ const useReaderNavigation = ({
         () => normalizeReaderAssetSrc(activeTransitionTarget?.cover ?? null),
         [activeTransitionTarget],
     );
-    const completionRecommendations = React.useMemo(
-        () => isCompletionPage
-            ? getEndOfReadingRecommendations(manga, libraryMangas.map((candidate) => {
-                const resolvedPageCount = resolvedPageCounts[candidate.id];
-                if (
-                    (typeof candidate.pages === 'number' && candidate.pages > 0)
-                    || typeof resolvedPageCount !== 'number'
-                    || resolvedPageCount <= 0
-                ) {
-                    return candidate;
-                }
-
-                return {
+    const libraryRecommendationMangas = React.useMemo<EndOfReadingRecommendation[]>(
+        () => libraryMangas.map((candidate) => {
+            const resolvedPageCount = resolvedPageCounts[candidate.id];
+            const candidateWithResolvedPages = (
+                (typeof candidate.pages === 'number' && candidate.pages > 0)
+                || typeof resolvedPageCount !== 'number'
+                || resolvedPageCount <= 0
+            )
+                ? candidate
+                : {
                     ...candidate,
                     pages: resolvedPageCount,
                 };
-            }), 3, {
+
+            return {
+                ...candidateWithResolvedPages,
+                recommendationSource: 'library',
+            };
+        }),
+        [libraryMangas, resolvedPageCounts],
+    );
+    const recommendationCandidates = React.useMemo<EndOfReadingRecommendation[]>(
+        () => [
+            ...libraryRecommendationMangas,
+            ...bookmarkRecommendationMangas,
+        ],
+        [bookmarkRecommendationMangas, libraryRecommendationMangas],
+    );
+    const completionRecommendations = React.useMemo(
+        () => isCompletionPage
+            ? getEndOfReadingRecommendations(manga, recommendationCandidates, 3, {
+                excludeStartedWithoutPageCount: true,
+                hiddenTagIds,
+                requireSameLanguage: true,
+                showHiddenContent,
+            })
+            : [],
+        [hiddenTagIds, isCompletionPage, manga, recommendationCandidates, showHiddenContent],
+    );
+    const completionRandomRecommendation = React.useMemo(
+        () => isCompletionPage
+            ? getRandomStandaloneEndOfReadingRecommendation(manga, recommendationCandidates, {
                 excludeStartedWithoutPageCount: true,
                 hiddenTagIds,
                 showHiddenContent,
             })
-            : [],
-        [hiddenTagIds, isCompletionPage, libraryMangas, manga, resolvedPageCounts, showHiddenContent],
+            : null,
+        [hiddenTagIds, isCompletionPage, manga, recommendationCandidates, showHiddenContent],
     );
     const completionSourceUrl = React.useMemo(
         () => manga ? getMangaSourceUrl(manga) || null : null,
@@ -449,6 +486,57 @@ const useReaderNavigation = ({
         );
     }, [getLibraryReturnLocation, navigate, resolveLocalMangaPageCount]);
 
+    const openBookmarkRecommendation = React.useCallback(async (targetManga: EndOfReadingRecommendation) => {
+        try {
+            const resolution = await resolveBookmarkRecommendationForReader(
+                targetManga,
+                bookmarkRecommendationScrapersById,
+            );
+            const libraryReturnLocation = getLibraryReturnLocation(null);
+
+            navigate(
+                `/reader?id=${encodeURIComponent(resolution.readerMangaId)}&page=${encodeURIComponent(String(resolution.initialPage))}`,
+                {
+                    state: {
+                        from: libraryReturnLocation,
+                        mangaId: resolution.readerMangaId,
+                        scraperReader: {
+                            id: resolution.readerMangaId,
+                            scraperId: resolution.scraper.id,
+                            title: resolution.title,
+                            sourceUrl: resolution.sourceUrl,
+                            cover: resolution.cover,
+                            language: resolution.detailsResult.languageCodes?.[0]
+                                || resolution.scraper.globalConfig.defaultLanguage
+                                || targetManga.language
+                                || null,
+                            pageUrls: resolution.pageUrls,
+                            bookmarkExcludedFields: resolution.scraper.globalConfig.bookmark.excludedFields,
+                        },
+                    },
+                },
+            );
+        } catch (error) {
+            console.error('Reader: failed to open bookmark recommendation', error);
+            alert(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette recommandation.');
+        }
+    }, [bookmarkRecommendationScrapersById, getLibraryReturnLocation, navigate]);
+
+    const openRecommendation = React.useCallback(async (targetManga: EndOfReadingRecommendation) => {
+        const linkedLibraryManga = findLinkedLibraryMangaForRecommendation(libraryMangas, targetManga);
+        if (linkedLibraryManga) {
+            await openLibraryManga(linkedLibraryManga);
+            return;
+        }
+
+        if (targetManga.recommendationSource === 'bookmark') {
+            await openBookmarkRecommendation(targetManga);
+            return;
+        }
+
+        await openLibraryManga(targetManga);
+    }, [libraryMangas, openBookmarkRecommendation, openLibraryManga]);
+
     const goTo = React.useCallback((index: number) => {
         scrollToTopImmediate();
         setTransitionDirection(null);
@@ -573,6 +661,7 @@ const useReaderNavigation = ({
                             title: target.title,
                             sourceUrl,
                             cover: target.adjacentChapter.image || target.detailsResult.cover,
+                            language: target.detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
                             pageUrls,
                             chapter: target.adjacentChapter,
                             bookmarkExcludedFields,
@@ -840,6 +929,7 @@ const useReaderNavigation = ({
         isCompletionPage,
         currentImageSrc,
         completionRecommendations,
+        completionRandomRecommendation,
         completionSourceUrl,
         continuationCoverSrc,
         pageCounterLabel,
@@ -855,6 +945,7 @@ const useReaderNavigation = ({
         returnToLibrary,
         openMangaSource,
         openLibraryManga,
+        openRecommendation,
         continueToAdjacentChapter,
         next,
         prev,

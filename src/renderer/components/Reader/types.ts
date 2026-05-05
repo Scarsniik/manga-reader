@@ -19,6 +19,7 @@ export type ReaderLocationState = {
         title: string;
         sourceUrl: string;
         cover?: string;
+        language?: string | null;
         pageUrls: string[];
         chapter?: ScraperRuntimeChapterResult;
         bookmarkExcludedFields?: ScraperBookmarkMetadataField[];

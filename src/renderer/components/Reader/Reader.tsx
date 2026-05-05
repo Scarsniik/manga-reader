@@ -7,6 +7,12 @@ import ReaderHeader from './ReaderHeader';
 import ReaderStage from './ReaderStage';
 import useParams from '@/renderer/hooks/useParams';
 import useTags from '@/renderer/hooks/useTags';
+import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import { useScraperViewHistory } from '@/renderer/stores/scraperViewHistory';
+import type {
+    ScraperReaderProgressRecord,
+    ScraperRecord,
+} from '@/shared/scraper';
 import {
     DEFAULT_READER_IMAGE_MAX_WIDTH,
     DEFAULT_READER_SCROLL_HOLD_SPEED,
@@ -30,6 +36,7 @@ import useReaderNavigation from './hooks/useReaderNavigation';
 import useReaderOcr from './hooks/useReaderOcr';
 import useReaderOcrPanelLayout from './hooks/useReaderOcrPanelLayout';
 import useReaderShortcuts from './hooks/useReaderShortcuts';
+import { buildBookmarkRecommendationMangas } from '@/renderer/components/Reader/readerBookmarkRecommendations';
 
 const Reader: React.FC = () => {
     const [ocrEnabled, setOcrEnabled] = React.useState<boolean>(false);
@@ -39,6 +46,10 @@ const Reader: React.FC = () => {
     const navigate = useNavigate();
     const { params, loading: settingsLoading, setParams } = useParams();
     const { tags } = useTags();
+    const { bookmarks: scraperBookmarks } = useScraperBookmarks();
+    const { recordsById: scraperViewHistoryRecordsById } = useScraperViewHistory();
+    const [scrapers, setScrapers] = React.useState<ScraperRecord[]>([]);
+    const [scraperReaderProgressRecords, setScraperReaderProgressRecords] = React.useState<ScraperReaderProgressRecord[]>([]);
     const locationState = location.state as ReaderLocationState;
     const ocrPreloadPageCount = settingsLoading
         ? null
@@ -60,6 +71,7 @@ const Reader: React.FC = () => {
         : normalizeReaderScrollStartBoost(params?.readerScrollStartBoost);
     const showProgressIndicator = normalizeBooleanSetting(params?.readerShowProgressIndicator, true);
     const openOcrPanelForJapaneseManga = normalizeBooleanSetting(params?.readerOpenOcrPanelForJapaneseManga, false);
+    const recommendBookmarks = normalizeBooleanSetting(params?.readerRecommendBookmarks, false);
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
     const autoOpenedOcrMangaIdRef = React.useRef<string | null>(null);
@@ -67,6 +79,55 @@ const Reader: React.FC = () => {
         () => tags.filter((tag) => tag.hidden).map((tag) => tag.id),
         [tags],
     );
+
+    const loadScrapersForRecommendations = React.useCallback(async () => {
+        if (!recommendBookmarks || !window.api || typeof window.api.getScrapers !== 'function') {
+            setScrapers([]);
+            return;
+        }
+
+        try {
+            const data = await window.api.getScrapers();
+            setScrapers(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.warn('Reader: failed to load scrapers for bookmark recommendations', error);
+            setScrapers([]);
+        }
+    }, [recommendBookmarks]);
+
+    const loadScraperReaderProgressRecords = React.useCallback(async () => {
+        if (!recommendBookmarks || !window.api || typeof window.api.getScraperReaderProgressRecords !== 'function') {
+            setScraperReaderProgressRecords([]);
+            return;
+        }
+
+        try {
+            const data = await window.api.getScraperReaderProgressRecords();
+            setScraperReaderProgressRecords(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.warn('Reader: failed to load scraper reader progress for bookmark recommendations', error);
+            setScraperReaderProgressRecords([]);
+        }
+    }, [recommendBookmarks]);
+
+    React.useEffect(() => {
+        void loadScrapersForRecommendations();
+
+        if (!recommendBookmarks) {
+            return undefined;
+        }
+
+        const onScrapersUpdated = () => {
+            void loadScrapersForRecommendations();
+        };
+
+        window.addEventListener('scrapers-updated', onScrapersUpdated as EventListener);
+        return () => window.removeEventListener('scrapers-updated', onScrapersUpdated as EventListener);
+    }, [loadScrapersForRecommendations, recommendBookmarks]);
+
+    React.useEffect(() => {
+        void loadScraperReaderProgressRecords();
+    }, [loadScraperReaderProgressRecords, location.search]);
 
     const {
         images,
@@ -87,6 +148,33 @@ const Reader: React.FC = () => {
         preloadPageCount: imagePreloadPageCount,
     });
     const ocrPanelLayoutStyle = useReaderOcrPanelLayout(readerHeaderRef, ocrPanelRef);
+    const scrapersById = React.useMemo(
+        () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
+        [scrapers],
+    );
+    const bookmarkRecommendationMangas = React.useMemo(
+        () => recommendBookmarks
+            ? buildBookmarkRecommendationMangas({
+                bookmarks: scraperBookmarks,
+                scrapersById,
+                tags,
+                viewHistoryRecordsById: scraperViewHistoryRecordsById,
+                progressRecords: scraperReaderProgressRecords,
+                libraryMangas,
+                currentManga: manga,
+            })
+            : [],
+        [
+            libraryMangas,
+            manga,
+            recommendBookmarks,
+            scraperBookmarks,
+            scraperReaderProgressRecords,
+            scraperViewHistoryRecordsById,
+            scrapersById,
+            tags,
+        ],
+    );
 
     const navigation = useReaderNavigation({
         locationSearch: location.search,
@@ -95,6 +183,8 @@ const Reader: React.FC = () => {
         libraryMangas,
         hiddenTagIds,
         showHiddenContent: Boolean(params?.showHiddens),
+        bookmarkRecommendationMangas,
+        bookmarkRecommendationScrapersById: scrapersById,
         images,
         currentIndex,
         setCurrentIndex,
@@ -203,6 +293,7 @@ const Reader: React.FC = () => {
                     transitionDirection={navigation.transitionDirection}
                     activeTransitionTarget={navigation.activeTransitionTarget}
                     completionRecommendations={navigation.completionRecommendations}
+                    completionRandomRecommendation={navigation.completionRandomRecommendation}
                     completionSourceUrl={navigation.completionSourceUrl}
                     continuationCoverSrc={navigation.continuationCoverSrc}
                     continuationLoading={navigation.continuationLoading}
@@ -215,7 +306,10 @@ const Reader: React.FC = () => {
                         void navigation.openMangaSource();
                     }}
                     onOpenRecommendation={(targetManga) => {
-                        void navigation.openLibraryManga(targetManga);
+                        void navigation.openRecommendation(targetManga);
+                    }}
+                    onOpenRandomRecommendation={(targetManga) => {
+                        void navigation.openRecommendation(targetManga);
                     }}
                     currentImageSrc={navigation.currentImageSrc}
                     activeOcrEnabled={activeOcrEnabled}

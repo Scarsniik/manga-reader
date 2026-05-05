@@ -84,6 +84,7 @@ const useReaderData = ({
                         ? savedProgress.currentPage
                         : null,
                     pages: scraperReaderState.pageUrls.length,
+                    language: scraperReaderState.language ?? null,
                     authorIds: [],
                     tagIds: [],
                     sourceKind: 'scraper',
@@ -222,6 +223,7 @@ const useReaderData = ({
                     title: details.title || remoteManga.title,
                     thumbnailPath: remoteManga.thumbnailPath || details.cover || null,
                     pages: totalPages,
+                    language: remoteManga.language || details.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
                     chapters: sourceChapterLabel || remoteManga.chapters,
                     scraperId: scraper.id,
                     sourceUrl: details.finalUrl || details.requestedUrl || sourceUrl,

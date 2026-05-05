@@ -31,6 +31,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - respecte `readerShowProgressIndicator` pour afficher ou masquer la barre de progression
 - `ReaderCompletion.tsx`
   - affiche la fin de manga/série, le retour bibliothèque, la source et les suggestions avec leur progression si elles sont commencées
+- `endOfReadingRecommendations.ts` / `readerBookmarkRecommendations.ts` / `readerBookmarkReader.ts`
+  - centralisent les règles de suggestions, de manga aléatoire, l'adaptation des bookmarks scraper en recommandations et leur ouverture directe dans le reader
 - `ReaderEmptyState.tsx`
   - affiche l'état debug quand aucune image n'est disponible
 - `ReaderControls.tsx`
@@ -44,7 +46,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Il supporte la lecture locale et la lecture issue d'un scraper.
 - Il gère la navigation clavier/souris, la progression et le passage au chapitre précédent/suivant.
 - Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.
-- En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, et les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché.
+- En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché, et la langue doit correspondre à la lecture en cours.
+- Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.
 - L'OCR reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones OCR peuvent être détectées automatiquement ou ajoutées manuellement.
-- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image, le pré-rendu OCR et l'ouverture automatique du panneau OCR pour les mangas marqués en japonais (`language = ja`).
+- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image, le pré-rendu OCR, l'ouverture automatique du panneau OCR pour les mangas marqués en japonais (`language = ja`) et l'inclusion optionnelle des bookmarks dans les propositions de fin de lecture.

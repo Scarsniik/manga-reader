@@ -537,6 +537,7 @@ export function useScraperBrowserDetails({
               title: detailsResult.title || query.trim() || 'manga',
               sourceUrl,
               cover: detailsResult.cover,
+              language: detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
               pageUrls,
               chapter: normalizedChapter,
               bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
