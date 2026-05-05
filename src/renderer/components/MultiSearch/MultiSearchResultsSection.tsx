@@ -1,6 +1,7 @@
 import React from "react";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import { DownloadArrowIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
 import type {
@@ -21,6 +22,8 @@ type Props = {
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
+  textFilter: string;
+  baseQuery: string;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   isExportingJson: boolean;
@@ -30,6 +33,9 @@ type Props = {
   onExportJson: () => void;
   onExportMergedResultsJson: () => void;
   onReloadMerge: () => void;
+  onTextFilterChange: (value: string) => void;
+  onFillTextFilterFromBaseQuery: () => void;
+  onClearTextFilter: () => void;
   onToggleLanguageFilterMode: (
     languageCode: string,
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
@@ -56,6 +62,8 @@ export default function MultiSearchResultsSection({
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
+  textFilter,
+  baseQuery,
   libraryMangas,
   bookmarkedSourceKeys,
   isExportingJson,
@@ -65,6 +73,9 @@ export default function MultiSearchResultsSection({
   onExportJson,
   onExportMergedResultsJson,
   onReloadMerge,
+  onTextFilterChange,
+  onFillTextFilterFromBaseQuery,
+  onClearTextFilter,
   onToggleLanguageFilterMode,
 }: Props) {
   if (viewMode === "merged") {
@@ -74,11 +85,20 @@ export default function MultiSearchResultsSection({
           <div>
             <h3>Resultats fusionnes</h3>
             <p>{mergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s).</p>
-            <MultiSearchLanguageFilterBar
-              languageCodes={resultLanguageCodes}
-              filterModes={languageFilterModes}
-              onToggleFilterMode={onToggleLanguageFilterMode}
-            />
+            <div className="multi-search__result-filter-stack">
+              <MultiSearchTextFilterBar
+                value={textFilter}
+                baseQuery={baseQuery}
+                onChange={onTextFilterChange}
+                onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
+                onClear={onClearTextFilter}
+              />
+              <MultiSearchLanguageFilterBar
+                languageCodes={resultLanguageCodes}
+                filterModes={languageFilterModes}
+                onToggleFilterMode={onToggleLanguageFilterMode}
+              />
+            </div>
           </div>
           <div className="multi-search__section-actions">
             {showMergeReloadButton ? (
@@ -139,11 +159,20 @@ export default function MultiSearchResultsSection({
         <div>
           <h3>Resultats par scrapper</h3>
           <p>{visibleSourceCount} source(s) chargee(s) sans fusion.</p>
-          <MultiSearchLanguageFilterBar
-            languageCodes={resultLanguageCodes}
-            filterModes={languageFilterModes}
-            onToggleFilterMode={onToggleLanguageFilterMode}
-          />
+          <div className="multi-search__result-filter-stack">
+            <MultiSearchTextFilterBar
+              value={textFilter}
+              baseQuery={baseQuery}
+              onChange={onTextFilterChange}
+              onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
+              onClear={onClearTextFilter}
+            />
+            <MultiSearchLanguageFilterBar
+              languageCodes={resultLanguageCodes}
+              filterModes={languageFilterModes}
+              onToggleFilterMode={onToggleLanguageFilterMode}
+            />
+          </div>
         </div>
         <div className="multi-search__section-actions">
           <button

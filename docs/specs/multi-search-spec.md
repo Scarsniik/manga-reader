@@ -52,6 +52,7 @@ La page de recherche multiple contient :
 - Résumé des scrapers concernés.
 - Statut détaillé des scrapers.
 - Résultats de la recherche.
+- Filtre texte des résultats chargés.
 
 ---
 
@@ -605,6 +606,10 @@ La V1 du multi-search repose sur les choix suivants :
 - Dans les cards multi-search, les langues sont affichees sous forme de drapeaux compacts via la librairie `flag-icons`, avec le nom de langue conserve en aide au survol. Le chinois (`zh`) est pris en charge comme langue frequente.
 - Dans les listes de langues, les codes qui ne correspondent pas a une langue connue sont affiches avec `?`.
 - La section de resultats affiche sous le compteur un drapeau par langue trouvee dans les resultats charges. Chaque drapeau filtre seulement l'affichage et les compteurs, sans supprimer les resultats charges. Le clic gauche alterne `only` et `default`, le clic droit alterne `without` et `default`.
+- La section de resultats affiche au-dessus des drapeaux un filtre texte qui filtre seulement l'affichage et les compteurs, sans relancer les scrapers ni supprimer les resultats charges.
+- Le filtre texte accepte plusieurs termes avec les memes separateurs que la recherche principale : virgule, point-virgule, barre verticale ou retour a la ligne.
+- Le filtre texte est applique apres un court delai de saisie pour eviter de recalculer l'affichage a chaque frappe.
+- Le filtre texte propose un bouton pour reprendre la recherche principale comme valeur de filtre, et un bouton pour vider la valeur.
 - La liste des scrapers associes a une card multi-search et le menu `Ouvrir avec` s'ouvrent au clic comme des menus deroulants en overlay pour ne pas deplacer les cards suivantes, et se ferment quand l'utilisateur clique en dehors.
 - Les couvertures multi-search distantes passent par un protocole local de vignette redimensionnee quand l'application Electron est disponible, avec fallback vers l'image originale.
 - Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque ou a un bookmark scraper.

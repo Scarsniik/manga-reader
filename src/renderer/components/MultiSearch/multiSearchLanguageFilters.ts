@@ -2,6 +2,10 @@ import {
   UNKNOWN_MULTI_SEARCH_VALUE,
   getLanguageLabel,
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import {
+  buildFilteredMultiSearchMergedResult,
+  uniqueMultiSearchFilterValues,
+} from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -9,20 +13,6 @@ import type {
   MultiSearchScraperRun,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
-
-const uniqueValues = (values: string[]): string[] => {
-  const seen = new Set<string>();
-
-  return values.filter((value) => {
-    const key = value.toLowerCase();
-    if (!value || seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
-};
 
 const isLanguageFilterMode = (
   mode: MultiSearchLanguageFilterMode | undefined,
@@ -86,28 +76,6 @@ const doesSourceMatchLanguageFilter = (
   return true;
 };
 
-const getFirstSourceValue = (
-  sources: MultiSearchSourceResult[],
-  getValue: (source: MultiSearchSourceResult) => string | undefined,
-): string | undefined => (
-  sources.map(getValue).find((value): value is string => Boolean(value))
-);
-
-const buildFilteredMergedResult = (
-  result: MultiSearchMergedResult,
-  sources: MultiSearchSourceResult[],
-): MultiSearchMergedResult => ({
-  id: result.id,
-  title: sources[0]?.result.title || result.title,
-  coverUrl: getFirstSourceValue(sources, (source) => source.result.thumbnailUrl),
-  summary: getFirstSourceValue(sources, (source) => source.result.summary),
-  pageCount: getFirstSourceValue(sources, (source) => source.result.pageCount),
-  sources,
-  sourceLanguageCodes: uniqueValues(sources.flatMap(getMultiSearchSourceLanguageValues)),
-  tentativeAuthorNames: uniqueValues(sources.flatMap((source) => source.tentativeAuthorNames)),
-  contentTypes: uniqueValues(sources.flatMap((source) => source.contentTypes)),
-});
-
 export const filterMultiSearchMergedResultsByLanguage = (
   results: MultiSearchMergedResult[],
   modes: MultiSearchLanguageFilterModes,
@@ -122,7 +90,9 @@ export const filterMultiSearchMergedResultsByLanguage = (
       return visibleResults;
     }
 
-    visibleResults.push(buildFilteredMergedResult(result, visibleSources));
+    visibleResults.push(
+      buildFilteredMultiSearchMergedResult(result, visibleSources, getMultiSearchSourceLanguageValues),
+    );
     return visibleResults;
   }, []);
 };
@@ -144,6 +114,6 @@ export const filterMultiSearchRunsByLanguage = (
 export const buildMultiSearchResultLanguageFilterCodes = (
   sources: MultiSearchSourceResult[],
 ): string[] => (
-  uniqueValues(sources.flatMap(getMultiSearchSourceLanguageValues))
+  uniqueMultiSearchFilterValues(sources.flatMap(getMultiSearchSourceLanguageValues))
     .sort((left, right) => getLanguageLabel(left).localeCompare(getLanguageLabel(right)))
 );

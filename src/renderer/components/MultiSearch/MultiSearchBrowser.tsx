@@ -26,10 +26,16 @@ import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
   filterMultiSearchRunsByLanguage,
+  getMultiSearchSourceLanguageValues,
   getMultiSearchLanguageFilterMode,
   hasActiveMultiSearchLanguageFilter,
   toggleMultiSearchLanguageFilterMode,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import {
+  filterMultiSearchMergedResultsByText,
+  filterMultiSearchRunsByText,
+  hasActiveMultiSearchTextFilter,
+} from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import {
   readMultiSearchState,
   saveMultiSearchState,
@@ -53,6 +59,8 @@ import "./style.scss";
 type Props = {
   scrapers: ScraperRecord[];
 };
+
+const RESULT_TEXT_FILTER_DELAY_MS = 350;
 
 const formatList = (values: string[], fallback: string): string => (
   values.length ? values.join(", ") : fallback
@@ -85,6 +93,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
   const [mergeRefreshKey, setMergeRefreshKey] = useState(0);
   const [resultLanguageFilterModes, setResultLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
+  const [resultTextFilter, setResultTextFilter] = useState("");
+  const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
@@ -106,6 +116,14 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => new Set(bookmarkMap.keys()),
     [bookmarkMap],
   );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedResultTextFilter(resultTextFilter);
+    }, RESULT_TEXT_FILTER_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resultTextFilter]);
 
   useEffect(() => {
     const loadLibraryMangas = async () => {
@@ -158,6 +176,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         setSelectedLanguageCodes(restoredState.selectedLanguageCodes);
         setSelectedContentTypes(restoredState.selectedContentTypes);
         setResultLanguageFilterModes(restoredState.resultLanguageFilterModes);
+        setResultTextFilter(restoredState.resultTextFilter);
+        setDebouncedResultTextFilter(restoredState.resultTextFilter);
         setDepthMode(restoredState.depthMode);
         setAdvancedPages(restoredState.advancedPages);
         setPaceMode(restoredState.paceMode);
@@ -189,6 +209,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       selectedLanguageCodes,
       selectedContentTypes,
       resultLanguageFilterModes,
+      resultTextFilter,
       depthMode,
       advancedPages,
       paceMode,
@@ -200,6 +221,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     paceMode,
     query,
     resultLanguageFilterModes,
+    resultTextFilter,
     runs,
     selectedContentTypes,
     selectedLanguageCodes,
@@ -238,16 +260,37 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => hasActiveMultiSearchLanguageFilter(resultLanguageFilterModes),
     [resultLanguageFilterModes],
   );
-  const visibleMergedResults = useMemo(
+  const hasActiveResultTextFilter = useMemo(
+    () => hasActiveMultiSearchTextFilter(debouncedResultTextFilter),
+    [debouncedResultTextFilter],
+  );
+  const languageFilteredMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(mergedResults, resultLanguageFilterModes),
     [mergedResults, resultLanguageFilterModes],
   );
+  const visibleMergedResults = useMemo(
+    () => filterMultiSearchMergedResultsByText(
+      languageFilteredMergedResults,
+      debouncedResultTextFilter,
+      getMultiSearchSourceLanguageValues,
+    ),
+    [debouncedResultTextFilter, languageFilteredMergedResults],
+  );
   const visibleRuns = useMemo(() => {
-    const filteredRuns = filterMultiSearchRunsByLanguage(runs, resultLanguageFilterModes);
-    return hasActiveResultLanguageFilter
+    const filteredRuns = filterMultiSearchRunsByText(
+      filterMultiSearchRunsByLanguage(runs, resultLanguageFilterModes),
+      debouncedResultTextFilter,
+    );
+    return hasActiveResultLanguageFilter || hasActiveResultTextFilter
       ? filteredRuns.filter((run) => run.results.length)
       : filteredRuns;
-  }, [hasActiveResultLanguageFilter, resultLanguageFilterModes, runs]);
+  }, [
+    debouncedResultTextFilter,
+    hasActiveResultLanguageFilter,
+    hasActiveResultTextFilter,
+    resultLanguageFilterModes,
+    runs,
+  ]);
   const visibleSourceCount = useMemo(() => (
     viewMode === "merged"
       ? visibleMergedResults.reduce((count, result) => count + result.sources.length, 0)
@@ -290,6 +333,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     event.preventDefault();
     setOpenError(null);
     setResultLanguageFilterModes({});
+    setResultTextFilter("");
+    setDebouncedResultTextFilter("");
     void runSearch({
       query,
       scrapers: selectedScrapers,
@@ -316,6 +361,15 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         [languageCode]: nextMode,
       };
     });
+  };
+
+  const handleFillTextFilterFromBaseQuery = () => {
+    setResultTextFilter(query);
+  };
+
+  const handleClearTextFilter = () => {
+    setResultTextFilter("");
+    setDebouncedResultTextFilter("");
   };
 
   const handleOpenSource = (source: MultiSearchSourceResult) => {
@@ -535,6 +589,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         loadedSourceCount={allSources.length}
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={resultLanguageFilterModes}
+        textFilter={resultTextFilter}
+        baseQuery={query}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         isExportingJson={isExportingJson}
@@ -544,6 +600,9 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         onExportJson={() => void handleExportJson()}
         onExportMergedResultsJson={() => void handleExportMergedResultsJson()}
         onReloadMerge={() => setMergeRefreshKey((currentKey) => currentKey + 1)}
+        onTextFilterChange={setResultTextFilter}
+        onFillTextFilterFromBaseQuery={handleFillTextFilterFromBaseQuery}
+        onClearTextFilter={handleClearTextFilter}
         onToggleLanguageFilterMode={handleToggleResultLanguageFilterMode}
       />
     </section>
