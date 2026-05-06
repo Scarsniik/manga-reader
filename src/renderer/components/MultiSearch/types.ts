@@ -7,6 +7,17 @@ export type MultiSearchPaceMode = "fast" | "careful";
 export type MultiSearchViewMode = "merged" | "byScraper";
 export type MultiSearchLanguageFilterMode = "default" | "only" | "without";
 export type MultiSearchLanguageFilterModes = Record<string, MultiSearchLanguageFilterMode>;
+export type MultiSearchMergePhase = "idle" | "queued" | "merging" | "sorting";
+
+export type MultiSearchMergeProgress = {
+  isActive: boolean;
+  phase: MultiSearchMergePhase;
+  processedSourceCount: number;
+  totalSourceCount: number;
+  sourceCount: number;
+  mergedGroupCount: number;
+  durationMs?: number;
+};
 
 export type MultiSearchScraperStatus =
   | "idle"

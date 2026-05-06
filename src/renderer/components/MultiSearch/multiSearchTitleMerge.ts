@@ -11,6 +11,33 @@ const FUZZY_TITLE_MAX_EDIT_DISTANCE = 1;
 const FUZZY_TITLE_MIN_CHARACTERS = 25;
 const FUZZY_TITLE_MIN_TOKENS = 5;
 
+type TitleAlternativeMergeProfile = {
+  variants: string[];
+  variantSet: Set<string>;
+  sequenceMarkers: Set<string>;
+  fuzzyVariants: string[];
+};
+
+type SourceTitleMergeProfile = {
+  alternatives: TitleAlternativeMergeProfile[];
+  normalizedTentativeAuthorNames: string[];
+};
+
+const sourceTitleMergeProfileCache = new WeakMap<MultiSearchSourceResult, SourceTitleMergeProfile>();
+
+const uniqueValues = (values: string[]): string[] => {
+  const seen = new Set<string>();
+
+  return values.filter((value) => {
+    if (!value || seen.has(value)) {
+      return false;
+    }
+
+    seen.add(value);
+    return true;
+  });
+};
+
 const normalizeListValue = (value: unknown): string => (
   String(value ?? "").trim().replace(/\s+/g, " ")
 );
@@ -111,13 +138,13 @@ const getTitleSequenceMarkers = (value: string): Set<string> => (
   new Set(normalizeTitleText(value).split(" ").filter((token) => SEQUENCE_MARKER_PATTERN.test(token)))
 );
 
-const hasDifferentSequenceMarkers = (left: string, right: string): boolean => {
-  const leftMarkers = getTitleSequenceMarkers(left);
-  const rightMarkers = getTitleSequenceMarkers(right);
-
-  return [...leftMarkers].some((marker) => !rightMarkers.has(marker))
-    || [...rightMarkers].some((marker) => !leftMarkers.has(marker));
-};
+const hasDifferentSequenceMarkerSets = (
+  leftMarkers: Set<string>,
+  rightMarkers: Set<string>,
+): boolean => (
+  [...leftMarkers].some((marker) => !rightMarkers.has(marker))
+  || [...rightMarkers].some((marker) => !leftMarkers.has(marker))
+);
 
 const normalizeTentativeAuthorName = (value: string): string => (
   normalizeTitleText(value)
@@ -127,12 +154,10 @@ const normalizeTentativeAuthorNames = (values: string[]): string[] => (
   values.map(normalizeTentativeAuthorName).filter(Boolean)
 );
 
-const haveConflictingTentativeAuthors = (
-  leftAuthors: string[],
-  rightAuthors: string[],
+const haveConflictingNormalizedTentativeAuthors = (
+  leftValues: string[],
+  rightValues: string[],
 ): boolean => {
-  const leftValues = normalizeTentativeAuthorNames(leftAuthors);
-  const rightValues = normalizeTentativeAuthorNames(rightAuthors);
   if (!leftValues.length || !rightValues.length) {
     return false;
   }
@@ -141,12 +166,10 @@ const haveConflictingTentativeAuthors = (
   return leftValues.every((author) => !rightSet.has(author));
 };
 
-const canUseFuzzyTitleMatch = (
-  leftAuthors: string[],
-  rightAuthors: string[],
+const canUseFuzzyTitleProfileMatch = (
+  leftValues: string[],
+  rightValues: string[],
 ): boolean => {
-  const leftValues = normalizeTentativeAuthorNames(leftAuthors);
-  const rightValues = normalizeTentativeAuthorNames(rightAuthors);
   if (!leftValues.length || !rightValues.length) {
     return true;
   }
@@ -214,48 +237,95 @@ const hasSingleEditDifference = (left: string, right: string): boolean => {
   return true;
 };
 
-const areFuzzyTitleVariantsMatching = (left: string, right: string): boolean => (
-  isFuzzyTitleCandidate(left)
-  && isFuzzyTitleCandidate(right)
-  && hasSingleEditDifference(left, right)
-);
+const buildTitleAlternativeMergeProfile = (title: string): TitleAlternativeMergeProfile => {
+  const variants = getMergeTitleVariants(title);
 
-const doTitleAlternativesMatch = (
-  left: string,
-  right: string,
-  allowFuzzyMatch = false,
+  return {
+    variants,
+    variantSet: new Set(variants),
+    sequenceMarkers: getTitleSequenceMarkers(title),
+    fuzzyVariants: variants.filter(isFuzzyTitleCandidate),
+  };
+};
+
+const buildSourceTitleMergeProfile = (source: MultiSearchSourceResult): SourceTitleMergeProfile => ({
+  alternatives: getTitleAlternatives(source.result.title).map(buildTitleAlternativeMergeProfile),
+  normalizedTentativeAuthorNames: normalizeTentativeAuthorNames(source.tentativeAuthorNames),
+});
+
+const getSourceTitleMergeProfile = (source: MultiSearchSourceResult): SourceTitleMergeProfile => {
+  const cachedProfile = sourceTitleMergeProfileCache.get(source);
+  if (cachedProfile) {
+    return cachedProfile;
+  }
+
+  const profile = buildSourceTitleMergeProfile(source);
+  sourceTitleMergeProfileCache.set(source, profile);
+  return profile;
+};
+
+const doTitleAlternativeProfilesMatch = (
+  left: TitleAlternativeMergeProfile,
+  right: TitleAlternativeMergeProfile,
+  allowFuzzyMatch: boolean,
 ): boolean => {
-  return getTitleAlternatives(left).some((leftAlternative) => (
-    getTitleAlternatives(right).some((rightAlternative) => {
-      if (hasDifferentSequenceMarkers(leftAlternative, rightAlternative)) {
-        return false;
-      }
+  if (hasDifferentSequenceMarkerSets(left.sequenceMarkers, right.sequenceMarkers)) {
+    return false;
+  }
 
-      const leftVariants = getMergeTitleVariants(leftAlternative);
-      const rightVariants = getMergeTitleVariants(rightAlternative);
-      const rightVariantSet = new Set(rightVariants);
-      if (leftVariants.some((leftVariant) => rightVariantSet.has(leftVariant))) {
-        return true;
-      }
+  if (left.variants.some((leftVariant) => right.variantSet.has(leftVariant))) {
+    return true;
+  }
 
-      return allowFuzzyMatch && leftVariants.some((leftVariant) => (
-        rightVariants.some((rightVariant) => areFuzzyTitleVariantsMatching(leftVariant, rightVariant))
-      ));
-    })
+  return allowFuzzyMatch && left.fuzzyVariants.some((leftVariant) => (
+    right.fuzzyVariants.some((rightVariant) => hasSingleEditDifference(leftVariant, rightVariant))
   ));
 };
+
+const doTitleProfilesMatch = (
+  left: SourceTitleMergeProfile,
+  right: SourceTitleMergeProfile,
+): boolean => {
+  if (
+    haveConflictingNormalizedTentativeAuthors(
+      left.normalizedTentativeAuthorNames,
+      right.normalizedTentativeAuthorNames,
+    )
+  ) {
+    return false;
+  }
+
+  const allowFuzzyMatch = canUseFuzzyTitleProfileMatch(
+    left.normalizedTentativeAuthorNames,
+    right.normalizedTentativeAuthorNames,
+  );
+
+  return left.alternatives.some((leftAlternative) => (
+    right.alternatives.some((rightAlternative) => (
+      doTitleAlternativeProfilesMatch(leftAlternative, rightAlternative, allowFuzzyMatch)
+    ))
+  ));
+};
+
+export const getMultiSearchTitleMergeExactKeys = (source: MultiSearchSourceResult): string[] => (
+  uniqueValues(getSourceTitleMergeProfile(source).alternatives.flatMap((alternative) => alternative.variants))
+);
+
+export const getMultiSearchTitleMergeFuzzyLengths = (source: MultiSearchSourceResult): number[] => (
+  Array.from(new Set(
+    getSourceTitleMergeProfile(source)
+      .alternatives
+      .flatMap((alternative) => alternative.fuzzyVariants)
+      .map((variant) => Array.from(variant).length),
+  ))
+);
 
 export const canMergeMultiSearchSourceTitles = (
   source: MultiSearchSourceResult,
   groupSource: MultiSearchSourceResult,
 ): boolean => {
-  if (haveConflictingTentativeAuthors(source.tentativeAuthorNames, groupSource.tentativeAuthorNames)) {
-    return false;
-  }
-
-  return doTitleAlternativesMatch(
-    source.result.title,
-    groupSource.result.title,
-    canUseFuzzyTitleMatch(source.tentativeAuthorNames, groupSource.tentativeAuthorNames),
+  return doTitleProfilesMatch(
+    getSourceTitleMergeProfile(source),
+    getSourceTitleMergeProfile(groupSource),
   );
 };

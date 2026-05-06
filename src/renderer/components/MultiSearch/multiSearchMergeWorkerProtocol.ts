@@ -1,4 +1,5 @@
 import type {
+  MultiSearchMergePhase,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
@@ -20,10 +21,26 @@ export type MultiSearchMergeWorkerRequest = (
   refreshKey: number;
 };
 
-export type MultiSearchMergeWorkerResponse = {
+export type MultiSearchMergeWorkerProgressResponse = {
+  type: "progress";
+  requestId: number;
+  refreshKey: number;
+  phase: Exclude<MultiSearchMergePhase, "idle" | "queued">;
+  processedSourceCount: number;
+  totalSourceCount: number;
+  sourceCount: number;
+  mergedGroupCount: number;
+};
+
+export type MultiSearchMergeWorkerMergedResponse = {
   type: "merged";
   requestId: number;
   refreshKey: number;
   mergedResults: MultiSearchMergedResult[];
   sourceCount: number;
+  durationMs: number;
 };
+
+export type MultiSearchMergeWorkerResponse =
+  | MultiSearchMergeWorkerProgressResponse
+  | MultiSearchMergeWorkerMergedResponse;

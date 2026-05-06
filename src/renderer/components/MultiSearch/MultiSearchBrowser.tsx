@@ -249,7 +249,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => flattenMultiSearchSources(runs),
     [runs],
   );
-  const mergedResults = useIncrementalMultiSearchMerge(allSources, mergeRefreshKey);
+  const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(allSources, mergeRefreshKey);
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(allSources),
     [allSources],
@@ -583,6 +583,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         viewMode={viewMode}
         runs={visibleRuns}
         mergedResults={visibleMergedResults}
+        mergeProgress={mergeProgress}
         visibleSourceCount={visibleSourceCount}
         loadedSourceCount={allSources.length}
         resultLanguageCodes={resultLanguageCodes}

@@ -623,3 +623,4 @@ La V1 du multi-search repose sur les choix suivants :
 - Les grilles de resultats virtualisent les cards par lignes mesurees : seules les cards visibles, une marge autour du viewport et les cards avec focus ou menu ouvert restent montees dans le DOM.
 - Pendant le scraping, les mises a jour de resultats sont groupees avant d'etre poussees a React afin de limiter les recalculs de fusion, de filtres et d'affichage sur les grosses recherches.
 - La fusion des resultats est incrementale et executee dans un Web Worker pendant une recherche : les nouvelles sources sont inserees dans les groupes existants hors du thread UI, et le bouton de developpement `Recharger fusion` force une reconstruction complete si necessaire.
+- La fusion expose une progression visible pendant le traitement et le tri. Le merge utilise un index URL/titres/fuzzy pour eviter de comparer chaque nouvelle source avec tous les groupes existants.

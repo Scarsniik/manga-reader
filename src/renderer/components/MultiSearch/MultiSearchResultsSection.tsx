@@ -7,6 +7,7 @@ import type { Manga } from "@/renderer/types";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
+  MultiSearchMergeProgress,
   MultiSearchMergedResult,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
@@ -18,6 +19,7 @@ type Props = {
   viewMode: MultiSearchViewMode;
   runs: MultiSearchScraperRun[];
   mergedResults: MultiSearchMergedResult[];
+  mergeProgress: MultiSearchMergeProgress;
   visibleSourceCount: number;
   loadedSourceCount: number;
   resultLanguageCodes: string[];
@@ -54,10 +56,34 @@ const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSe
   contentTypes: source.contentTypes,
 });
 
+const formatMergeDuration = (durationMs: number): string => {
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  return `${(durationMs / 1000).toFixed(1)} s`;
+};
+
+const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
+  if (progress.phase === "queued") {
+    return `Fusion en attente : ${progress.totalSourceCount} source(s) a analyser.`;
+  }
+
+  if (progress.phase === "sorting") {
+    return `Fusion en cours : tri de ${progress.mergedGroupCount} carte(s).`;
+  }
+
+  return [
+    `Fusion en cours : ${progress.processedSourceCount}/${progress.totalSourceCount} source(s) analysee(s)`,
+    `${progress.mergedGroupCount} carte(s) provisoire(s)`,
+  ].join(", ");
+};
+
 export default function MultiSearchResultsSection({
   viewMode,
   runs,
   mergedResults,
+  mergeProgress,
   visibleSourceCount,
   loadedSourceCount,
   resultLanguageCodes,
@@ -95,6 +121,21 @@ export default function MultiSearchResultsSection({
           <div>
             <h3>Resultats fusionnes</h3>
             <p>{mergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s).</p>
+            {mergeProgress.isActive ? (
+              <div className="multi-search__merge-progress" role="status" aria-live="polite">
+                <span>{getMergeProgressLabel(mergeProgress)}</span>
+                {mergeProgress.totalSourceCount > 0 ? (
+                  <progress
+                    max={mergeProgress.totalSourceCount}
+                    value={Math.min(mergeProgress.processedSourceCount, mergeProgress.totalSourceCount)}
+                  />
+                ) : null}
+              </div>
+            ) : mergeProgress.durationMs !== undefined && loadedSourceCount > 0 ? (
+              <p className="multi-search__merge-progress is-complete">
+                Fusion prete en {formatMergeDuration(mergeProgress.durationMs)}.
+              </p>
+            ) : null}
             <div className="multi-search__result-filter-stack">
               <MultiSearchTextFilterBar
                 value={textFilter}
