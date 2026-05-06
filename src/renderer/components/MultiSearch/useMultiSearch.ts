@@ -13,109 +13,22 @@ import { parseMultiSearchTerms } from "@/renderer/components/MultiSearch/multiSe
 import type {
   MultiSearchPaceMode,
   MultiSearchScraperRun,
-  MultiSearchSourceResult,
   MultiSearchTermRun,
 } from "@/renderer/components/MultiSearch/types";
+import useMultiSearchRunBatcher from "@/renderer/components/MultiSearch/useMultiSearchRunBatcher";
+import {
+  buildInitialRun,
+  ensureRunSearchTerms,
+  keepNewSourceResults,
+  summarizeTermRuns,
+  upsertTermRun,
+} from "@/renderer/components/MultiSearch/multiSearchRunState";
 
 type RunSearchOptions = {
   query: string;
   scrapers: ScraperRecord[];
   maxPages: number;
   paceMode: MultiSearchPaceMode;
-};
-
-const buildInitialTermRun = (term: string): MultiSearchTermRun => ({
-  term,
-  loadedPages: 0,
-  hasNextPage: true,
-});
-
-const summarizeTermRuns = (
-  searchTerms: MultiSearchTermRun[],
-): Pick<MultiSearchScraperRun, "loadedPages" | "hasNextPage" | "currentPageUrl" | "nextPageUrl"> => {
-  const activeNextTerm = searchTerms.find((termRun) => termRun.hasNextPage);
-  const lastLoadedTerm = [...searchTerms].reverse().find((termRun) => termRun.currentPageUrl);
-
-  return {
-    loadedPages: searchTerms.reduce((total, termRun) => total + termRun.loadedPages, 0),
-    hasNextPage: Boolean(activeNextTerm),
-    currentPageUrl: lastLoadedTerm?.currentPageUrl,
-    nextPageUrl: activeNextTerm?.nextPageUrl,
-  };
-};
-
-const buildInitialRun = (scraper: ScraperRecord, searchTerms: string[]): MultiSearchScraperRun => ({
-  scraper,
-  status: "waiting",
-  results: [],
-  searchTerms: searchTerms.map(buildInitialTermRun),
-  loadedPages: 0,
-  hasNextPage: searchTerms.length > 0,
-});
-
-const ensureRunSearchTerms = (
-  run: MultiSearchScraperRun,
-  fallbackTerms: string[],
-): MultiSearchTermRun[] => {
-  if (run.searchTerms.length) {
-    return run.searchTerms;
-  }
-
-  return fallbackTerms.map((term, index) => ({
-    term,
-    loadedPages: index === 0 ? run.loadedPages : 0,
-    hasNextPage: index === 0 ? run.hasNextPage : false,
-    currentPageUrl: index === 0 ? run.currentPageUrl : undefined,
-    nextPageUrl: index === 0 ? run.nextPageUrl : undefined,
-  }));
-};
-
-const upsertTermRun = (
-  searchTerms: MultiSearchTermRun[],
-  nextTermRun: MultiSearchTermRun,
-): MultiSearchTermRun[] => {
-  const existingIndex = searchTerms.findIndex((termRun) => termRun.term === nextTermRun.term);
-  if (existingIndex === -1) {
-    return [...searchTerms, nextTermRun];
-  }
-
-  return searchTerms.map((termRun, index) => (
-    index === existingIndex ? nextTermRun : termRun
-  ));
-};
-
-const normalizeResultUrl = (source: MultiSearchSourceResult): string => {
-  const value = source.result.detailUrl?.trim();
-  if (!value) {
-    return "";
-  }
-
-  try {
-    return new URL(value).toString();
-  } catch {
-    return value;
-  }
-};
-
-const keepNewSourceResults = (
-  existingResults: MultiSearchSourceResult[],
-  pageResults: MultiSearchSourceResult[],
-): MultiSearchSourceResult[] => {
-  const seenUrls = new Set(existingResults.map(normalizeResultUrl).filter(Boolean));
-
-  return pageResults.filter((source) => {
-    const url = normalizeResultUrl(source);
-    if (!url) {
-      return true;
-    }
-
-    if (seenUrls.has(url)) {
-      return false;
-    }
-
-    seenUrls.add(url);
-    return true;
-  });
 };
 
 export default function useMultiSearch() {
@@ -125,6 +38,14 @@ export default function useMultiSearch() {
   const [error, setError] = useState<string | null>(null);
   const searchTokenRef = useRef(0);
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
+  const {
+    clearRunUpdates,
+    flushRunUpdates,
+    queueRunUpdate,
+  } = useMultiSearchRunBatcher({
+    searchTokenRef,
+    setRuns,
+  });
   const canLoadMore = useMemo(
     () => runs.some((run) => run.hasNextPage && run.status !== "loading"),
     [runs],
@@ -134,27 +55,14 @@ export default function useMultiSearch() {
     restoredRuns: MultiSearchScraperRun[],
     paceMode: MultiSearchPaceMode,
   ) => {
+    clearRunUpdates();
     searchTokenRef.current += 1;
     lastPaceModeRef.current = paceMode;
     setRuns(restoredRuns);
     setIsSearching(false);
     setError(null);
     setMessage(restoredRuns.length ? "Recherche multi-sources restauree." : null);
-  }, []);
-
-  const patchRun = useCallback((
-    token: number,
-    scraperId: string,
-    updater: (run: MultiSearchScraperRun) => MultiSearchScraperRun,
-  ) => {
-    if (token !== searchTokenRef.current) {
-      return;
-    }
-
-    setRuns((currentRuns) => currentRuns.map((run) => (
-      run.scraper.id === scraperId ? updater(run) : run
-    )));
-  }, []);
+  }, [clearRunUpdates]);
 
   const loadNextPageForRun = useCallback(async (
     run: MultiSearchScraperRun,
@@ -162,18 +70,17 @@ export default function useMultiSearch() {
     paceConfig: PaceConfig,
     token: number,
   ): Promise<MultiSearchScraperRun | null> => {
-    const scraperId = run.scraper.id;
     const searchTerm = termRun.term.trim();
 
     if (!searchTerm) {
       return run;
     }
 
-    patchRun(token, scraperId, (currentRun) => ({
-      ...currentRun,
+    queueRunUpdate(token, {
+      ...run,
       status: "loading",
       error: undefined,
-    }));
+    });
 
     try {
       const searchConfig = getSearchConfig(run.scraper);
@@ -207,7 +114,7 @@ export default function useMultiSearch() {
         error: undefined,
       };
 
-      patchRun(token, scraperId, () => nextRun);
+      queueRunUpdate(token, nextRun, newPageResults.length, !nextRun.hasNextPage);
       return nextRun;
     } catch (loadError) {
       const hasPartialResults = run.loadedPages > 0 || run.results.length > 0;
@@ -227,7 +134,7 @@ export default function useMultiSearch() {
           error: undefined,
         };
 
-        patchRun(token, scraperId, () => partialRun);
+        queueRunUpdate(token, partialRun, 0, true);
         return partialRun;
       }
 
@@ -239,10 +146,10 @@ export default function useMultiSearch() {
         error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
       };
 
-      patchRun(token, scraperId, () => failedRun);
+      queueRunUpdate(token, failedRun, 0, true);
       return failedRun;
     }
-  }, [patchRun]);
+  }, [queueRunUpdate]);
 
   const loadNextPagesForRun = useCallback(async (
     run: MultiSearchScraperRun,
@@ -294,6 +201,7 @@ export default function useMultiSearch() {
     }
 
     if (!scrapers.length) {
+      clearRunUpdates();
       setError("Aucun scrapper compatible n'est selectionne.");
       setRuns([]);
       return;
@@ -302,6 +210,7 @@ export default function useMultiSearch() {
     const token = searchTokenRef.current + 1;
     searchTokenRef.current = token;
     lastPaceModeRef.current = paceMode;
+    clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
     const pageLimit = Math.max(1, maxPages);
 
@@ -313,36 +222,42 @@ export default function useMultiSearch() {
     const tasks = scrapers.map((scraper) => async () => {
       let currentRun = buildInitialRun(scraper, searchTerms);
 
-      for (let pageOffset = 0; pageOffset < pageLimit; pageOffset += 1) {
-        if (token !== searchTokenRef.current) {
-          return;
-        }
+      try {
+        for (let pageOffset = 0; pageOffset < pageLimit; pageOffset += 1) {
+          if (token !== searchTokenRef.current) {
+            return;
+          }
 
-        const loadedPagesBefore = currentRun.loadedPages;
-        const nextRun = await loadNextPagesForRun(currentRun, searchTerms, paceConfig, token);
+          const loadedPagesBefore = currentRun.loadedPages;
+          const nextRun = await loadNextPagesForRun(currentRun, searchTerms, paceConfig, token);
 
-        if (!nextRun) {
-          return;
-        }
+          if (!nextRun) {
+            return;
+          }
 
-        currentRun = nextRun;
-        if (currentRun.loadedPages === loadedPagesBefore || !currentRun.hasNextPage) {
-          return;
+          currentRun = nextRun;
+          if (currentRun.loadedPages === loadedPagesBefore || !currentRun.hasNextPage) {
+            return;
+          }
         }
+      } finally {
+        flushRunUpdates(token);
       }
     });
 
     try {
       await runWithConcurrency(tasks, paceConfig.concurrency);
       if (token === searchTokenRef.current) {
+        flushRunUpdates(token);
         setMessage("Recherche multi-sources terminee sur les pages chargees.");
       }
     } finally {
       if (token === searchTokenRef.current) {
+        flushRunUpdates(token);
         setIsSearching(false);
       }
     }
-  }, [loadNextPagesForRun]);
+  }, [clearRunUpdates, flushRunUpdates, loadNextPagesForRun]);
 
   const loadMoreForScraper = useCallback(async (scraperId: string, query: string) => {
     const run = runs.find((candidate) => candidate.scraper.id === scraperId);
@@ -355,7 +270,8 @@ export default function useMultiSearch() {
     setError(null);
     setMessage(null);
     await loadNextPagesForRun(run, searchTerms, getPaceConfig(lastPaceModeRef.current), token);
-  }, [loadNextPagesForRun, runs]);
+    flushRunUpdates(token);
+  }, [flushRunUpdates, loadNextPagesForRun, runs]);
 
   const loadMoreForAll = useCallback(async (query: string) => {
     const searchTerms = parseMultiSearchTerms(query);
@@ -373,19 +289,25 @@ export default function useMultiSearch() {
     try {
       await runWithConcurrency(
         loadableRuns.map((run) => async () => {
-          await loadNextPagesForRun(run, searchTerms, paceConfig, token);
+          try {
+            await loadNextPagesForRun(run, searchTerms, paceConfig, token);
+          } finally {
+            flushRunUpdates(token);
+          }
         }),
         paceConfig.concurrency,
       );
       if (token === searchTokenRef.current) {
+        flushRunUpdates(token);
         setMessage("Pages supplementaires chargees pour les scrappers disponibles.");
       }
     } finally {
       if (token === searchTokenRef.current) {
+        flushRunUpdates(token);
         setIsSearching(false);
       }
     }
-  }, [loadNextPagesForRun, runs]);
+  }, [flushRunUpdates, loadNextPagesForRun, runs]);
 
   return {
     runs,

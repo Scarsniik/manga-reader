@@ -619,3 +619,4 @@ La V1 du multi-search repose sur les choix suivants :
 - En environnement de developpement uniquement, la section de resultats fusionnes expose un bouton `Recharger fusion` qui force le recalcul de la fusion depuis les sources deja chargees.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose aussi un bouton `Merged JSON` qui ouvre un export limite aux `mergedResults`.
 - Les grilles de resultats virtualisent les cards par lignes mesurees : seules les cards visibles, une marge autour du viewport et les cards avec focus ou menu ouvert restent montees dans le DOM.
+- Pendant le scraping, les mises a jour de resultats sont groupees avant d'etre poussees a React afin de limiter les recalculs de fusion, de filtres et d'affichage sur les grosses recherches.
