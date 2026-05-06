@@ -236,61 +236,71 @@ const buildMergedResultId = (source: MultiSearchSourceResult): string => (
   `${source.scraper.id}::${source.result.detailUrl || source.result.title}`
 );
 
-export const mergeMultiSearchResults = (
-  sources: MultiSearchSourceResult[],
-): MultiSearchMergedResult[] => {
-  const groups: MultiSearchMergedResult[] = [];
+export const mergeMultiSearchSourceIntoGroups = (
+  groups: MultiSearchMergedResult[],
+  source: MultiSearchSourceResult,
+): void => {
+  const group = groups.find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
 
-  sources.forEach((source) => {
-    const group = groups.find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
-
-    if (group) {
-      group.sources.push(source);
-      group.sourceLanguageCodes = uniqueValues([
-        ...group.sourceLanguageCodes,
-        ...getSourceLanguageValuesForMerge(source),
-      ]);
-      group.tentativeAuthorNames = uniqueValues([
-        ...group.tentativeAuthorNames,
-        ...source.tentativeAuthorNames,
-      ]);
-      group.contentTypes = uniqueValues([
-        ...group.contentTypes,
-        ...source.contentTypes,
-      ]);
-      if (!group.coverUrl && source.result.thumbnailUrl) {
-        group.coverUrl = source.result.thumbnailUrl;
-      }
-      if (!group.summary && source.result.summary) {
-        group.summary = source.result.summary;
-      }
-      if (!group.pageCount && source.result.pageCount) {
-        group.pageCount = source.result.pageCount;
-      }
-      return;
+  if (group) {
+    group.sources.push(source);
+    group.sourceLanguageCodes = uniqueValues([
+      ...group.sourceLanguageCodes,
+      ...getSourceLanguageValuesForMerge(source),
+    ]);
+    group.tentativeAuthorNames = uniqueValues([
+      ...group.tentativeAuthorNames,
+      ...source.tentativeAuthorNames,
+    ]);
+    group.contentTypes = uniqueValues([
+      ...group.contentTypes,
+      ...source.contentTypes,
+    ]);
+    if (!group.coverUrl && source.result.thumbnailUrl) {
+      group.coverUrl = source.result.thumbnailUrl;
     }
+    if (!group.summary && source.result.summary) {
+      group.summary = source.result.summary;
+    }
+    if (!group.pageCount && source.result.pageCount) {
+      group.pageCount = source.result.pageCount;
+    }
+    return;
+  }
 
-    groups.push({
-      id: buildMergedResultId(source),
-      title: source.result.title,
-      coverUrl: source.result.thumbnailUrl,
-      summary: source.result.summary,
-      pageCount: source.result.pageCount,
-      sources: [source],
-      sourceLanguageCodes: uniqueValues(getSourceLanguageValuesForMerge(source)),
-      tentativeAuthorNames: uniqueValues(source.tentativeAuthorNames),
-      contentTypes: uniqueValues(source.contentTypes),
-    });
+  groups.push({
+    id: buildMergedResultId(source),
+    title: source.result.title,
+    coverUrl: source.result.thumbnailUrl,
+    summary: source.result.summary,
+    pageCount: source.result.pageCount,
+    sources: [source],
+    sourceLanguageCodes: uniqueValues(getSourceLanguageValuesForMerge(source)),
+    tentativeAuthorNames: uniqueValues(source.tentativeAuthorNames),
+    contentTypes: uniqueValues(source.contentTypes),
   });
+};
 
-  return groups.sort((left, right) => {
+export const sortMultiSearchMergedResults = (
+  groups: MultiSearchMergedResult[],
+): MultiSearchMergedResult[] => (
+  [...groups].sort((left, right) => {
     const sourceCountCompare = right.sources.length - left.sources.length;
     if (sourceCountCompare !== 0) {
       return sourceCountCompare;
     }
 
     return left.title.localeCompare(right.title);
-  });
+  })
+);
+
+export const mergeMultiSearchResults = (
+  sources: MultiSearchSourceResult[],
+): MultiSearchMergedResult[] => {
+  const groups: MultiSearchMergedResult[] = [];
+
+  sources.forEach((source) => mergeMultiSearchSourceIntoGroups(groups, source));
+  return sortMultiSearchMergedResults(groups);
 };
 
 export const flattenMultiSearchSources = (

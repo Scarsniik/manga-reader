@@ -20,8 +20,8 @@ import {
   getScraperSourceLanguages,
   isSearchableScraper,
   matchesMultiSearchFilters,
-  mergeMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
@@ -248,10 +248,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => flattenMultiSearchSources(runs),
     [runs],
   );
-  const mergedResults = useMemo(
-    () => mergeMultiSearchResults(allSources),
-    [allSources, mergeRefreshKey],
-  );
+  const mergedResults = useIncrementalMultiSearchMerge(allSources, mergeRefreshKey);
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(allSources),
     [allSources],
