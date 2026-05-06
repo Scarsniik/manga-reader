@@ -47,9 +47,11 @@ const normalizeTextFilterValue = (value: string): string => (
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/[^\p{L}\p{N}\[\]]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ")
+    .replace(/\[\s+/g, "[")
+    .replace(/\s+]/g, "]")
 );
 
 const parseTextFilterTerms = (value: string): string[] => (
