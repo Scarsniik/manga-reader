@@ -455,7 +455,8 @@ Le merge consiste à regrouper plusieurs résultats qui correspondent au même m
 La V1 retient une fusion déterministe et prudente :
 
 - même URL source si elle est disponible ;
-- ou même titre normalisé après découpe des titres alternatifs et suppression des contextes connus.
+- ou même titre normalisé après découpe des titres alternatifs et suppression des contextes connus ;
+- ou titre quasi identique avec une seule difference de caractere, uniquement si les auteurs provisoires sont compatibles et si le titre est assez long.
 
 Il n'y a pas de score de similarité réglable. Un doublon visible est moins grave qu'un mauvais regroupement.
 
@@ -540,7 +541,7 @@ Vue
    - rythme rapide ou prudent.
 4. La recherche démarre sur les scrapers sélectionnés.
 5. Les résultats sont affichés dès qu'ils arrivent.
-6. Les cartes sont mergées par correspondance stricte d'URL ou de titre normalise.
+6. Les cartes sont mergees par correspondance d'URL, par titre normalise, ou par titre quasi identique avec auteurs compatibles.
 7. Les statuts des scrapers sont mis à jour en temps réel.
 
 ### Paramètres par défaut
@@ -576,7 +577,7 @@ La V1 du multi-search repose sur les choix suivants :
 - affichage des statuts par scraper ;
 - résultats sous forme de cartes ;
 - cartes pouvant être mergées ;
-- merge strict par URL ou titre normalise ;
+- merge prudent par URL, titre normalise ou titre quasi identique avec auteurs compatibles ;
 - ouverture d'une carte mergée via un menu de choix du scraper ;
 - langue affichée au niveau de la carte et/ou de chaque source ;
 - vue fusionnée par défaut ;
@@ -599,6 +600,7 @@ La V1 du multi-search repose sur les choix suivants :
 - Les blocs entre crochets places au tout debut d'un titre sont extraits comme `tentativeAuthorNames`, meme lorsqu'ils sont precedes par un prefixe de convention entre parentheses comme `(SC37)`. Les marqueurs de langue evidents sont ignores. Cette information est exposee dans les exports et sert de veto faible : si deux sources ont des auteurs provisoires differents, elles ne fusionnent pas par titre. Une URL identique reste prioritaire.
 - Les caracteres `|` et `/` dans un titre de resultat sont traites comme des separateurs de titres alternatifs, souvent deux langues pour un meme manga. Chaque alternative est comparee aux autres titres, et une alternative qui ne matche pas n'empeche pas la fusion si une autre alternative matche.
 - Le merge refuse une paire de titres alternatifs qui ne porte pas les memes marqueurs numeriques ou romains (`2`, `II`, `III`, etc.), afin d'eviter de fusionner deux volumes distincts. Ce refus s'applique par paire d'alternatives, pas au titre complet separe par `|` ou `/`.
+- Quand les auteurs provisoires sont identiques ou manquants d'un cote, le merge accepte aussi une seule difference de caractere entre deux alternatives normalisees longues. Ce fallback ne s'applique pas si les deux sources ont des auteurs provisoires contradictoires.
 - Une erreur de pagination apres au moins une page chargee ferme simplement la pagination de ce scraper et conserve les resultats deja recuperes.
 - Pour chaque scraper, les resultats de recherche multi-sources dedoublonnent les URLs deja vues sur les pages precedentes. Si une page ne contient que des URLs deja vues, la pagination de ce scraper s'arrete.
 - Si la couverture affichee dans une card multi-search ne charge pas, la card essaie les couvertures des autres sources du meme resultat avant d'afficher le placeholder.

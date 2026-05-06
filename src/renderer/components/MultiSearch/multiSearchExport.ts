@@ -13,6 +13,8 @@ type MultiSearchExportOptions = {
   sourceCount: number;
 };
 
+const MULTI_SEARCH_MERGE_STRATEGY = "title-alternatives-one-edit-compatible-authors";
+
 const buildScraperSnapshot = (source: MultiSearchSourceResult) => ({
   id: source.scraper.id,
   name: source.scraper.name,
@@ -50,7 +52,7 @@ export const buildMultiSearchExportPayload = ({
   exportedAt: new Date().toISOString(),
   query,
   viewMode,
-  mergeStrategy: "strict-title-alternatives",
+  mergeStrategy: MULTI_SEARCH_MERGE_STRATEGY,
   counts: {
     scrapers: runs.length,
     sources: sourceCount,
@@ -91,7 +93,7 @@ export const buildMultiSearchMergedResultsExportPayload = (
   mergedResults: MultiSearchMergedResult[],
 ) => ({
   exportedAt: new Date().toISOString(),
-  mergeStrategy: "strict-title-alternatives",
+  mergeStrategy: MULTI_SEARCH_MERGE_STRATEGY,
   counts: {
     mergedCards: mergedResults.length,
     sources: mergedResults.reduce((count, result) => count + result.sources.length, 0),
