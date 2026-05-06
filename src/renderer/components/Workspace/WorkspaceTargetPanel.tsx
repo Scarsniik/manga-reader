@@ -23,7 +23,7 @@ import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraper
 type Props = {
   tabId: string;
   target: WorkspaceTarget;
-  onTitleChange: (title: string) => void;
+  onTitleChange: (tabId: string, title: string) => void;
 };
 
 type ScraperConfigPanelProps = {
@@ -320,17 +320,22 @@ function ScraperDetailsPanel({
       <ScraperBrowser
         scraper={scraper}
         initialState={initialState}
+        routeSyncEnabled={false}
       />
     </div>
   );
 }
 
 export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: Props) {
+  const handleTitleChange = useCallback((title: string) => {
+    onTitleChange(tabId, title);
+  }, [onTitleChange, tabId]);
+
   if (target.kind === "scraper.config") {
     return (
       <ScraperConfigPanel
         scraperId={target.scraperId}
-        onTitleChange={onTitleChange}
+        onTitleChange={handleTitleChange}
       />
     );
   }
@@ -342,7 +347,7 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
         scraperId={target.scraperId}
         sourceUrl={target.sourceUrl}
         title={target.title}
-        onTitleChange={onTitleChange}
+        onTitleChange={handleTitleChange}
       />
     );
   }
@@ -355,7 +360,7 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
         query={target.query}
         title={target.title}
         templateContext={target.templateContext}
-        onTitleChange={onTitleChange}
+        onTitleChange={handleTitleChange}
       />
     );
   }

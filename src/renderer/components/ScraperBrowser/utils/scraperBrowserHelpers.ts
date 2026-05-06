@@ -10,7 +10,7 @@ import {
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
 
-export const MAX_VISIBLE_SEARCH_RESULTS = 18;
+export const MAX_VISIBLE_SEARCH_RESULTS = 100;
 const SCRAPER_LISTING_RETURN_STATE_CACHE_MAX = 20;
 const scraperListingReturnStateCache = new Map<string, ScraperListingReturnState>();
 

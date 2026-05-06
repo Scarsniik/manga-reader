@@ -50,6 +50,7 @@ type OpenResultOptions = {
 
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
+  routeSyncEnabled: boolean;
   locationPathname: string;
   locationSearch: string;
   locationState: ScraperBrowserLocationState | null;
@@ -186,6 +187,7 @@ const getRouteStateForNavigation = (options: {
 
 export function useScraperBrowserSearch({
   scraper,
+  routeSyncEnabled,
   locationPathname,
   locationSearch,
   locationState,
@@ -762,6 +764,17 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    if (!routeSyncEnabled) {
+      const nextListingReturnState = options?.listingReturnState ?? null;
+      setListingReturnState(nextListingReturnState);
+      setMode('manga');
+      setQuery(formatScraperValueForDisplay(result.detailUrl));
+      void loadDetailsFromTargetUrl(result.detailUrl).finally(() => {
+        setListingReturnState(nextListingReturnState);
+      });
+      return;
+    }
+
     const nextSearch = getRouteStateForNavigation({
       routeSearch: locationSearch,
       scraperId: scraper.id,
@@ -798,9 +811,14 @@ export function useScraperBrowserSearch({
     mode,
     navigate,
     query,
+    routeSyncEnabled,
     scraper.id,
+    setListingReturnState,
+    setMode,
+    setQuery,
     setRuntimeError,
     setRuntimeMessage,
+    loadDetailsFromTargetUrl,
   ]);
 
   const handleOpenAuthorResult = useCallback((result: ScraperSearchResultItem) => {
@@ -822,6 +840,14 @@ export function useScraperBrowserSearch({
     }
 
     setAuthorTemplateContext(null);
+
+    if (!routeSyncEnabled) {
+      const nextAuthorQuery = formatScraperValueForDisplay(result.authorUrl);
+      setMode('author');
+      setQuery(nextAuthorQuery);
+      void runAuthorLookup(nextAuthorQuery, { templateContext: null });
+      return;
+    }
 
     const nextSearch = getRouteStateForNavigation({
       routeSearch: locationSearch,
@@ -858,8 +884,12 @@ export function useScraperBrowserSearch({
     mode,
     navigate,
     query,
+    routeSyncEnabled,
+    runAuthorLookup,
     scraper.id,
     setAuthorTemplateContext,
+    setMode,
+    setQuery,
     setRuntimeError,
     setRuntimeMessage,
   ]);

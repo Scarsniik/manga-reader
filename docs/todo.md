@@ -81,7 +81,7 @@
 
 ### Fixes
 
-- [ ] Onglets : Ne pas concerver le scroll entre les onglets
+- [x] Onglets : Ne pas conserver le scroll entre les onglets
 - [ ] Onglets : Si on ouvre un lecteur en onglet, on ne voit plus les onglet mais juste le lecteur. Ca reviens quand on fait retour
 
 ## 4. Application et technique

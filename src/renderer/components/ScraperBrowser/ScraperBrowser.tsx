@@ -104,6 +104,7 @@ import './style.scss';
 type Props = {
   scraper: ScraperRecord;
   initialState?: ScraperBrowserInitialState | null;
+  routeSyncEnabled?: boolean;
 };
 
 const buildBackLabel = (
@@ -182,7 +183,7 @@ const normalizeSavedScraperSearches = (value: unknown): SavedScraperSearch[] => 
   }, []);
 };
 
-export default function ScraperBrowser({ scraper, initialState = null }: Props) {
+export default function ScraperBrowser({ scraper, initialState = null, routeSyncEnabled = true }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as ScraperBrowserLocationState | null;
@@ -486,6 +487,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
     handleModeChange,
   } = useScraperBrowserSearch({
     scraper,
+    routeSyncEnabled,
     locationPathname: location.pathname,
     locationSearch: location.search,
     locationState,
@@ -535,6 +537,7 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   });
 
   useScraperBrowserRouteSync({
+    enabled: routeSyncEnabled,
     scraperId: scraper.id,
     initialState,
     locationPathname: location.pathname,
@@ -888,13 +891,16 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
       return null;
     }
 
-    cacheScraperListingReturnState(
-      buildScraperListingReturnStateCacheKey(location.pathname, location.search),
-      returnState,
-    );
+    if (routeSyncEnabled) {
+      cacheScraperListingReturnState(
+        buildScraperListingReturnStateCacheKey(location.pathname, location.search),
+        returnState,
+      );
+    }
+
     setListingReturnState(returnState);
     return returnState;
-  }, [buildCurrentListingReturnState, location.pathname, location.search]);
+  }, [buildCurrentListingReturnState, location.pathname, location.search, routeSyncEnabled]);
 
   useEffect(() => {
     viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
@@ -948,9 +954,18 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
   }, [canNavigateBack, navigate]);
 
   const handleOpenAuthorFromDetails = useCallback((value: string, authorTitle: string) => {
-    setAuthorTemplateContext(detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : null);
+    const templateContext = detailsResult ? buildScraperTemplateContextFromDetails(detailsResult) : null;
+    setAuthorTemplateContext(templateContext);
     const nextAuthorQuery = formatScraperValueForDisplay(value);
     setAuthorSourceNameHint(authorTitle ? { query: nextAuthorQuery, name: authorTitle } : null);
+
+    if (!routeSyncEnabled) {
+      setMode('author');
+      setQuery(nextAuthorQuery);
+      void runAuthorLookup(nextAuthorQuery, { templateContext });
+      return;
+    }
+
     const routeState = parseScraperRouteState(location.search);
     const nextSearch = writeScraperRouteState(location.search, {
       scraperId: scraper.id,
@@ -981,7 +996,18 @@ export default function ScraperBrowser({ scraper, initialState = null }: Props) 
         },
       },
     );
-  }, [detailsResult, location.pathname, location.search, locationState, navigate, scraper.id]);
+  }, [
+    detailsResult,
+    location.pathname,
+    location.search,
+    locationState,
+    navigate,
+    routeSyncEnabled,
+    runAuthorLookup,
+    scraper.id,
+    setMode,
+    setQuery,
+  ]);
 
   const handleOpenAuthorFromDetailsInWorkspace = useCallback((value: string, authorTitle: string) => {
     if (!hasScraperFieldSelectorValue(authorConfig?.titleSelector) || !authorConfig?.resultItemSelector) {

@@ -203,6 +203,7 @@ export default function WorkspaceScraperAuthorPanel({
       <ScraperBrowser
         scraper={scraper}
         initialState={initialState}
+        routeSyncEnabled={false}
       />
     </div>
   );

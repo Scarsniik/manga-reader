@@ -37,6 +37,7 @@ type DetailsLookupOptions = {
 };
 
 type UseScraperBrowserRouteSyncOptions = {
+  enabled: boolean;
   scraperId: string;
   initialState: ScraperBrowserInitialState | null;
   locationPathname: string;
@@ -82,6 +83,7 @@ type UseScraperBrowserRouteSyncOptions = {
 };
 
 export function useScraperBrowserRouteSync({
+  enabled,
   scraperId,
   initialState,
   locationPathname,
@@ -422,6 +424,16 @@ export function useScraperBrowserRouteSync({
   restoreFromRouteRef.current = restoreFromRoute;
 
   useEffect(() => {
+    if (!enabled) {
+      isRestoringRouteRef.current = false;
+      lastInternalSearchRef.current = null;
+      lastRestoredRouteSignatureRef.current = routeStateSignature;
+      if (!urlRestoreReady) {
+        setUrlRestoreReady(true);
+      }
+      return;
+    }
+
     const isInternalRouteWrite = lastInternalSearchRef.current === locationSearch;
     if (isInternalRouteWrite) {
       lastInternalSearchRef.current = null;
@@ -464,13 +476,14 @@ export function useScraperBrowserRouteSync({
       isRestoringRouteRef.current = false;
     };
   }, [
+    enabled,
     locationSearch,
     routeStateSignature,
     urlRestoreReady,
   ]);
 
   useEffect(() => {
-    if (!urlRestoreReady || isRestoringRouteRef.current) {
+    if (!enabled || !urlRestoreReady || isRestoringRouteRef.current) {
       return;
     }
 
@@ -564,6 +577,7 @@ export function useScraperBrowserRouteSync({
     );
   }, [
     currentDetailsUrl,
+    enabled,
     hasExecutedListing,
     listingPageIndex,
     listingReturnState,

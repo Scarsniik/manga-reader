@@ -94,10 +94,22 @@
 }
 
 .workspace-view__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-tab-panel {
   flex: 1 1 auto;
   min-height: 0;
   padding-top: 8px;
   overflow: auto;
+}
+
+.workspace-tab-panel[hidden] {
+  display: none;
 }
 
 .workspace-placeholder {

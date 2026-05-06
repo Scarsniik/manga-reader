@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import WorkspaceTargetPanel from "@/renderer/components/Workspace/WorkspaceTargetPanel";
 import { clearWorkspaceBrowserTabCache } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTab, WorkspaceTarget } from "@/renderer/types/workspace";
@@ -79,11 +79,6 @@ export default function WorkspaceView() {
     return api.onWorkspaceOpenTarget?.(openTarget);
   }, [openTarget]);
 
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId) || null,
-    [activeTabId, tabs],
-  );
-
   const handleCloseTab = useCallback((tabId: string) => {
     const closingIndex = storedTabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) {
@@ -124,14 +119,6 @@ export default function WorkspaceView() {
     ));
     updateTabs(nextTabs);
   }, [updateTabs]);
-
-  const handleActiveTabTitleChange = useCallback((title: string) => {
-    if (!activeTabId) {
-      return;
-    }
-
-    handleTitleChange(activeTabId, title);
-  }, [activeTabId, handleTitleChange]);
 
   const handleTabAuxClick = useCallback((event: React.MouseEvent<HTMLElement>, tabId: string) => {
     if (event.button !== 1) {
@@ -188,13 +175,24 @@ export default function WorkspaceView() {
       </div>
 
       <div className="workspace-view__body">
-        {activeTab ? (
-          <WorkspaceTargetPanel
-            key={activeTab.id}
-            tabId={activeTab.id}
-            target={activeTab.target}
-            onTitleChange={handleActiveTabTitleChange}
-          />
+        {tabs.length > 0 ? (
+          tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                className={["workspace-tab-panel", isActive ? "is-active" : ""].filter(Boolean).join(" ")}
+                role="tabpanel"
+                hidden={!isActive}
+              >
+                <WorkspaceTargetPanel
+                  tabId={tab.id}
+                  target={tab.target}
+                  onTitleChange={handleTitleChange}
+                />
+              </div>
+            );
+          })
         ) : (
           <div className="workspace-placeholder">
             Ouvre un element avec le clic molette pour l'ajouter ici.
