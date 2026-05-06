@@ -1,7 +1,7 @@
 import React from "react";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
-import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
+import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
 import { DownloadArrowIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
 import type {
@@ -78,6 +78,16 @@ export default function MultiSearchResultsSection({
   onClearTextFilter,
   onToggleLanguageFilterMode,
 }: Props) {
+  const scraperResultGroups = React.useMemo(() => (
+    viewMode === "byScraper"
+      ? runs.map((run) => ({
+        scraperId: run.scraper.id,
+        scraperName: run.scraper.name,
+        results: run.results.map(buildSingleSourceMergedResult),
+      }))
+      : []
+  ), [runs, viewMode]);
+
   if (viewMode === "merged") {
     return (
       <section className="multi-search__results">
@@ -137,18 +147,13 @@ export default function MultiSearchResultsSection({
           </div>
         </div>
 
-        <div className="multi-search__results-grid">
-          {mergedResults.map((result) => (
-            <MultiSearchResultCard
-              key={result.id}
-              result={result}
-              libraryMangas={libraryMangas}
-              bookmarkedSourceKeys={bookmarkedSourceKeys}
-              onOpenSource={onOpenSource}
-              onOpenSourceInWorkspace={onOpenSourceInWorkspace}
-            />
-          ))}
-        </div>
+        <MultiSearchVirtualizedResultsGrid
+          results={mergedResults}
+          libraryMangas={libraryMangas}
+          bookmarkedSourceKeys={bookmarkedSourceKeys}
+          onOpenSource={onOpenSource}
+          onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+        />
       </section>
     );
   }
@@ -189,21 +194,16 @@ export default function MultiSearchResultsSection({
       </div>
 
       <div className="multi-search__by-scraper">
-        {runs.map((run) => (
-          <div key={run.scraper.id} className="multi-search__scraper-results">
-            <h4>{run.scraper.name}</h4>
-            <div className="multi-search__results-grid">
-              {run.results.map((source) => (
-                <MultiSearchResultCard
-                  key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}`}
-                  result={buildSingleSourceMergedResult(source)}
-                  libraryMangas={libraryMangas}
-                  bookmarkedSourceKeys={bookmarkedSourceKeys}
-                  onOpenSource={onOpenSource}
-                  onOpenSourceInWorkspace={onOpenSourceInWorkspace}
-                />
-              ))}
-            </div>
+        {scraperResultGroups.map((group) => (
+          <div key={group.scraperId} className="multi-search__scraper-results">
+            <h4>{group.scraperName}</h4>
+            <MultiSearchVirtualizedResultsGrid
+              results={group.results}
+              libraryMangas={libraryMangas}
+              bookmarkedSourceKeys={bookmarkedSourceKeys}
+              onOpenSource={onOpenSource}
+              onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+            />
           </div>
         ))}
       </div>

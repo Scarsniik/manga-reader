@@ -618,3 +618,4 @@ La V1 du multi-search repose sur les choix suivants :
 - La section de resultats expose un bouton JSON qui ecrit un export temporaire dans le dossier temporaire systeme puis l'ouvre avec l'application associee aux fichiers JSON.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose un bouton `Recharger fusion` qui force le recalcul de la fusion depuis les sources deja chargees.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose aussi un bouton `Merged JSON` qui ouvre un export limite aux `mergedResults`.
+- Les grilles de resultats virtualisent les cards par lignes mesurees : seules les cards visibles, une marge autour du viewport et les cards avec focus ou menu ouvert restent montees dans le DOM.
