@@ -45,6 +45,7 @@ import {
   buildMultiSearchMergedResultsExportPayload,
 } from "@/renderer/components/MultiSearch/multiSearchExport";
 import type {
+  MultiSearchAdvancedPages,
   MultiSearchDepthMode,
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -85,7 +86,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [selectedLanguageCodes, setSelectedLanguageCodes] = useState<string[]>([]);
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [depthMode, setDepthMode] = useState<MultiSearchDepthMode>("quick");
-  const [advancedPages, setAdvancedPages] = useState(3);
+  const [advancedPages, setAdvancedPages] = useState<MultiSearchAdvancedPages>(3);
   const [paceMode, setPaceMode] = useState<MultiSearchPaceMode>("fast");
   const [viewMode, setViewMode] = useState<MultiSearchViewMode>("merged");
   const [openError, setOpenError] = useState<string | null>(null);

@@ -11,6 +11,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { parseMultiSearchTerms } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type {
+  MultiSearchPageLimit,
   MultiSearchPaceMode,
   MultiSearchScraperRun,
   MultiSearchTermRun,
@@ -27,7 +28,7 @@ import {
 type RunSearchOptions = {
   query: string;
   scrapers: ScraperRecord[];
-  maxPages: number;
+  maxPages: MultiSearchPageLimit;
   paceMode: MultiSearchPaceMode;
 };
 
@@ -212,7 +213,7 @@ export default function useMultiSearch() {
     lastPaceModeRef.current = paceMode;
     clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
-    const pageLimit = Math.max(1, maxPages);
+    const pageLimit = maxPages === null ? null : Math.max(1, maxPages);
 
     setRuns(scrapers.map((scraper) => buildInitialRun(scraper, searchTerms)));
     setIsSearching(true);
@@ -223,7 +224,11 @@ export default function useMultiSearch() {
       let currentRun = buildInitialRun(scraper, searchTerms);
 
       try {
-        for (let pageOffset = 0; pageOffset < pageLimit; pageOffset += 1) {
+        for (
+          let pageOffset = 0;
+          pageLimit === null || pageOffset < pageLimit;
+          pageOffset += 1
+        ) {
           if (token !== searchTokenRef.current) {
             return;
           }

@@ -1,5 +1,6 @@
 import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 import type {
+  MultiSearchAdvancedPages,
   MultiSearchDepthMode,
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -20,7 +21,7 @@ export type MultiSearchPersistentFormState = {
   resultLanguageFilterModes: MultiSearchLanguageFilterModes;
   resultTextFilter: string;
   depthMode: MultiSearchDepthMode;
-  advancedPages: number;
+  advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
   viewMode: MultiSearchViewMode;
 };
@@ -74,6 +75,14 @@ const isStringArray = (value: unknown): value is string[] => (
 const isDepthMode = (value: unknown): value is MultiSearchDepthMode => (
   value === "quick" || value === "extended" || value === "advanced"
 );
+
+const restoreAdvancedPages = (value: unknown): MultiSearchAdvancedPages => {
+  if (value === "maximum") {
+    return "maximum";
+  }
+
+  return Number.isFinite(value) ? Math.max(1, Number(value)) : 3;
+};
 
 const isPaceMode = (value: unknown): value is MultiSearchPaceMode => (
   value === "fast" || value === "careful"
@@ -248,7 +257,7 @@ export const readMultiSearchState = (
       resultLanguageFilterModes: restoreLanguageFilterModes(parsed.resultLanguageFilterModes),
       resultTextFilter: typeof parsed.resultTextFilter === "string" ? parsed.resultTextFilter : "",
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
-      advancedPages: Number.isFinite(parsed.advancedPages) ? parsed.advancedPages : 3,
+      advancedPages: restoreAdvancedPages(parsed.advancedPages),
       paceMode: isPaceMode(parsed.paceMode) ? parsed.paceMode : "fast",
       viewMode: isViewMode(parsed.viewMode) ? parsed.viewMode : "merged",
       runs: Array.isArray(parsed.runs)

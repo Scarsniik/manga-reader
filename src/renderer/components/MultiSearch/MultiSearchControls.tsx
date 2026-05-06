@@ -1,6 +1,8 @@
 import React, { FormEvent } from "react";
 import type {
+  MultiSearchAdvancedPages,
   MultiSearchDepthMode,
+  MultiSearchPageLimit,
   MultiSearchPaceMode,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
@@ -8,7 +10,7 @@ import type {
 type Props = {
   query: string;
   depthMode: MultiSearchDepthMode;
-  advancedPages: number;
+  advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
   viewMode: MultiSearchViewMode;
   isSearching: boolean;
@@ -16,20 +18,23 @@ type Props = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onQueryChange: (value: string) => void;
   onDepthModeChange: (value: MultiSearchDepthMode) => void;
-  onAdvancedPagesChange: (value: number) => void;
+  onAdvancedPagesChange: (value: MultiSearchAdvancedPages) => void;
   onPaceModeChange: (value: MultiSearchPaceMode) => void;
   onViewModeChange: (value: MultiSearchViewMode) => void;
 };
 
-const DEPTH_PAGE_OPTIONS = [1, 2, 3, 5, 10];
+const DEPTH_PAGE_OPTIONS = [1, 2, 3, 5, 10, 20];
 
-export const getDepthPages = (depthMode: MultiSearchDepthMode, advancedPages: number): number => {
+export const getDepthPages = (
+  depthMode: MultiSearchDepthMode,
+  advancedPages: MultiSearchAdvancedPages,
+): MultiSearchPageLimit => {
   if (depthMode === "extended") {
     return 3;
   }
 
   if (depthMode === "advanced") {
-    return advancedPages;
+    return advancedPages === "maximum" ? null : advancedPages;
   }
 
   return 1;
@@ -86,12 +91,16 @@ export default function MultiSearchControls({
           {depthMode === "advanced" ? (
             <select
               value={advancedPages}
-              onChange={(event) => onAdvancedPagesChange(Number(event.target.value))}
+              onChange={(event) => {
+                const value = event.target.value;
+                onAdvancedPagesChange(value === "maximum" ? "maximum" : Number(value));
+              }}
               aria-label="Pages par scrapper"
             >
               {DEPTH_PAGE_OPTIONS.map((pageCount) => (
                 <option key={pageCount} value={pageCount}>{pageCount} page(s)</option>
               ))}
+              <option value="maximum">Maximum</option>
             </select>
           ) : null}
         </div>

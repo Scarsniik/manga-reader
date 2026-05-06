@@ -80,11 +80,13 @@ Profondeur de recherche
 [ Rapide : 1 page ] [ Étendue : 3 pages ] [ Avancée... ]
 ```
 
-En mode avancé, l'utilisateur peut choisir une valeur fixe :
+En mode avancé, l'utilisateur peut choisir une valeur fixe ou charger jusqu'a la fin de pagination :
 
 ```txt
-Pages par scraper : 1 / 2 / 3 / 5 / 10
+Pages par scraper : 1 / 2 / 3 / 5 / 10 / 20 / Maximum
 ```
+
+`Maximum` charge chaque scraper jusqu'a ce qu'il n'y ait plus de page suivante, qu'une erreur ferme la pagination, ou qu'une page ne retourne que des URLs deja vues.
 
 ### Recommandation V1
 

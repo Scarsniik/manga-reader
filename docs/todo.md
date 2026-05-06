@@ -22,7 +22,7 @@
 - [ ] Gerer le systeme de téléchargement natif du site avec le scrapper (nouveau module)
 - [ ] Gerer les apis
 - [x] Nombre de page dans module fiche
-- [ ] Ajout détection langue (bien étudier type de détéction : titre, drapeau, autre ?)
+- [x] Ajout détection langue (bien étudier type de détéction : titre, drapeau, autre ?)
 - [x] Recherche multiple : Liste des scrapper dans une card s'ouvre en hover pour que ça ne déplace pas ce qu'il y a en dessous
 - [x] Recherche multiple : lazy loading
 - [x] Recherche multiple : Pouvoir mettre plusieurs thermes de recherche
@@ -33,7 +33,7 @@
 
 - [ ] Quand on clique sur télécharger dans un scrapper avec des chapitres, ça change tous les boutons d'un coup
 - [x] Eviter de dl tout le manga avant de lancer le lecteur
-- [ ] Erreur étrange : Je vais sur une fiche, lance une recherche, met un truc en bookmark, vais sur la fiche du truc depuis les bookmark, la fiche ne s'affiche pas, je dois cliquer sur "Ouvrir" pour que ça marche
+- [x] Erreur étrange : Je vais sur une fiche, lance une recherche, met un truc en bookmark, vais sur la fiche du truc depuis les bookmark, la fiche ne s'affiche pas, je dois cliquer sur "Ouvrir" pour que ça marche
 
 ### Reworks
 
