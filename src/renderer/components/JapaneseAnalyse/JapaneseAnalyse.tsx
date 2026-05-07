@@ -15,11 +15,10 @@ import {
   JpdbParseResult,
   JpdbSentenceSegment,
   JpdbVocabularyEntry,
-  parseTextWithJpdb,
   removeVocabularyFromJpdbDeck,
   submitVocabularyReviewToJpdb,
-  translateJaToEn,
 } from '@/renderer/services/jpdb';
+import { loadJpdbTextAnalysis } from '@/renderer/services/jpdbAnalysis';
 import Header from './Header';
 import DetectedText from './DetectedText';
 import TokensList from './TokensList';
@@ -47,6 +46,9 @@ export type Box = {
 type Props = {
   selectedBoxes: Box[];
   analysisScrollKey?: string;
+  useTranslationOrder?: boolean;
+  translationContextSegments?: string[];
+  translationOrderRevision?: number;
   tokenCycleRequestNonce?: number;
   tokenCycleSelectionKey?: string | null;
   onWordClick?: (word: string) => void;
@@ -83,6 +85,9 @@ const AnalysisSkeleton = () => (
 export default function JapaneseAnalyse({
   selectedBoxes,
   analysisScrollKey,
+  useTranslationOrder = false,
+  translationContextSegments,
+  translationOrderRevision = 0,
   tokenCycleRequestNonce = 0,
   tokenCycleSelectionKey = null,
   onWordClick,
@@ -119,8 +124,19 @@ export default function JapaneseAnalyse({
   const autoText = useMemo(() => selectedBoxes.map((box) => box.text).join('\n'), [selectedBoxes]);
   const text = manualText ?? autoText;
   const isUsingManualText = manualText !== null;
+  const translationSegments = useMemo(
+    () => (
+      useTranslationOrder && !isUsingManualText
+        ? translationContextSegments
+        : undefined
+    ),
+    [isUsingManualText, translationContextSegments, useTranslationOrder]
+  );
   const currentAnalysisKey = analysisScrollKey || text || autoText;
   const getVocabularyReviewKey = (entry: Pick<JpdbVocabularyEntry, 'vid' | 'sid'>) => `${entry.vid}:${entry.sid}`;
+  const translationLabel = useTranslationOrder && (translationSegments?.length ?? 0) > 1
+    ? 'Traduction chaînée'
+    : 'Traduction';
 
   useEffect(() => {
     setInputText(autoText);
@@ -165,7 +181,7 @@ export default function JapaneseAnalyse({
     }
 
     let cancelled = false;
-    const requestKey = analysisScrollKey || text || autoText;
+    const requestKey = currentAnalysisKey;
 
     setParseResult(null);
     setJpdbError(null);
@@ -185,32 +201,30 @@ export default function JapaneseAnalyse({
     setActionError(null);
 
     (async () => {
-      const [parseRes, translationRes] = await Promise.allSettled([
-        parseTextWithJpdb(text),
-        translateJaToEn(text),
-      ]);
+      const analysis = await loadJpdbTextAnalysis(text, {
+        force: analysisNonce > 0 && isUsingManualText,
+        translationSegments,
+      });
 
       if (cancelled) {
         return;
       }
 
-      if (parseRes.status === 'fulfilled') {
-        const parsed = parseRes.value;
-        setParseResult(parsed);
-        if (parsed.tokens.length > 0) {
+      if (analysis.parseResult) {
+        setParseResult(analysis.parseResult);
+        if (analysis.parseResult.tokens.length > 0) {
           setActiveTokenIndex(0);
           setSelectedTokenIndex(0);
         }
       } else {
-        const error = parseRes.reason;
-        setJpdbError(error?.message || String(error));
+        setJpdbError(analysis.parseError);
       }
 
-      if (translationRes.status === 'fulfilled') {
-        setTranslation(translationRes.value.text);
-        setTranslationTruncated(!!translationRes.value.is_truncated);
-      } else {
-        console.debug('translateJaToEn failed:', translationRes.reason?.message || translationRes.reason);
+      if (analysis.translation) {
+        setTranslation(analysis.translation.text);
+        setTranslationTruncated(!!analysis.translation.is_truncated);
+      } else if (analysis.translationError) {
+        console.debug('translateJaToEn failed:', analysis.translationError);
       }
 
       if (!cancelled) {
@@ -222,7 +236,15 @@ export default function JapaneseAnalyse({
     return () => {
       cancelled = true;
     };
-  }, [analysisNonce, analysisScrollKey, autoText, text]);
+  }, [
+    analysisNonce,
+    currentAnalysisKey,
+    isUsingManualText,
+    translationOrderRevision,
+    translationSegments,
+    text,
+    useTranslationOrder,
+  ]);
 
   const sentenceSegments = useMemo<JpdbSentenceSegment[]>(
     () => buildJpdbSentenceSegments(text, parseResult),
@@ -376,7 +398,13 @@ export default function JapaneseAnalyse({
         });
       });
     });
-  }, [analysisCompletedKey, analysisLoading, currentAnalysisKey, kanjiCompletedKey, kanjiFetchLoading]);
+  }, [
+    analysisCompletedKey,
+    analysisLoading,
+    currentAnalysisKey,
+    kanjiCompletedKey,
+    kanjiFetchLoading,
+  ]);
 
   useEffect(() => {
     if (selectedSurface) {
@@ -496,7 +524,7 @@ export default function JapaneseAnalyse({
         <>
           {translation ? (
             <div className="translation">
-              <div className="translation__label">Traduction</div>
+              <div className="translation__label">{translationLabel}</div>
               <div className="translation__text">{translation}</div>
               {translationTruncated ? (
                 <div className="translation-truncated">Traduction tronquée par JPDB.</div>

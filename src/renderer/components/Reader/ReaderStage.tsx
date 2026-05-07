@@ -37,6 +37,8 @@ type Props = {
     showBoxes: boolean;
     allOcrBoxes: ReaderOcrBox[];
     selectedBoxes: string[];
+    orderSelectionEnabled: boolean;
+    orderedBoxIds: string[];
     onSelectBox: (id: string | null, additive?: boolean) => void;
     manualSelectionEnabled: boolean;
     manualSelectionLoading: boolean;
@@ -82,6 +84,8 @@ const ReaderStage: React.FC<Props> = ({
     showBoxes,
     allOcrBoxes,
     selectedBoxes,
+    orderSelectionEnabled,
+    orderedBoxIds,
     onSelectBox,
     manualSelectionEnabled,
     manualSelectionLoading,
@@ -143,6 +147,8 @@ const ReaderStage: React.FC<Props> = ({
                             showBoxes={showBoxes}
                             detectedBoxes={allOcrBoxes}
                             selectedBoxes={selectedBoxes}
+                            orderSelectionEnabled={orderSelectionEnabled}
+                            orderedBoxIds={orderedBoxIds}
                             onSelectBox={onSelectBox}
                             manualSelectionEnabled={manualSelectionEnabled}
                             manualSelectionLoading={manualSelectionLoading}

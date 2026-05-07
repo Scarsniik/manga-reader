@@ -8,8 +8,17 @@ import {
 
 type OcrDirectionalCandidateMetrics = {
     primaryDistance: number;
+    primaryBacktrackDistance: number;
+    effectivePrimaryDistance: number;
     secondaryDistance: number;
     secondaryOverlap: number;
+};
+
+export type ReaderOcrNavigationOptions = {
+    alignmentOffsetRatio: number;
+    deadZoneRatio: number;
+    strictDirection: boolean;
+    looseFallback: boolean;
 };
 
 const BASE_OCR_PAGE_MEMORY_CACHE = 6;
@@ -377,84 +386,184 @@ const getOcrBoxCenter = (box: ReaderOcrBox) => ({
     y: box.bbox.y + (box.bbox.h / 2),
 });
 
-const getAxisOverlap = (startA: number, endA: number, startB: number, endB: number): number => (
-    Math.max(0, Math.min(endA, endB) - Math.max(startA, startB))
+const getAxisOverlap = (
+    startA: number,
+    endA: number,
+    startB: number,
+    endB: number,
+    axisOffset: number = 0,
+): number => (
+    Math.max(0, Math.min(endA + axisOffset, endB) - Math.max(startA - axisOffset, startB))
 );
 
 const getDirectionalOcrCandidateMetrics = (
     currentBox: ReaderOcrBox,
     candidateBox: ReaderOcrBox,
-    direction: OcrNavigationDirection
+    direction: OcrNavigationDirection,
+    options: ReaderOcrNavigationOptions,
 ): OcrDirectionalCandidateMetrics | null => {
     const currentCenter = getOcrBoxCenter(currentBox);
     const candidateCenter = getOcrBoxCenter(candidateBox);
+    const axisOffset = Math.max(0, Math.min(0.5, options.alignmentOffsetRatio));
+    const deadZone = Math.max(0, Math.min(0.5, options.deadZoneRatio));
     const epsilon = 0.0001;
 
     let primaryDistance = 0;
+    let primaryBacktrackDistance = 0;
     let secondaryDistance = 0;
     let secondaryOverlap = 0;
 
+    const resolvePrimaryDistance = (rawPrimaryDistance: number) => {
+        if (options.strictDirection) {
+            if (rawPrimaryDistance <= deadZone + epsilon) {
+                return false;
+            }
+
+            primaryDistance = rawPrimaryDistance;
+            primaryBacktrackDistance = 0;
+            return true;
+        }
+
+        if (rawPrimaryDistance < -axisOffset - epsilon) {
+            return false;
+        }
+
+        if (rawPrimaryDistance > 0 && rawPrimaryDistance <= deadZone + epsilon) {
+            return false;
+        }
+
+        primaryDistance = Math.max(0, rawPrimaryDistance);
+        primaryBacktrackDistance = Math.max(0, -rawPrimaryDistance);
+        return true;
+    };
+
     if (direction === 'left') {
-        if (candidateCenter.x >= currentCenter.x - epsilon) {
+        const rawPrimaryDistance = currentCenter.x - candidateCenter.x;
+        if (!resolvePrimaryDistance(rawPrimaryDistance)) {
             return null;
         }
-        primaryDistance = currentCenter.x - candidateCenter.x;
         secondaryDistance = Math.abs(candidateCenter.y - currentCenter.y);
         secondaryOverlap = getAxisOverlap(
             currentBox.bbox.y,
             currentBox.bbox.y + currentBox.bbox.h,
             candidateBox.bbox.y,
-            candidateBox.bbox.y + candidateBox.bbox.h
+            candidateBox.bbox.y + candidateBox.bbox.h,
+            axisOffset,
         );
     } else if (direction === 'right') {
-        if (candidateCenter.x <= currentCenter.x + epsilon) {
+        const rawPrimaryDistance = candidateCenter.x - currentCenter.x;
+        if (!resolvePrimaryDistance(rawPrimaryDistance)) {
             return null;
         }
-        primaryDistance = candidateCenter.x - currentCenter.x;
         secondaryDistance = Math.abs(candidateCenter.y - currentCenter.y);
         secondaryOverlap = getAxisOverlap(
             currentBox.bbox.y,
             currentBox.bbox.y + currentBox.bbox.h,
             candidateBox.bbox.y,
-            candidateBox.bbox.y + candidateBox.bbox.h
+            candidateBox.bbox.y + candidateBox.bbox.h,
+            axisOffset,
         );
     } else if (direction === 'up') {
-        if (candidateCenter.y >= currentCenter.y - epsilon) {
+        const rawPrimaryDistance = currentCenter.y - candidateCenter.y;
+        if (!resolvePrimaryDistance(rawPrimaryDistance)) {
             return null;
         }
-        primaryDistance = currentCenter.y - candidateCenter.y;
         secondaryDistance = Math.abs(candidateCenter.x - currentCenter.x);
         secondaryOverlap = getAxisOverlap(
             currentBox.bbox.x,
             currentBox.bbox.x + currentBox.bbox.w,
             candidateBox.bbox.x,
-            candidateBox.bbox.x + candidateBox.bbox.w
+            candidateBox.bbox.x + candidateBox.bbox.w,
+            axisOffset,
         );
     } else {
-        if (candidateCenter.y <= currentCenter.y + epsilon) {
+        const rawPrimaryDistance = candidateCenter.y - currentCenter.y;
+        if (!resolvePrimaryDistance(rawPrimaryDistance)) {
             return null;
         }
-        primaryDistance = candidateCenter.y - currentCenter.y;
         secondaryDistance = Math.abs(candidateCenter.x - currentCenter.x);
         secondaryOverlap = getAxisOverlap(
             currentBox.bbox.x,
             currentBox.bbox.x + currentBox.bbox.w,
             candidateBox.bbox.x,
-            candidateBox.bbox.x + candidateBox.bbox.w
+            candidateBox.bbox.x + candidateBox.bbox.w,
+            axisOffset,
         );
     }
 
     return {
         primaryDistance,
+        primaryBacktrackDistance,
+        effectivePrimaryDistance: primaryDistance + (primaryBacktrackDistance * 1.5),
         secondaryDistance,
         secondaryOverlap,
     };
 };
 
-export const findDirectionalOcrBox = (
+const isBetterAlignedOcrCandidate = (
+    metrics: OcrDirectionalCandidateMetrics,
+    bestMetrics: OcrDirectionalCandidateMetrics,
+    epsilon: number,
+): boolean => {
+    if (metrics.effectivePrimaryDistance < bestMetrics.effectivePrimaryDistance - epsilon) {
+        return true;
+    }
+    if (metrics.effectivePrimaryDistance > bestMetrics.effectivePrimaryDistance + epsilon) {
+        return false;
+    }
+
+    if (metrics.primaryBacktrackDistance < bestMetrics.primaryBacktrackDistance - epsilon) {
+        return true;
+    }
+    if (metrics.primaryBacktrackDistance > bestMetrics.primaryBacktrackDistance + epsilon) {
+        return false;
+    }
+
+    if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
+        return true;
+    }
+    if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
+        return false;
+    }
+
+    return metrics.secondaryOverlap > bestMetrics.secondaryOverlap + epsilon;
+};
+
+const isBetterLooseOcrCandidate = (
+    metrics: OcrDirectionalCandidateMetrics,
+    bestMetrics: OcrDirectionalCandidateMetrics,
+    epsilon: number,
+): boolean => {
+    if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
+        return true;
+    }
+    if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
+        return false;
+    }
+
+    if (metrics.effectivePrimaryDistance < bestMetrics.effectivePrimaryDistance - epsilon) {
+        return true;
+    }
+    if (metrics.effectivePrimaryDistance > bestMetrics.effectivePrimaryDistance + epsilon) {
+        return false;
+    }
+
+    if (metrics.primaryBacktrackDistance < bestMetrics.primaryBacktrackDistance - epsilon) {
+        return true;
+    }
+    if (metrics.primaryBacktrackDistance > bestMetrics.primaryBacktrackDistance + epsilon) {
+        return false;
+    }
+
+    return metrics.secondaryOverlap > bestMetrics.secondaryOverlap + epsilon;
+};
+
+const findDirectionalOcrBoxCandidate = (
     boxes: ReaderOcrBox[],
     currentBox: ReaderOcrBox,
-    direction: OcrNavigationDirection
+    direction: OcrNavigationDirection,
+    options: ReaderOcrNavigationOptions,
+    requireSecondaryOverlap: boolean,
 ): ReaderOcrBox | null => {
     let bestCandidate: ReaderOcrBox | null = null;
     let bestMetrics: OcrDirectionalCandidateMetrics | null = null;
@@ -465,8 +574,8 @@ export const findDirectionalOcrBox = (
             return;
         }
 
-        const metrics = getDirectionalOcrCandidateMetrics(currentBox, candidateBox, direction);
-        if (metrics === null) {
+        const metrics = getDirectionalOcrCandidateMetrics(currentBox, candidateBox, direction, options);
+        if (metrics === null || (requireSecondaryOverlap && metrics.secondaryOverlap <= epsilon)) {
             return;
         }
 
@@ -476,59 +585,36 @@ export const findDirectionalOcrBox = (
             return;
         }
 
-        const candidateHasOverlap = metrics.secondaryOverlap > epsilon;
-        const bestHasOverlap = bestMetrics.secondaryOverlap > epsilon;
+        const isBetterCandidate = requireSecondaryOverlap
+            ? isBetterAlignedOcrCandidate(metrics, bestMetrics, epsilon)
+            : isBetterLooseOcrCandidate(metrics, bestMetrics, epsilon);
 
-        if (candidateHasOverlap !== bestHasOverlap) {
-            if (candidateHasOverlap) {
-                bestMetrics = metrics;
-                bestCandidate = candidateBox;
-            }
-            return;
-        }
-
-        if (candidateHasOverlap) {
-            if (metrics.primaryDistance < bestMetrics.primaryDistance - epsilon) {
-                bestMetrics = metrics;
-                bestCandidate = candidateBox;
-                return;
-            }
-            if (metrics.primaryDistance > bestMetrics.primaryDistance + epsilon) {
-                return;
-            }
-
-            if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
-                bestMetrics = metrics;
-                bestCandidate = candidateBox;
-                return;
-            }
-            if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
-                return;
-            }
-
-            if (metrics.secondaryOverlap > bestMetrics.secondaryOverlap + epsilon) {
-                bestMetrics = metrics;
-                bestCandidate = candidateBox;
-            }
-            return;
-        }
-
-        if (metrics.secondaryDistance < bestMetrics.secondaryDistance - epsilon) {
-            bestMetrics = metrics;
-            bestCandidate = candidateBox;
-            return;
-        }
-        if (metrics.secondaryDistance > bestMetrics.secondaryDistance + epsilon) {
-            return;
-        }
-
-        if (metrics.primaryDistance < bestMetrics.primaryDistance - epsilon) {
+        if (isBetterCandidate) {
             bestMetrics = metrics;
             bestCandidate = candidateBox;
         }
     });
 
     return bestCandidate;
+};
+
+export const findDirectionalOcrBox = (
+    boxes: ReaderOcrBox[],
+    currentBox: ReaderOcrBox,
+    direction: OcrNavigationDirection,
+    options: ReaderOcrNavigationOptions = {
+        alignmentOffsetRatio: 0,
+        deadZoneRatio: 0,
+        strictDirection: true,
+        looseFallback: true,
+    },
+): ReaderOcrBox | null => {
+    const alignedCandidate = findDirectionalOcrBoxCandidate(boxes, currentBox, direction, options, true);
+    if (alignedCandidate || !options.looseFallback) {
+        return alignedCandidate;
+    }
+
+    return findDirectionalOcrBoxCandidate(boxes, currentBox, direction, options, false);
 };
 
 export const isRemoteScraperManga = (manga: Manga | null): boolean => (

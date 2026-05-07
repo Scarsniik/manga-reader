@@ -9,6 +9,12 @@ export type AppParams = {
     showHiddens?: boolean;
     titleLineCount?: number;
     readerOcrPreloadPageCount?: number;
+    readerOcrAutoAnalyzeBubbles?: boolean;
+    readerOcrPreloadTokenDetails?: boolean;
+    readerOcrNavigationOffset?: number;
+    readerOcrNavigationDeadZone?: number;
+    readerOcrNavigationStrictDirection?: boolean;
+    readerOcrNavigationLooseFallback?: boolean;
     readerImagePreloadPageCount?: number;
     readerImageMaxWidth?: number;
     readerShowProgressIndicator?: boolean;

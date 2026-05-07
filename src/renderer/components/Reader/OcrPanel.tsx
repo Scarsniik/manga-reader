@@ -9,6 +9,10 @@ type Props = {
     detectedBoxes: Box[];
     manualBoxes: Box[];
     selectedBoxes: string[];
+    orderSelectionEnabled?: boolean;
+    orderedBoxIds?: string[];
+    orderedTranslationEnabled?: boolean;
+    orderedTranslationRevision?: number;
     tokenCycleRequestNonce?: number;
     tokenCycleSelectionKey?: string | null;
     onSimulate: () => void | Promise<void>;
@@ -16,6 +20,7 @@ type Props = {
     onSelectBox: (id: string | null, additive?: boolean) => void;
     onFocusBox?: (id: string) => void;
     onToggleManualSelection?: () => void;
+    onToggleOrderSelection?: () => void;
     onRemoveManualBox?: (id: string) => void | Promise<void>;
     manualSelectionEnabled?: boolean;
     manualSelectionLoading?: boolean;
@@ -34,6 +39,10 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     detectedBoxes,
     manualBoxes,
     selectedBoxes,
+    orderSelectionEnabled = false,
+    orderedBoxIds = [],
+    orderedTranslationEnabled = false,
+    orderedTranslationRevision = 0,
     tokenCycleRequestNonce = 0,
     tokenCycleSelectionKey = null,
     onSimulate,
@@ -41,6 +50,7 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     onSelectBox,
     onFocusBox,
     onToggleManualSelection,
+    onToggleOrderSelection,
     onRemoveManualBox,
     manualSelectionEnabled = false,
     manualSelectionLoading = false,
@@ -54,14 +64,30 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     showBoxes = true,
     onToggleShowBoxes,
 }, ref) => {
-    const allBoxes = [...detectedBoxes, ...manualBoxes];
-    const boxMap = new Map(allBoxes.map((box) => [box.id, box] as const));
-    const selectedBoxSet = new Set(selectedBoxes);
-    const selectedForAnalyse = selectedBoxes
+    const allBoxes = useMemo(() => [...detectedBoxes, ...manualBoxes], [detectedBoxes, manualBoxes]);
+    const boxMap = useMemo(() => new Map(allBoxes.map((box) => [box.id, box] as const)), [allBoxes]);
+    const selectedBoxSet = useMemo(() => new Set(selectedBoxes), [selectedBoxes]);
+    const selectedForAnalyse = useMemo(() => selectedBoxes
         .map((id) => boxMap.get(id) || null)
-        .filter((box): box is Box => !!box);
+        .filter((box): box is Box => !!box), [boxMap, selectedBoxes]);
+    const translationContextSegments = useMemo(() => {
+        const activeSelectedBoxId = selectedBoxes.length === 1 ? selectedBoxes[0] : null;
+        const activeOrderIndex = activeSelectedBoxId
+            ? orderedBoxIds.indexOf(activeSelectedBoxId)
+            : -1;
 
-    const selectionSummary = selectedForAnalyse.length === 0
+        if (!orderedTranslationEnabled || activeOrderIndex < 0) {
+            return undefined;
+        }
+
+        return orderedBoxIds
+            .slice(0, activeOrderIndex + 1)
+            .map((id) => boxMap.get(id)?.text || '')
+            .filter((text) => text.trim().length > 0);
+    }, [boxMap, orderedBoxIds, orderedTranslationEnabled, selectedBoxes]);
+    const selectionSummary = orderSelectionEnabled
+        ? `Ordre en cours : ${orderedBoxIds.length} zone(s).`
+        : selectedForAnalyse.length === 0
         ? 'Sélectionne une bulle pour lancer l’analyse.'
         : selectedForAnalyse.length === 1
             ? '1 bulle sélectionnée'
@@ -70,7 +96,11 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
 
     const renderBoxButton = (box: Box, typeLabel: string) => (
         <button
-            className={selectedBoxSet.has(box.id) ? 'ocr-box-select is-selected' : 'ocr-box-select'}
+            className={[
+                'ocr-box-select',
+                selectedBoxSet.has(box.id) ? 'is-selected' : '',
+                orderSelectionEnabled && orderedBoxIds.includes(box.id) ? 'is-ordered' : '',
+            ].filter(Boolean).join(' ')}
             onClick={(event) => {
                 onSelectBox(box.id, event.ctrlKey || event.metaKey);
                 if (typeof onFocusBox === 'function') {
@@ -81,6 +111,9 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
         >
             <span className="ocr-box-select__meta">
                 <span className="ocr-box-select__badge">{typeLabel}</span>
+                {orderSelectionEnabled && orderedBoxIds.includes(box.id) ? (
+                    <span className="ocr-box-select__badge">#{orderedBoxIds.indexOf(box.id) + 1}</span>
+                ) : null}
                 {box.vertical ? <span className="ocr-box-select__tag">Vertical</span> : null}
             </span>
             <span className="ocr-box-select__text">{box.text || '(vide)'}</span>
@@ -89,7 +122,12 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
 
     const hasDetectedBoxes = detectedBoxes.length > 0;
     const hasManualBoxes = manualBoxes.length > 0;
-    const hasStatus = !!loading || !!manualSelectionLoading || !!manualSelectionEnabled || !!error || !!statusNote;
+    const hasStatus = !!loading
+        || !!manualSelectionLoading
+        || !!manualSelectionEnabled
+        || !!orderSelectionEnabled
+        || !!error
+        || !!statusNote;
 
     return (
         <aside className="reader-ocr-panel" aria-label="OCR panel" ref={ref}>
@@ -116,6 +154,18 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             type="button"
                         >
                             {manualSelectionEnabled ? 'Annuler zone' : 'Zone manuelle'}
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (typeof onToggleOrderSelection === 'function') {
+                                    onToggleOrderSelection();
+                                }
+                            }}
+                            disabled={manualSelectionLoading}
+                            className={orderSelectionEnabled ? 'is-active' : ''}
+                            type="button"
+                        >
+                            {orderSelectionEnabled ? 'Valider ordre' : 'Ordre trad'}
                         </button>
                     </div>
                 </div>
@@ -144,6 +194,9 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                         {manualSelectionLoading ? <div className="ocr-status-pill">Analyse de la sélection manuelle…</div> : null}
                         {manualSelectionEnabled ? (
                             <div className="ocr-status-note">Dessine une zone sur l&apos;image pour ajouter une sélection manuelle.</div>
+                        ) : null}
+                        {orderSelectionEnabled ? (
+                            <div className="ocr-status-note">Clique les zones sur la page dans l&apos;ordre de lecture. Clique une zone déjà numérotée pour la retirer.</div>
                         ) : null}
                         {error ? <div className="ocr-status-error">{error}</div> : null}
                         {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
@@ -232,6 +285,9 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             key={selectionScrollKey}
                             selectedBoxes={selectedForAnalyse}
                             analysisScrollKey={selectionScrollKey}
+                            useTranslationOrder={orderedTranslationEnabled}
+                            translationContextSegments={translationContextSegments}
+                            translationOrderRevision={orderedTranslationRevision}
                             tokenCycleRequestNonce={tokenCycleRequestNonce}
                             tokenCycleSelectionKey={tokenCycleSelectionKey}
                             onClose={() => onSelectBox(null)}

@@ -15,6 +15,8 @@ type Props = {
     showBoxes?: boolean;
     detectedBoxes: ReaderOcrBox[];
     selectedBoxes: string[];
+    orderSelectionEnabled?: boolean;
+    orderedBoxIds?: string[];
     onSelectBox: (id: string | null, additive?: boolean) => void;
     manualSelectionEnabled?: boolean;
     manualSelectionLoading?: boolean;
@@ -30,6 +32,8 @@ const ImageViewer: React.FC<Props> = ({
     showBoxes = true,
     detectedBoxes,
     selectedBoxes,
+    orderSelectionEnabled = false,
+    orderedBoxIds = [],
     onSelectBox,
     manualSelectionEnabled = false,
     manualSelectionLoading = false,
@@ -96,28 +100,38 @@ const ImageViewer: React.FC<Props> = ({
         <div className="image-wrap">
             <img ref={imgRef} src={src} alt="page" className="reader-image" />
 
-            {ocrEnabled && showBoxes && detectedBoxes.map(b => {
+            {ocrEnabled && (showBoxes || orderSelectionEnabled) && detectedBoxes.map(b => {
                 const left = `calc(${b.bbox.x * 100}% - ${BOX_VISUAL_PADDING_PX}px)`;
                 const top = `calc(${b.bbox.y * 100}% - ${BOX_VISUAL_PADDING_PX}px)`;
                 const width = `calc(${b.bbox.w * 100}% + ${BOX_VISUAL_PADDING_PX * 2}px)`;
                 const height = `calc(${b.bbox.h * 100}% + ${BOX_VISUAL_PADDING_PX * 2}px)`;
                 const isSelected = selectedBoxes.indexOf(b.id) >= 0;
+                const orderIndex = orderSelectionEnabled ? orderedBoxIds.indexOf(b.id) : -1;
+                const orderNumber = orderIndex >= 0 ? orderIndex + 1 : null;
                 return (
                     <button
                         key={b.id}
-                        className={"overlay-box" + (isSelected ? ' selected' : '')}
+                        className={[
+                            "overlay-box",
+                            isSelected ? "selected" : "",
+                            orderSelectionEnabled ? "is-ordering" : "",
+                            orderNumber !== null ? "is-ordered" : "",
+                        ].filter(Boolean).join(" ")}
                         style={{ left, top, width, height }}
                         onClick={(e) => onSelectBox(b.id, e.ctrlKey || e.metaKey)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                                // treat Enter as toggle selection (additive)
                                 onSelectBox(b.id, true);
                             }
                         }}
                         aria-pressed={isSelected}
                         aria-label={b.text ? `Zone OCR: ${b.text}` : 'Zone OCR'}
                         title={b.text}
-                    />
+                    >
+                        {orderNumber !== null ? (
+                            <span className="overlay-order-label">{orderNumber}</span>
+                        ) : null}
+                    </button>
                 );
             })}
 

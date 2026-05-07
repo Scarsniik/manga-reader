@@ -1,5 +1,15 @@
 export const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
 export const MAX_READER_OCR_PRELOAD_PAGE_COUNT = 10;
+export const DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES = true;
+export const DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS = false;
+export const DEFAULT_READER_OCR_NAVIGATION_OFFSET = 6;
+export const MIN_READER_OCR_NAVIGATION_OFFSET = 0;
+export const MAX_READER_OCR_NAVIGATION_OFFSET = 25;
+export const DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE = 1;
+export const MIN_READER_OCR_NAVIGATION_DEAD_ZONE = 0;
+export const MAX_READER_OCR_NAVIGATION_DEAD_ZONE = 10;
+export const DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION = true;
+export const DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK = true;
 export const DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT = 2;
 export const MAX_READER_IMAGE_PRELOAD_PAGE_COUNT = 10;
 export const DEFAULT_READER_IMAGE_MAX_WIDTH = 1100;
@@ -42,6 +52,10 @@ const normalizeIntegerSetting = (
     return Math.max(min, Math.min(max, Math.floor(parsed)));
 };
 
+const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => (
+    typeof value === "boolean" ? value : fallback
+);
+
 export const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
     normalizeIntegerSetting(
         value,
@@ -49,6 +63,40 @@ export const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
         0,
         MAX_READER_OCR_PRELOAD_PAGE_COUNT,
     )
+);
+
+export const normalizeReaderOcrAutoAnalyzeBubbles = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES)
+);
+
+export const normalizeReaderOcrPreloadTokenDetails = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS)
+);
+
+export const normalizeReaderOcrNavigationOffset = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_NAVIGATION_OFFSET,
+        MIN_READER_OCR_NAVIGATION_OFFSET,
+        MAX_READER_OCR_NAVIGATION_OFFSET,
+    )
+);
+
+export const normalizeReaderOcrNavigationDeadZone = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
+        MIN_READER_OCR_NAVIGATION_DEAD_ZONE,
+        MAX_READER_OCR_NAVIGATION_DEAD_ZONE,
+    )
+);
+
+export const normalizeReaderOcrNavigationStrictDirection = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION)
+);
+
+export const normalizeReaderOcrNavigationLooseFallback = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK)
 );
 
 export const normalizeReaderImagePreloadPageCount = (value: unknown): number => (

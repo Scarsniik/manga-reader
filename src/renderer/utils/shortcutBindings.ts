@@ -10,6 +10,9 @@ export type ShortcutActionId =
   | "readerOcrNavigateLeft"
   | "readerOcrNavigateRight"
   | "readerOcrManualSelection"
+  | "readerOcrOrderSelection"
+  | "readerOcrOrderedPrevious"
+  | "readerOcrOrderedNext"
   | "readerOcrTogglePanel"
   | "readerOcrTokenNavigation";
 
@@ -74,6 +77,18 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
         label: "Sélection OCR manuelle",
       },
       {
+        id: "readerOcrOrderSelection",
+        label: "Ordre de traduction OCR",
+      },
+      {
+        id: "readerOcrOrderedPrevious",
+        label: "Bulle ordonnée précédente",
+      },
+      {
+        id: "readerOcrOrderedNext",
+        label: "Bulle ordonnée suivante",
+      },
+      {
         id: "readerOcrTogglePanel",
         label: "Ouverture panneau OCR",
       },
@@ -95,6 +110,9 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   readerOcrNavigateLeft: ["K", "", ""],
   readerOcrNavigateRight: ["M", "", ""],
   readerOcrManualSelection: ["*", "", ""],
+  readerOcrOrderSelection: ["", "", ""],
+  readerOcrOrderedPrevious: ["", "", ""],
+  readerOcrOrderedNext: ["", "", ""],
   readerOcrTogglePanel: ["$", "", ""],
   readerOcrTokenNavigation: [":", "", ""],
 };

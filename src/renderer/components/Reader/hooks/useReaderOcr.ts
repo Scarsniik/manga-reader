@@ -4,6 +4,10 @@ import { findVerticalScrollContainer } from '@/renderer/utils/scrollPosition';
 import { getOcrApi, mockOcrRecognize } from '@/renderer/utils/mockOcr';
 import { notifyOcrRuntimeMissing } from '@/renderer/utils/ocrRuntimeUi';
 import {
+    preloadJpdbOrderedTextAnalysis,
+    preloadJpdbTextAnalysis,
+} from '@/renderer/services/jpdbAnalysis';
+import {
     ManualSelection,
     OcrNavigationDirection,
     ReaderOcrBox,
@@ -29,7 +33,26 @@ type Args = {
     images: string[];
     manga: Manga | null;
     preloadPageCount: number | null;
+    analysisPreloadEnabled: boolean;
+    preloadTokenDetails: boolean;
+    navigationOffset: number;
+    navigationDeadZone: number;
+    navigationStrictDirection: boolean;
+    navigationLooseFallback: boolean;
     imgRef: React.RefObject<HTMLImageElement | null>;
+};
+
+type OrderedOcrNavigationDirection = "previous" | "next";
+
+const clampScrollTopToImage = (
+    targetScrollTop: number,
+    imageTop: number,
+    imageBottom: number,
+    viewportHeight: number,
+): number => {
+    const minScrollTop = Math.max(0, imageTop);
+    const maxScrollTop = Math.max(minScrollTop, imageBottom - viewportHeight);
+    return Math.max(minScrollTop, Math.min(maxScrollTop, targetScrollTop));
 };
 
 const useReaderOcr = ({
@@ -39,12 +62,22 @@ const useReaderOcr = ({
     images,
     manga,
     preloadPageCount,
+    analysisPreloadEnabled,
+    preloadTokenDetails,
+    navigationOffset,
+    navigationDeadZone,
+    navigationStrictDirection,
+    navigationLooseFallback,
     imgRef,
 }: Args) => {
     const [showBoxes, setShowBoxes] = React.useState<boolean>(true);
     const [detectedBoxes, setDetectedBoxes] = React.useState<ReaderOcrBox[]>([]);
     const [manualBoxes, setManualBoxes] = React.useState<ReaderOcrBox[]>([]);
     const [selectedBoxes, setSelectedBoxes] = React.useState<string[]>([]);
+    const [orderSelectionEnabled, setOrderSelectionEnabled] = React.useState<boolean>(false);
+    const [orderedBoxIds, setOrderedBoxIds] = React.useState<string[]>([]);
+    const [orderedTranslationEnabled, setOrderedTranslationEnabled] = React.useState<boolean>(false);
+    const [orderedTranslationRevision, setOrderedTranslationRevision] = React.useState<number>(0);
     const [tokenCycleRequest, setTokenCycleRequest] = React.useState<{
         selectionKey: string | null;
         nonce: number;
@@ -64,6 +97,10 @@ const useReaderOcr = ({
     const allOcrBoxes = React.useMemo(
         () => [...detectedBoxes, ...manualBoxes],
         [detectedBoxes, manualBoxes],
+    );
+    const allOcrBoxIds = React.useMemo(
+        () => new Set(allOcrBoxes.map((box) => box.id)),
+        [allOcrBoxes],
     );
 
     const rememberOcrBoxesForPage = React.useCallback((src: string, boxes: ReaderOcrBox[]) => {
@@ -90,17 +127,84 @@ const useReaderOcr = ({
         ocrPageCacheRef.current.delete(src);
     }, []);
 
+    const preloadOcrBoxAnalysis = React.useCallback((
+        boxes: ReaderOcrBox[],
+        priority: 'high' | 'normal' = 'normal',
+    ) => {
+        if (!analysisPreloadEnabled || boxes.length === 0) {
+            return;
+        }
+
+        const queuedTexts = new Set<string>();
+        boxes.forEach((box) => {
+            const text = String(box.text || '');
+            if (text.trim().length === 0 || queuedTexts.has(text)) {
+                return;
+            }
+
+            queuedTexts.add(text);
+            preloadJpdbTextAnalysis(text, {
+                includeTokenDetails: preloadTokenDetails,
+                priority,
+            });
+        });
+    }, [analysisPreloadEnabled, preloadTokenDetails]);
+
+    const preloadOrderedOcrBoxAnalysis = React.useCallback((
+        boxes: ReaderOcrBox[],
+        priority: 'high' | 'normal' = 'high',
+    ) => {
+        const orderedTexts = boxes
+            .map((box) => String(box.text || '').trim())
+            .filter((text) => text.length > 0);
+
+        if (orderedTexts.length === 0) {
+            return;
+        }
+
+        preloadJpdbOrderedTextAnalysis(orderedTexts, {
+            includeTokenDetails: preloadTokenDetails,
+            priority,
+        });
+    }, [preloadTokenDetails]);
+
     const applyCurrentPageOcrBoxes = React.useCallback((boxes: ReaderOcrBox[]) => {
         const splitBoxes = splitReaderOcrBoxes(boxes);
         setDetectedBoxes(splitBoxes.detected);
         setManualBoxes(splitBoxes.manual);
     }, []);
 
+    const clearOrderSelectionState = React.useCallback(() => {
+        setOrderSelectionEnabled(false);
+        setOrderedBoxIds([]);
+        setOrderedTranslationEnabled(false);
+    }, []);
+
     const updateSelectedBoxes = React.useCallback((id: string | null, additive?: boolean) => {
+        if (orderSelectionEnabled) {
+            if (!id) {
+                setOrderedBoxIds([]);
+                return;
+            }
+
+            setOrderedBoxIds((previousOrder) => {
+                if (previousOrder.includes(id)) {
+                    return previousOrder.filter((boxId) => boxId !== id);
+                }
+
+                return [...previousOrder, id];
+            });
+            return;
+        }
+
         if (!id) {
+            setOrderedTranslationEnabled(false);
             setSelectedBoxes([]);
             return;
         }
+
+        const keepsOrderedTranslation = !additive && orderedBoxIds.includes(id);
+        setOrderedTranslationEnabled((current) => current && keepsOrderedTranslation);
 
         setSelectedBoxes((previousSelection) => {
             const nextSelection = new Set(previousSelection);
@@ -114,7 +218,7 @@ const useReaderOcr = ({
             }
             return [id];
         });
-    }, []);
+    }, [orderSelectionEnabled, orderedBoxIds]);
 
     const loadOcrBoxesForPage = React.useCallback(async (
         src: string,
@@ -127,6 +231,7 @@ const useReaderOcr = ({
         if (!forceRefresh && useMemoryCache) {
             const cachedBoxes = ocrPageCacheRef.current.get(src);
             if (cachedBoxes) {
+                preloadOcrBoxAnalysis(cachedBoxes, pageIndex === currentIndex ? 'high' : 'normal');
                 return {
                     boxes: cachedBoxes,
                     fromCache: false,
@@ -165,6 +270,7 @@ const useReaderOcr = ({
 
             const nextBoxes = filterVisibleOcrBoxes(Array.isArray(boxes) ? boxes as ReaderOcrBox[] : []);
             rememberOcrBoxesForPage(src, nextBoxes);
+            preloadOcrBoxAnalysis(nextBoxes, pageIndex === currentIndex ? 'high' : 'normal');
             return {
                 boxes: nextBoxes,
                 fromCache: !!ocrResult?.fromCache,
@@ -183,7 +289,7 @@ const useReaderOcr = ({
                 ocrInFlightRef.current.delete(inFlightKey);
             }
         }
-    }, [manga, rememberOcrBoxesForPage]);
+    }, [currentIndex, manga, preloadOcrBoxAnalysis, rememberOcrBoxesForPage]);
 
     const handleManualSelectionComplete = React.useCallback(async (selection: ManualSelection) => {
         const src = images[currentIndex];
@@ -278,8 +384,10 @@ const useReaderOcr = ({
             }
 
             rememberOcrBoxesForPage(src, nextBoxes);
+            preloadOcrBoxAnalysis([chosenManualBox], 'high');
             applyCurrentPageOcrBoxes(nextBoxes);
             setSelectedBoxes([chosenManualBox.id]);
+            clearOrderSelectionState();
             setOcrStatusNote('Selection manuelle ajoutee');
             setManualSelectionEnabled(false);
         } catch (error: any) {
@@ -297,12 +405,14 @@ const useReaderOcr = ({
         }
     }, [
         applyCurrentPageOcrBoxes,
+        clearOrderSelectionState,
         currentIndex,
         detectedBoxes,
         images,
         imgRef,
         manualBoxes,
         manga,
+        preloadOcrBoxAnalysis,
         rememberOcrBoxesForPage,
     ]);
 
@@ -340,6 +450,8 @@ const useReaderOcr = ({
             rememberOcrBoxesForPage(src, nextBoxes);
             applyCurrentPageOcrBoxes(nextBoxes);
             setSelectedBoxes((previousSelection) => previousSelection.filter((id) => id !== boxId));
+            setOrderedBoxIds((previousOrder) => previousOrder.filter((id) => id !== boxId));
+            setOrderedTranslationEnabled(false);
             setOcrStatusNote('Selection manuelle retiree');
         } catch (error: any) {
             setOcrError(String(error && error.message ? error.message : error));
@@ -376,25 +488,41 @@ const useReaderOcr = ({
         const bubbleCenterY = imageRect.top + ((targetBox.bbox.y + (targetBox.bbox.h / 2)) * imageRect.height);
         const scrollContainer = findVerticalScrollContainer(imageElement);
 
-        if (scrollContainer) {
+        if (scrollContainer && scrollContainer !== document.scrollingElement) {
             const containerRect = scrollContainer.getBoundingClientRect();
-            const targetScrollTop = Math.max(
-                0,
-                scrollContainer.scrollTop + (bubbleCenterY - containerRect.top) - (scrollContainer.clientHeight * 0.45),
+            const imageTop = scrollContainer.scrollTop + (imageRect.top - containerRect.top);
+            const imageBottom = imageTop + imageRect.height;
+            const targetScrollTop = scrollContainer.scrollTop
+                + (bubbleCenterY - containerRect.top)
+                - (scrollContainer.clientHeight * 0.45);
+
+            const clampedScrollTop = clampScrollTopToImage(
+                targetScrollTop,
+                imageTop,
+                imageBottom,
+                scrollContainer.clientHeight,
             );
 
             scrollContainer.scrollTo({
-                top: targetScrollTop,
+                top: clampedScrollTop,
                 behavior: 'smooth',
             });
             return;
         }
 
-        const absoluteBubbleCenterY = window.scrollY + bubbleCenterY;
-        const targetScrollTop = Math.max(0, absoluteBubbleCenterY - (window.innerHeight * 0.45));
+        const imageTop = window.scrollY + imageRect.top;
+        const imageBottom = imageTop + imageRect.height;
+        const absoluteBubbleCenterY = imageTop + ((targetBox.bbox.y + (targetBox.bbox.h / 2)) * imageRect.height);
+        const targetScrollTop = absoluteBubbleCenterY - (window.innerHeight * 0.45);
+        const clampedScrollTop = clampScrollTopToImage(
+            targetScrollTop,
+            imageTop,
+            imageBottom,
+            window.innerHeight,
+        );
 
         window.scrollTo({
-            top: targetScrollTop,
+            top: clampedScrollTop,
             behavior: 'smooth',
         });
     }, [detectedBoxes, imgRef, manualBoxes]);
@@ -411,7 +539,12 @@ const useReaderOcr = ({
             ? allOcrBoxes.find((box) => box.id === currentSelectedId) ?? null
             : null;
         const nextBox = currentBox
-            ? findDirectionalOcrBox(allOcrBoxes, currentBox, direction)
+            ? findDirectionalOcrBox(allOcrBoxes, currentBox, direction, {
+                alignmentOffsetRatio: navigationOffset / 100,
+                deadZoneRatio: navigationDeadZone / 100,
+                strictDirection: navigationStrictDirection,
+                looseFallback: navigationLooseFallback,
+            })
             : allOcrBoxes[0];
 
         if (!nextBox) {
@@ -423,9 +556,61 @@ const useReaderOcr = ({
                 ? previousSelection
                 : [nextBox.id]
         ));
+        if (orderedTranslationEnabled && orderedBoxIds.includes(nextBox.id)) {
+            setOrderSelectionEnabled(false);
+        } else {
+            clearOrderSelectionState();
+        }
         focusOcrBox(nextBox.id);
         return true;
-    }, [activeOcrEnabled, allOcrBoxes, focusOcrBox, selectedBoxes]);
+    }, [
+        activeOcrEnabled,
+        allOcrBoxes,
+        clearOrderSelectionState,
+        focusOcrBox,
+        navigationDeadZone,
+        navigationLooseFallback,
+        navigationOffset,
+        navigationStrictDirection,
+        orderedBoxIds,
+        orderedTranslationEnabled,
+        selectedBoxes,
+    ]);
+
+    const navigateOrderedOcrBox = React.useCallback((direction: OrderedOcrNavigationDirection): boolean => {
+        if (!activeOcrEnabled || !orderedTranslationEnabled || orderedBoxIds.length <= 1) {
+            return false;
+        }
+
+        const availableOrderedBoxIds = orderedBoxIds.filter((boxId) => allOcrBoxIds.has(boxId));
+        if (availableOrderedBoxIds.length <= 1) {
+            return false;
+        }
+
+        const selectedBoxId = selectedBoxes.length === 1 ? selectedBoxes[0] : null;
+        const currentOrderIndex = selectedBoxId
+            ? availableOrderedBoxIds.indexOf(selectedBoxId)
+            : -1;
+        const nextOrderIndex = currentOrderIndex + (direction === "next" ? 1 : -1);
+
+        if (nextOrderIndex < 0 || nextOrderIndex >= availableOrderedBoxIds.length) {
+            return false;
+        }
+
+        const nextBoxId = availableOrderedBoxIds[nextOrderIndex];
+        setSelectedBoxes([nextBoxId]);
+        setOrderSelectionEnabled(false);
+        setOrderedTranslationEnabled(true);
+        focusOcrBox(nextBoxId);
+        return true;
+    }, [
+        activeOcrEnabled,
+        allOcrBoxIds,
+        focusOcrBox,
+        orderedBoxIds,
+        orderedTranslationEnabled,
+        selectedBoxes,
+    ]);
 
     const requestTokenCycle = React.useCallback(() => {
         if (selectedBoxes.length === 0) {
@@ -459,6 +644,7 @@ const useReaderOcr = ({
 
             applyCurrentPageOcrBoxes(result.boxes);
             setSelectedBoxes([]);
+            clearOrderSelectionState();
             const sourceLabel = getOcrSourceLabel(result.source);
             setOcrStatusNote(result.fromCache
                 ? `Source: ${sourceLabel}, calcul initial ${result.computedAt ?? 'inconnu'}`
@@ -488,7 +674,7 @@ const useReaderOcr = ({
 
             setOcrLoading(false);
         }
-    }, [applyCurrentPageOcrBoxes, clearOcrBoxesForPage, currentIndex, images, loadOcrBoxesForPage]);
+    }, [applyCurrentPageOcrBoxes, clearOcrBoxesForPage, clearOrderSelectionState, currentIndex, images, loadOcrBoxesForPage]);
 
     const clearOcr = React.useCallback(() => {
         clearOcrBoxesForPage(images[currentIndex]);
@@ -497,15 +683,73 @@ const useReaderOcr = ({
         setOcrError(null);
         setOcrStatusNote(null);
         setManualSelectionEnabled(false);
-    }, [applyCurrentPageOcrBoxes, clearOcrBoxesForPage, currentIndex, images]);
+        clearOrderSelectionState();
+    }, [applyCurrentPageOcrBoxes, clearOcrBoxesForPage, clearOrderSelectionState, currentIndex, images]);
 
     const toggleManualSelection = React.useCallback(() => {
         if (manualSelectionLoading) {
             return;
         }
 
+        clearOrderSelectionState();
         setManualSelectionEnabled((value) => !value);
-    }, [manualSelectionLoading]);
+    }, [clearOrderSelectionState, manualSelectionLoading]);
+
+    const toggleOrderSelection = React.useCallback(() => {
+        if (manualSelectionLoading) {
+            return;
+        }
+
+        if (!orderSelectionEnabled) {
+            if (allOcrBoxes.length === 0) {
+                setOcrStatusNote("Aucune zone OCR disponible pour définir un ordre.");
+                return;
+            }
+
+            setShowBoxes(true);
+            setManualSelectionEnabled(false);
+            setOrderedTranslationEnabled(false);
+            setOrderedBoxIds([]);
+            setOrderSelectionEnabled(true);
+            setOcrStatusNote("Clique les zones OCR dans l'ordre de lecture, puis valide avec le bouton Ordre.");
+            return;
+        }
+
+        const nextOrderedBoxIds = orderedBoxIds.filter((boxId) => allOcrBoxIds.has(boxId));
+        setOrderSelectionEnabled(false);
+        setOrderedBoxIds(nextOrderedBoxIds);
+
+        if (nextOrderedBoxIds.length === 0) {
+            setOcrStatusNote("Ordre OCR annulé : aucune zone sélectionnée.");
+            return;
+        }
+
+        const firstOrderedBoxId = nextOrderedBoxIds[0];
+        const nextOrderedBoxes = nextOrderedBoxIds
+            .map((boxId) => allOcrBoxes.find((box) => box.id === boxId) ?? null)
+            .filter((box): box is ReaderOcrBox => !!box);
+        preloadOrderedOcrBoxAnalysis(nextOrderedBoxes, 'high');
+        setSelectedBoxes(firstOrderedBoxId ? [firstOrderedBoxId] : []);
+        setOrderedTranslationEnabled(nextOrderedBoxIds.length > 1);
+        setOrderedTranslationRevision((value) => value + 1);
+        if (firstOrderedBoxId) {
+            focusOcrBox(firstOrderedBoxId);
+        }
+        setOcrStatusNote(
+            nextOrderedBoxIds.length > 1
+                ? `Ordre OCR validé : ${nextOrderedBoxIds.length} zones seront traduites en chaîne.`
+                : "Ordre OCR validé : une zone sélectionnée."
+        );
+    }, [
+        allOcrBoxIds,
+        allOcrBoxes,
+        allOcrBoxes.length,
+        focusOcrBox,
+        manualSelectionLoading,
+        orderSelectionEnabled,
+        orderedBoxIds,
+        preloadOrderedOcrBoxAnalysis,
+    ]);
 
     React.useEffect(() => {
         if (!activeOcrEnabled) {
@@ -516,6 +760,7 @@ const useReaderOcr = ({
             setOcrStatusNote(null);
             setManualSelectionEnabled(false);
             setManualSelectionLoading(false);
+            clearOrderSelectionState();
             return;
         }
 
@@ -528,6 +773,7 @@ const useReaderOcr = ({
             setOcrStatusNote(null);
             setManualSelectionEnabled(false);
             setManualSelectionLoading(false);
+            clearOrderSelectionState();
             return;
         }
 
@@ -535,8 +781,10 @@ const useReaderOcr = ({
         setSelectedBoxes([]);
         setManualSelectionEnabled(false);
         setManualSelectionLoading(false);
+        clearOrderSelectionState();
 
         if (cachedBoxes) {
+            preloadOcrBoxAnalysis(cachedBoxes, 'high');
             applyCurrentPageOcrBoxes(cachedBoxes);
             setOcrError(null);
             setOcrLoading(false);
@@ -595,7 +843,15 @@ const useReaderOcr = ({
         return () => {
             cancelled = true;
         };
-    }, [activeOcrEnabled, applyCurrentPageOcrBoxes, currentImageSrc, currentIndex, loadOcrBoxesForPage]);
+    }, [
+        activeOcrEnabled,
+        applyCurrentPageOcrBoxes,
+        clearOrderSelectionState,
+        currentImageSrc,
+        currentIndex,
+        loadOcrBoxesForPage,
+        preloadOcrBoxAnalysis,
+    ]);
 
     React.useEffect(() => {
         if (!activeOcrEnabled || preloadPageCount === null || images.length === 0) {
@@ -641,6 +897,10 @@ const useReaderOcr = ({
         };
     }, [activeOcrEnabled, currentIndex, images, loadOcrBoxesForPage, preloadPageCount]);
 
+    React.useEffect(() => {
+        setOrderedBoxIds((previousOrder) => previousOrder.filter((boxId) => allOcrBoxIds.has(boxId)));
+    }, [allOcrBoxIds]);
+
     return {
         showBoxes,
         setShowBoxes,
@@ -648,6 +908,10 @@ const useReaderOcr = ({
         manualBoxes,
         allOcrBoxes,
         selectedBoxes,
+        orderSelectionEnabled,
+        orderedBoxIds,
+        orderedTranslationEnabled,
+        orderedTranslationRevision,
         tokenCycleRequest,
         manualSelectionEnabled,
         manualSelectionLoading,
@@ -659,10 +923,12 @@ const useReaderOcr = ({
         handleRemoveManualBox,
         focusOcrBox,
         navigateOcrBox,
+        navigateOrderedOcrBox,
         requestTokenCycle,
         refreshOcr,
         clearOcr,
         toggleManualSelection,
+        toggleOrderSelection,
     };
 };
 

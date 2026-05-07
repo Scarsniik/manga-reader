@@ -238,6 +238,10 @@
   box-shadow: inset 0 0 0 1px rgba(119,167,208,0.12);
 }
 
+.ocr-box-select.is-ordered {
+  border-color: rgba(119,167,208,0.46);
+}
+
 .ocr-box-select__meta {
   display: flex;
   align-items: center;

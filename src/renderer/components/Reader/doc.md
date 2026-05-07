@@ -20,10 +20,13 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - gère la copie de l'image courante
   - expose les états dérivés de navigation
 - `hooks/useReaderOcr.ts`
-  - charge et met en cache l'OCR
-  - pré-rend l'OCR autour de la page courante selon `readerOcrPreloadPageCount`
+  - charge et met en cache l'OCR du lecteur d'ecran
+  - pré-rend le lecteur d'ecran autour de la page courante selon `readerOcrPreloadPageCount`
+  - précharge traduction et parsing JPDB des bulles quand `readerOcrAutoAnalyzeBubbles` est actif
+  - peut précharger les détails de tous les tokens via `readerOcrPreloadTokenDetails`
   - gère les sélections manuelles
-  - gère la sélection/focalisation des bulles OCR
+  - gère l'ordre manuel de traduction des bulles pour chaîner le contexte JPDB
+  - gère la sélection/focalisation des bulles avec une navigation clavier configurable via `readerOcrNavigationOffset`, `readerOcrNavigationDeadZone`, `readerOcrNavigationStrictDirection` et `readerOcrNavigationLooseFallback`
 - `hooks/useReaderShortcuts.ts`
   - centralise les raccourcis clavier et applique `readerScrollStrength` aux actions de scroll
 - `ReaderStage.tsx`
@@ -48,6 +51,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.
 - En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché, et la langue doit correspondre à la lecture en cours.
 - Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.
-- L'OCR reste optionnel et s'affiche dans un panneau latéral dédié.
-- Les zones OCR peuvent être détectées automatiquement ou ajoutées manuellement.
-- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image, le pré-rendu OCR, l'ouverture automatique du panneau OCR pour les mangas marqués en japonais (`language = ja`) et l'inclusion optionnelle des bookmarks dans les propositions de fin de lecture.
+- Le lecteur d'ecran reste optionnel et s'affiche dans un panneau latéral dédié.
+- Les zones de lecture peuvent être détectées automatiquement ou ajoutées manuellement.
+- Le panneau OCR permet de choisir manuellement l'ordre des bulles, avec un raccourci configurable sans valeur par défaut ; les traductions sont alors relancées en chaîne avec la phrase japonaise et la traduction anglaise précédentes comme contexte JPDB. Une fois l'ordre validé, deux raccourcis configurables sans valeur par défaut permettent d'aller à la bulle ordonnée précédente ou suivante.
+- L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image et une section `Lecteur d’écran` dédiée au pré-rendu OCR, au préchargement de l'analyse JPDB des bulles, au préchargement optionnel des détails de token, aux garde-fous de navigation clavier et à l'ouverture automatique du panneau pour les mangas marqués en japonais (`language = ja`). Il pilote aussi l'inclusion optionnelle des bookmarks dans les propositions de fin de lecture.

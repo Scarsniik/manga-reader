@@ -6,6 +6,16 @@ import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
 const MAX_READER_OCR_PRELOAD_PAGE_COUNT = 10;
+const DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES = true;
+const DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS = false;
+const DEFAULT_READER_OCR_NAVIGATION_OFFSET = 6;
+const MIN_READER_OCR_NAVIGATION_OFFSET = 0;
+const MAX_READER_OCR_NAVIGATION_OFFSET = 25;
+const DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE = 1;
+const MIN_READER_OCR_NAVIGATION_DEAD_ZONE = 0;
+const MAX_READER_OCR_NAVIGATION_DEAD_ZONE = 10;
+const DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION = true;
+const DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK = true;
 const DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT = 2;
 const MAX_READER_IMAGE_PRELOAD_PAGE_COUNT = 10;
 const DEFAULT_READER_IMAGE_MAX_WIDTH = 1100;
@@ -35,6 +45,9 @@ const defaultShortcutBindings = {
     readerOcrNavigateLeft: ["K", "", ""],
     readerOcrNavigateRight: ["M", "", ""],
     readerOcrManualSelection: ["*", "", ""],
+    readerOcrOrderSelection: ["", "", ""],
+    readerOcrOrderedPrevious: ["", "", ""],
+    readerOcrOrderedNext: ["", "", ""],
     readerOcrTogglePanel: ["$", "", ""],
     readerOcrTokenNavigation: [":", "", ""],
 };
@@ -80,6 +93,44 @@ const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
         0,
         MAX_READER_OCR_PRELOAD_PAGE_COUNT,
     )
+);
+
+const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => (
+    typeof value === "boolean" ? value : fallback
+);
+
+const normalizeReaderOcrAutoAnalyzeBubbles = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES)
+);
+
+const normalizeReaderOcrPreloadTokenDetails = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS)
+);
+
+const normalizeReaderOcrNavigationOffset = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_NAVIGATION_OFFSET,
+        MIN_READER_OCR_NAVIGATION_OFFSET,
+        MAX_READER_OCR_NAVIGATION_OFFSET,
+    )
+);
+
+const normalizeReaderOcrNavigationDeadZone = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
+        MIN_READER_OCR_NAVIGATION_DEAD_ZONE,
+        MAX_READER_OCR_NAVIGATION_DEAD_ZONE,
+    )
+);
+
+const normalizeReaderOcrNavigationStrictDirection = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION)
+);
+
+const normalizeReaderOcrNavigationLooseFallback = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK)
 );
 
 const normalizeReaderImagePreloadPageCount = (value: unknown): number => (
@@ -180,6 +231,12 @@ const defaultSettings = {
     showHiddens: false,
     titleLineCount: 2,
     readerOcrPreloadPageCount: DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT,
+    readerOcrAutoAnalyzeBubbles: DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES,
+    readerOcrPreloadTokenDetails: DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS,
+    readerOcrNavigationOffset: DEFAULT_READER_OCR_NAVIGATION_OFFSET,
+    readerOcrNavigationDeadZone: DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
+    readerOcrNavigationStrictDirection: DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
+    readerOcrNavigationLooseFallback: DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK,
     readerImagePreloadPageCount: DEFAULT_READER_IMAGE_PRELOAD_PAGE_COUNT,
     readerImageMaxWidth: DEFAULT_READER_IMAGE_MAX_WIDTH,
     readerShowProgressIndicator: true,
@@ -230,6 +287,16 @@ const normalizeSettings = (value: unknown) => {
     const legacyReaderPreloadPageCount = (merged as Record<string, unknown>).readerPreloadPageCount;
     merged.readerOcrPreloadPageCount = normalizeReaderOcrPreloadPageCount(
         merged.readerOcrPreloadPageCount ?? legacyReaderPreloadPageCount,
+    );
+    merged.readerOcrAutoAnalyzeBubbles = normalizeReaderOcrAutoAnalyzeBubbles(merged.readerOcrAutoAnalyzeBubbles);
+    merged.readerOcrPreloadTokenDetails = normalizeReaderOcrPreloadTokenDetails(merged.readerOcrPreloadTokenDetails);
+    merged.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(merged.readerOcrNavigationOffset);
+    merged.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(merged.readerOcrNavigationDeadZone);
+    merged.readerOcrNavigationStrictDirection = normalizeReaderOcrNavigationStrictDirection(
+        merged.readerOcrNavigationStrictDirection,
+    );
+    merged.readerOcrNavigationLooseFallback = normalizeReaderOcrNavigationLooseFallback(
+        merged.readerOcrNavigationLooseFallback,
     );
     merged.readerImagePreloadPageCount = normalizeReaderImagePreloadPageCount(merged.readerImagePreloadPageCount);
     merged.readerImageMaxWidth = normalizeReaderImageMaxWidth(merged.readerImageMaxWidth);
@@ -415,6 +482,22 @@ export async function saveSettings(event: any, settings: any) {
         const legacyReaderPreloadPageCount = (nextSettings as Record<string, unknown>).readerPreloadPageCount;
         nextSettings.readerOcrPreloadPageCount = normalizeReaderOcrPreloadPageCount(
             nextSettings.readerOcrPreloadPageCount ?? legacyReaderPreloadPageCount,
+        );
+        nextSettings.readerOcrAutoAnalyzeBubbles = normalizeReaderOcrAutoAnalyzeBubbles(
+            nextSettings.readerOcrAutoAnalyzeBubbles,
+        );
+        nextSettings.readerOcrPreloadTokenDetails = normalizeReaderOcrPreloadTokenDetails(
+            nextSettings.readerOcrPreloadTokenDetails,
+        );
+        nextSettings.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(nextSettings.readerOcrNavigationOffset);
+        nextSettings.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(
+            nextSettings.readerOcrNavigationDeadZone,
+        );
+        nextSettings.readerOcrNavigationStrictDirection = normalizeReaderOcrNavigationStrictDirection(
+            nextSettings.readerOcrNavigationStrictDirection,
+        );
+        nextSettings.readerOcrNavigationLooseFallback = normalizeReaderOcrNavigationLooseFallback(
+            nextSettings.readerOcrNavigationLooseFallback,
         );
         nextSettings.readerImagePreloadPageCount = normalizeReaderImagePreloadPageCount(nextSettings.readerImagePreloadPageCount);
         nextSettings.readerImageMaxWidth = normalizeReaderImageMaxWidth(nextSettings.readerImageMaxWidth);

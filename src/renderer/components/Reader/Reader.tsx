@@ -15,12 +15,24 @@ import type {
 } from '@/shared/scraper';
 import {
     DEFAULT_READER_IMAGE_MAX_WIDTH,
+    DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES,
+    DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
+    DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK,
+    DEFAULT_READER_OCR_NAVIGATION_OFFSET,
+    DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
+    DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS,
     DEFAULT_READER_SCROLL_HOLD_SPEED,
     DEFAULT_READER_SCROLL_START_BOOST,
     DEFAULT_READER_SCROLL_STRENGTH,
     normalizeReaderImageMaxWidth,
     normalizeReaderImagePreloadPageCount,
+    normalizeReaderOcrAutoAnalyzeBubbles,
+    normalizeReaderOcrNavigationDeadZone,
+    normalizeReaderOcrNavigationLooseFallback,
+    normalizeReaderOcrNavigationOffset,
+    normalizeReaderOcrNavigationStrictDirection,
     normalizeReaderOcrPreloadPageCount,
+    normalizeReaderOcrPreloadTokenDetails,
     normalizeReaderScrollHoldSpeed,
     normalizeReaderScrollStartBoost,
     normalizeReaderScrollStrength,
@@ -72,6 +84,24 @@ const Reader: React.FC = () => {
     const showProgressIndicator = normalizeBooleanSetting(params?.readerShowProgressIndicator, true);
     const openOcrPanelForJapaneseManga = normalizeBooleanSetting(params?.readerOpenOcrPanelForJapaneseManga, false);
     const recommendBookmarks = normalizeBooleanSetting(params?.readerRecommendBookmarks, false);
+    const readerOcrAutoAnalyzeBubbles = settingsLoading
+        ? DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES
+        : normalizeReaderOcrAutoAnalyzeBubbles(params?.readerOcrAutoAnalyzeBubbles);
+    const readerOcrPreloadTokenDetails = settingsLoading
+        ? DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS
+        : normalizeReaderOcrPreloadTokenDetails(params?.readerOcrPreloadTokenDetails);
+    const readerOcrNavigationOffset = settingsLoading
+        ? DEFAULT_READER_OCR_NAVIGATION_OFFSET
+        : normalizeReaderOcrNavigationOffset(params?.readerOcrNavigationOffset);
+    const readerOcrNavigationDeadZone = settingsLoading
+        ? DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE
+        : normalizeReaderOcrNavigationDeadZone(params?.readerOcrNavigationDeadZone);
+    const readerOcrNavigationStrictDirection = settingsLoading
+        ? DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION
+        : normalizeReaderOcrNavigationStrictDirection(params?.readerOcrNavigationStrictDirection);
+    const readerOcrNavigationLooseFallback = settingsLoading
+        ? DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK
+        : normalizeReaderOcrNavigationLooseFallback(params?.readerOcrNavigationLooseFallback);
     const detectedSectionOpen = normalizeBooleanSetting(params?.readerOcrDetectedSectionOpen, true);
     const manualSectionOpen = normalizeBooleanSetting(params?.readerOcrManualSectionOpen, true);
     const autoOpenedOcrMangaIdRef = React.useRef<string | null>(null);
@@ -202,6 +232,12 @@ const Reader: React.FC = () => {
         images,
         manga,
         preloadPageCount: ocrPreloadPageCount,
+        analysisPreloadEnabled: readerOcrAutoAnalyzeBubbles,
+        preloadTokenDetails: readerOcrPreloadTokenDetails,
+        navigationOffset: readerOcrNavigationOffset,
+        navigationDeadZone: readerOcrNavigationDeadZone,
+        navigationStrictDirection: readerOcrNavigationStrictDirection,
+        navigationLooseFallback: readerOcrNavigationLooseFallback,
         imgRef,
     });
 
@@ -216,7 +252,9 @@ const Reader: React.FC = () => {
         selectedBoxes: ocr.selectedBoxes,
         requestTokenCycle: ocr.requestTokenCycle,
         navigateOcrBox: ocr.navigateOcrBox,
+        navigateOrderedOcrBox: ocr.navigateOrderedOcrBox,
         toggleManualSelection: ocr.toggleManualSelection,
+        toggleOrderSelection: ocr.toggleOrderSelection,
         openOcrPanel: () => setOcrEnabled(true),
         toggleOcrPanel: () => setOcrEnabled((value) => !value),
         next: navigation.next,
@@ -316,6 +354,8 @@ const Reader: React.FC = () => {
                     showBoxes={ocr.showBoxes}
                     allOcrBoxes={ocr.allOcrBoxes}
                     selectedBoxes={ocr.selectedBoxes}
+                    orderSelectionEnabled={ocr.orderSelectionEnabled}
+                    orderedBoxIds={ocr.orderedBoxIds}
                     onSelectBox={ocr.updateSelectedBoxes}
                     manualSelectionEnabled={ocr.manualSelectionEnabled}
                     manualSelectionLoading={ocr.manualSelectionLoading}
@@ -342,6 +382,10 @@ const Reader: React.FC = () => {
                         detectedBoxes={ocr.detectedBoxes}
                         manualBoxes={ocr.manualBoxes}
                         selectedBoxes={ocr.selectedBoxes}
+                        orderSelectionEnabled={ocr.orderSelectionEnabled}
+                        orderedBoxIds={ocr.orderedBoxIds}
+                        orderedTranslationEnabled={ocr.orderedTranslationEnabled}
+                        orderedTranslationRevision={ocr.orderedTranslationRevision}
                         tokenCycleRequestNonce={ocr.tokenCycleRequest.nonce}
                         tokenCycleSelectionKey={ocr.tokenCycleRequest.selectionKey}
                         onSimulate={() => {
@@ -367,6 +411,7 @@ const Reader: React.FC = () => {
                             );
                         }}
                         onToggleManualSelection={ocr.toggleManualSelection}
+                        onToggleOrderSelection={ocr.toggleOrderSelection}
                         onRemoveManualBox={(boxId) => {
                             void ocr.handleRemoveManualBox(boxId);
                         }}

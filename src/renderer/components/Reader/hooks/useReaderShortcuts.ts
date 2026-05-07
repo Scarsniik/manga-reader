@@ -20,7 +20,9 @@ type Args = {
     selectedBoxes: string[];
     requestTokenCycle: () => void;
     navigateOcrBox: (direction: OcrNavigationDirection) => boolean;
+    navigateOrderedOcrBox: (direction: OrderedOcrNavigationDirection) => boolean;
     toggleManualSelection: () => void;
+    toggleOrderSelection: () => void;
     openOcrPanel: () => void;
     toggleOcrPanel: () => void;
     next: () => void;
@@ -34,6 +36,7 @@ type Args = {
 };
 
 type ScrollDirection = "up" | "down";
+type OrderedOcrNavigationDirection = "previous" | "next";
 
 const OCR_NAVIGATION_ACTIONS: Array<{
     actionId: ShortcutActionId;
@@ -57,12 +60,28 @@ const OCR_NAVIGATION_ACTIONS: Array<{
     },
 ];
 
+const ORDERED_OCR_NAVIGATION_ACTIONS: Array<{
+    actionId: ShortcutActionId;
+    direction: OrderedOcrNavigationDirection;
+}> = [
+    {
+        actionId: "readerOcrOrderedPrevious",
+        direction: "previous",
+    },
+    {
+        actionId: "readerOcrOrderedNext",
+        direction: "next",
+    },
+];
+
 const useReaderShortcuts = ({
     copyCurrentImage,
     selectedBoxes,
     requestTokenCycle,
     navigateOcrBox,
+    navigateOrderedOcrBox,
     toggleManualSelection,
+    toggleOrderSelection,
     openOcrPanel,
     toggleOcrPanel,
     next,
@@ -276,11 +295,16 @@ const useReaderShortcuts = ({
                 return;
             }
 
-            const ocrNavigationAction = OCR_NAVIGATION_ACTIONS.find((action) => (
-                matchesShortcut(event, action.actionId)
-            ));
-            if (ocrNavigationAction && navigateOcrBox(ocrNavigationAction.direction)) {
+            if (matchesShortcut(event, "readerOcrOrderSelection")) {
+                if (!ocrPanelAvailable) {
+                    return;
+                }
+
                 preventShortcutDefault(event);
+                if (!activeOcrEnabled) {
+                    openOcrPanel();
+                }
+                toggleOrderSelection();
                 return;
             }
 
@@ -306,6 +330,26 @@ const useReaderShortcuts = ({
             if (scrollDirection) {
                 preventShortcutDefault(event);
                 startContinuousScroll(event, scrollDirection);
+                return;
+            }
+
+            const ocrNavigationAction = OCR_NAVIGATION_ACTIONS.find((action) => (
+                matchesShortcut(event, action.actionId)
+            ));
+            if (selectedBoxes.length > 0 && ocrNavigationAction && navigateOcrBox(ocrNavigationAction.direction)) {
+                preventShortcutDefault(event);
+                return;
+            }
+
+            const orderedOcrNavigationAction = ORDERED_OCR_NAVIGATION_ACTIONS.find((action) => (
+                matchesShortcut(event, action.actionId)
+            ));
+            if (
+                selectedBoxes.length > 0
+                && orderedOcrNavigationAction
+                && navigateOrderedOcrBox(orderedOcrNavigationAction.direction)
+            ) {
+                preventShortcutDefault(event);
                 return;
             }
 
@@ -339,6 +383,7 @@ const useReaderShortcuts = ({
     }, [
         activeOcrEnabled,
         copyCurrentImage,
+        navigateOrderedOcrBox,
         navigateOcrBox,
         next,
         ocrPanelAvailable,
@@ -352,6 +397,7 @@ const useReaderShortcuts = ({
         scrollStrength,
         shortcuts,
         toggleManualSelection,
+        toggleOrderSelection,
         toggleOcrPanel,
     ]);
 };

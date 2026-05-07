@@ -400,7 +400,9 @@ export type JpdbJa2EnResult = {
   is_truncated?: boolean;
 };
 
-export async function translateJaToEn(text: string): Promise<JpdbJa2EnResult> {
+export type JpdbTranslationContext = [string, string];
+
+export async function translateJaToEn(text: string, context?: JpdbTranslationContext): Promise<JpdbJa2EnResult> {
   if (!text) throw new Error('text is required');
 
   // Try to get API key from electron settings via preload API
@@ -411,7 +413,7 @@ export async function translateJaToEn(text: string): Promise<JpdbJa2EnResult> {
   const key = settings?.jpdbApiKey;
   if (!key) throw new Error('JPDB API key not configured.');
 
-  const body = { text };
+  const body = context ? { text, context } : { text };
 
   // Log the body JSON to help diagnose malformed requests (400)
   let resp!: Response;
