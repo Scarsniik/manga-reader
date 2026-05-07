@@ -4,6 +4,8 @@ import {
     OcrRuntimeInstallStatus,
     OcrRuntimeStatus,
 } from "@/renderer/components/OcrRuntime/types";
+import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
+import useModal from "@/renderer/hooks/useModal";
 import { openOcrRuntimeStatus } from "@/renderer/utils/ocrRuntimeUi";
 import "@/renderer/components/OcrRuntime/style.scss";
 
@@ -83,6 +85,7 @@ const formatInstallStage = (status?: OcrRuntimeInstallStatus | null) => {
 };
 
 export default function OcrRuntimeSettingsPanel() {
+    const { openModal } = useModal();
     const [runtimeStatus, setRuntimeStatus] = useState<OcrRuntimeStatus | null>(null);
     const [installStatus, setInstallStatus] = useState<OcrRuntimeInstallStatus | null>(null);
     const [busy, setBusy] = useState(false);
@@ -144,6 +147,27 @@ export default function OcrRuntimeSettingsPanel() {
         });
     }, []);
 
+    const confirmRuntimeUninstall = useCallback(async (runtimePath: string) => {
+        const api = getOcrRuntimeApi();
+        if (typeof api.ocrRuntimeUninstall !== "function") {
+            setError("Desinstallation OCR indisponible.");
+            return;
+        }
+
+        setBusy(true);
+        setMessage(null);
+        setError(null);
+        try {
+            const result = await api.ocrRuntimeUninstall({ confirmRuntimePath: runtimePath });
+            setMessage(result?.uninstalled ? "Runtime OCR desinstalle." : "Runtime OCR non desinstalle.");
+            await loadStatus();
+        } catch (uninstallError) {
+            setError(uninstallError instanceof Error ? uninstallError.message : String(uninstallError));
+        } finally {
+            setBusy(false);
+        }
+    }, [loadStatus]);
+
     const uninstallRuntime = useCallback(async () => {
         const api = getOcrRuntimeApi();
         if (typeof api.ocrRuntimeUninstall !== "function") {
@@ -162,20 +186,22 @@ export default function OcrRuntimeSettingsPanel() {
                 return;
             }
 
-            const confirmed = window.confirm(`Desinstaller le runtime OCR ?\n\n${runtimePath}`);
-            if (!confirmed) {
-                return;
-            }
-
-            const result = await api.ocrRuntimeUninstall({ confirmRuntimePath: runtimePath });
-            setMessage(result?.uninstalled ? "Runtime OCR desinstalle." : "Runtime OCR non desinstalle.");
-            await loadStatus();
+            openModal(buildConfirmActionModal({
+                title: "Desinstaller le runtime OCR",
+                message: "Desinstaller le runtime OCR ?",
+                details: runtimePath,
+                confirmLabel: "Desinstaller",
+                confirmVariant: "danger",
+                onConfirm: () => {
+                    void confirmRuntimeUninstall(runtimePath);
+                },
+            }));
         } catch (uninstallError) {
             setError(uninstallError instanceof Error ? uninstallError.message : String(uninstallError));
         } finally {
             setBusy(false);
         }
-    }, [loadStatus, runtimeStatus?.runtimePath]);
+    }, [confirmRuntimeUninstall, openModal, runtimeStatus?.runtimePath]);
 
     const openRuntimeFolder = useCallback(async () => {
         const targetPath = runtimeStatus?.runtimePath || installStatus?.runtimePath;

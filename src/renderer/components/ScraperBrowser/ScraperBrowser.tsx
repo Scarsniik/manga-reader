@@ -7,6 +7,7 @@ import {
   ScraperSearchResultItem,
 } from '@/shared/scraper';
 import type { Manga, SavedScraperSearch } from '@/renderer/types';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
 import buildScraperImagePreviewModal from '@/renderer/components/Modal/modales/ScraperImagePreviewModal';
 import buildScraperLinkMangaModal from '@/renderer/components/Modal/modales/ScraperLinkMangaModal';
@@ -660,18 +661,26 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
 
   const handleSavedScraperSearchClick = useCallback(async (search: SavedScraperSearch) => {
     if (savedSearchDeleteMode) {
-      const confirmed = window.confirm(`Supprimer la recherche "${search.name}" ?`);
-      if (!confirmed) {
-        return;
-      }
+      openModal(buildConfirmActionModal({
+        title: 'Supprimer la recherche',
+        message: (
+          <>
+            Supprimer la recherche <strong>{search.name}</strong> ?
+          </>
+        ),
+        details: 'Ce groupe de filtres ne sera plus disponible.',
+        confirmLabel: 'Supprimer',
+        confirmVariant: 'danger',
+        onConfirm: () => {
+          const nextSearches = savedScraperSearches.filter((item) => item.id !== search.id);
+          setParams({ savedScraperSearches: nextSearches }, { broadcast: false });
 
-      const nextSearches = savedScraperSearches.filter((item) => item.id !== search.id);
-      setParams({ savedScraperSearches: nextSearches }, { broadcast: false });
-
-      if (!nextSearches.some((item) => item.scraperId === scraper.id)) {
-        setSavedSearchDeleteMode(false);
-        setSavedSearchesExpanded(false);
-      }
+          if (!nextSearches.some((item) => item.scraperId === scraper.id)) {
+            setSavedSearchDeleteMode(false);
+            setSavedSearchesExpanded(false);
+          }
+        },
+      }));
       return;
     }
 
@@ -699,6 +708,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
   }, [
     hasAuthor,
     hasSearch,
+    openModal,
     runAuthorLookup,
     runSearchLookup,
     savedScraperSearches,

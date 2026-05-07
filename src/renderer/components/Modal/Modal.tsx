@@ -4,9 +4,10 @@ import '@/renderer/components/Modal/style.scss';
 type Action = {
   label: string;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
   id?: string;
   closeOnClick?: boolean;
+  autoFocus?: boolean;
 };
 
 const Modal: React.FC<{
@@ -65,7 +66,8 @@ const Modal: React.FC<{
                 key={i}
                 type="button"
                 id={a.id}
-                className={`app-modal-btn ${a.variant === 'primary' ? 'primary' : 'secondary'}`}
+                className={`app-modal-btn ${a.variant || 'secondary'}`}
+                autoFocus={a.autoFocus}
                 onClick={() => {
                   a.onClick?.();
                   if (a.closeOnClick !== false) {

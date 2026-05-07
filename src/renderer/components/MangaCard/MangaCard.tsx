@@ -4,6 +4,7 @@ import { Manga } from '@/renderer/types';
 import { ScraperRecord } from '@/shared/scraper';
 import useModal from '@/renderer/hooks/useModal';
 import buildEditMangaModal from '@/renderer/components/Modal/modales/EditMangaModal';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import buildMangaOcrModal from '@/renderer/components/Modal/modales/MangaOcrModal';
 import Card, { CardOverlayItem } from '@/renderer/components/Card/Card';
 import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
@@ -328,26 +329,37 @@ const MangaCard: React.FC<Props> = ({
         }
     }, [manga, pages, currentPage, setCurrentPage, onCardUpdated]);
 
-    const onDeleteClick = useCallback(async (e: React.MouseEvent) => {
+    const onDeleteClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        const ok = confirm(`Supprimer "${manga.title}" ?`);
-        if (!ok) return;
-        try {
-            if (onRemove) {
-                await onRemove(manga.id);
-            } else if (window.api && typeof window.api.removeManga === 'function') {
-                const updated = await window.api.removeManga(manga.id);
-                console.log('removeManga returned', updated);
-            } else {
-                console.warn('No remove handler available');
-            }
-            // notify parent so it can update UI / filters
-            try { if (typeof onCardUpdated === 'function') onCardUpdated(manga.id); } catch (err) { console.warn('onCardUpdated failed', err); }
-        } catch (err) {
-            console.error('Failed to remove manga', err);
-            alert('Échec de la suppression');
-        }
-    }, [manga.id, onRemove, onCardUpdated]);
+        openModal(buildConfirmActionModal({
+            title: 'Supprimer le manga',
+            message: (
+                <>
+                    Supprimer <strong>{manga.title}</strong> ?
+                </>
+            ),
+            details: 'Le manga sera retire de la bibliotheque.',
+            confirmLabel: 'Supprimer',
+            confirmVariant: 'danger',
+            onConfirm: async () => {
+                try {
+                    if (onRemove) {
+                        await onRemove(manga.id);
+                    } else if (window.api && typeof window.api.removeManga === 'function') {
+                        const updated = await window.api.removeManga(manga.id);
+                        console.log('removeManga returned', updated);
+                    } else {
+                        console.warn('No remove handler available');
+                    }
+                    // notify parent so it can update UI / filters
+                    try { if (typeof onCardUpdated === 'function') onCardUpdated(manga.id); } catch (err) { console.warn('onCardUpdated failed', err); }
+                } catch (err) {
+                    console.error('Failed to remove manga', err);
+                    alert('Échec de la suppression');
+                }
+            },
+        }));
+    }, [manga.id, manga.title, onRemove, onCardUpdated, openModal]);
 
     const overlayContent: CardOverlayItem[] = useMemo(() => ([
         {

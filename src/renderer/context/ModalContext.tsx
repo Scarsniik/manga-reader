@@ -4,9 +4,10 @@ import Modal from '@/renderer/components/Modal/Modal';
 export type ModalAction = {
   label: string;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
   id?: string;
   closeOnClick?: boolean;
+  autoFocus?: boolean;
 };
 
 export type ModalOptions = {
@@ -26,12 +27,26 @@ export type ModalContextValue = {
 export const ModalContext = createContext<ModalContextValue | undefined>(undefined);
 
 export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [modal, setModal] = useState<ModalOptions | null>(null);
+  const [modalStack, setModalStack] = useState<ModalOptions[]>([]);
 
-  const openModal = useCallback((opts: ModalOptions) => setModal(opts), []);
-  const closeModal = useCallback(() => setModal(null), []);
+  const openModal = useCallback((opts: ModalOptions) => {
+    setModalStack((currentStack) => [...currentStack, opts]);
+  }, []);
+  const closeModal = useCallback(() => {
+    setModalStack((currentStack) => currentStack.slice(0, -1));
+  }, []);
   const setModalActions = useCallback((actions: ModalAction[]) => {
-    setModal((currentModal) => currentModal ? { ...currentModal, actions } : currentModal);
+    setModalStack((currentStack) => {
+      if (currentStack.length === 0) {
+        return currentStack;
+      }
+
+      return currentStack.map((modal, index) => (
+        index === currentStack.length - 1
+          ? { ...modal, actions }
+          : modal
+      ));
+    });
   }, []);
 
   const value = useMemo(() => ({
@@ -43,8 +58,9 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <ModalContext.Provider value={value}>
       {children}
-      {modal ? (
+      {modalStack.map((modal, index) => (
         <Modal
+          key={index}
           title={modal.title}
           content={modal.content}
           actions={modal.actions}
@@ -52,7 +68,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           bodyClassName={modal.bodyClassName}
           onClose={closeModal}
         />
-      ) : null}
+      ))}
     </ModalContext.Provider>
   );
 };

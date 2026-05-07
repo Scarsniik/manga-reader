@@ -14,6 +14,7 @@ import { compareSeriesMangasByChapter } from '@/renderer/utils/seriesChapters';
 import generateId from '@/utils/id';
 import SavedSearchesList from '@/renderer/components/SavedSearches/SavedSearchesList';
 import SaveSearchModalContent from '@/renderer/components/SavedSearches/SaveSearchModalContent';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import { useModal } from '@/renderer/hooks/useModal';
 
 type Props = {
@@ -632,16 +633,26 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
     const handleSavedSearchClick = useCallback((search: SavedLibrarySearch) => {
         if (savedSearchDeleteMode) {
-            const confirmed = window.confirm(`Supprimer la recherche "${search.name}" ?`);
-            if (!confirmed) return;
+            openModal(buildConfirmActionModal({
+                title: 'Supprimer la recherche',
+                message: (
+                    <>
+                        Supprimer la recherche <strong>{search.name}</strong> ?
+                    </>
+                ),
+                details: 'Ce groupe de filtres ne sera plus disponible.',
+                confirmLabel: 'Supprimer',
+                confirmVariant: 'danger',
+                onConfirm: () => {
+                    const nextSearches = savedLibrarySearches.filter(item => item.id !== search.id);
+                    setParams({ savedLibrarySearches: nextSearches }, { broadcast: false });
 
-            const nextSearches = savedLibrarySearches.filter(item => item.id !== search.id);
-            setParams({ savedLibrarySearches: nextSearches }, { broadcast: false });
-
-            if (nextSearches.length === 0) {
-                setSavedSearchDeleteMode(false);
-                setSavedSearchesExpanded(false);
-            }
+                    if (nextSearches.length === 0) {
+                        setSavedSearchDeleteMode(false);
+                        setSavedSearchesExpanded(false);
+                    }
+                },
+            }));
             return;
         }
 
@@ -658,6 +669,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         defaultSort,
         expanded,
         normalizeUiFilterState,
+        openModal,
         savedLibrarySearches,
         savedSearchDeleteMode,
         setParams,

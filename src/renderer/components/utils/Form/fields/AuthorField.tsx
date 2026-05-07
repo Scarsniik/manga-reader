@@ -1,5 +1,7 @@
 import "./AuthorField.scss";
 import React, { useMemo, useState } from "react";
+import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
+import { useModal } from "@/renderer/hooks/useModal";
 import useAuthors from "@/renderer/hooks/useAuthors";
 import { Field as FieldType } from "../types";
 import EntityPickerField from "./EntityPickerField";
@@ -12,6 +14,7 @@ interface Props {
 }
 
 export default function AuthorField({ field, value, onChange, disableCreate = false }: Props) {
+  const { openModal } = useModal();
   const { authors, addAuthor, removeAuthor, refresh } = useAuthors();
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -24,6 +27,10 @@ export default function AuthorField({ field, value, onChange, disableCreate = fa
         name: author.name,
       })),
     [authors],
+  );
+  const selectedAuthorName = useMemo(
+    () => authors.find((author) => author.id === value)?.name || "cet auteur",
+    [authors, value],
   );
 
   async function handleCreate(e: React.FormEvent | React.MouseEvent | React.KeyboardEvent) {
@@ -48,13 +55,25 @@ export default function AuthorField({ field, value, onChange, disableCreate = fa
     }
   }
 
-  async function handleDelete(e: React.MouseEvent) {
+  function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
-    if (!window.confirm("Supprimer cet auteur ?")) return;
-    await removeAuthor(value!);
-    await refresh();
-    onChange({ target: { value: "", name: field.name } } as any);
+
+    openModal(buildConfirmActionModal({
+      title: "Supprimer l'auteur",
+      message: (
+        <>
+          Supprimer <strong>{selectedAuthorName}</strong> ?
+        </>
+      ),
+      confirmLabel: "Supprimer",
+      confirmVariant: "danger",
+      onConfirm: async () => {
+        await removeAuthor(value!);
+        await refresh();
+        onChange({ target: { value: "", name: field.name } } as any);
+      },
+    }));
   }
 
   function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

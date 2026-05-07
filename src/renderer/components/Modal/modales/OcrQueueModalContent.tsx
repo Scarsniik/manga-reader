@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
+import { useModal } from '@/renderer/hooks/useModal';
 import { notifyOcrRuntimeMissing, openOcrRuntimeStatus } from '@/renderer/utils/ocrRuntimeUi';
 import './OcrModalContent.scss';
 
@@ -29,6 +31,7 @@ const formatJobStatus = (status?: string | null) => {
 };
 
 const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredMangaIds }) => {
+  const { openModal } = useModal();
   const [queue, setQueue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,22 +118,7 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
     }
   }, [loadQueue]);
 
-  const cancelAllJobs = useCallback(async () => {
-    if (!window.api) {
-      setError('API OCR indisponible');
-      return;
-    }
-
-    const activeJobs = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status));
-    if (activeJobs.length === 0) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Annuler ${activeJobs.length} job(s) OCR encore actifs ?`);
-    if (!confirmed) {
-      return;
-    }
-
+  const cancelActiveJobs = useCallback(async (activeJobs: any[]) => {
     try {
       setQueue((prev: any) => ({
         ...(prev || {}),
@@ -162,7 +150,30 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
     } catch (err: any) {
       setError(String(err?.message || err || 'Impossible d\'annuler toute la file OCR'));
     }
-  }, [loadQueue, queue?.jobs]);
+  }, [loadQueue]);
+
+  const cancelAllJobs = useCallback(() => {
+    if (!window.api) {
+      setError('API OCR indisponible');
+      return;
+    }
+
+    const activeJobs = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status));
+    if (activeJobs.length === 0) {
+      return;
+    }
+
+    openModal(buildConfirmActionModal({
+      title: 'Annuler les jobs OCR',
+      message: `Annuler ${activeJobs.length} job(s) OCR encore actifs ?`,
+      details: 'Les jobs en cours et en attente recevront une demande d\'annulation.',
+      confirmLabel: 'Tout annuler',
+      confirmVariant: 'danger',
+      onConfirm: () => {
+        void cancelActiveJobs(activeJobs);
+      },
+    }));
+  }, [cancelActiveJobs, openModal, queue?.jobs]);
 
   const activeJobCount = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status)).length;
 

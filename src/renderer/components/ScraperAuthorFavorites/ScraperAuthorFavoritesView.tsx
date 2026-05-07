@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ScraperAuthorFavoriteRecord, ScraperRecord } from "@/shared/scraper";
+import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
@@ -20,6 +21,7 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { Manga } from "@/renderer/types";
+import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import { getScraperBookmarkKey, useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import {
@@ -50,6 +52,7 @@ export default function ScraperAuthorFavoritesView({
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openModal } = useModal();
   const { params } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
   const { bookmarks } = useScraperBookmarks();
@@ -125,17 +128,24 @@ export default function ScraperAuthorFavoritesView({
       });
   }, []);
 
-  const handleRemoveFavorite = useCallback(async (favorite: ScraperAuthorFavoriteRecord) => {
-    const confirmed = window.confirm(`Supprimer l'auteur favori "${favorite.name}" ?`);
-    if (!confirmed) {
-      return;
-    }
-
-    await removeScraperAuthorFavorite({ favoriteId: favorite.id });
-    if (selectedFavoriteId === favorite.id) {
-      setSelectedFavoriteId(null);
-    }
-  }, [selectedFavoriteId]);
+  const handleRemoveFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
+    openModal(buildConfirmActionModal({
+      title: "Supprimer l'auteur favori",
+      message: (
+        <>
+          Supprimer l'auteur favori <strong>{favorite.name}</strong> ?
+        </>
+      ),
+      confirmLabel: "Supprimer",
+      confirmVariant: "danger",
+      onConfirm: async () => {
+        await removeScraperAuthorFavorite({ favoriteId: favorite.id });
+        if (selectedFavoriteId === favorite.id) {
+          setSelectedFavoriteId(null);
+        }
+      },
+    }));
+  }, [openModal, selectedFavoriteId]);
 
   const handleToggleLanguageFilterMode = useCallback((
     languageCode: string,

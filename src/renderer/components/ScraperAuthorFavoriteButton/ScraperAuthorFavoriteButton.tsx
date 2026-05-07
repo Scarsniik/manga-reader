@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import type { SaveScraperAuthorFavoriteRequest } from "@/shared/scraper";
 import { StarIcon } from "@/renderer/components/icons";
+import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import { useModal } from "@/renderer/hooks/useModal";
 import {
   removeScraperAuthorFavoriteSource,
@@ -51,27 +52,34 @@ export default function ScraperAuthorFavoriteButton({
     ? `Retirer ${normalizedSourceName} des auteurs favoris`
     : `Ajouter ${normalizedSourceName} aux auteurs favoris`;
 
-  const handleRemove = useCallback(async () => {
+  const handleRemove = useCallback(() => {
     if (!favorite || pending) {
       return;
     }
 
-    const confirmed = window.confirm(`Retirer ${normalizedSourceName} des auteurs favoris ?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setPending(true);
-    try {
-      await removeScraperAuthorFavoriteSource({
-        favoriteId: favorite.id,
-        scraperId: normalizedScraperId,
-        authorUrl: normalizedAuthorUrl,
-      });
-    } finally {
-      setPending(false);
-    }
-  }, [favorite, normalizedAuthorUrl, normalizedScraperId, normalizedSourceName, pending]);
+    openModal(buildConfirmActionModal({
+      title: "Retirer l'auteur favori",
+      message: (
+        <>
+          Retirer <strong>{normalizedSourceName}</strong> des auteurs favoris ?
+        </>
+      ),
+      confirmLabel: "Retirer",
+      confirmVariant: "danger",
+      onConfirm: async () => {
+        setPending(true);
+        try {
+          await removeScraperAuthorFavoriteSource({
+            favoriteId: favorite.id,
+            scraperId: normalizedScraperId,
+            authorUrl: normalizedAuthorUrl,
+          });
+        } finally {
+          setPending(false);
+        }
+      },
+    }));
+  }, [favorite, normalizedAuthorUrl, normalizedScraperId, normalizedSourceName, openModal, pending]);
 
   const handleAdd = useCallback(() => {
     openModal({

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
+import { useModal } from '@/renderer/hooks/useModal';
 import {
   ScraperDownloadJob,
   ScraperDownloadQueueStatus,
@@ -103,6 +105,7 @@ const DownloadQueueJobCard: React.FC<{
 };
 
 const ScraperDownloadQueueModalContent: React.FC = () => {
+  const { openModal } = useModal();
   const [queue, setQueue] = useState<ScraperDownloadQueueStatus>(EMPTY_QUEUE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +151,16 @@ const ScraperDownloadQueueModalContent: React.FC = () => {
     }
   }, [loadQueue]);
 
-  const handleCancelAll = useCallback(async () => {
+  const cancelAllActiveJobs = useCallback(async () => {
+    try {
+      await window.api.cancelAllScraperDownloadJobs();
+      await loadQueue();
+    } catch (err: any) {
+      setError(String(err?.message || err || 'Impossible d\'annuler la file de telechargements'));
+    }
+  }, [loadQueue]);
+
+  const handleCancelAll = useCallback(() => {
     if (!window.api || typeof window.api.cancelAllScraperDownloadJobs !== 'function') {
       setError('API de telechargement indisponible');
       return;
@@ -158,18 +170,17 @@ const ScraperDownloadQueueModalContent: React.FC = () => {
       return;
     }
 
-    const confirmed = window.confirm(`Annuler ${queue.counts.active} telechargement(s) actif(s) ?`);
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await window.api.cancelAllScraperDownloadJobs();
-      await loadQueue();
-    } catch (err: any) {
-      setError(String(err?.message || err || 'Impossible d\'annuler la file de telechargements'));
-    }
-  }, [loadQueue, queue.counts?.active]);
+    openModal(buildConfirmActionModal({
+      title: 'Annuler les telechargements',
+      message: `Annuler ${queue.counts.active} telechargement(s) actif(s) ?`,
+      details: 'Les telechargements en cours et en attente recevront une demande d\'annulation.',
+      confirmLabel: 'Tout annuler',
+      confirmVariant: 'danger',
+      onConfirm: () => {
+        void cancelAllActiveJobs();
+      },
+    }));
+  }, [cancelAllActiveJobs, openModal, queue.counts?.active]);
 
   const summaryItems = useMemo(() => ([
     { label: 'Actifs', value: queue.counts?.active || 0 },

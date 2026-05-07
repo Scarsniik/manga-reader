@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import ScraperConfigWizard from '@/renderer/components/ScraperConfig/ScraperConfigWizard';
 import '@/renderer/components/ScraperConfig/style.scss';
 import { ScraperRecord } from '@/shared/scraper';
+import { useModal } from '@/renderer/hooks/useModal';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
 
 declare global {
@@ -32,6 +34,7 @@ type Props = {
 };
 
 export default function ScrapersModalContent({ initialView = { kind: 'list' } }: Props) {
+  const { openModal } = useModal();
   const [view, setView] = useState<ViewState>(initialView);
   const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,29 +111,37 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
     }
   }, []);
 
-  const handleDelete = useCallback(async (scraper: ScraperRecord) => {
-    const confirmed = window.confirm(`Supprimer le scrapper "${scraper.name}" ?`);
-    if (!confirmed) {
-      return;
-    }
+  const handleDelete = useCallback((scraper: ScraperRecord) => {
+    openModal(buildConfirmActionModal({
+      title: 'Supprimer le scrapper',
+      message: (
+        <>
+          Supprimer le scrapper <strong>{scraper.name}</strong> ?
+        </>
+      ),
+      details: 'Sa configuration locale sera supprimee.',
+      confirmLabel: 'Supprimer',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        if (!window.api || typeof window.api.deleteScraper !== 'function') {
+          setError('La suppression des scrappers n\'est pas disponible dans cette version.');
+          return;
+        }
 
-    if (!window.api || typeof window.api.deleteScraper !== 'function') {
-      setError('La suppression des scrappers n\'est pas disponible dans cette version.');
-      return;
-    }
-
-    setDeletingId(scraper.id);
-    setError(null);
-    try {
-      const nextScrapers = await window.api.deleteScraper(scraper.id);
-      setScrapers(Array.isArray(nextScrapers) ? nextScrapers as ScraperRecord[] : []);
-      setView({ kind: 'list' });
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Impossible de supprimer le scrapper.');
-    } finally {
-      setDeletingId(null);
-    }
-  }, []);
+        setDeletingId(scraper.id);
+        setError(null);
+        try {
+          const nextScrapers = await window.api.deleteScraper(scraper.id);
+          setScrapers(Array.isArray(nextScrapers) ? nextScrapers as ScraperRecord[] : []);
+          setView({ kind: 'list' });
+        } catch (deleteError) {
+          setError(deleteError instanceof Error ? deleteError.message : 'Impossible de supprimer le scrapper.');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    }));
+  }, [openModal]);
 
   if (view.kind === 'create') {
     return (
