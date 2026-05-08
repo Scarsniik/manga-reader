@@ -5,6 +5,7 @@ import type {
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
+import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import {
   MEASUREMENT_PRECISION_PX,
   MIN_OVERSCAN_PX,
@@ -29,6 +30,7 @@ type Props = {
   results: MultiSearchMergedResult[];
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
+  sourceProgressIndex: MultiSearchProgressIndex;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
 };
@@ -43,6 +45,7 @@ function MeasuredMultiSearchResultCard({
   result,
   libraryMangas,
   bookmarkedSourceKeys,
+  sourceProgressIndex,
   onOpenSource,
   onOpenSourceInWorkspace,
   onHeightChange,
@@ -128,6 +131,7 @@ function MeasuredMultiSearchResultCard({
         result={result}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
+        sourceProgressIndex={sourceProgressIndex}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
       />
@@ -139,6 +143,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   results,
   libraryMangas,
   bookmarkedSourceKeys,
+  sourceProgressIndex,
   onOpenSource,
   onOpenSourceInWorkspace,
 }: Props) {
@@ -398,6 +403,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               result={result}
               libraryMangas={libraryMangas}
               bookmarkedSourceKeys={bookmarkedSourceKeys}
+              sourceProgressIndex={sourceProgressIndex}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onHeightChange={updateItemHeight}

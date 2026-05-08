@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ScraperAuthorFavoriteRecord, ScraperRecord } from "@/shared/scraper";
+import type {
+  ScraperAuthorFavoriteRecord,
+  ScraperReaderProgressRecord,
+  ScraperRecord,
+} from "@/shared/scraper";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
@@ -15,9 +20,15 @@ import {
   flattenMultiSearchSources,
   mergeMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { buildMultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import {
+  filterMultiSearchMergedResultsByReadingStatus,
+  toggleMultiSearchReadingStatusFilter,
+} from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
+  MultiSearchReadingStatusFilter,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { Manga } from "@/renderer/types";
@@ -58,8 +69,10 @@ export default function ScraperAuthorFavoritesView({
   const { bookmarks } = useScraperBookmarks();
   const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | null>(null);
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
+  const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [openError, setOpenError] = useState<string | null>(null);
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
+  const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
     [scrapers],
@@ -71,6 +84,10 @@ export default function ScraperAuthorFavoritesView({
   const bookmarkedSourceKeys = useMemo(
     () => new Set(bookmarks.map((bookmark) => getScraperBookmarkKey(bookmark.scraperId, bookmark.sourceUrl))),
     [bookmarks],
+  );
+  const sourceProgressIndex = useMemo(
+    () => buildMultiSearchProgressIndex(readerProgressRecords),
+    [readerProgressRecords],
   );
   const {
     runs,
@@ -93,8 +110,23 @@ export default function ScraperAuthorFavoritesView({
     [loadedSources],
   );
   const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-    [languageFilterModes, mergedResults],
+    () => filterMultiSearchMergedResultsByReadingStatus(
+      filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
+      readingStatusFilters,
+      {
+        libraryMangas,
+        bookmarkedSourceKeys,
+        sourceProgressIndex,
+      },
+    ),
+    [
+      bookmarkedSourceKeys,
+      languageFilterModes,
+      libraryMangas,
+      mergedResults,
+      readingStatusFilters,
+      sourceProgressIndex,
+    ],
   );
 
   useEffect(() => {
@@ -109,23 +141,50 @@ export default function ScraperAuthorFavoritesView({
     }
 
     setLanguageFilterModes({});
+    setReadingStatusFilters([]);
     void start();
   }, [selectedFavorite, start]);
 
   useEffect(() => {
-    if (!window.api || typeof window.api.getMangas !== "function") {
-      setLibraryMangas([]);
-      return;
-    }
+    const loadLibraryMangas = async () => {
+      if (!window.api || typeof window.api.getMangas !== "function") {
+        setLibraryMangas([]);
+        return;
+      }
 
-    void window.api.getMangas()
-      .then((data: unknown) => {
+      try {
+        const data = await window.api.getMangas();
         setLibraryMangas(Array.isArray(data) ? data as Manga[] : []);
-      })
-      .catch((loadError: unknown) => {
+      } catch (loadError) {
         console.warn("Failed to load library mangas for author favorites", loadError);
         setLibraryMangas([]);
-      });
+      }
+    };
+    const loadReaderProgressRecords = async () => {
+      if (!window.api || typeof window.api.getScraperReaderProgressRecords !== "function") {
+        setReaderProgressRecords([]);
+        return;
+      }
+
+      try {
+        const data = await window.api.getScraperReaderProgressRecords();
+        setReaderProgressRecords(Array.isArray(data) ? data as ScraperReaderProgressRecord[] : []);
+      } catch (progressError) {
+        console.warn("Failed to load scraper reader progress for author favorites", progressError);
+        setReaderProgressRecords([]);
+      }
+    };
+
+    void loadLibraryMangas();
+    void loadReaderProgressRecords();
+
+    const onMangasUpdated = () => {
+      void loadLibraryMangas();
+      void loadReaderProgressRecords();
+    };
+
+    window.addEventListener("mangas-updated", onMangasUpdated as EventListener);
+    return () => window.removeEventListener("mangas-updated", onMangasUpdated as EventListener);
   }, []);
 
   const handleRemoveFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
@@ -159,6 +218,12 @@ export default function ScraperAuthorFavoritesView({
         [languageCode]: nextMode,
       };
     });
+  }, []);
+
+  const handleToggleReadingStatusFilter = useCallback((status: MultiSearchReadingStatusFilter) => {
+    setReadingStatusFilters((currentStatuses) => (
+      toggleMultiSearchReadingStatusFilter(currentStatuses, status)
+    ));
   }, []);
 
   const handleOpenSource = useCallback((source: MultiSearchSourceResult) => {
@@ -313,11 +378,17 @@ export default function ScraperAuthorFavoritesView({
               <div>
                 <h3>Resultats combines</h3>
                 <p>{visibleMergedResults.length} carte(s), {loadedSources.length} source(s) chargee(s).</p>
-                <MultiSearchLanguageFilterBar
-                  languageCodes={resultLanguageCodes}
-                  filterModes={languageFilterModes}
-                  onToggleFilterMode={handleToggleLanguageFilterMode}
-                />
+                <div className="multi-search__facet-filter-row">
+                  <MultiSearchLanguageFilterBar
+                    languageCodes={resultLanguageCodes}
+                    filterModes={languageFilterModes}
+                    onToggleFilterMode={handleToggleLanguageFilterMode}
+                  />
+                  <MultiSearchReadingStatusFilterBar
+                    selectedStatuses={readingStatusFilters}
+                    onToggleStatus={handleToggleReadingStatusFilter}
+                  />
+                </div>
               </div>
             </div>
 
@@ -328,6 +399,7 @@ export default function ScraperAuthorFavoritesView({
                   result={result}
                   libraryMangas={libraryMangas}
                   bookmarkedSourceKeys={bookmarkedSourceKeys}
+                  sourceProgressIndex={sourceProgressIndex}
                   onOpenSource={handleOpenSource}
                   onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
                 />

@@ -1,14 +1,19 @@
 import React from "react";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
-import { getScraperBookmarkKey } from "@/renderer/stores/scraperBookmarks";
 import type { Manga } from "@/renderer/types";
 import { getLanguageLabel } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type {
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
-import { findMangaLinkedToSource } from "@/renderer/utils/mangaSource";
+import {
+  getMultiSearchSourceAvailability,
+  pickPrimarySourceProgress,
+  type MultiSearchProgressIndex,
+  type MultiSearchReadingStatus,
+  type MultiSearchSourceAvailability,
+} from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
 import "./card.scss";
@@ -17,6 +22,7 @@ type Props = {
   result: MultiSearchMergedResult;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
+  sourceProgressIndex: MultiSearchProgressIndex;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
 };
@@ -34,6 +40,20 @@ const getSourceLanguageTitle = (source: MultiSearchSourceResult): string => (
 const formatMatchedSourceCount = (count: number): string => (
   count > 1 ? ` x${count}` : ""
 );
+
+const getProgressClassName = (status: MultiSearchReadingStatus): string => (
+  status === "completed" ? "is-completed" : "is-in-progress"
+);
+
+const getOpenOptionClassName = (
+  availability: MultiSearchSourceAvailability | undefined,
+): string => [
+  "multi-search-card__open-option",
+  availability?.inLibrary || availability?.inBookmarks || availability?.progress ? "has-states" : "",
+  availability?.inLibrary ? "is-library" : "",
+  availability?.inBookmarks ? "is-bookmark" : "",
+  availability?.progress ? getProgressClassName(availability.progress.status) : "",
+].join(" ").trim();
 
 const closeDetails = (details: HTMLDetailsElement | null) => {
   if (details) {
@@ -71,6 +91,7 @@ export default function MultiSearchResultCard({
   result,
   libraryMangas,
   bookmarkedSourceKeys,
+  sourceProgressIndex,
   onOpenSource,
   onOpenSourceInWorkspace,
 }: Props) {
@@ -92,21 +113,24 @@ export default function MultiSearchResultCard({
   const languageLabels = result.sourceLanguageCodes.map(getLanguageLabel);
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
   const sourceAvailability = React.useMemo(() => (
-    result.sources.map((source) => {
-      const sourceUrl = source.result.detailUrl || "";
-      const bookmarkKey = getScraperBookmarkKey(source.scraper.id, sourceUrl);
-
-      return {
-        inLibrary: Boolean(sourceUrl && findMangaLinkedToSource(libraryMangas, {
-          scraperId: source.scraper.id,
-          sourceUrl,
-        })),
-        inBookmarks: Boolean(bookmarkKey && bookmarkedSourceKeys.has(bookmarkKey)),
-      };
-    })
-  ), [bookmarkedSourceKeys, libraryMangas, result.sources]);
+    result.sources.map((source) => getMultiSearchSourceAvailability({
+      source,
+      libraryMangas,
+      bookmarkedSourceKeys,
+      progressIndex: sourceProgressIndex,
+    }))
+  ), [bookmarkedSourceKeys, libraryMangas, result.sources, sourceProgressIndex]);
   const librarySourceCount = sourceAvailability.filter((availability) => availability.inLibrary).length;
   const bookmarkSourceCount = sourceAvailability.filter((availability) => availability.inBookmarks).length;
+  const progressSourceCount = sourceAvailability.filter((availability) => availability.progress).length;
+  const primaryProgress = pickPrimarySourceProgress(sourceAvailability);
+  const progressTitle = sourceAvailability
+    .map((availability, index) => (availability.progress
+      ? `${result.sources[index].scraper.name}: ${availability.progress.label}`
+      : ""
+    ))
+    .filter(Boolean)
+    .join("\n");
   const scraperSourceCounts = Array.from(
     result.sources.reduce<Map<string, { id: string; name: string; count: number }>>((counts, source) => {
       const current = counts.get(source.scraper.id);
@@ -135,6 +159,25 @@ export default function MultiSearchResultCard({
           Bookmark{formatMatchedSourceCount(bookmarkSourceCount)}
         </span>
       ) : null}
+      {primaryProgress ? (
+        <div
+          className={[
+            "multi-search-card__progress",
+            getProgressClassName(primaryProgress.status),
+          ].join(" ")}
+          title={progressTitle || primaryProgress.label}
+        >
+          <div className="multi-search-card__progress-line">
+            <span>{primaryProgress.status === "completed" ? "Termine" : "En cours"}</span>
+            <strong>{primaryProgress.shortLabel}{formatMatchedSourceCount(progressSourceCount)}</strong>
+          </div>
+          {primaryProgress.percent !== null ? (
+            <span className="multi-search-card__progress-track" aria-hidden="true">
+              <span style={{ width: `${primaryProgress.percent}%` }} />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <span>{result.sources.length} source(s) trouvee(s)</span>
       {result.sources.length > 1 ? (
         <details ref={sourceMenuRef} className="multi-search-card__source-menu">
@@ -159,6 +202,11 @@ export default function MultiSearchResultCard({
                   <div className="multi-search-card__source-states">
                     {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
                     {availability?.inBookmarks ? <span className="is-bookmark">Bookmark</span> : null}
+                    {availability?.progress ? (
+                      <span className={getProgressClassName(availability.progress.status)}>
+                        {availability.progress.shortLabel}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -215,41 +263,64 @@ export default function MultiSearchResultCard({
             Ouvrir avec...
           </summary>
           <div className="multi-search-card__open-options">
-            {result.sources.map((source, index) => (
-              <button
-                key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
-                type="button"
-                onClick={() => {
-                  closeDetails(openMenuRef.current);
-                  onOpenSource(source);
-                }}
-                onMouseDown={(event) => {
-                  if (event.button !== 1) {
-                    return;
-                  }
+            {result.sources.map((source, index) => {
+              const availability = sourceAvailability[index];
+              const hasOpenStates = Boolean(
+                availability?.progress
+                || availability?.inLibrary
+                || availability?.inBookmarks,
+              );
 
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onAuxClick={(event) => {
-                  if (event.button !== 1) {
-                    return;
-                  }
+              return (
+                <button
+                  key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
+                  type="button"
+                  className={getOpenOptionClassName(availability)}
+                  onClick={() => {
+                    closeDetails(openMenuRef.current);
+                    onOpenSource(source);
+                  }}
+                  onMouseDown={(event) => {
+                    if (event.button !== 1) {
+                      return;
+                    }
 
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeDetails(openMenuRef.current);
-                  onOpenSourceInWorkspace(source);
-                }}
-                disabled={!source.result.detailUrl}
-                data-prevent-middle-click-autoscroll="true"
-              >
-                <strong>{source.scraper.name}</strong>
-                <span title={getSourceLanguageTitle(source)}>
-                  <LanguageFlags languageCodes={source.sourceLanguageCodes} />
-                </span>
-              </button>
-            ))}
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeDetails(openMenuRef.current);
+                    onOpenSourceInWorkspace(source);
+                  }}
+                  disabled={!source.result.detailUrl}
+                  data-prevent-middle-click-autoscroll="true"
+                >
+                  <span className="multi-search-card__open-source-main">
+                    <strong>{source.scraper.name}</strong>
+                    <span title={getSourceLanguageTitle(source)}>
+                      <LanguageFlags languageCodes={source.sourceLanguageCodes} />
+                    </span>
+                  </span>
+                  {hasOpenStates ? (
+                    <span className="multi-search-card__open-source-states">
+                      {availability?.progress ? (
+                        <span className={getProgressClassName(availability.progress.status)}>
+                          {availability.progress.shortLabel}
+                        </span>
+                      ) : null}
+                      {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
+                      {availability?.inBookmarks ? <span className="is-bookmark">Bookmark</span> : null}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </details>
       ),
@@ -269,7 +340,7 @@ export default function MultiSearchResultCard({
       onClick={result.sources.length === 1 ? () => onOpenSource(result.sources[0]) : undefined}
       onMiddleClick={result.sources.length === 1 ? () => onOpenSourceInWorkspace(result.sources[0]) : undefined}
       onCoverError={() => setCoverIndex((currentIndex) => currentIndex + 1)}
-      aria-label={result.sources.length === 1 ? `Ouvrir ${result.title}` : undefined}
+      ariaLabel={result.sources.length === 1 ? `Ouvrir ${result.title}` : undefined}
     />
   );
 }

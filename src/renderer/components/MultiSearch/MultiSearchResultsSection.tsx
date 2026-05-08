@@ -1,5 +1,6 @@
 import React from "react";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
+import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
 import { DownloadArrowIcon } from "@/renderer/components/icons";
@@ -9,11 +10,13 @@ import type {
   MultiSearchLanguageFilterModes,
   MultiSearchMergeProgress,
   MultiSearchMergedResult,
+  MultiSearchReadingStatusFilter,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -24,10 +27,12 @@ type Props = {
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
+  readingStatusFilters: MultiSearchReadingStatusFilter[];
   textFilter: string;
   baseQuery: string;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
+  sourceProgressIndex: MultiSearchProgressIndex;
   isExportingJson: boolean;
   showMergeReloadButton: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
@@ -42,6 +47,7 @@ type Props = {
     languageCode: string,
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
   ) => void;
+  onToggleReadingStatusFilter: (status: MultiSearchReadingStatusFilter) => void;
 };
 
 const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
@@ -88,10 +94,12 @@ export default function MultiSearchResultsSection({
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
+  readingStatusFilters,
   textFilter,
   baseQuery,
   libraryMangas,
   bookmarkedSourceKeys,
+  sourceProgressIndex,
   isExportingJson,
   showMergeReloadButton,
   onOpenSource,
@@ -103,6 +111,7 @@ export default function MultiSearchResultsSection({
   onFillTextFilterFromBaseQuery,
   onClearTextFilter,
   onToggleLanguageFilterMode,
+  onToggleReadingStatusFilter,
 }: Props) {
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
@@ -144,11 +153,17 @@ export default function MultiSearchResultsSection({
                 onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
                 onClear={onClearTextFilter}
               />
-              <MultiSearchLanguageFilterBar
-                languageCodes={resultLanguageCodes}
-                filterModes={languageFilterModes}
-                onToggleFilterMode={onToggleLanguageFilterMode}
-              />
+              <div className="multi-search__facet-filter-row">
+                <MultiSearchLanguageFilterBar
+                  languageCodes={resultLanguageCodes}
+                  filterModes={languageFilterModes}
+                  onToggleFilterMode={onToggleLanguageFilterMode}
+                />
+                <MultiSearchReadingStatusFilterBar
+                  selectedStatuses={readingStatusFilters}
+                  onToggleStatus={onToggleReadingStatusFilter}
+                />
+              </div>
             </div>
           </div>
           <div className="multi-search__section-actions">
@@ -192,6 +207,7 @@ export default function MultiSearchResultsSection({
           results={mergedResults}
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
+          sourceProgressIndex={sourceProgressIndex}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
         />
@@ -213,11 +229,17 @@ export default function MultiSearchResultsSection({
               onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
               onClear={onClearTextFilter}
             />
-            <MultiSearchLanguageFilterBar
-              languageCodes={resultLanguageCodes}
-              filterModes={languageFilterModes}
-              onToggleFilterMode={onToggleLanguageFilterMode}
-            />
+            <div className="multi-search__facet-filter-row">
+              <MultiSearchLanguageFilterBar
+                languageCodes={resultLanguageCodes}
+                filterModes={languageFilterModes}
+                onToggleFilterMode={onToggleLanguageFilterMode}
+              />
+              <MultiSearchReadingStatusFilterBar
+                selectedStatuses={readingStatusFilters}
+                onToggleStatus={onToggleReadingStatusFilter}
+              />
+            </div>
           </div>
         </div>
         <div className="multi-search__section-actions">
@@ -242,6 +264,7 @@ export default function MultiSearchResultsSection({
               results={group.results}
               libraryMangas={libraryMangas}
               bookmarkedSourceKeys={bookmarkedSourceKeys}
+              sourceProgressIndex={sourceProgressIndex}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
             />

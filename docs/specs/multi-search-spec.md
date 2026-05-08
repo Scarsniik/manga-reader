@@ -614,9 +614,11 @@ La V1 du multi-search repose sur les choix suivants :
 - Le filtre texte accepte plusieurs termes avec les memes separateurs que la recherche principale : virgule, point-virgule, barre verticale ou retour a la ligne.
 - Le filtre texte est applique apres un court delai de saisie pour eviter de recalculer l'affichage a chaque frappe.
 - Le filtre texte propose un bouton pour reprendre la recherche principale comme valeur de filtre, et un bouton pour vider la valeur.
+- Les resultats peuvent aussi etre filtres par etat de lecture avec des choix cumulables : `Non lu`, `En cours` et `Lu`. Le filtre utilise les progressions scraper et les mangas lies a une source.
 - La liste des scrapers associes a une card multi-search et le menu `Ouvrir avec` s'ouvrent au clic comme des menus deroulants en overlay pour ne pas deplacer les cards suivantes, et se ferment quand l'utilisateur clique en dehors.
 - Les couvertures multi-search distantes passent par un protocole local de vignette redimensionnee quand l'application Electron est disponible, avec fallback vers l'image originale.
-- Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque ou a un bookmark scraper.
+- Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque, a un bookmark scraper ou a une progression de lecture en cours/terminee.
+- Dans le menu `Ouvrir avec`, chaque source affiche aussi ses etats bibliotheque, bookmark et progression, avec une bordure distincte quand la source a une progression.
 - La section de resultats expose un bouton JSON qui ecrit un export temporaire dans le dossier temporaire systeme puis l'ouvre avec l'application associee aux fichiers JSON.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose un bouton `Recharger fusion` qui force le recalcul de la fusion depuis les sources deja chargees.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose aussi un bouton `Merged JSON` qui ouvre un export limite aux `mergedResults`.

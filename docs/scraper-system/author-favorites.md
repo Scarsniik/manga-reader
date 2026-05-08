@@ -48,7 +48,8 @@ La vue combinee reutilise aussi :
 - la conversion des cards en `MultiSearchSourceResult`
 - la fusion des resultats par titre
 - le filtre de langue du multi-search
-- les cards de resultat multi-source
+- le filtre multi-choix par etat de lecture
+- les cards de resultat multi-source, avec les badges bibliotheque, bookmark et progression de lecture
 
 ## Stockage
 

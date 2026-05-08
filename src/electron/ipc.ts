@@ -240,9 +240,11 @@ ipcMain.handle("get-scraper-reader-progress", async (event: IpcMainInvokeEvent, 
 ipcMain.handle("get-scraper-reader-progress-records", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
     scrapers.getScraperReaderProgressRecords(event, scraperId)
 ));
-ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => (
-    scrapers.saveScraperReaderProgress(event, request)
-));
+ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => {
+    const saved = await scrapers.saveScraperReaderProgress(event, request);
+    notifyMangasUpdated();
+    return saved;
+});
 ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => (
     scrapers.queueScraperDownload(event, request)
 ));

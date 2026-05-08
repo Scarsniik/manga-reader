@@ -5,6 +5,7 @@ import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
   MultiSearchPaceMode,
+  MultiSearchReadingStatusFilter,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
   MultiSearchTermRun,
@@ -19,6 +20,7 @@ export type MultiSearchPersistentFormState = {
   selectedLanguageCodes: string[];
   selectedContentTypes: string[];
   resultLanguageFilterModes: MultiSearchLanguageFilterModes;
+  resultReadingStatusFilters: MultiSearchReadingStatusFilter[];
   resultTextFilter: string;
   depthMode: MultiSearchDepthMode;
   advancedPages: MultiSearchAdvancedPages;
@@ -94,6 +96,16 @@ const isViewMode = (value: unknown): value is MultiSearchViewMode => (
 
 const isLanguageFilterMode = (value: unknown): value is MultiSearchLanguageFilterMode => (
   value === "default" || value === "only" || value === "without"
+);
+
+const isReadingStatusFilter = (value: unknown): value is MultiSearchReadingStatusFilter => (
+  value === "unread" || value === "inProgress" || value === "read"
+);
+
+const restoreReadingStatusFilters = (value: unknown): MultiSearchReadingStatusFilter[] => (
+  Array.isArray(value)
+    ? value.filter(isReadingStatusFilter)
+    : []
 );
 
 const restoreLanguageFilterModes = (value: unknown): MultiSearchLanguageFilterModes => {
@@ -255,6 +267,7 @@ export const readMultiSearchState = (
       selectedLanguageCodes: isStringArray(parsed.selectedLanguageCodes) ? parsed.selectedLanguageCodes : [],
       selectedContentTypes: isStringArray(parsed.selectedContentTypes) ? parsed.selectedContentTypes : [],
       resultLanguageFilterModes: restoreLanguageFilterModes(parsed.resultLanguageFilterModes),
+      resultReadingStatusFilters: restoreReadingStatusFilters(parsed.resultReadingStatusFilters),
       resultTextFilter: typeof parsed.resultTextFilter === "string" ? parsed.resultTextFilter : "",
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
       advancedPages: restoreAdvancedPages(parsed.advancedPages),

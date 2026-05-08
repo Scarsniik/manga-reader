@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ScraperRecord } from "@/shared/scraper";
+import type { ScraperReaderProgressRecord, ScraperRecord } from "@/shared/scraper";
 import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import type { Manga } from "@/renderer/types";
 import MultiSearchControls, { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
@@ -37,6 +37,12 @@ import {
   hasActiveMultiSearchTextFilter,
 } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import {
+  filterMultiSearchMergedResultsByReadingStatus,
+  filterMultiSearchRunsByReadingStatus,
+  hasActiveMultiSearchReadingStatusFilter,
+  toggleMultiSearchReadingStatusFilter,
+} from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
+import {
   readMultiSearchState,
   saveMultiSearchState,
 } from "@/renderer/components/MultiSearch/multiSearchPersistence";
@@ -50,11 +56,13 @@ import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
   MultiSearchPaceMode,
+  MultiSearchReadingStatusFilter,
   MultiSearchScraperRun,
   MultiSearchSourceResult,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
+import { buildMultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import "./style.scss";
 
 type Props = {
@@ -94,9 +102,11 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
   const [mergeRefreshKey, setMergeRefreshKey] = useState(0);
   const [resultLanguageFilterModes, setResultLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
+  const [resultReadingStatusFilters, setResultReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
+  const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
     [scrapers],
@@ -141,11 +151,27 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         setLibraryMangas([]);
       }
     };
+    const loadReaderProgressRecords = async () => {
+      if (!window.api || typeof window.api.getScraperReaderProgressRecords !== "function") {
+        setReaderProgressRecords([]);
+        return;
+      }
+
+      try {
+        const data = await window.api.getScraperReaderProgressRecords();
+        setReaderProgressRecords(Array.isArray(data) ? data as ScraperReaderProgressRecord[] : []);
+      } catch (progressError) {
+        console.warn("Failed to load scraper reader progress for multi-search", progressError);
+        setReaderProgressRecords([]);
+      }
+    };
 
     void loadLibraryMangas();
+    void loadReaderProgressRecords();
 
     const onMangasUpdated = () => {
       void loadLibraryMangas();
+      void loadReaderProgressRecords();
     };
 
     window.addEventListener("mangas-updated", onMangasUpdated as EventListener);
@@ -177,6 +203,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         setSelectedLanguageCodes(restoredState.selectedLanguageCodes);
         setSelectedContentTypes(restoredState.selectedContentTypes);
         setResultLanguageFilterModes(restoredState.resultLanguageFilterModes);
+        setResultReadingStatusFilters(restoredState.resultReadingStatusFilters);
         setResultTextFilter(restoredState.resultTextFilter);
         setDebouncedResultTextFilter(restoredState.resultTextFilter);
         setDepthMode(restoredState.depthMode);
@@ -210,6 +237,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       selectedLanguageCodes,
       selectedContentTypes,
       resultLanguageFilterModes,
+      resultReadingStatusFilters,
       resultTextFilter,
       depthMode,
       advancedPages,
@@ -222,6 +250,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     paceMode,
     query,
     resultLanguageFilterModes,
+    resultReadingStatusFilters,
     resultTextFilter,
     runs,
     selectedContentTypes,
@@ -254,39 +283,67 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => buildMultiSearchResultLanguageFilterCodes(allSources),
     [allSources],
   );
+  const sourceProgressIndex = useMemo(
+    () => buildMultiSearchProgressIndex(readerProgressRecords),
+    [readerProgressRecords],
+  );
   const hasActiveResultLanguageFilter = useMemo(
     () => hasActiveMultiSearchLanguageFilter(resultLanguageFilterModes),
     [resultLanguageFilterModes],
+  );
+  const hasActiveResultReadingStatusFilter = useMemo(
+    () => hasActiveMultiSearchReadingStatusFilter(resultReadingStatusFilters),
+    [resultReadingStatusFilters],
   );
   const hasActiveResultTextFilter = useMemo(
     () => hasActiveMultiSearchTextFilter(debouncedResultTextFilter),
     [debouncedResultTextFilter],
   );
+  const readingStatusFilterContext = useMemo(() => ({
+    libraryMangas,
+    bookmarkedSourceKeys,
+    sourceProgressIndex,
+  }), [bookmarkedSourceKeys, libraryMangas, sourceProgressIndex]);
   const languageFilteredMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(mergedResults, resultLanguageFilterModes),
     [mergedResults, resultLanguageFilterModes],
   );
+  const readingStatusFilteredMergedResults = useMemo(
+    () => filterMultiSearchMergedResultsByReadingStatus(
+      languageFilteredMergedResults,
+      resultReadingStatusFilters,
+      readingStatusFilterContext,
+    ),
+    [languageFilteredMergedResults, readingStatusFilterContext, resultReadingStatusFilters],
+  );
   const visibleMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByText(
-      languageFilteredMergedResults,
+      readingStatusFilteredMergedResults,
       debouncedResultTextFilter,
       getMultiSearchSourceLanguageValues,
     ),
-    [debouncedResultTextFilter, languageFilteredMergedResults],
+    [debouncedResultTextFilter, readingStatusFilteredMergedResults],
   );
   const visibleRuns = useMemo(() => {
     const filteredRuns = filterMultiSearchRunsByText(
-      filterMultiSearchRunsByLanguage(runs, resultLanguageFilterModes),
+      filterMultiSearchRunsByReadingStatus(
+        filterMultiSearchRunsByLanguage(runs, resultLanguageFilterModes),
+        resultReadingStatusFilters,
+        readingStatusFilterContext,
+      ),
       debouncedResultTextFilter,
     );
-    return hasActiveResultLanguageFilter || hasActiveResultTextFilter
+    return hasActiveResultLanguageFilter || hasActiveResultTextFilter || hasActiveResultReadingStatusFilter
       ? filteredRuns.filter((run) => run.results.length)
       : filteredRuns;
   }, [
     debouncedResultTextFilter,
     hasActiveResultLanguageFilter,
+    hasActiveResultReadingStatusFilter,
     hasActiveResultTextFilter,
+    readingStatusFilterContext,
     resultLanguageFilterModes,
+    resultReadingStatusFilters,
     runs,
   ]);
   const visibleSourceCount = useMemo(() => (
@@ -331,6 +388,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     event.preventDefault();
     setOpenError(null);
     setResultLanguageFilterModes({});
+    setResultReadingStatusFilters([]);
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
     void runSearch({
@@ -359,6 +417,12 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         [languageCode]: nextMode,
       };
     });
+  };
+
+  const handleToggleResultReadingStatusFilter = (status: MultiSearchReadingStatusFilter) => {
+    setResultReadingStatusFilters((currentStatuses) => (
+      toggleMultiSearchReadingStatusFilter(currentStatuses, status)
+    ));
   };
 
   const handleFillTextFilterFromBaseQuery = () => {
@@ -588,10 +652,12 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         loadedSourceCount={allSources.length}
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={resultLanguageFilterModes}
+        readingStatusFilters={resultReadingStatusFilters}
         textFilter={resultTextFilter}
         baseQuery={query}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
+        sourceProgressIndex={sourceProgressIndex}
         isExportingJson={isExportingJson}
         showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
@@ -603,6 +669,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         onFillTextFilterFromBaseQuery={handleFillTextFilterFromBaseQuery}
         onClearTextFilter={handleClearTextFilter}
         onToggleLanguageFilterMode={handleToggleResultLanguageFilterMode}
+        onToggleReadingStatusFilter={handleToggleResultReadingStatusFilter}
       />
     </section>
   );
