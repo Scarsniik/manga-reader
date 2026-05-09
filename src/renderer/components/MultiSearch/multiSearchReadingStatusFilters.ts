@@ -1,14 +1,9 @@
 import {
-  buildFilteredMultiSearchMergedResult,
-} from "@/renderer/components/MultiSearch/multiSearchResultFilters";
-import {
-  getMultiSearchSourceLanguageValues,
-} from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import {
   getMultiSearchAvailabilityReadingStatus,
   getMultiSearchSourceAvailability,
   type MultiSearchProgressIndex,
 } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import type { ScraperViewHistoryRecord } from "@/shared/scraper";
 import type {
   MultiSearchMergedResult,
   MultiSearchReadingStatusFilter,
@@ -21,6 +16,7 @@ export type MultiSearchReadingStatusFilterContext = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
 };
 
 const READING_STATUS_ORDER: MultiSearchReadingStatusFilter[] = [
@@ -60,6 +56,7 @@ const getSourceReadingStatus = (
       libraryMangas: context.libraryMangas,
       bookmarkedSourceKeys: context.bookmarkedSourceKeys,
       progressIndex: context.sourceProgressIndex,
+      viewHistoryRecordsById: context.viewHistoryRecordsById,
     }),
   )
 );
@@ -72,6 +69,23 @@ const doesSourceMatchReadingStatusFilter = (
   !statuses.length || statuses.includes(getSourceReadingStatus(source, context))
 );
 
+const getMergedResultReadingStatus = (
+  result: MultiSearchMergedResult,
+  context: MultiSearchReadingStatusFilterContext,
+): MultiSearchReadingStatusFilter => {
+  const sourceStatuses = result.sources.map((source) => getSourceReadingStatus(source, context));
+
+  if (sourceStatuses.includes("read")) {
+    return "read";
+  }
+
+  if (sourceStatuses.includes("inProgress")) {
+    return "inProgress";
+  }
+
+  return "unread";
+};
+
 export const filterMultiSearchMergedResultsByReadingStatus = (
   results: MultiSearchMergedResult[],
   statuses: MultiSearchReadingStatusFilter[],
@@ -81,20 +95,7 @@ export const filterMultiSearchMergedResultsByReadingStatus = (
     return results;
   }
 
-  return results.reduce<MultiSearchMergedResult[]>((visibleResults, result) => {
-    const visibleSources = result.sources.filter((source) => (
-      doesSourceMatchReadingStatusFilter(source, statuses, context)
-    ));
-
-    if (!visibleSources.length) {
-      return visibleResults;
-    }
-
-    visibleResults.push(
-      buildFilteredMultiSearchMergedResult(result, visibleSources, getMultiSearchSourceLanguageValues),
-    );
-    return visibleResults;
-  }, []);
+  return results.filter((result) => statuses.includes(getMergedResultReadingStatus(result, context)));
 };
 
 export const filterMultiSearchRunsByReadingStatus = (

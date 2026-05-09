@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type {
   ScraperAuthorFavoriteRecord,
+  ScraperAuthorFavoriteSource,
   ScraperReaderProgressRecord,
   ScraperRecord,
+  ScraperViewHistoryCardIdentity,
 } from "@/shared/scraper";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
@@ -25,6 +27,7 @@ import {
   filterMultiSearchMergedResultsByReadingStatus,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
+import { openMultiSearchSourceReader } from "@/renderer/components/MultiSearch/multiSearchReader";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -36,10 +39,18 @@ import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import { getScraperBookmarkKey, useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import {
+  setScraperCardRead,
+  useScraperViewHistory,
+} from "@/renderer/stores/scraperViewHistory";
+import {
   removeScraperAuthorFavorite,
   useScraperAuthorFavorites,
 } from "@/renderer/stores/scraperAuthorFavorites";
-import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
+import {
+  readScraperAuthorFavoriteRouteId,
+  writeScraperAuthorFavoriteRouteState,
+  writeScraperRouteState,
+} from "@/renderer/utils/scraperBrowserNavigation";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
@@ -67,7 +78,12 @@ export default function ScraperAuthorFavoritesView({
   const { params } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
   const { bookmarks } = useScraperBookmarks();
-  const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | null>(null);
+  const { recordsById: viewHistoryRecordsById } = useScraperViewHistory();
+  const routeFavoriteId = useMemo(
+    () => readScraperAuthorFavoriteRouteId(location.search),
+    [location.search],
+  );
+  const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | null>(routeFavoriteId);
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -97,11 +113,15 @@ export default function ScraperAuthorFavoritesView({
     canLoadMore,
     start,
     loadMoreForAll,
+    loadAllForAll,
     loadMoreForRun,
   } = useAuthorFavoriteRuns(
     selectedFavorite,
     scrapersById,
-    params?.scraperAuthorFavoritePageCount ?? 1,
+    {
+      initialPageCount: params?.scraperAuthorFavoritePageCount ?? 1,
+      cacheResults: params?.scraperAuthorFavoriteCacheResults === true,
+    },
   );
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
   const mergedResults = useMemo(() => mergeMultiSearchResults(loadedSources), [loadedSources]);
@@ -117,6 +137,7 @@ export default function ScraperAuthorFavoritesView({
         libraryMangas,
         bookmarkedSourceKeys,
         sourceProgressIndex,
+        viewHistoryRecordsById,
       },
     ),
     [
@@ -126,14 +147,83 @@ export default function ScraperAuthorFavoritesView({
       mergedResults,
       readingStatusFilters,
       sourceProgressIndex,
+      viewHistoryRecordsById,
     ],
   );
 
   useEffect(() => {
-    if (selectedFavoriteId && !favorites.some((favorite) => favorite.id === selectedFavoriteId)) {
-      setSelectedFavoriteId(null);
+    if (routeFavoriteId === selectedFavoriteId) {
+      return;
     }
-  }, [favorites, selectedFavoriteId]);
+
+    if (!routeFavoriteId) {
+      setSelectedFavoriteId(null);
+      return;
+    }
+
+    if (loading || favorites.some((favorite) => favorite.id === routeFavoriteId)) {
+      setSelectedFavoriteId(routeFavoriteId);
+    }
+  }, [favorites, loading, routeFavoriteId, selectedFavoriteId]);
+
+  useEffect(() => {
+    if (!selectedFavoriteId || loading || favorites.some((favorite) => favorite.id === selectedFavoriteId)) {
+      return;
+    }
+
+    if (routeFavoriteId === selectedFavoriteId) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: writeScraperAuthorFavoriteRouteState(location.search, null),
+        },
+        { replace: true },
+      );
+    }
+
+    setSelectedFavoriteId(null);
+  }, [favorites, loading, location.pathname, location.search, navigate, routeFavoriteId, selectedFavoriteId]);
+
+  const handleSelectFavorite = useCallback((favoriteId: string | null) => {
+    setSelectedFavoriteId(favoriteId);
+    navigate({
+      pathname: location.pathname,
+      search: writeScraperAuthorFavoriteRouteState(location.search, favoriteId),
+      });
+  }, [location.pathname, location.search, navigate]);
+
+  const handleOpenFavoriteSource = useCallback((source: ScraperAuthorFavoriteSource) => {
+    const locationState = location.state && typeof location.state === "object"
+      ? location.state as Record<string, unknown>
+      : {};
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: writeScraperRouteState(location.search, {
+          scraperId: source.scraperId,
+          mode: "author",
+          homepageActive: false,
+          homepagePage: 1,
+          searchActive: false,
+          searchQuery: "",
+          searchPage: 1,
+          authorActive: true,
+          authorQuery: source.authorUrl,
+          authorPage: 1,
+          mangaQuery: "",
+          mangaUrl: "",
+          bookmarksFilterScraperId: null,
+        }),
+      },
+      {
+        state: {
+          ...locationState,
+          scraperBrowserAuthorTemplateContext: source.templateContext ?? null,
+        },
+      },
+    );
+  }, [location.pathname, location.search, location.state, navigate]);
 
   useEffect(() => {
     if (!selectedFavorite) {
@@ -200,11 +290,11 @@ export default function ScraperAuthorFavoritesView({
       onConfirm: async () => {
         await removeScraperAuthorFavorite({ favoriteId: favorite.id });
         if (selectedFavoriteId === favorite.id) {
-          setSelectedFavoriteId(null);
+          handleSelectFavorite(null);
         }
       },
     }));
-  }, [openModal, selectedFavoriteId]);
+  }, [handleSelectFavorite, openModal, selectedFavoriteId]);
 
   const handleToggleLanguageFilterMode = useCallback((
     languageCode: string,
@@ -304,6 +394,52 @@ export default function ScraperAuthorFavoritesView({
     });
   }, []);
 
+  const handleOpenProgressReader = useCallback(async (
+    source: MultiSearchSourceResult,
+    page: number,
+    knownTotalPages: number | null,
+    readerMangaId?: string,
+  ) => {
+    setOpenError(null);
+
+    try {
+      await openMultiSearchSourceReader({
+        source,
+        page,
+        knownTotalPages,
+        readerMangaId,
+        navigate,
+        from: {
+          pathname: location.pathname,
+          search: location.search,
+        },
+      });
+    } catch (openReaderError) {
+      setOpenError(
+        openReaderError instanceof Error
+          ? openReaderError.message
+          : "Impossible d'ouvrir le lecteur.",
+      );
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  const handleSetSourcesRead = useCallback(async (identities: ScraperViewHistoryCardIdentity[], read: boolean) => {
+    if (!identities.length) {
+      return;
+    }
+
+    setOpenError(null);
+
+    try {
+      await Promise.all(identities.map((identity) => setScraperCardRead({
+        ...identity,
+        read,
+      })));
+    } catch (readError) {
+      setOpenError(readError instanceof Error ? readError.message : "Impossible de mettre a jour l'historique de lecture.");
+    }
+  }, []);
+
   if (selectedFavorite) {
     return (
       <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -312,7 +448,7 @@ export default function ScraperAuthorFavoritesView({
             <button
               type="button"
               className="scraper-author-favorites-view__back"
-              onClick={() => setSelectedFavoriteId(null)}
+              onClick={() => handleSelectFavorite(null)}
             >
               Retour aux auteurs favoris
             </button>
@@ -340,27 +476,44 @@ export default function ScraperAuthorFavoritesView({
               <h3>Sources</h3>
               <p>{runs.length} source(s), {loadedSources.length} resultat(s) charge(s).</p>
             </div>
-            <button
-              type="button"
-              className="multi-search__export-json-button"
-              onClick={() => void loadMoreForAll()}
-              disabled={loadingRuns || !canLoadMore}
-            >
-              Charger plus
-            </button>
+            <div className="scraper-author-favorites-view__source-actions">
+              <button
+                type="button"
+                className="multi-search__export-json-button"
+                onClick={() => void loadMoreForAll()}
+                disabled={loadingRuns || !canLoadMore}
+              >
+                Charger plus
+              </button>
+              <button
+                type="button"
+                className="multi-search__export-json-button"
+                onClick={() => void loadAllForAll()}
+                disabled={loadingRuns || !canLoadMore}
+              >
+                Charger tout
+              </button>
+            </div>
           </div>
           <div className="scraper-author-favorites-view__source-list">
             {runs.map((run) => (
               <div key={run.key} className={`scraper-author-favorites-view__source is-${run.status}`}>
-                <div>
+                <button
+                  type="button"
+                  className="scraper-author-favorites-view__source-link"
+                  onClick={() => handleOpenFavoriteSource(run.favoriteSource)}
+                  aria-label={`Ouvrir la page auteur ${run.favoriteSource.name} dans ${run.scraper.name}`}
+                  title={`Ouvrir dans ${run.scraper.name}`}
+                >
                   <strong>{run.scraper.name}</strong>
                   <span>{run.favoriteSource.name}</span>
                   {run.error ? <small>{run.error}</small> : null}
-                </div>
+                </button>
                 <div>
                   <span>{run.loadedPages} page(s)</span>
                   <button
                     type="button"
+                    className="scraper-author-favorites-view__source-more"
                     onClick={() => void loadMoreForRun(run.key)}
                     disabled={loadingRuns || !run.hasNextPage || run.status === "loading"}
                   >
@@ -400,8 +553,16 @@ export default function ScraperAuthorFavoritesView({
                   libraryMangas={libraryMangas}
                   bookmarkedSourceKeys={bookmarkedSourceKeys}
                   sourceProgressIndex={sourceProgressIndex}
+                  viewHistoryRecordsById={viewHistoryRecordsById}
                   onOpenSource={handleOpenSource}
                   onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
+                  onOpenProgressReader={(source, page, totalPages, readerMangaId) => void handleOpenProgressReader(
+                    source,
+                    page,
+                    totalPages,
+                    readerMangaId,
+                  )}
+                  onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
                 />
               ))}
             </div>
@@ -432,7 +593,7 @@ export default function ScraperAuthorFavoritesView({
                 id: "open-author-favorite",
                 type: "primary",
                 label: "Ouvrir",
-                onClick: () => setSelectedFavoriteId(favorite.id),
+                onClick: () => handleSelectFavorite(favorite.id),
               },
               {
                 id: "remove-author-favorite",
@@ -456,11 +617,11 @@ export default function ScraperAuthorFavoritesView({
                 )}
                 actions={actions}
                 isActionable
-                onClick={() => setSelectedFavoriteId(favorite.id)}
+                onClick={() => handleSelectFavorite(favorite.id)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setSelectedFavoriteId(favorite.id);
+                    handleSelectFavorite(favorite.id);
                   }
                 }}
                 ariaLabel={`Ouvrir l'auteur favori ${favorite.name}`}

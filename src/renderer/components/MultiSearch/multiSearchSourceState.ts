@@ -1,4 +1,7 @@
-import type { ScraperReaderProgressRecord } from "@/shared/scraper";
+import type {
+  ScraperReaderProgressRecord,
+  ScraperViewHistoryRecord,
+} from "@/shared/scraper";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import type { Manga } from "@/renderer/types";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
@@ -6,6 +9,10 @@ import type { MultiSearchReadingStatusFilter } from "@/renderer/components/Multi
 import { getScraperBookmarkKey } from "@/renderer/stores/scraperBookmarks";
 import { findMangaLinkedToSource } from "@/renderer/utils/mangaSource";
 import { createScraperMangaId } from "@/renderer/utils/scraperRuntime";
+import {
+  buildSearchResultViewHistoryIdentity,
+  getScraperViewHistoryRecord,
+} from "@/renderer/utils/scraperViewHistory";
 
 export type MultiSearchReadingStatus = "inProgress" | "completed";
 
@@ -17,11 +24,13 @@ export type MultiSearchSourceProgress = {
   label: string;
   shortLabel: string;
   updatedAt?: string;
+  readerMangaId?: string;
 };
 
 export type MultiSearchSourceAvailability = {
   inLibrary: boolean;
   inBookmarks: boolean;
+  readAt?: string;
   progress: MultiSearchSourceProgress | null;
 };
 
@@ -35,6 +44,7 @@ type SourceAvailabilityOptions = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   progressIndex: MultiSearchProgressIndex;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
 };
 
 const toPositiveInteger = (value: unknown): number | null => {
@@ -80,6 +90,7 @@ const buildProgress = (
   currentPageValue: unknown,
   totalPagesValue: unknown,
   updatedAt?: string,
+  readerMangaId?: string,
 ): MultiSearchSourceProgress | null => {
   const currentPage = toPositiveInteger(currentPageValue);
   const totalPages = toPositiveInteger(totalPagesValue);
@@ -104,8 +115,23 @@ const buildProgress = (
     label: status === "completed" ? `Termine ${pageLabel}` : `En cours ${pageLabel}`,
     shortLabel: status === "completed" ? "Termine" : pageLabel,
     updatedAt,
+    readerMangaId,
   };
 };
+
+const buildExplicitReadProgress = (readAt: string | undefined): MultiSearchSourceProgress | null => (
+  readAt
+    ? {
+      status: "completed",
+      currentPage: 1,
+      totalPages: 1,
+      percent: 100,
+      label: "Marque lu",
+      shortLabel: "Lu",
+      updatedAt: readAt,
+    }
+    : null
+);
 
 const compareProgress = (
   left: MultiSearchSourceProgress,
@@ -131,7 +157,12 @@ const getLatestProgress = (
   records: ScraperReaderProgressRecord[],
 ): MultiSearchSourceProgress | null => {
   const progressRecords = records
-    .map((record) => buildProgress(record.currentPage, record.totalPages, record.updatedAt))
+    .map((record) => buildProgress(
+      record.currentPage,
+      record.totalPages,
+      record.updatedAt,
+      record.id,
+    ))
     .filter((progress): progress is MultiSearchSourceProgress => Boolean(progress))
     .sort(compareProgress);
 
@@ -149,7 +180,12 @@ const getSourceReaderProgress = (
 
   const standaloneProgress = progressIndex.recordsById.get(createScraperMangaId(source.scraper.id, sourceUrl));
   const standaloneDisplay = standaloneProgress
-    ? buildProgress(standaloneProgress.currentPage, standaloneProgress.totalPages, standaloneProgress.updatedAt)
+    ? buildProgress(
+      standaloneProgress.currentPage,
+      standaloneProgress.totalPages,
+      standaloneProgress.updatedAt,
+      standaloneProgress.id,
+    )
     : null;
   if (standaloneDisplay) {
     return standaloneDisplay;
@@ -192,6 +228,7 @@ export const getMultiSearchSourceAvailability = ({
   libraryMangas,
   bookmarkedSourceKeys,
   progressIndex,
+  viewHistoryRecordsById,
 }: SourceAvailabilityOptions): MultiSearchSourceAvailability => {
   const sourceUrl = source.result.detailUrl || "";
   const linkedManga = sourceUrl
@@ -204,11 +241,17 @@ export const getMultiSearchSourceAvailability = ({
   const libraryProgress = linkedManga
     ? buildProgress(linkedManga.currentPage, linkedManga.pages)
     : null;
+  const viewHistoryRecord = getScraperViewHistoryRecord(
+    viewHistoryRecordsById,
+    buildSearchResultViewHistoryIdentity(source.scraper.id, source.result),
+  );
+  const readAt = viewHistoryRecord?.readAt;
 
   return {
     inLibrary: Boolean(linkedManga),
     inBookmarks: Boolean(bookmarkKey && bookmarkedSourceKeys.has(bookmarkKey)),
-    progress: libraryProgress ?? getSourceReaderProgress(source, progressIndex),
+    readAt,
+    progress: buildExplicitReadProgress(readAt) ?? libraryProgress ?? getSourceReaderProgress(source, progressIndex),
   };
 };
 

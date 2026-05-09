@@ -15,6 +15,7 @@ export const seriesFilePath = path.join(dataDir, "series.json");
 export const scrapersFilePath = path.join(dataDir, "scrapers.json");
 export const scraperBookmarksFilePath = path.join(dataDir, "scraper-bookmarks.json");
 export const scraperAuthorFavoritesFilePath = path.join(dataDir, "scraper-author-favorites.json");
+export const scraperAuthorFavoriteCacheDir = path.join(dataDir, "scraper-author-favorite-cache");
 export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-progress.json");
 export const scraperViewHistoryFilePath = path.join(dataDir, "scraper-view-history.json");
 export const workspaceWindowStateFilePath = path.join(dataDir, "workspace-window-state.json");
@@ -33,6 +34,15 @@ export async function ensureThumbnailsDir() {
         await fs.mkdir(thumbnailsDir, { recursive: true });
     } catch (err) {
         console.warn("Failed to ensure thumbnails directory exists", err);
+    }
+}
+
+export async function ensureScraperAuthorFavoriteCacheDir() {
+    try {
+        await ensureDataDir();
+        await fs.mkdir(scraperAuthorFavoriteCacheDir, { recursive: true });
+    } catch (err) {
+        console.warn("Failed to ensure scraper author favorite cache directory exists", err);
     }
 }
 

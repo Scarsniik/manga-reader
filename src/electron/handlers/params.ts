@@ -260,6 +260,7 @@ const defaultSettings = {
     showSavedScraperSearches: true,
     savedScraperSearches: [],
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
+    scraperAuthorFavoriteCacheResults: false,
     stackMangaInSeries: true,
     mangaListFilters: null,
     appUpdateAutoCheck: true,
@@ -313,6 +314,14 @@ const normalizeSettings = (value: unknown) => {
         ? merged.readerRecommendBookmarks
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
+    const legacyAuthorFavoriteScrapeAllPages = (merged as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
+    merged.scraperAuthorFavoriteCacheResults = typeof merged.scraperAuthorFavoriteCacheResults === "boolean"
+        ? merged.scraperAuthorFavoriteCacheResults
+        : normalizeBooleanSetting(
+            legacyAuthorFavoriteScrapeAllPages,
+            defaultSettings.scraperAuthorFavoriteCacheResults,
+        );
+    delete (merged as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
     merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
 };
@@ -516,6 +525,14 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(
             nextSettings.scraperAuthorFavoritePageCount,
         );
+        const legacyAuthorFavoriteScrapeAllPages = (nextSettings as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
+        nextSettings.scraperAuthorFavoriteCacheResults = typeof nextSettings.scraperAuthorFavoriteCacheResults === "boolean"
+            ? nextSettings.scraperAuthorFavoriteCacheResults
+            : normalizeBooleanSetting(
+                legacyAuthorFavoriteScrapeAllPages,
+                defaultSettings.scraperAuthorFavoriteCacheResults,
+            );
+        delete (nextSettings as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
         nextSettings.shortcuts = normalizeShortcutSettings(nextSettings);
 
         await writeSettingsAtomically(nextSettings);

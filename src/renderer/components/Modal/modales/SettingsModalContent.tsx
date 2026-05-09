@@ -96,12 +96,21 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperAuthorFavoriteCacheResults',
+          label: 'Stocker les résultats des auteurs favoris',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperAuthorFavoritePageCount',
           label: 'Pages à charger à l\'ouverture d\'un auteur favori',
           type: 'number',
           min: 1,
           max: 20,
           step: 1,
+          disabledWhen: {
+            field: 'scraperAuthorFavoriteCacheResults',
+            equals: true,
+          },
         },
         {
           name: 'stackMangaInSeries',
@@ -200,6 +209,7 @@ export default function SettingsModalContent() {
       showSavedLibrarySearches,
       showSavedScraperSearches,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
+      scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }

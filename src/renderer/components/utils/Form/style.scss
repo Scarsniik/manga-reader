@@ -57,6 +57,19 @@
   color: #cbd5e1; /* gray-300 */
 }
 
+.mh-form__field.is-disabled {
+  opacity: 0.72;
+}
+
+.mh-form__field.is-disabled label {
+  color: #78869a;
+  cursor: not-allowed;
+}
+
+.mh-form__field.is-disabled .mh-form__inline-row {
+  color: #78869a;
+}
+
 .mh-form__field--checkbox,
 .mh-form__field--number {
   gap: 4px;
@@ -131,6 +144,21 @@
 .mh-form__field select:focus {
   border-color: #60a5fa; /* blue-400 */
   box-shadow: 0 0 0 3px rgba(96,165,250,0.08);
+}
+
+.mh-form__field input:disabled,
+.mh-form__field textarea:disabled,
+.mh-form__field select:disabled {
+  background: #151b27;
+  border-color: #2a3241;
+  color: #7f8ca0;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.mh-form__field input[type="checkbox"]:disabled {
+  accent-color: #475569;
+  opacity: 0.65;
 }
 
 .mh-form__field input[type="checkbox"] {

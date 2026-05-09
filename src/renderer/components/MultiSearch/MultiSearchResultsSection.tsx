@@ -1,4 +1,8 @@
 import React from "react";
+import type {
+  ScraperViewHistoryCardIdentity,
+  ScraperViewHistoryRecord,
+} from "@/shared/scraper";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
@@ -33,10 +37,18 @@ type Props = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   isExportingJson: boolean;
   showMergeReloadButton: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
+  onOpenProgressReader: (
+    source: MultiSearchSourceResult,
+    page: number,
+    totalPages: number | null,
+    readerMangaId?: string,
+  ) => void;
+  onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
   onExportJson: () => void;
   onExportMergedResultsJson: () => void;
   onReloadMerge: () => void;
@@ -100,10 +112,13 @@ export default function MultiSearchResultsSection({
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
+  viewHistoryRecordsById,
   isExportingJson,
   showMergeReloadButton,
   onOpenSource,
   onOpenSourceInWorkspace,
+  onOpenProgressReader,
+  onSetSourcesRead,
   onExportJson,
   onExportMergedResultsJson,
   onReloadMerge,
@@ -208,8 +223,11 @@ export default function MultiSearchResultsSection({
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
           sourceProgressIndex={sourceProgressIndex}
+          viewHistoryRecordsById={viewHistoryRecordsById}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+          onOpenProgressReader={onOpenProgressReader}
+          onSetSourcesRead={onSetSourcesRead}
         />
       </section>
     );
@@ -265,8 +283,11 @@ export default function MultiSearchResultsSection({
               libraryMangas={libraryMangas}
               bookmarkedSourceKeys={bookmarkedSourceKeys}
               sourceProgressIndex={sourceProgressIndex}
+              viewHistoryRecordsById={viewHistoryRecordsById}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+              onOpenProgressReader={onOpenProgressReader}
+              onSetSourcesRead={onSetSourcesRead}
             />
           </div>
         ))}

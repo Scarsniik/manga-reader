@@ -1,4 +1,8 @@
 import React from "react";
+import type {
+  ScraperViewHistoryCardIdentity,
+  ScraperViewHistoryRecord,
+} from "@/shared/scraper";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import type { Manga } from "@/renderer/types";
 import type {
@@ -31,8 +35,16 @@ type Props = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
+  onOpenProgressReader: (
+    source: MultiSearchSourceResult,
+    page: number,
+    totalPages: number | null,
+    readerMangaId?: string,
+  ) => void;
+  onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
 };
 
 type MeasuredItemProps = Omit<Props, "results"> & {
@@ -46,8 +58,11 @@ function MeasuredMultiSearchResultCard({
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
+  viewHistoryRecordsById,
   onOpenSource,
   onOpenSourceInWorkspace,
+  onOpenProgressReader,
+  onSetSourcesRead,
   onHeightChange,
   onStickyChange,
 }: MeasuredItemProps) {
@@ -132,8 +147,11 @@ function MeasuredMultiSearchResultCard({
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
+        viewHistoryRecordsById={viewHistoryRecordsById}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+        onOpenProgressReader={onOpenProgressReader}
+        onSetSourcesRead={onSetSourcesRead}
       />
     </div>
   );
@@ -144,8 +162,11 @@ export default function MultiSearchVirtualizedResultsGrid({
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
+  viewHistoryRecordsById,
   onOpenSource,
   onOpenSourceInWorkspace,
+  onOpenProgressReader,
+  onSetSourcesRead,
 }: Props) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const scrollTargetRef = React.useRef<ScrollTarget | null>(null);
@@ -404,8 +425,11 @@ export default function MultiSearchVirtualizedResultsGrid({
               libraryMangas={libraryMangas}
               bookmarkedSourceKeys={bookmarkedSourceKeys}
               sourceProgressIndex={sourceProgressIndex}
+              viewHistoryRecordsById={viewHistoryRecordsById}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+              onOpenProgressReader={onOpenProgressReader}
+              onSetSourcesRead={onSetSourcesRead}
               onHeightChange={updateItemHeight}
               onStickyChange={updateStickyState}
             />

@@ -29,6 +29,7 @@ type AsyncCommitGuard = () => boolean;
 type ListingLookupOptions = {
   pageIndex?: number;
   preserveListingReturnState?: boolean;
+  templateContext?: ScraperTemplateContext | null;
   canCommit?: AsyncCommitGuard;
 };
 
@@ -338,8 +339,19 @@ export function useScraperBrowserRouteSync({
 
     if (nextMode === 'author') {
       setQuery(routeState.authorQuery);
+      const hasAuthorTemplateContextState = Object.prototype.hasOwnProperty.call(
+        locationState ?? {},
+        'scraperBrowserAuthorTemplateContext',
+      );
+      const routedAuthorTemplateContext = hasAuthorTemplateContextState
+        ? locationState?.scraperBrowserAuthorTemplateContext ?? null
+        : undefined;
 
       if (routeState.authorActive && hasAuthor) {
+        if (hasAuthorTemplateContextState) {
+          setAuthorTemplateContext(routedAuthorTemplateContext ?? null);
+        }
+
         const cachedAuthorState = restoredListingReturnState?.mode === 'author'
           ? restoredListingReturnState
           : null;
@@ -350,6 +362,7 @@ export function useScraperBrowserRouteSync({
 
         await runAuthorLookup(routeState.authorQuery, {
           pageIndex: Math.max(0, routeState.authorPage - 1),
+          ...(hasAuthorTemplateContextState ? { templateContext: routedAuthorTemplateContext ?? null } : {}),
           canCommit,
         });
         return;

@@ -8,5 +8,14 @@ type Props = {
 }
 
 export default function CheckboxField({ field, value, onChange }: Props) {
-  return <input id={field.name} name={field.name} type="checkbox" checked={!!value} onChange={onChange} />
+  return (
+    <input
+      id={field.name}
+      name={field.name}
+      type="checkbox"
+      checked={!!value}
+      disabled={field.disabled}
+      onChange={onChange}
+    />
+  )
 }

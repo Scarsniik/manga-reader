@@ -5,6 +5,7 @@ export { default as CloseXIcon } from './close-x.svg?react';
 export { default as DetailsCardIcon } from './details-card.svg?react';
 export { default as DownloadArrowIcon } from './download-arrow.svg?react';
 export { default as EditPencilIcon } from './edit-pencil.svg?react';
+export { default as EyeIcon } from './eye.svg?react';
 export { default as FileSelectionIcon } from './file-selection.svg?react';
 export { default as FilterRemoveIcon } from './filter-remove.svg?react';
 export { default as FolderExternalLinkIcon } from './folder-external-link.svg?react';

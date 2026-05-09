@@ -191,6 +191,9 @@ ipcMain.handle("save-scraper-author-favorite", async (event: IpcMainInvokeEvent,
 });
 ipcMain.handle("remove-scraper-author-favorite", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.removeScraperAuthorFavorite(event, request);
+    if (updated && request?.favoriteId) {
+        await scrapers.removeScraperAuthorFavoriteCache(event, request.favoriteId);
+    }
     notifyScraperAuthorFavoritesUpdated();
     return updated;
 });
@@ -199,6 +202,12 @@ ipcMain.handle("remove-scraper-author-favorite-source", async (event: IpcMainInv
     notifyScraperAuthorFavoritesUpdated();
     return updated;
 });
+ipcMain.handle("get-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, favoriteId: string) => (
+    scrapers.getScraperAuthorFavoriteCache(event, favoriteId)
+));
+ipcMain.handle("save-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.saveScraperAuthorFavoriteCache(event, request)
+));
 ipcMain.handle("get-scraper-view-history", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
     scrapers.getScraperViewHistory(event, scraperId)
 ));

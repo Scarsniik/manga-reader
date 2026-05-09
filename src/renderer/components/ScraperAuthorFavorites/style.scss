@@ -23,7 +23,7 @@
 
 .scraper-author-favorites-view__back,
 .scraper-author-favorites-view__clear,
-.scraper-author-favorites-view__source button {
+.scraper-author-favorites-view__source-more {
   min-height: 34px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -44,7 +44,7 @@
 
 .scraper-author-favorites-view__back:hover,
 .scraper-author-favorites-view__clear:hover,
-.scraper-author-favorites-view__source button:hover {
+.scraper-author-favorites-view__source-more:hover {
   border-color: rgba(93, 156, 255, 0.45);
   background: rgba(93, 156, 255, 0.12);
   color: #dcebff;
@@ -52,14 +52,14 @@
 
 .scraper-author-favorites-view__back:focus-visible,
 .scraper-author-favorites-view__clear:focus-visible,
-.scraper-author-favorites-view__source button:focus-visible {
+.scraper-author-favorites-view__source-more:focus-visible {
   outline: none;
   border-color: #5d9cff;
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
 }
 
 .scraper-author-favorites-view__clear:disabled,
-.scraper-author-favorites-view__source button:disabled {
+.scraper-author-favorites-view__source-more:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -71,6 +71,13 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
+}
+
+.scraper-author-favorites-view__source-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .scraper-author-favorites-view__source-list {
@@ -98,6 +105,31 @@
   border-color: rgba(255, 107, 107, 0.34);
 }
 
+.scraper-author-favorites-view__source-link {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scraper-author-favorites-view__source-link:hover strong {
+  color: #dcebff;
+}
+
+.scraper-author-favorites-view__source-link:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
 .scraper-author-favorites-view__source > div {
   display: flex;
   flex-wrap: wrap;
@@ -120,7 +152,7 @@
   color: #ffc2c2;
 }
 
-.scraper-author-favorites-view__source button {
+.scraper-author-favorites-view__source-more {
   padding: 0 12px;
 }
 
@@ -129,5 +161,9 @@
   .scraper-author-favorites-view__source {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .scraper-author-favorites-view__source-actions {
+    justify-content: flex-start;
   }
 }

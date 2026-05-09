@@ -26,6 +26,14 @@ const renderLabel = (field: Field) => (
     field.label ? <label htmlFor={field.name}>{field.label}{field.required ? ' *' : ''}</label> : null
 )
 
+const getFieldClassName = (field: Field, modifier?: string): string => (
+    [
+        'mh-form__field',
+        modifier ? `mh-form__field--${modifier}` : null,
+        field.disabled ? 'is-disabled' : null,
+    ].filter(Boolean).join(' ')
+)
+
 export default function FormField({
     field,
     value,
@@ -36,7 +44,7 @@ export default function FormField({
 }: Props) {
     if (field.type === "checkbox") {
         return (
-            <div className="mh-form__field mh-form__field--checkbox">
+            <div className={getFieldClassName(field, 'checkbox')}>
                 <div className="mh-form__inline-row">
                     <CheckboxField field={field} value={value} onChange={onChange(field) as any} />
                     {renderLabel(field)}
@@ -49,7 +57,7 @@ export default function FormField({
 
     if (field.type === "number") {
         return (
-            <div className="mh-form__field mh-form__field--number">
+            <div className={getFieldClassName(field, 'number')}>
                 <div className="mh-form__inline-row">
                     <NumberField field={field} value={value} onChange={onChange(field) as any} />
                     {renderLabel(field)}
@@ -64,15 +72,15 @@ export default function FormField({
         const hasPath = String(value || '').trim().length > 0
 
         return (
-            <div className="mh-form__field mh-form__field--path">
+            <div className={getFieldClassName(field, 'path')}>
                 {renderLabel(field)}
 
                 <div className="mh-form__path-row">
                     <TextField field={field} value={value} onChange={onChange(field) as any} />
-                    <button type="button" onClick={() => onOpenPath(field)} disabled={!hasPath}>
+                    <button type="button" onClick={() => onOpenPath(field)} disabled={field.disabled || !hasPath}>
                         Ouvrir
                     </button>
-                    <button type="button" onClick={() => onChoosePath(field)}>
+                    <button type="button" onClick={() => onChoosePath(field)} disabled={field.disabled}>
                         Choisir
                     </button>
                 </div>
@@ -83,7 +91,7 @@ export default function FormField({
     }
 
     return (
-        <div className="mh-form__field">
+        <div className={getFieldClassName(field)}>
             {renderLabel(field)}
 
             {field.type === "text" ? <TextField field={field} value={value} onChange={onChange(field) as any} /> : null}

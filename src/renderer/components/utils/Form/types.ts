@@ -8,6 +8,12 @@ export type Field = {
   layout?: 'stack' | 'inline' | 'cards'
   placeholder?: string
   required?: boolean
+  disabled?: boolean
+  disabledWhen?: {
+    field: string
+    equals?: any
+    notEquals?: any
+  }
   min?: number
   max?: number
   step?: number

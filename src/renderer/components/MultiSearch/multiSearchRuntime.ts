@@ -4,6 +4,7 @@ import {
   ScraperAuthorFeatureConfig,
   ScraperRecord,
   ScraperSearchFeatureConfig,
+  ScraperSearchResultItem,
 } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocument,
@@ -289,6 +290,18 @@ export const buildSourceResults = (
     };
   });
 };
+
+export const buildSourceResultsFromItems = (
+  scraper: ScraperRecord,
+  items: ScraperSearchResultItem[],
+  getPageIndex: (result: ScraperSearchResultItem, index: number) => number,
+  getSearchTerm: (result: ScraperSearchResultItem, index: number) => string,
+): MultiSearchSourceResult[] => (
+  items.flatMap((result, index) => buildSourceResults(scraper, {
+    currentPageUrl: "",
+    items: [result],
+  }, getPageIndex(result, index), getSearchTerm(result, index)))
+);
 
 export const resolveHasNextPage = (
   searchConfig: ScraperSearchFeatureConfig,

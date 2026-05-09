@@ -18,6 +18,7 @@ export default function NumberField({ field, value, onChange }: Props) {
       min={field.min}
       max={field.max}
       step={field.step}
+      disabled={field.disabled}
       onChange={onChange}
     />
   )

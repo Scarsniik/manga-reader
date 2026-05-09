@@ -20,6 +20,11 @@ export {
   saveScraperAuthorFavorite,
 } from "./scrapers/authorFavorites";
 export {
+  getScraperAuthorFavoriteCache,
+  removeScraperAuthorFavoriteCache,
+  saveScraperAuthorFavoriteCache,
+} from "./scrapers/authorFavoriteCache";
+export {
   getScraperReaderProgress,
   getScraperReaderProgressRecords,
   saveScraperReaderProgress,

@@ -212,7 +212,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                         }
 
                         const v = fd.get(f.name)
-                        s[f.name] = v === null ? '' : String(v)
+                        s[f.name] = v === null ? values[f.name] ?? '' : String(v)
                     }
                     snapshot = s
                 } catch {
@@ -318,10 +318,31 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         }
     }, [submitButtonId, submitValues])
 
+    const isFieldDisabled = useCallback((field: Field): boolean => {
+        if (field.disabled) {
+            return true
+        }
+
+        if (!field.disabledWhen) {
+            return false
+        }
+
+        const referenceValue = values[field.disabledWhen.field]
+        if (Object.prototype.hasOwnProperty.call(field.disabledWhen, 'equals')) {
+            return referenceValue === field.disabledWhen.equals
+        }
+
+        if (Object.prototype.hasOwnProperty.call(field.disabledWhen, 'notEquals')) {
+            return referenceValue !== field.disabledWhen.notEquals
+        }
+
+        return Boolean(referenceValue)
+    }, [values])
+
     const renderField = (f: Field) => (
         <FormField
             key={f.name}
-            field={f}
+            field={{ ...f, disabled: isFieldDisabled(f) }}
             value={values[f.name]}
             error={mergedFieldError(f.name)}
             onChange={handleChange}

@@ -22,6 +22,7 @@ import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/
 import {
     clearScraperRouteState,
     parseScraperRouteState,
+    SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
     writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import {
@@ -36,7 +37,6 @@ declare global {
 }
 
 const MULTI_SEARCH_VIEW_ID = 'multi-search';
-const AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
 
 const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 'homepage' | 'search' => (
     scraper?.features.some((feature) => feature.kind === 'homepage' && feature.status !== 'not_configured')
@@ -360,7 +360,7 @@ const MangaManager: React.FC = () => {
     const isLibraryView = activeViewId === 'library';
     const isBookmarksView = activeViewId === 'bookmarks';
     const isMultiSearchView = activeViewId === MULTI_SEARCH_VIEW_ID;
-    const isAuthorFavoritesView = activeViewId === AUTHOR_FAVORITES_VIEW_ID;
+    const isAuthorFavoritesView = activeViewId === SCRAPER_AUTHOR_FAVORITES_VIEW_ID;
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -451,7 +451,7 @@ const MangaManager: React.FC = () => {
             activeViewId === 'library'
             || activeViewId === 'bookmarks'
             || activeViewId === MULTI_SEARCH_VIEW_ID
-            || activeViewId === AUTHOR_FAVORITES_VIEW_ID
+            || activeViewId === SCRAPER_AUTHOR_FAVORITES_VIEW_ID
         ) {
             return;
         }
@@ -621,7 +621,7 @@ const MangaManager: React.FC = () => {
                     >
                         <option value="library">Bibliotheque</option>
                         <option value={MULTI_SEARCH_VIEW_ID}>Recherche multi-sources</option>
-                        <option value={AUTHOR_FAVORITES_VIEW_ID}>Auteurs favoris</option>
+                        <option value={SCRAPER_AUTHOR_FAVORITES_VIEW_ID}>Auteurs favoris</option>
                         <option value="bookmarks">Tous les bookmarks</option>
                         {sortedScrapers.map((scraper) => (
                             <option key={scraper.id} value={scraper.id}>

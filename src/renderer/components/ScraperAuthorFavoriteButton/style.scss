@@ -1,3 +1,9 @@
+.scraper-author-favorite-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .scraper-author-favorite-button {
   display: inline-flex;
   align-items: center;
@@ -40,6 +46,45 @@
 }
 
 .scraper-author-favorite-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.scraper-author-favorite-open-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(93, 156, 255, 0.38);
+  background: rgba(93, 156, 255, 0.14);
+  color: #dcebff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.scraper-author-favorite-open-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.scraper-author-favorite-open-button:hover,
+.scraper-author-favorite-open-button:focus-visible {
+  border-color: rgba(93, 156, 255, 0.68);
+  background: rgba(93, 156, 255, 0.22);
+  color: #ffffff;
+}
+
+.scraper-author-favorite-open-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-author-favorite-open-button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }

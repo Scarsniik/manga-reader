@@ -526,18 +526,32 @@ export const resolveScraperAuthorTargetUrl = (
     || trimmedQuery.startsWith('?')
     || trimmedQuery.startsWith('#');
 
-  if (config.urlStrategy === 'template' && !looksLikeDirectUrlInput) {
+  if (config.urlStrategy === 'template') {
     const searchResolvedTemplate = applyScraperSearchTemplate(
       config.urlTemplate || '',
       trimmedQuery,
       options,
     );
+    const pageIndex = Math.max(0, options?.pageIndex ?? 0);
+    const hasContextPlaceholders = /{{\s*(?:raw:)?[^}]+\s*}}/.test(searchResolvedTemplate);
+    const hasTemplateContext = Object.values(options?.templateContext ?? {})
+      .some((value) => typeof value === 'string' && value.length > 0);
+    const shouldUseTemplate = !looksLikeDirectUrlInput
+      || (pageIndex > 0 && hasContextPlaceholders && hasTemplateContext);
 
-    return buildScraperContextTemplateUrl(
-      baseUrl,
-      searchResolvedTemplate,
-      options?.templateContext ?? {},
-    );
+    if (shouldUseTemplate) {
+      try {
+        return buildScraperContextTemplateUrl(
+          baseUrl,
+          searchResolvedTemplate,
+          options?.templateContext ?? {},
+        );
+      } catch (error) {
+        if (!looksLikeDirectUrlInput) {
+          throw error;
+        }
+      }
+    }
   }
 
   return resolveScraperUrl(baseUrl, trimmedQuery);

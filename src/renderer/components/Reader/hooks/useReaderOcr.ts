@@ -43,6 +43,7 @@ type Args = {
 };
 
 type OrderedOcrNavigationDirection = "previous" | "next";
+const OCR_FOCUS_SCROLL_BEHAVIOR: ScrollBehavior = "auto";
 
 const clampScrollTopToImage = (
     targetScrollTop: number,
@@ -481,7 +482,7 @@ const useReaderOcr = ({
 
         const imageRect = imageElement.getBoundingClientRect();
         if (!imageRect.width || !imageRect.height) {
-            imageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            imageElement.scrollIntoView({ behavior: OCR_FOCUS_SCROLL_BEHAVIOR, block: 'center' });
             return;
         }
 
@@ -505,7 +506,7 @@ const useReaderOcr = ({
 
             scrollContainer.scrollTo({
                 top: clampedScrollTop,
-                behavior: 'smooth',
+                behavior: OCR_FOCUS_SCROLL_BEHAVIOR,
             });
             return;
         }
@@ -523,7 +524,7 @@ const useReaderOcr = ({
 
         window.scrollTo({
             top: clampedScrollTop,
-            behavior: 'smooth',
+            behavior: OCR_FOCUS_SCROLL_BEHAVIOR,
         });
     }, [detectedBoxes, imgRef, manualBoxes]);
 
@@ -591,7 +592,11 @@ const useReaderOcr = ({
         const currentOrderIndex = selectedBoxId
             ? availableOrderedBoxIds.indexOf(selectedBoxId)
             : -1;
-        const nextOrderIndex = currentOrderIndex + (direction === "next" ? 1 : -1);
+        const nextOrderIndex = currentOrderIndex >= 0
+            ? currentOrderIndex + (direction === "next" ? 1 : -1)
+            : direction === "next"
+                ? 0
+                : availableOrderedBoxIds.length - 1;
 
         if (nextOrderIndex < 0 || nextOrderIndex >= availableOrderedBoxIds.length) {
             return false;

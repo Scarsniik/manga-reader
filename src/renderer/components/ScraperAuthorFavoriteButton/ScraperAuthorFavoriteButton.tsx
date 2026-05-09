@@ -1,6 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
-import type { SaveScraperAuthorFavoriteRequest } from "@/shared/scraper";
-import { StarIcon } from "@/renderer/components/icons";
+import type {
+  SaveScraperAuthorFavoriteRequest,
+  ScraperAuthorFavoriteRecord,
+} from "@/shared/scraper";
+import { OpenBookIcon, StarIcon } from "@/renderer/components/icons";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import { useModal } from "@/renderer/hooks/useModal";
 import {
@@ -17,6 +20,7 @@ type Props = {
   sourceName: string;
   cover?: string | null;
   templateContext?: Record<string, string | undefined> | null;
+  onOpenFavorite?: (favorite: ScraperAuthorFavoriteRecord) => void;
   className?: string;
   disabled?: boolean;
 };
@@ -32,6 +36,7 @@ export default function ScraperAuthorFavoriteButton({
   sourceName,
   cover,
   templateContext,
+  onOpenFavorite,
   className = "",
   disabled = false,
 }: Props) {
@@ -117,27 +122,48 @@ export default function ScraperAuthorFavoriteButton({
     normalizedScraperId,
     pending,
   ]);
+  const handleOpenFavorite = useCallback(() => {
+    if (disabled || pending || !favorite || !onOpenFavorite) {
+      return;
+    }
+
+    onOpenFavorite(favorite);
+  }, [disabled, favorite, onOpenFavorite, pending]);
 
   if (!normalizedScraperId || !normalizedAuthorUrl) {
     return null;
   }
 
   return (
-    <button
-      type="button"
-      className={[
-        "scraper-author-favorite-button",
-        isFavorite ? "is-favorite" : "",
-        pending ? "is-pending" : "",
-        className,
-      ].join(" ").trim()}
-      onClick={handleClick}
-      disabled={disabled || pending}
-      aria-pressed={isFavorite}
-      aria-label={label}
-      title={`${label} (${scraperName})`}
-    >
-      <StarIcon aria-hidden="true" focusable="false" />
-    </button>
+    <div className={["scraper-author-favorite-actions", className].join(" ").trim()}>
+      <button
+        type="button"
+        className={[
+          "scraper-author-favorite-button",
+          isFavorite ? "is-favorite" : "",
+          pending ? "is-pending" : "",
+        ].join(" ").trim()}
+        onClick={handleClick}
+        disabled={disabled || pending}
+        aria-pressed={isFavorite}
+        aria-label={label}
+        title={`${label} (${scraperName})`}
+      >
+        <StarIcon aria-hidden="true" focusable="false" />
+      </button>
+      {isFavorite && favorite && onOpenFavorite ? (
+        <button
+          type="button"
+          className="scraper-author-favorite-open-button"
+          onClick={handleOpenFavorite}
+          disabled={disabled || pending}
+          aria-label={`Ouvrir la page favori ${favorite.name}`}
+          title={`Ouvrir la page favori ${favorite.name}`}
+        >
+          <OpenBookIcon aria-hidden="true" focusable="false" />
+          <span>Voir favori</span>
+        </button>
+      ) : null}
+    </div>
   );
 }

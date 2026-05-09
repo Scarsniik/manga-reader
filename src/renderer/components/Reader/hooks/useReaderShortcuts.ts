@@ -336,7 +336,7 @@ const useReaderShortcuts = ({
             const ocrNavigationAction = OCR_NAVIGATION_ACTIONS.find((action) => (
                 matchesShortcut(event, action.actionId)
             ));
-            if (selectedBoxes.length > 0 && ocrNavigationAction && navigateOcrBox(ocrNavigationAction.direction)) {
+            if (ocrNavigationAction && navigateOcrBox(ocrNavigationAction.direction)) {
                 preventShortcutDefault(event);
                 return;
             }
@@ -345,8 +345,7 @@ const useReaderShortcuts = ({
                 matchesShortcut(event, action.actionId)
             ));
             if (
-                selectedBoxes.length > 0
-                && orderedOcrNavigationAction
+                orderedOcrNavigationAction
                 && navigateOrderedOcrBox(orderedOcrNavigationAction.direction)
             ) {
                 preventShortcutDefault(event);

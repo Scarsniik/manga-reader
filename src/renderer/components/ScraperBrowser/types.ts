@@ -15,6 +15,7 @@ export type ScraperBrowserLocationState = {
     kind: ScraperBrowserHistorySourceKind;
   };
   scraperBrowserListingReturnState?: ScraperListingReturnState | null;
+  scraperBrowserAuthorTemplateContext?: ScraperTemplateContext | null;
 };
 
 export type ScraperBrowserInitialState = {

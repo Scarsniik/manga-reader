@@ -569,6 +569,38 @@ export interface RemoveScraperAuthorFavoriteSourceRequest {
   authorUrl: string;
 }
 
+export interface ScraperAuthorFavoriteCachedResult {
+  pageIndex: number;
+  searchTerm: string;
+  result: ScraperSearchResultItem;
+}
+
+export interface ScraperAuthorFavoriteCacheSource {
+  key: string;
+  scraperId: string;
+  authorUrl: string;
+  sourceName: string;
+  loadedPages: number;
+  hasNextPage: boolean;
+  currentPageUrl?: string;
+  nextPageUrl?: string;
+  results: ScraperAuthorFavoriteCachedResult[];
+  updatedAt: string;
+}
+
+export interface ScraperAuthorFavoriteCacheRecord {
+  favoriteId: string;
+  favoriteUpdatedAt?: string;
+  cachedAt: string;
+  completedAt?: string;
+  sources: ScraperAuthorFavoriteCacheSource[];
+}
+
+export interface SaveScraperAuthorFavoriteCacheRequest {
+  favoriteId: string;
+  cache: ScraperAuthorFavoriteCacheRecord;
+}
+
 export interface SaveScraperBookmarkRequest {
   scraperId: string;
   sourceUrl: string;

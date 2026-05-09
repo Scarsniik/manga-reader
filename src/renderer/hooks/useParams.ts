@@ -34,6 +34,7 @@ export type AppParams = {
     showSavedScraperSearches?: boolean;
     savedScraperSearches?: SavedScraperSearch[];
     scraperAuthorFavoritePageCount?: number;
+    scraperAuthorFavoriteCacheResults?: boolean;
     mangaListFilters?: LibrarySearchFilterState | null;
     [key: string]: any;
 };

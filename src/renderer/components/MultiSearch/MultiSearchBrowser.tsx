@@ -1,7 +1,15 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ScraperReaderProgressRecord, ScraperRecord } from "@/shared/scraper";
+import type {
+  ScraperReaderProgressRecord,
+  ScraperRecord,
+  ScraperViewHistoryCardIdentity,
+} from "@/shared/scraper";
 import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
+import {
+  setScraperCardRead,
+  useScraperViewHistory,
+} from "@/renderer/stores/scraperViewHistory";
 import type { Manga } from "@/renderer/types";
 import MultiSearchControls, { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
 import MultiSearchFilters, {
@@ -46,6 +54,7 @@ import {
   readMultiSearchState,
   saveMultiSearchState,
 } from "@/renderer/components/MultiSearch/multiSearchPersistence";
+import { openMultiSearchSourceReader } from "@/renderer/components/MultiSearch/multiSearchReader";
 import {
   buildMultiSearchExportPayload,
   buildMultiSearchMergedResultsExportPayload,
@@ -123,6 +132,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     loadMoreForScraper,
   } = useMultiSearch();
   const { bookmarkMap } = useScraperBookmarks();
+  const { recordsById: viewHistoryRecordsById } = useScraperViewHistory();
   const bookmarkedSourceKeys = useMemo(
     () => new Set(bookmarkMap.keys()),
     [bookmarkMap],
@@ -303,7 +313,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     libraryMangas,
     bookmarkedSourceKeys,
     sourceProgressIndex,
-  }), [bookmarkedSourceKeys, libraryMangas, sourceProgressIndex]);
+    viewHistoryRecordsById,
+  }), [bookmarkedSourceKeys, libraryMangas, sourceProgressIndex, viewHistoryRecordsById]);
   const languageFilteredMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(mergedResults, resultLanguageFilterModes),
     [mergedResults, resultLanguageFilterModes],
@@ -512,6 +523,52 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     });
   };
 
+  const handleOpenProgressReader = async (
+    source: MultiSearchSourceResult,
+    page: number,
+    knownTotalPages: number | null,
+    readerMangaId?: string,
+  ) => {
+    setOpenError(null);
+
+    try {
+      await openMultiSearchSourceReader({
+        source,
+        page,
+        knownTotalPages,
+        readerMangaId,
+        navigate,
+        from: {
+          pathname: location.pathname,
+          search: location.search,
+        },
+      });
+    } catch (openReaderError) {
+      setOpenError(
+        openReaderError instanceof Error
+          ? openReaderError.message
+          : "Impossible d'ouvrir le lecteur.",
+      );
+    }
+  };
+
+  const handleSetSourcesRead = async (identities: ScraperViewHistoryCardIdentity[], read: boolean) => {
+    if (!identities.length) {
+      return;
+    }
+
+    setOpenError(null);
+
+    try {
+      await Promise.all(identities.map((identity) => setScraperCardRead({
+        ...identity,
+        read,
+      })));
+    } catch (readError) {
+      setOpenError(readError instanceof Error ? readError.message : "Impossible de mettre a jour l'historique de lecture.");
+    }
+  };
+
   const handleExportJson = async () => {
     if (!window.api || typeof window.api.openJsonDocument !== "function") {
       setOpenError("L'export JSON n'est pas disponible dans cette version.");
@@ -658,10 +715,18 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
+        viewHistoryRecordsById={viewHistoryRecordsById}
         isExportingJson={isExportingJson}
         showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
+        onOpenProgressReader={(source, page, totalPages, readerMangaId) => void handleOpenProgressReader(
+          source,
+          page,
+          totalPages,
+          readerMangaId,
+        )}
+        onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
         onExportJson={() => void handleExportJson()}
         onExportMergedResultsJson={() => void handleExportMergedResultsJson()}
         onReloadMerge={() => setMergeRefreshKey((currentKey) => currentKey + 1)}

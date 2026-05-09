@@ -2,6 +2,7 @@ import type {
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
+import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import {
   canMergeMultiSearchSourceTitles,
   getMultiSearchTitleMergeExactKeys,
@@ -40,8 +41,10 @@ const shouldMergeSourceIntoGroup = (
   source: MultiSearchSourceResult,
   group: MultiSearchMergedResult,
 ): boolean => {
+  const sourceDetailUrl = getSourceDetailUrlKey(source);
+
   return group.sources.some((groupSource) => {
-    if (source.result.detailUrl && groupSource.result.detailUrl === source.result.detailUrl) {
+    if (sourceDetailUrl && getSourceDetailUrlKey(groupSource) === sourceDetailUrl) {
       return true;
     }
 
@@ -67,8 +70,29 @@ const getSourceLanguageValuesForMerge = (source: MultiSearchSourceResult): strin
   source.sourceLanguageCodes.length ? source.sourceLanguageCodes : [UNKNOWN_MULTI_SEARCH_VALUE]
 );
 
+const normalizeTextKey = (value: unknown): string => (
+  String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase()
+);
+
+const getSourceDetailUrlKey = (source: MultiSearchSourceResult): string => (
+  normalizeScraperViewHistorySourceUrl(source.result.detailUrl)
+);
+
+const getSourceIdentityKey = (source: MultiSearchSourceResult): string => {
+  const detailUrl = getSourceDetailUrlKey(source);
+  if (detailUrl) {
+    return `${source.scraper.id}::${detailUrl}`;
+  }
+
+  return [
+    source.scraper.id,
+    normalizeTextKey(source.result.title),
+    normalizeScraperViewHistorySourceUrl(source.result.thumbnailUrl),
+  ].join("::");
+};
+
 const buildMergedResultId = (source: MultiSearchSourceResult): string => (
-  `${source.scraper.id}::${source.result.detailUrl || source.result.title}`
+  `${source.scraper.id}::${getSourceDetailUrlKey(source) || source.result.title}`
 );
 
 const buildMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
@@ -102,8 +126,9 @@ const indexGroupSource = (
   group: MultiSearchMergedResult,
   source: MultiSearchSourceResult,
 ): void => {
-  if (source.result.detailUrl) {
-    state.detailUrlGroups.set(source.result.detailUrl, group);
+  const detailUrl = getSourceDetailUrlKey(source);
+  if (detailUrl) {
+    state.detailUrlGroups.set(detailUrl, group);
   }
 
   getMultiSearchTitleMergeExactKeys(source).forEach((titleKey) => {
@@ -150,7 +175,7 @@ const collectCandidateGroups = (
   const candidates: MultiSearchMergedResult[] = [];
   const seenGroups = new Set<MultiSearchMergedResult>();
 
-  addCandidateGroup(candidates, seenGroups, state.detailUrlGroups.get(source.result.detailUrl || ""));
+  addCandidateGroup(candidates, seenGroups, state.detailUrlGroups.get(getSourceDetailUrlKey(source)));
 
   getMultiSearchTitleMergeExactKeys(source).forEach((titleKey) => {
     addCandidateGroupSet(candidates, seenGroups, state.titleKeyGroups.get(titleKey));
@@ -168,7 +193,12 @@ const collectCandidateGroups = (
 const appendSourceToGroup = (
   group: MultiSearchMergedResult,
   source: MultiSearchSourceResult,
-): void => {
+): boolean => {
+  const sourceIdentityKey = getSourceIdentityKey(source);
+  if (group.sources.some((groupSource) => getSourceIdentityKey(groupSource) === sourceIdentityKey)) {
+    return false;
+  }
+
   group.sources.push(source);
   group.sourceLanguageCodes = uniqueValues([
     ...group.sourceLanguageCodes,
@@ -191,6 +221,8 @@ const appendSourceToGroup = (
   if (!group.pageCount && source.result.pageCount) {
     group.pageCount = source.result.pageCount;
   }
+
+  return true;
 };
 
 export const mergeMultiSearchSourceIntoState = (
@@ -201,8 +233,9 @@ export const mergeMultiSearchSourceIntoState = (
     .find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
 
   if (group) {
-    appendSourceToGroup(group, source);
-    indexGroupSource(state, group, source);
+    if (appendSourceToGroup(group, source)) {
+      indexGroupSource(state, group, source);
+    }
     return;
   }
 

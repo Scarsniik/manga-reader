@@ -1,6 +1,12 @@
 import React from "react";
+import {
+  buildScraperViewHistoryCardId,
+  type ScraperViewHistoryCardIdentity,
+  type ScraperViewHistoryRecord,
+} from "@/shared/scraper";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
+import { BookmarkRibbonIcon, EyeIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
 import { getLanguageLabel } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type {
@@ -16,6 +22,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
+import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import "./card.scss";
 
 type Props = {
@@ -23,8 +30,16 @@ type Props = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
+  onOpenProgressReader: (
+    source: MultiSearchSourceResult,
+    page: number,
+    totalPages: number | null,
+    readerMangaId?: string,
+  ) => void;
+  onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
 };
 
 const formatValues = (values: string[], fallback: string): string => (
@@ -40,6 +55,11 @@ const getSourceLanguageTitle = (source: MultiSearchSourceResult): string => (
 const formatMatchedSourceCount = (count: number): string => (
   count > 1 ? ` x${count}` : ""
 );
+
+type ReadableSourceEntry = {
+  identity: ScraperViewHistoryCardIdentity;
+  availability: MultiSearchSourceAvailability | undefined;
+};
 
 const getProgressClassName = (status: MultiSearchReadingStatus): string => (
   status === "completed" ? "is-completed" : "is-in-progress"
@@ -92,8 +112,11 @@ export default function MultiSearchResultCard({
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
+  viewHistoryRecordsById,
   onOpenSource,
   onOpenSourceInWorkspace,
+  onOpenProgressReader,
+  onSetSourcesRead,
 }: Props) {
   const sourceMenuRef = React.useRef<HTMLDetailsElement>(null);
   const openMenuRef = React.useRef<HTMLDetailsElement>(null);
@@ -118,12 +141,61 @@ export default function MultiSearchResultCard({
       libraryMangas,
       bookmarkedSourceKeys,
       progressIndex: sourceProgressIndex,
+      viewHistoryRecordsById,
     }))
-  ), [bookmarkedSourceKeys, libraryMangas, result.sources, sourceProgressIndex]);
+  ), [bookmarkedSourceKeys, libraryMangas, result.sources, sourceProgressIndex, viewHistoryRecordsById]);
+  const readableSourceEntries = React.useMemo(() => {
+    const seenIds = new Set<string>();
+
+    return result.sources.reduce<ReadableSourceEntry[]>((entries, source, index) => {
+      const identity = buildSearchResultViewHistoryIdentity(source.scraper.id, source.result);
+      const id = buildScraperViewHistoryCardId(identity);
+      if (!id || seenIds.has(id)) {
+        return entries;
+      }
+
+      seenIds.add(id);
+      entries.push({
+        identity,
+        availability: sourceAvailability[index],
+      });
+      return entries;
+    }, []);
+  }, [result.sources, sourceAvailability]);
+  const explicitReadEntries = readableSourceEntries.filter((entry) => Boolean(entry.availability?.readAt));
+  const inProgressEntries = readableSourceEntries.filter((entry) => (
+    !entry.availability?.readAt && entry.availability?.progress?.status === "inProgress"
+  ));
+  const completedProgressEntries = readableSourceEntries.filter((entry) => (
+    entry.availability?.progress?.status === "completed"
+  ));
+  const hasExplicitRead = explicitReadEntries.length > 0;
+  const readTargetIdentities = (
+    inProgressEntries.length
+      ? inProgressEntries
+      : completedProgressEntries.length
+        ? completedProgressEntries
+        : readableSourceEntries.slice(0, 1)
+  ).map((entry) => entry.identity);
+  const unreadTargetIdentities = explicitReadEntries.map((entry) => entry.identity);
+  const readToggleTargetIdentities = hasExplicitRead ? unreadTargetIdentities : readTargetIdentities;
+  const canToggleRead = readToggleTargetIdentities.length > 0;
+  const readToggleLabel = hasExplicitRead ? "Marquer comme non lu" : "Marquer comme lu";
   const librarySourceCount = sourceAvailability.filter((availability) => availability.inLibrary).length;
   const bookmarkSourceCount = sourceAvailability.filter((availability) => availability.inBookmarks).length;
   const progressSourceCount = sourceAvailability.filter((availability) => availability.progress).length;
   const primaryProgress = pickPrimarySourceProgress(sourceAvailability);
+  const primaryProgressSourceIndex = primaryProgress
+    ? sourceAvailability.findIndex((availability) => availability.progress === primaryProgress)
+    : -1;
+  const primaryProgressSource = primaryProgressSourceIndex >= 0
+    ? result.sources[primaryProgressSourceIndex]
+    : null;
+  const canOpenPrimaryProgressReader = Boolean(
+    primaryProgress?.status === "inProgress"
+    && primaryProgressSource?.result.detailUrl
+    && primaryProgressSource.canOpenDetails,
+  );
   const progressTitle = sourceAvailability
     .map((availability, index) => (availability.progress
       ? `${result.sources[index].scraper.name}: ${availability.progress.label}`
@@ -142,6 +214,19 @@ export default function MultiSearchResultCard({
       return counts;
     }, new Map()).values(),
   );
+  const progressContent = primaryProgress ? (
+    <>
+      <span className="multi-search-card__progress-line">
+        <span>{primaryProgress.status === "completed" ? "Termine" : "En cours"}</span>
+        <strong>{primaryProgress.shortLabel}{formatMatchedSourceCount(progressSourceCount)}</strong>
+      </span>
+      {primaryProgress.percent !== null ? (
+        <span className="multi-search-card__progress-track" aria-hidden="true">
+          <span style={{ width: `${primaryProgress.percent}%` }} />
+        </span>
+      ) : null}
+    </>
+  ) : null;
   const metadata = (
     <div className="multi-search-card__metadata">
       <span title={formatValues(languageLabels, "Non renseignee")}>
@@ -159,22 +244,59 @@ export default function MultiSearchResultCard({
           Bookmark{formatMatchedSourceCount(bookmarkSourceCount)}
         </span>
       ) : null}
-      {primaryProgress ? (
-        <div
-          className={[
-            "multi-search-card__progress",
-            getProgressClassName(primaryProgress.status),
-          ].join(" ")}
-          title={progressTitle || primaryProgress.label}
-        >
-          <div className="multi-search-card__progress-line">
-            <span>{primaryProgress.status === "completed" ? "Termine" : "En cours"}</span>
-            <strong>{primaryProgress.shortLabel}{formatMatchedSourceCount(progressSourceCount)}</strong>
-          </div>
-          {primaryProgress.percent !== null ? (
-            <span className="multi-search-card__progress-track" aria-hidden="true">
-              <span style={{ width: `${primaryProgress.percent}%` }} />
-            </span>
+      {primaryProgress || canToggleRead ? (
+        <div className="multi-search-card__progress-row">
+          {primaryProgress && canOpenPrimaryProgressReader && primaryProgressSource ? (
+            <button
+              type="button"
+              className={[
+                "multi-search-card__progress",
+                "is-clickable",
+                getProgressClassName(primaryProgress.status),
+              ].join(" ")}
+              title={progressTitle || primaryProgress.label}
+              aria-label={`Ouvrir ${result.title} a la page ${primaryProgress.currentPage}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenProgressReader(
+                  primaryProgressSource,
+                  primaryProgress.currentPage,
+                  primaryProgress.totalPages,
+                  primaryProgress.readerMangaId,
+                );
+              }}
+            >
+              {progressContent}
+            </button>
+          ) : primaryProgress ? (
+            <div
+              className={[
+                "multi-search-card__progress",
+                getProgressClassName(primaryProgress.status),
+              ].join(" ")}
+              title={progressTitle || primaryProgress.label}
+            >
+              {progressContent}
+            </div>
+          ) : null}
+          {canToggleRead ? (
+            <button
+              type="button"
+              className={[
+                "multi-search-card__read-toggle",
+                hasExplicitRead ? "is-read" : "",
+              ].join(" ").trim()}
+              title={readToggleLabel}
+              aria-label={`${readToggleLabel} ${result.title}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSetSourcesRead(readToggleTargetIdentities, !hasExplicitRead);
+              }}
+            >
+              <EyeIcon aria-hidden="true" focusable="false" />
+            </button>
           ) : null}
         </div>
       ) : null}
@@ -201,7 +323,11 @@ export default function MultiSearchResultCard({
                   </div>
                   <div className="multi-search-card__source-states">
                     {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
-                    {availability?.inBookmarks ? <span className="is-bookmark">Bookmark</span> : null}
+                    {availability?.inBookmarks ? (
+                      <span className="is-bookmark" title="Bookmark">
+                        <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
+                      </span>
+                    ) : null}
                     {availability?.progress ? (
                       <span className={getProgressClassName(availability.progress.status)}>
                         {availability.progress.shortLabel}
@@ -265,11 +391,7 @@ export default function MultiSearchResultCard({
           <div className="multi-search-card__open-options">
             {result.sources.map((source, index) => {
               const availability = sourceAvailability[index];
-              const hasOpenStates = Boolean(
-                availability?.progress
-                || availability?.inLibrary
-                || availability?.inBookmarks,
-              );
+              const hasOpenTags = Boolean(availability?.progress || availability?.inBookmarks);
 
               return (
                 <button
@@ -301,23 +423,26 @@ export default function MultiSearchResultCard({
                   disabled={!source.result.detailUrl}
                   data-prevent-middle-click-autoscroll="true"
                 >
-                  <span className="multi-search-card__open-source-main">
-                    <strong>{source.scraper.name}</strong>
-                    <span title={getSourceLanguageTitle(source)}>
+                  <span className="multi-search-card__open-source-line">
+                    <span className="multi-search-card__open-source-language" title={getSourceLanguageTitle(source)}>
                       <LanguageFlags languageCodes={source.sourceLanguageCodes} />
                     </span>
+                    <strong className="multi-search-card__open-source-name">{source.scraper.name}</strong>
+                    {hasOpenTags ? (
+                      <span className="multi-search-card__open-source-tags">
+                        {availability?.progress ? (
+                          <span className={getProgressClassName(availability.progress.status)}>
+                            {availability.progress.shortLabel}
+                          </span>
+                        ) : null}
+                        {availability?.inBookmarks ? (
+                          <span className="is-bookmark" title="Bookmark">
+                            <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
                   </span>
-                  {hasOpenStates ? (
-                    <span className="multi-search-card__open-source-states">
-                      {availability?.progress ? (
-                        <span className={getProgressClassName(availability.progress.status)}>
-                          {availability.progress.shortLabel}
-                        </span>
-                      ) : null}
-                      {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
-                      {availability?.inBookmarks ? <span className="is-bookmark">Bookmark</span> : null}
-                    </span>
-                  ) : null}
                 </button>
               );
             })}

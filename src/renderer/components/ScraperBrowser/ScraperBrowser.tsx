@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   buildScraperViewHistoryCardId,
   hasScraperFieldSelectorValue,
+  ScraperAuthorFavoriteRecord,
   ScraperRecord,
   ScraperSearchResultItem,
 } from '@/shared/scraper';
@@ -53,6 +54,8 @@ import {
 } from '@/renderer/stores/scraperViewHistory';
 import {
   parseScraperRouteState,
+  SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
+  writeScraperAuthorFavoriteRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import {
@@ -840,6 +843,31 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     : initialAuthorDisplayQuery && initialAuthorDisplayQuery === query && initialState?.authorDisplayName
       ? initialState.authorDisplayName
       : formatScraperValueForDisplay(query) || query;
+  const handleOpenAuthorFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
+    const favoritesSearch = writeScraperAuthorFavoriteRouteState(
+      writeScraperRouteState(location.search, {
+        scraperId: SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
+        mode: 'search',
+        homepageActive: false,
+        homepagePage: 1,
+        searchActive: false,
+        searchQuery: '',
+        searchPage: 1,
+        authorActive: false,
+        authorQuery: '',
+        authorPage: 1,
+        mangaQuery: '',
+        mangaUrl: '',
+        bookmarksFilterScraperId: null,
+      }),
+      favorite.id,
+    );
+
+    navigate({
+      pathname: '/',
+      search: favoritesSearch,
+    });
+  }, [location.search, navigate]);
   const authorFavoriteAction = mode === 'author' && query.trim() ? (
     <ScraperAuthorFavoriteButton
       scraperId={scraper.id}
@@ -848,6 +876,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       sourceName={authorSourceName}
       cover={listingResults[0]?.thumbnailUrl}
       templateContext={authorTemplateContext ?? undefined}
+      onOpenFavorite={handleOpenAuthorFavorite}
       disabled={loading}
     />
   ) : null;

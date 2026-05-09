@@ -9,6 +9,14 @@ type Props = {
 
 export default function TextField({ field, value, onChange }: Props) {
   return (
-    <input id={field.name} name={field.name} type="text" placeholder={field.placeholder} value={value ?? ''} onChange={onChange} />
+    <input
+      id={field.name}
+      name={field.name}
+      type="text"
+      placeholder={field.placeholder}
+      value={value ?? ''}
+      disabled={field.disabled}
+      onChange={onChange}
+    />
   )
 }
