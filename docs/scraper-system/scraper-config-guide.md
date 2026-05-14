@@ -394,6 +394,7 @@ module `Auteur`.
 
 | Selecteur | Requis | Zone | Description |
 | --- | --- | --- | --- |
+| `authorNameSelector` | non | document | extrait le nom de l'auteur affiche sur la page auteur ; il sert aux favoris auteur et au pre-remplissage de recherche multi-sources |
 | `resultListSelector` | non | document | limite la zone de parsing |
 | `resultItemSelector` | oui | conteneur ou document | detecte chaque card |
 | `titleSelector` | oui | card | titre de la card ; une card sans titre est ignoree |
@@ -405,7 +406,8 @@ module `Auteur`.
 | `nextPageSelector` | non | document | lien de page suivante |
 
 L'ecran peut copier les selecteurs de `Recherche` pour accelerer une page auteur qui rend les memes
-cards.
+cards. Le selecteur `authorNameSelector` reste separe, car il cible la page auteur elle-meme et
+n'existe pas dans les resultats de recherche.
 
 ### Validation et runtime
 
@@ -417,6 +419,13 @@ Le runtime peut ouvrir `Auteur` :
 - depuis une URL auteur extraite par `Recherche`
 - depuis une URL auteur extraite par `Fiche`
 - depuis un nom d'auteur si `Auteur` est en mode template
+
+Quand le nom auteur est connu, la page auteur expose une action de recherche multi-sources. Cette
+action ouvre `Recherche multi-sources` avec les noms auteur uniques separes par `, ` dans le champ de
+recherche, sans lancer la recherche automatiquement.
+
+Quand `authorNameSelector` extrait un nom, ce nom remplace le titre generique `Resultats auteur`
+dans la page auteur, avec une majuscule au debut de chaque mot.
 
 ## Module Chapitres
 

@@ -1,9 +1,10 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type {
-  ScraperReaderProgressRecord,
-  ScraperRecord,
-  ScraperViewHistoryCardIdentity,
+import {
+  hasScraperFieldSelectorValue,
+  type ScraperReaderProgressRecord,
+  type ScraperRecord,
+  type ScraperViewHistoryCardIdentity,
 } from "@/shared/scraper";
 import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import {
@@ -17,6 +18,7 @@ import MultiSearchFilters, {
 } from "@/renderer/components/MultiSearch/MultiSearchFilters";
 import MultiSearchResultsSection from "@/renderer/components/MultiSearch/MultiSearchResultsSection";
 import MultiSearchStatusPanel from "@/renderer/components/MultiSearch/MultiSearchStatusPanel";
+import MultiSearchAuthorsDialog from "@/renderer/components/MultiSearch/MultiSearchAuthorsDialog";
 import useMultiSearch from "@/renderer/components/MultiSearch/useMultiSearch";
 import {
   UNKNOWN_MULTI_SEARCH_VALUE,
@@ -59,6 +61,11 @@ import {
   buildMultiSearchExportPayload,
   buildMultiSearchMergedResultsExportPayload,
 } from "@/renderer/components/MultiSearch/multiSearchExport";
+import {
+  extractMultiSearchAuthors,
+  type MultiSearchAuthorExtractionProgress,
+  type MultiSearchAuthorResult,
+} from "@/renderer/components/MultiSearch/multiSearchAuthors";
 import type {
   MultiSearchAdvancedPages,
   MultiSearchDepthMode,
@@ -70,8 +77,16 @@ import type {
   MultiSearchSourceResult,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
-import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
+import {
+  type MultiSearchPrefillLocationState,
+  writeScraperRouteState,
+} from "@/renderer/utils/scraperBrowserNavigation";
 import { buildMultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import {
+  getScraperAuthorFeatureConfig,
+  getScraperFeature,
+} from "@/renderer/utils/scraperRuntime";
+import { useModal } from "@/renderer/hooks/useModal";
 import "./style.scss";
 
 type Props = {
@@ -90,14 +105,17 @@ const buildEmptyStatusCounts = (): Record<MultiSearchScraperRun["status"], numbe
   loading: 0,
   success: 0,
   done: 0,
+  cancelled: 0,
   error: 0,
 });
 
 export default function MultiSearchBrowser({ scrapers }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openModal } = useModal();
   const initializedSelectionRef = useRef(false);
   const restoredStateRef = useRef(false);
+  const consumedPrefillLocationKeyRef = useRef<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedScraperIds, setSelectedScraperIds] = useState<string[]>([]);
   const [selectedLanguageCodes, setSelectedLanguageCodes] = useState<string[]>([]);
@@ -108,6 +126,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [viewMode, setViewMode] = useState<MultiSearchViewMode>("merged");
   const [openError, setOpenError] = useState<string | null>(null);
   const [isExportingJson, setIsExportingJson] = useState(false);
+  const [isExtractingAuthors, setIsExtractingAuthors] = useState(false);
+  const [authorExtractionProgress, setAuthorExtractionProgress] = useState<MultiSearchAuthorExtractionProgress | null>(null);
   const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
   const [mergeRefreshKey, setMergeRefreshKey] = useState(0);
   const [resultLanguageFilterModes, setResultLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
@@ -126,8 +146,11 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     message,
     error,
     canLoadMore,
+    canStopSearch,
     restoreRuns,
     runSearch,
+    stopSearch,
+    stopScraperSearch,
     loadMoreForAll,
     loadMoreForScraper,
   } = useMultiSearch();
@@ -137,6 +160,10 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => new Set(bookmarkMap.keys()),
     [bookmarkMap],
   );
+  const locationState = location.state as MultiSearchPrefillLocationState | null;
+  const multiSearchPrefillQuery = typeof locationState?.multiSearchPrefillQuery === "string"
+    ? locationState.multiSearchPrefillQuery.trim()
+    : "";
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -202,6 +229,29 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   }, []);
 
   useEffect(() => {
+    if (multiSearchPrefillQuery && consumedPrefillLocationKeyRef.current !== location.key) {
+      consumedPrefillLocationKeyRef.current = location.key;
+      restoredStateRef.current = true;
+      initializedSelectionRef.current = true;
+
+      setQuery(multiSearchPrefillQuery);
+      setSelectedScraperIds(searchableScrapers.map((scraper) => scraper.id));
+      setSelectedLanguageCodes([]);
+      setSelectedContentTypes([]);
+      setResultLanguageFilterModes({});
+      setResultReadingStatusFilters([]);
+      setResultTextFilter("");
+      setDebouncedResultTextFilter("");
+      setDepthMode("quick");
+      setAdvancedPages(3);
+      setPaceMode("fast");
+      setViewMode("merged");
+      setOpenError(null);
+      setAuthorExtractionProgress(null);
+      restoreRuns([], "fast");
+      return;
+    }
+
     if (!restoredStateRef.current) {
       const restoredState = readMultiSearchState(searchableScrapers);
       restoredStateRef.current = true;
@@ -234,7 +284,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
 
     initializedSelectionRef.current = true;
     setSelectedScraperIds(searchableScrapers.map((scraper) => scraper.id));
-  }, [restoreRuns, searchableScrapers]);
+  }, [location.key, multiSearchPrefillQuery, restoreRuns, searchableScrapers]);
 
   useEffect(() => {
     if (!restoredStateRef.current) {
@@ -402,6 +452,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     setResultReadingStatusFilters([]);
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
+    setAuthorExtractionProgress(null);
     void runSearch({
       query,
       scrapers: selectedScrapers,
@@ -569,6 +620,96 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     }
   };
 
+  const handleOpenAuthor = (author: MultiSearchAuthorResult) => {
+    const scraper = searchableScrapers.find((candidate) => candidate.id === author.scraperId);
+    const authorConfig = scraper
+      ? getScraperAuthorFeatureConfig(getScraperFeature(scraper, "author"))
+      : null;
+    const canOpenInWorkspace = Boolean(
+      scraper
+      && window.api
+      && typeof window.api.openWorkspaceTarget === "function"
+      && hasScraperFieldSelectorValue(authorConfig?.titleSelector)
+      && authorConfig?.resultItemSelector,
+    );
+
+    setOpenError(null);
+
+    if (canOpenInWorkspace && scraper) {
+      void window.api.openWorkspaceTarget({
+        kind: "scraper.author",
+        scraperId: scraper.id,
+        query: author.url,
+        title: author.name,
+      }).then((opened: boolean) => {
+        if (!opened) {
+          setOpenError("Impossible d'ouvrir cette page auteur dans le workspace.");
+        }
+      }).catch((openAuthorError: unknown) => {
+        setOpenError(
+          openAuthorError instanceof Error
+            ? openAuthorError.message
+            : "Impossible d'ouvrir cette page auteur dans le workspace.",
+        );
+      });
+      return;
+    }
+
+    if (window.api && typeof window.api.openExternalUrl === "function") {
+      void window.api.openExternalUrl(author.url);
+      return;
+    }
+
+    setOpenError("L'ouverture de liens auteurs n'est pas disponible dans cette version.");
+  };
+
+  const handleOpenAllAuthors = (authors: MultiSearchAuthorResult[]) => {
+    authors.forEach(handleOpenAuthor);
+  };
+
+  const handleExtractAuthors = async () => {
+    const sourcesSnapshot = allSources;
+    if (!sourcesSnapshot.length || isExtractingAuthors) {
+      return;
+    }
+
+    setIsExtractingAuthors(true);
+    setAuthorExtractionProgress({
+      processedSourceCount: 0,
+      totalSourceCount: sourcesSnapshot.length,
+      detailsSourceCount: 0,
+    });
+    setOpenError(null);
+
+    try {
+      const extractionResult = await extractMultiSearchAuthors(
+        sourcesSnapshot,
+        paceMode,
+        setAuthorExtractionProgress,
+      );
+
+      openModal({
+        title: "Auteurs trouves",
+        content: (
+          <MultiSearchAuthorsDialog
+            authors={extractionResult.authors}
+            onOpenAuthor={handleOpenAuthor}
+            onOpenAllAuthors={handleOpenAllAuthors}
+          />
+        ),
+        className: "multi-search-authors-modal",
+      });
+    } catch (extractError) {
+      setOpenError(
+        extractError instanceof Error
+          ? extractError.message
+          : "Impossible d'extraire les auteurs des resultats charges.",
+      );
+    } finally {
+      setIsExtractingAuthors(false);
+    }
+  };
+
   const handleExportJson = async () => {
     if (!window.api || typeof window.api.openJsonDocument !== "function") {
       setOpenError("L'export JSON n'est pas disponible dans cette version.");
@@ -648,7 +789,9 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         viewMode={viewMode}
         isSearching={isSearching}
         canSubmit={selectedScrapers.length > 0}
+        canStopSearch={canStopSearch}
         onSubmit={handleSubmit}
+        onStopSearch={stopSearch}
         onQueryChange={setQuery}
         onDepthModeChange={setDepthMode}
         onAdvancedPagesChange={setAdvancedPages}
@@ -677,6 +820,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
             <span>{statusCounts.done} termine(s)</span>
             <span>{statusCounts.loading} en cours</span>
             <span>{statusCounts.error} erreur(s)</span>
+            <span>{statusCounts.cancelled} arrete(s)</span>
             <span>{statusCounts.waiting} en attente</span>
           </div>
         </div>
@@ -698,6 +842,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         canLoadMore={canLoadMore}
         onLoadMoreForAll={(nextQuery) => void loadMoreForAll(nextQuery)}
         onLoadMoreForScraper={(scraperId, nextQuery) => void loadMoreForScraper(scraperId, nextQuery)}
+        onStopScraperSearch={stopScraperSearch}
       />
 
       <MultiSearchResultsSection
@@ -717,6 +862,9 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         isExportingJson={isExportingJson}
+        isExtractingAuthors={isExtractingAuthors}
+        canExtractAuthors={allSources.length > 0}
+        authorExtractionProgress={authorExtractionProgress}
         showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
@@ -729,6 +877,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
         onExportJson={() => void handleExportJson()}
         onExportMergedResultsJson={() => void handleExportMergedResultsJson()}
+        onExtractAuthors={() => void handleExtractAuthors()}
         onReloadMerge={() => setMergeRefreshKey((currentKey) => currentKey + 1)}
         onTextFilterChange={setResultTextFilter}
         onFillTextFilterFromBaseQuery={handleFillTextFilterFromBaseQuery}

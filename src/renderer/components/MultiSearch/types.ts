@@ -26,6 +26,7 @@ export type MultiSearchScraperStatus =
   | "loading"
   | "success"
   | "done"
+  | "cancelled"
   | "error";
 
 export type MultiSearchSourceResult = {

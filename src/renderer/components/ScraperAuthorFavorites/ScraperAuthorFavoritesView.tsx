@@ -9,6 +9,7 @@ import type {
 } from "@/shared/scraper";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
+import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
@@ -48,10 +49,12 @@ import {
 } from "@/renderer/stores/scraperAuthorFavorites";
 import {
   readScraperAuthorFavoriteRouteId,
+  SCRAPER_MULTI_SEARCH_VIEW_ID,
   writeScraperAuthorFavoriteRouteState,
   writeScraperRouteState,
 } from "@/renderer/utils/scraperBrowserNavigation";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
+import { formatAuthorMultiSearchQuery } from "@/renderer/utils/authorSearchNames";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "./style.scss";
@@ -97,6 +100,11 @@ export default function ScraperAuthorFavoritesView({
     () => favorites.find((favorite) => favorite.id === selectedFavoriteId) ?? null,
     [favorites, selectedFavoriteId],
   );
+  const selectedFavoriteMultiSearchQuery = useMemo(() => (
+    selectedFavorite
+      ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
+      : ""
+  ), [selectedFavorite]);
   const bookmarkedSourceKeys = useMemo(
     () => new Set(bookmarks.map((bookmark) => getScraperBookmarkKey(bookmark.scraperId, bookmark.sourceUrl))),
     [bookmarks],
@@ -224,6 +232,41 @@ export default function ScraperAuthorFavoritesView({
       },
     );
   }, [location.pathname, location.search, location.state, navigate]);
+
+  const handleOpenSelectedFavoriteMultiSearch = useCallback(() => {
+    if (!selectedFavoriteMultiSearchQuery) {
+      setOpenError("Aucun nom auteur exploitable n'est disponible pour pre-remplir la recherche multi-sources.");
+      return;
+    }
+
+    const multiSearch = writeScraperRouteState(location.search, {
+      scraperId: SCRAPER_MULTI_SEARCH_VIEW_ID,
+      mode: "search",
+      homepageActive: false,
+      homepagePage: 1,
+      searchActive: false,
+      searchQuery: "",
+      searchPage: 1,
+      authorActive: false,
+      authorQuery: "",
+      authorPage: 1,
+      mangaQuery: "",
+      mangaUrl: "",
+      bookmarksFilterScraperId: null,
+    });
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: multiSearch,
+      },
+      {
+        state: {
+          multiSearchPrefillQuery: selectedFavoriteMultiSearchQuery,
+        },
+      },
+    );
+  }, [location.pathname, location.search, navigate, selectedFavoriteMultiSearchQuery]);
 
   useEffect(() => {
     if (!selectedFavorite) {
@@ -455,14 +498,28 @@ export default function ScraperAuthorFavoritesView({
             <h2>{selectedFavorite.name}</h2>
             <p>{selectedFavorite.sources.length} source(s) auteur associee(s).</p>
           </div>
-          <button
-            type="button"
-            className="scraper-author-favorites-view__clear"
-            onClick={() => void start()}
-            disabled={loadingRuns}
-          >
-            Recharger
-          </button>
+          <div className="scraper-author-favorites-view__header-actions">
+            <button
+              type="button"
+              className="scraper-author-favorites-view__multi-search"
+              onClick={handleOpenSelectedFavoriteMultiSearch}
+              disabled={!selectedFavoriteMultiSearchQuery}
+              title={selectedFavoriteMultiSearchQuery
+                ? `Pre-remplir la recherche multi-sources avec ${selectedFavoriteMultiSearchQuery}`
+                : "Aucun nom auteur disponible"}
+            >
+              <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+              <span>Recherche multi-source</span>
+            </button>
+            <button
+              type="button"
+              className="scraper-author-favorites-view__clear"
+              onClick={() => void start()}
+              disabled={loadingRuns}
+            >
+              Recharger
+            </button>
+          </div>
         </div>
 
         {runMessage ? <div className="multi-search__message is-info">{runMessage}</div> : null}

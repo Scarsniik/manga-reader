@@ -48,7 +48,7 @@
 - [ ] Historique de lecture global
 - [ ] Clique droit sur une card pour voir les options comme avec le clique sur le bouton de la card
 - [ ] Header : il est moche
-- [ ] Lazy loading pour l'acceuil
+- [x] Lazy loading pour l'acceuil
 - [ ] Détection et fusion de doublons quand un même manga vient de plusieurs scrappers.
 - [x] Possibilité de configurer plus le reader (UI, raccourcis, etc)
 - [ ] Mode de lecture vertical (pourquoi pas configuration avec tag ou autre)

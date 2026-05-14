@@ -7,8 +7,9 @@ import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/Mult
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
-import { DownloadArrowIcon } from "@/renderer/components/icons";
+import { DownloadArrowIcon, LoadingSpinnerIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
+import type { MultiSearchAuthorExtractionProgress } from "@/renderer/components/MultiSearch/multiSearchAuthors";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -39,6 +40,9 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   isExportingJson: boolean;
+  isExtractingAuthors: boolean;
+  canExtractAuthors: boolean;
+  authorExtractionProgress: MultiSearchAuthorExtractionProgress | null;
   showMergeReloadButton: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -51,6 +55,7 @@ type Props = {
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
   onExportJson: () => void;
   onExportMergedResultsJson: () => void;
+  onExtractAuthors: () => void;
   onReloadMerge: () => void;
   onTextFilterChange: (value: string) => void;
   onFillTextFilterFromBaseQuery: () => void;
@@ -97,6 +102,21 @@ const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
   ].join(", ");
 };
 
+const getAuthorExtractionButtonLabel = (
+  isExtractingAuthors: boolean,
+  progress: MultiSearchAuthorExtractionProgress | null,
+): string => {
+  if (!isExtractingAuthors) {
+    return "Extraire auteurs";
+  }
+
+  if (!progress || progress.totalSourceCount === 0) {
+    return "Extraction...";
+  }
+
+  return `Extraction ${progress.processedSourceCount}/${progress.totalSourceCount}`;
+};
+
 export default function MultiSearchResultsSection({
   viewMode,
   runs,
@@ -114,6 +134,9 @@ export default function MultiSearchResultsSection({
   sourceProgressIndex,
   viewHistoryRecordsById,
   isExportingJson,
+  isExtractingAuthors,
+  canExtractAuthors,
+  authorExtractionProgress,
   showMergeReloadButton,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -121,6 +144,7 @@ export default function MultiSearchResultsSection({
   onSetSourcesRead,
   onExportJson,
   onExportMergedResultsJson,
+  onExtractAuthors,
   onReloadMerge,
   onTextFilterChange,
   onFillTextFilterFromBaseQuery,
@@ -182,6 +206,18 @@ export default function MultiSearchResultsSection({
             </div>
           </div>
           <div className="multi-search__section-actions">
+            <button
+              type="button"
+              className="multi-search__export-json-button"
+              onClick={onExtractAuthors}
+              disabled={!canExtractAuthors || isExtractingAuthors}
+              title="Extraire les auteurs depuis les resultats charges"
+            >
+              {isExtractingAuthors ? (
+                <LoadingSpinnerIcon className="multi-search__button-spinner" aria-hidden="true" focusable="false" />
+              ) : null}
+              <span>{getAuthorExtractionButtonLabel(isExtractingAuthors, authorExtractionProgress)}</span>
+            </button>
             {showMergeReloadButton ? (
               <>
                 <button
@@ -261,6 +297,18 @@ export default function MultiSearchResultsSection({
           </div>
         </div>
         <div className="multi-search__section-actions">
+          <button
+            type="button"
+            className="multi-search__export-json-button"
+            onClick={onExtractAuthors}
+            disabled={!canExtractAuthors || isExtractingAuthors}
+            title="Extraire les auteurs depuis les resultats charges"
+          >
+            {isExtractingAuthors ? (
+              <LoadingSpinnerIcon className="multi-search__button-spinner" aria-hidden="true" focusable="false" />
+            ) : null}
+            <span>{getAuthorExtractionButtonLabel(isExtractingAuthors, authorExtractionProgress)}</span>
+          </button>
           <button
             type="button"
             className="multi-search__export-json-button"

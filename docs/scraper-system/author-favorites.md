@@ -53,6 +53,8 @@ Le parametre global `Stocker les resultats des auteurs favoris` remplace cette l
 La vue auteur favori expose aussi :
 
 - chaque source auteur, cliquable pour revenir a la page auteur du scrapper correspondant
+- une action `Recherche multi-source` qui ouvre la recherche multi-sources avec les noms auteur
+  uniques de toutes les sources du favori, separes par `, `, sans lancer la recherche
 - `Charger plus`, qui charge une page supplementaire sur les sources encore paginables
 - `Charger tout`, qui charge toutes les pages restantes sur les sources encore paginables
 

@@ -221,6 +221,7 @@ type ScraperStatus =
   | "loading"
   | "success"
   | "done"
+  | "cancelled"
   | "error";
 ```
 
@@ -626,3 +627,12 @@ La V1 du multi-search repose sur les choix suivants :
 - Pendant le scraping, les mises a jour de resultats sont groupees avant d'etre poussees a React afin de limiter les recalculs de fusion, de filtres et d'affichage sur les grosses recherches.
 - La fusion des resultats est incrementale et executee dans un Web Worker pendant une recherche : les nouvelles sources sont inserees dans les groupes existants hors du thread UI, et le bouton de developpement `Recharger fusion` force une reconstruction complete si necessaire.
 - La fusion expose une progression visible pendant le traitement et le tri. Le merge utilise un index URL/titres/fuzzy pour eviter de comparer chaque nouvelle source avec tous les groupes existants.
+- La recherche multi-sources peut etre arretee globalement. Les requetes deja parties ne sont pas interrompues cote IPC, mais leurs resultats sont ignores et les scrapers encore actifs passent en statut `cancelled`.
+- Une recherche peut aussi etre arretee pour un scraper precis depuis son statut detaille. Les resultats deja charges sont conserves et la pagination de ce scraper est fermee pour cette recherche.
+- La section de resultats expose un bouton `Extraire auteurs`. Il deduplique les auteurs par couple scraper + URL auteur normalisee, jamais par nom affiche.
+- L'extraction d'auteurs utilise d'abord les informations deja presentes dans les cards de resultat (`authorUrlSelector` de la recherche). Elle ne charge la fiche detaillee que pour les sources qui n'ont pas donne d'auteur via la card et seulement si la fiche fournit un selecteur d'URL auteur.
+- A la fin de l'extraction, une dialog affiche les auteurs trouves avec leur nom et leur scraper. Chaque auteur est ouvrable en onglet auteur workspace quand le composant Auteur est configure, avec un fallback vers l'ouverture externe du lien. La dialog propose aussi `Tout ouvrir`.
+- Dans cette dialog, un auteur deja present dans un favori auteur affiche un pictogramme bookmark jaune a droite de sa ligne.
+- Depuis une page auteur ou un auteur favori, une action peut pre-remplir le champ de recherche
+  multi-sources avec les noms auteur uniques connus, joints par `, `. Cette action ne lance pas la
+  recherche automatiquement.

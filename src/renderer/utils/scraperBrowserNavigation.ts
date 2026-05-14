@@ -1,6 +1,11 @@
 export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author';
 
+export const SCRAPER_MULTI_SEARCH_VIEW_ID = 'multi-search';
 export const SCRAPER_AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
+
+export type MultiSearchPrefillLocationState = {
+  multiSearchPrefillQuery?: string;
+};
 
 export type ScraperRouteState = {
   scraperId: string | null;

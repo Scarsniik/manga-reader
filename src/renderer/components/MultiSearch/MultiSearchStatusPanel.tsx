@@ -8,6 +8,7 @@ type Props = {
   canLoadMore: boolean;
   onLoadMoreForAll: (query: string) => void;
   onLoadMoreForScraper: (scraperId: string, query: string) => void;
+  onStopScraperSearch: (scraperId: string) => void;
 };
 
 const getStatusLabel = (status: MultiSearchScraperRun["status"]): string => {
@@ -17,6 +18,7 @@ const getStatusLabel = (status: MultiSearchScraperRun["status"]): string => {
     loading: "En cours",
     success: "Charge",
     done: "Termine",
+    cancelled: "Arrete",
     error: "Erreur",
   };
 
@@ -38,6 +40,7 @@ export default function MultiSearchStatusPanel({
   canLoadMore,
   onLoadMoreForAll,
   onLoadMoreForScraper,
+  onStopScraperSearch,
 }: Props) {
   if (!runs.length) {
     return null;
@@ -77,13 +80,23 @@ export default function MultiSearchStatusPanel({
               ) : null}
             </div>
             {run.error ? <p>{run.error}</p> : null}
-            <button
-              type="button"
-              onClick={() => onLoadMoreForScraper(run.scraper.id, query)}
-              disabled={!run.hasNextPage || run.status === "loading"}
-            >
-              Charger plus pour ce scrapper
-            </button>
+            <div className="multi-search__status-actions">
+              <button
+                type="button"
+                onClick={() => onLoadMoreForScraper(run.scraper.id, query)}
+                disabled={!run.hasNextPage || run.status === "loading"}
+              >
+                Charger plus pour ce scrapper
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onStopScraperSearch(run.scraper.id)}
+                disabled={run.status !== "loading" && run.status !== "waiting"}
+              >
+                Arreter ce scrapper
+              </button>
+            </div>
           </div>
         ))}
       </div>

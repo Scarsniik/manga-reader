@@ -9,6 +9,7 @@ import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 type Props = {
   mode: 'homepage' | 'search' | 'author';
   backLabel?: string | null;
+  authorTitle?: string | null;
   visibleSearchResults: ScraperSearchResultItem[];
   searchResultsCount: number;
   query: string;
@@ -43,6 +44,7 @@ type Props = {
 export default function ScraperSearchResultsSection({
   mode,
   backLabel = null,
+  authorTitle = null,
   visibleSearchResults,
   searchResultsCount,
   query,
@@ -79,6 +81,11 @@ export default function ScraperSearchResultsSection({
 
   const isAuthorMode = mode === 'author';
   const isHomepageMode = mode === 'homepage';
+  const heading = isAuthorMode
+    ? authorTitle || 'Resultats auteur'
+    : isHomepageMode
+      ? 'Homepage'
+      : 'Resultats de recherche';
 
   return (
     <section className="scraper-browser__results">
@@ -95,9 +102,7 @@ export default function ScraperSearchResultsSection({
               </button>
             </div>
           ) : null}
-          <h3>
-            {isAuthorMode ? 'Resultats auteur' : isHomepageMode ? 'Homepage' : 'Resultats de recherche'}
-          </h3>
+          <h3>{heading}</h3>
           <p>
             {query.trim()
               ? (

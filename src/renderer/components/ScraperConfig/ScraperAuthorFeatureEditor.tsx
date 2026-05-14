@@ -13,6 +13,7 @@ import {
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFeatureEditorHeader from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader';
 import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/ScraperFeatureMessages';
+import ScraperFieldSelectorField from '@/renderer/components/ScraperConfig/shared/ScraperFieldSelectorField';
 import ScraperLanguageDetectionSection from '@/renderer/components/ScraperConfig/shared/ScraperLanguageDetectionSection';
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
@@ -36,6 +37,7 @@ import {
 import { buildScraperTemplateContextFromValidation } from '@/renderer/utils/scraperTemplateContext';
 import {
   AUTHOR_SCRAPING_FIELD_NAMES,
+  AUTHOR_NAME_SELECTOR_FIELD,
   AuthorFeatureFormState,
   buildAuthorScrapingFields,
   buildAuthorConfig,
@@ -362,6 +364,7 @@ export default function ScraperAuthorFeatureEditor({
       const extractedResults = extractedPage.items;
 
       const titles = extractedResults.map((result) => result.title).filter(Boolean);
+      const authorNames = extractedPage.authorNames ?? [];
       const authorUrls = extractedResults.map((result) => result.authorUrl).filter(Boolean) as string[];
       const thumbnails = extractedResults.map((result) => result.thumbnailUrl).filter(Boolean) as string[];
       const summaries = extractedResults.map((result) => result.summary).filter(Boolean) as string[];
@@ -387,6 +390,24 @@ export default function ScraperAuthorFeatureEditor({
             matchedCount: 0,
             issueCode: 'no_match' as const,
           },
+        ...(config.authorNameSelector
+          ? [authorNames.length > 0
+            ? {
+              key: 'authors' as const,
+              selector: formatScraperFieldSelectorForDisplay(config.authorNameSelector),
+              required: false,
+              matchedCount: authorNames.length,
+              sample: authorNames[0],
+              samples: authorNames.slice(0, 12),
+            }
+            : {
+              key: 'authors' as const,
+              selector: formatScraperFieldSelectorForDisplay(config.authorNameSelector),
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match' as const,
+            }]
+          : []),
         ...(config.thumbnailSelector
           ? [thumbnails.length > 0
             ? {
@@ -685,6 +706,13 @@ export default function ScraperAuthorFeatureEditor({
               Definis les selecteurs qui permettent d&apos;extraire la liste de cards retournee par la page auteur.
             </p>
           </div>
+
+          <ScraperFieldSelectorField
+            field={AUTHOR_NAME_SELECTOR_FIELD}
+            value={formValues.authorNameSelector}
+            error={fieldErrors.authorNameSelector}
+            onChange={handleFieldSelectorChange('authorNameSelector')}
+          />
 
           {canCopySearchSelectors ? (
             <div className="scraper-config-section__actions">

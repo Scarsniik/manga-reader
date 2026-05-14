@@ -45,6 +45,13 @@ export const AUTHOR_SCRAPING_FIELD_NAMES = [
 
 export type AuthorScrapingFieldName = typeof AUTHOR_SCRAPING_FIELD_NAMES[number];
 
+export const AUTHOR_NAME_SELECTOR_FIELD: Field = {
+  name: 'authorNameSelector',
+  label: 'Selecteur du nom auteur',
+  type: 'text',
+  placeholder: 'Optionnel : h1, .author-title, .profile-name',
+};
+
 export const URL_STRATEGY_FIELD: Field = {
   name: 'urlStrategy',
   label: 'Strategie de construction de l\'URL auteur',
@@ -155,11 +162,17 @@ export const SCRAPING_FIELD_SELECTOR_NAMES = [
   'nextPageSelector',
 ] as const;
 
+const AUTHOR_FEATURE_FIELD_SELECTOR_NAMES = [
+  'authorNameSelector',
+  ...SCRAPING_FIELD_SELECTOR_NAMES,
+] as const;
+
 export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   urlStrategy: 'result_url',
   urlTemplate: '',
   testUrl: '',
   testValue: '',
+  authorNameSelector: undefined,
   resultListSelector: '',
   resultItemSelector: '',
   titleSelector: { kind: 'css', value: '' },
@@ -196,6 +209,7 @@ export const buildAuthorConfig = (
   urlTemplate: trimOptional(values.urlTemplate),
   testUrl: trimOptional(values.testUrl),
   testValue: trimOptional(values.testValue),
+  authorNameSelector: trimOptionalFieldSelector(values.authorNameSelector),
   languageDetection: buildLanguageDetectionConfig(values.languageDetection),
   ...buildAuthorScrapingFields(values),
 });
@@ -208,6 +222,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): AuthorFeatu
     urlTemplate: trimOptional(raw.urlTemplate),
     testUrl: trimOptional(raw.testUrl),
     testValue: trimOptional(raw.testValue),
+    authorNameSelector: trimOptionalFieldSelector(raw.authorNameSelector),
     languageDetection: buildLanguageDetectionConfig(raw.languageDetection as Record<string, unknown> | undefined),
     ...buildAuthorScrapingFields(raw),
   };
@@ -230,7 +245,7 @@ export const getSaveFieldErrors = (
     errors.titleSelector = 'Le selecteur du titre est requis.';
   }
 
-  SCRAPING_FIELD_SELECTOR_NAMES.forEach((fieldName) => {
+  AUTHOR_FEATURE_FIELD_SELECTOR_NAMES.forEach((fieldName) => {
     const error = getInvalidRegexFieldSelectorError(config[fieldName]);
     if (error) {
       errors[fieldName] = error;
@@ -270,6 +285,7 @@ export const buildValidationPresentation = (
   const titleCheck = validationResult.checks.find((check) => check.key === 'title');
   const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
+  const authorNameCheck = validationResult.checks.find((check) => check.key === 'authors');
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
   const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
   const languageCheck = validationResult.checks.find((check) => check.key === 'language');
@@ -299,6 +315,10 @@ export const buildValidationPresentation = (
 
   if (previewResults[0]?.detailUrl) {
     details.push(`Premier lien fiche detecte : ${formatDisplayUrl(previewResults[0].detailUrl)}`);
+  }
+
+  if (authorNameCheck?.matchedCount) {
+    details.push(`Nom(s) auteur detecte(s) : ${authorNameCheck.samples?.join(', ') || authorNameCheck.sample}`);
   }
 
   if (authorUrlCheck?.matchedCount) {

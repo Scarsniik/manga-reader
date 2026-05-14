@@ -129,6 +129,7 @@ export default function WorkspaceScraperAuthorPanel({
         finalUrl: documentResult.finalUrl,
       });
       const displayQuery = formatScraperValueForDisplay(query);
+      const resolvedAuthorName = authorPage.authorNames?.[0] || title || displayQuery;
       const nextInitialState: ScraperBrowserInitialState = {
         query: displayQuery,
         listingMode: "author",
@@ -139,9 +140,9 @@ export default function WorkspaceScraperAuthorPanel({
         hasExecutedListing: true,
         listingReturnState: null,
         authorTemplateContext: templateContext ?? null,
-        authorDisplayName: title || displayQuery,
+        authorDisplayName: resolvedAuthorName,
       };
-      const resolvedTitle = title || displayQuery || "Page auteur";
+      const resolvedTitle = resolvedAuthorName || "Page auteur";
 
       setScraper(nextScraper);
       setInitialState(nextInitialState);

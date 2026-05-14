@@ -303,6 +303,45 @@
   font-weight: 700;
 }
 
+.scraper-browser__author-multi-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(93, 156, 255, 0.38);
+  background: rgba(93, 156, 255, 0.14);
+  color: #dcebff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.scraper-browser__author-multi-search svg {
+  width: 18px;
+  height: 18px;
+}
+
+.scraper-browser__author-multi-search:hover,
+.scraper-browser__author-multi-search:focus-visible {
+  border-color: rgba(93, 156, 255, 0.68);
+  background: rgba(93, 156, 255, 0.22);
+  color: #ffffff;
+}
+
+.scraper-browser__author-multi-search:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-browser__author-multi-search:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .scraper-browser__results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));

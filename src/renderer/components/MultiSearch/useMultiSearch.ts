@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
   buildSourceResults,
@@ -19,7 +19,9 @@ import type {
 import useMultiSearchRunBatcher from "@/renderer/components/MultiSearch/useMultiSearchRunBatcher";
 import {
   buildInitialRun,
+  cancelMultiSearchRun,
   ensureRunSearchTerms,
+  isMultiSearchRunActive,
   keepNewSourceResults,
   summarizeTermRuns,
   upsertTermRun,
@@ -38,6 +40,7 @@ export default function useMultiSearch() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchTokenRef = useRef(0);
+  const cancelledScraperIdsRef = useRef(new Set<string>());
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
   const {
     clearRunUpdates,
@@ -51,6 +54,21 @@ export default function useMultiSearch() {
     () => runs.some((run) => run.hasNextPage && run.status !== "loading"),
     [runs],
   );
+  const hasActiveRuns = useMemo(
+    () => runs.some(isMultiSearchRunActive),
+    [runs],
+  );
+  const canStopSearch = hasActiveRuns;
+
+  useEffect(() => {
+    if (!hasActiveRuns) {
+      setIsSearching(false);
+    }
+  }, [hasActiveRuns]);
+
+  const isRunCancelled = useCallback((token: number, scraperId: string): boolean => (
+    token !== searchTokenRef.current || cancelledScraperIdsRef.current.has(scraperId)
+  ), []);
 
   const restoreRuns = useCallback((
     restoredRuns: MultiSearchScraperRun[],
@@ -58,8 +76,11 @@ export default function useMultiSearch() {
   ) => {
     clearRunUpdates();
     searchTokenRef.current += 1;
+    cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
-    setRuns(restoredRuns);
+    setRuns(restoredRuns.map((run) => (
+      isMultiSearchRunActive(run) ? cancelMultiSearchRun(run) : run
+    )));
     setIsSearching(false);
     setError(null);
     setMessage(restoredRuns.length ? "Recherche multi-sources restauree." : null);
@@ -75,6 +96,10 @@ export default function useMultiSearch() {
 
     if (!searchTerm) {
       return run;
+    }
+
+    if (isRunCancelled(token, run.scraper.id)) {
+      return null;
     }
 
     queueRunUpdate(token, {
@@ -94,6 +119,10 @@ export default function useMultiSearch() {
         termRun.nextPageUrl,
         paceConfig,
       );
+      if (isRunCancelled(token, run.scraper.id)) {
+        return null;
+      }
+
       const pageResults = buildSourceResults(run.scraper, page, pageIndex, searchTerm);
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
@@ -118,6 +147,10 @@ export default function useMultiSearch() {
       queueRunUpdate(token, nextRun, newPageResults.length, !nextRun.hasNextPage);
       return nextRun;
     } catch (loadError) {
+      if (isRunCancelled(token, run.scraper.id)) {
+        return null;
+      }
+
       const hasPartialResults = run.loadedPages > 0 || run.results.length > 0;
       const failedTermRun: MultiSearchTermRun = {
         ...termRun,
@@ -150,7 +183,7 @@ export default function useMultiSearch() {
       queueRunUpdate(token, failedRun, 0, true);
       return failedRun;
     }
-  }, [queueRunUpdate]);
+  }, [isRunCancelled, queueRunUpdate]);
 
   const loadNextPagesForRun = useCallback(async (
     run: MultiSearchScraperRun,
@@ -162,6 +195,11 @@ export default function useMultiSearch() {
       ...run,
       searchTerms: ensureRunSearchTerms(run, fallbackTerms),
     };
+
+    if (isRunCancelled(token, currentRun.scraper.id)) {
+      return null;
+    }
+
     const loadableTerms = currentRun.searchTerms.filter((termRun) => termRun.hasNextPage);
 
     if (!loadableTerms.length) {
@@ -169,7 +207,7 @@ export default function useMultiSearch() {
     }
 
     for (const termRun of loadableTerms) {
-      if (token !== searchTokenRef.current) {
+      if (isRunCancelled(token, currentRun.scraper.id)) {
         return null;
       }
 
@@ -187,7 +225,7 @@ export default function useMultiSearch() {
     }
 
     return currentRun;
-  }, [loadNextPageForRun]);
+  }, [isRunCancelled, loadNextPageForRun]);
 
   const runSearch = useCallback(async ({
     query,
@@ -210,6 +248,7 @@ export default function useMultiSearch() {
 
     const token = searchTokenRef.current + 1;
     searchTokenRef.current = token;
+    cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
     clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
@@ -263,6 +302,35 @@ export default function useMultiSearch() {
       }
     }
   }, [clearRunUpdates, flushRunUpdates, loadNextPagesForRun]);
+
+  const stopSearch = useCallback(() => {
+    const token = searchTokenRef.current;
+    flushRunUpdates(token);
+    searchTokenRef.current = token + 1;
+    cancelledScraperIdsRef.current.clear();
+    clearRunUpdates();
+    setRuns((currentRuns) => currentRuns.map((run) => (
+      isMultiSearchRunActive(run) ? cancelMultiSearchRun(run) : run
+    )));
+    setIsSearching(false);
+    setError(null);
+    setMessage("Recherche multi-sources arretee.");
+  }, [clearRunUpdates, flushRunUpdates]);
+
+  const stopScraperSearch = useCallback((scraperId: string) => {
+    const token = searchTokenRef.current;
+    flushRunUpdates(token);
+    cancelledScraperIdsRef.current.add(scraperId);
+    setRuns((currentRuns) => (
+      currentRuns.map((run) => (
+        run.scraper.id === scraperId && isMultiSearchRunActive(run)
+          ? cancelMultiSearchRun(run)
+          : run
+      ))
+    ));
+    setError(null);
+    setMessage("Recherche arretee pour ce scrapper.");
+  }, [flushRunUpdates]);
 
   const loadMoreForScraper = useCallback(async (scraperId: string, query: string) => {
     const run = runs.find((candidate) => candidate.scraper.id === scraperId);
@@ -320,8 +388,11 @@ export default function useMultiSearch() {
     message,
     error,
     canLoadMore,
+    canStopSearch,
     restoreRuns,
     runSearch,
+    stopSearch,
+    stopScraperSearch,
     loadMoreForAll,
     loadMoreForScraper,
   };

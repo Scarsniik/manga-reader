@@ -25,7 +25,7 @@ import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import ScraperAuthorFavoriteButton from '@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton';
-import { DownloadArrowIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
+import { DownloadArrowIcon, MagnifyingGlassIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -55,6 +55,7 @@ import {
 import {
   parseScraperRouteState,
   SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
+  SCRAPER_MULTI_SEARCH_VIEW_ID,
   writeScraperAuthorFavoriteRouteState,
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
@@ -100,6 +101,11 @@ import {
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
+import {
+  buildUniqueAuthorSearchNames,
+  formatAuthorDisplayName,
+  formatAuthorMultiSearchQuery,
+} from '@/renderer/utils/authorSearchNames';
 import generateId from '@/utils/id';
 import useParams from '@/renderer/hooks/useParams';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
@@ -838,11 +844,22 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
   const initialAuthorDisplayQuery = initialState?.listingMode === 'author'
     ? formatScraperValueForDisplay(initialState.query || '')
     : '';
-  const authorSourceName = authorSourceNameHint?.query === query
+  const fallbackAuthorSourceName = authorSourceNameHint?.query === query
     ? authorSourceNameHint.name
     : initialAuthorDisplayQuery && initialAuthorDisplayQuery === query && initialState?.authorDisplayName
       ? initialState.authorDisplayName
       : formatScraperValueForDisplay(query) || query;
+  const authorSourceName = listingPage?.authorNames?.[0] || fallbackAuthorSourceName;
+  const authorNameCandidates = useMemo(() => (
+    buildUniqueAuthorSearchNames([
+      ...(listingPage?.authorNames ?? []),
+      fallbackAuthorSourceName,
+    ])
+  ), [fallbackAuthorSourceName, listingPage?.authorNames]);
+  const authorResultsTitle = formatAuthorDisplayName(authorNameCandidates[0]);
+  const authorMultiSearchQuery = useMemo(() => (
+    formatAuthorMultiSearchQuery(authorNameCandidates)
+  ), [authorNameCandidates]);
   const handleOpenAuthorFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
     const favoritesSearch = writeScraperAuthorFavoriteRouteState(
       writeScraperRouteState(location.search, {
@@ -868,6 +885,54 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       search: favoritesSearch,
     });
   }, [location.search, navigate]);
+  const handleOpenAuthorMultiSearch = useCallback(() => {
+    if (!authorMultiSearchQuery) {
+      setRuntimeError('Aucun nom auteur exploitable n\'est disponible pour pre-remplir la recherche multi-sources.');
+      return;
+    }
+
+    const multiSearch = writeScraperRouteState(location.search, {
+      scraperId: SCRAPER_MULTI_SEARCH_VIEW_ID,
+      mode: 'search',
+      homepageActive: false,
+      homepagePage: 1,
+      searchActive: false,
+      searchQuery: '',
+      searchPage: 1,
+      authorActive: false,
+      authorQuery: '',
+      authorPage: 1,
+      mangaQuery: '',
+      mangaUrl: '',
+      bookmarksFilterScraperId: null,
+    });
+
+    navigate(
+      {
+        pathname: '/',
+        search: multiSearch,
+      },
+      {
+        state: {
+          multiSearchPrefillQuery: authorMultiSearchQuery,
+        },
+      },
+    );
+  }, [authorMultiSearchQuery, location.search, navigate, setRuntimeError]);
+  const authorMultiSearchAction = mode === 'author' ? (
+    <button
+      type="button"
+      className="scraper-browser__author-multi-search"
+      onClick={handleOpenAuthorMultiSearch}
+      disabled={loading || !authorMultiSearchQuery}
+      title={authorMultiSearchQuery
+        ? `Pre-remplir la recherche multi-sources avec ${authorMultiSearchQuery}`
+        : 'Aucun nom auteur disponible'}
+    >
+      <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+      <span>Recherche multi-source</span>
+    </button>
+  ) : null;
   const authorFavoriteAction = mode === 'author' && query.trim() ? (
     <ScraperAuthorFavoriteButton
       scraperId={scraper.id}
@@ -879,6 +944,12 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       onOpenFavorite={handleOpenAuthorFavorite}
       disabled={loading}
     />
+  ) : null;
+  const authorHeaderAction = mode === 'author' ? (
+    <>
+      {authorMultiSearchAction}
+      {authorFavoriteAction}
+    </>
   ) : null;
   const shouldShowSearchPagination = Boolean(
     listingPage && (listingPageIndex > 0 || listingPage.nextPageUrl || usesActiveTemplatePaging),
@@ -1582,6 +1653,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       <ScraperSearchResultsSection
         mode={mode === 'author' ? 'author' : mode === 'homepage' ? 'homepage' : 'search'}
         backLabel={authorResultsBackLabel}
+        authorTitle={authorResultsTitle}
         visibleSearchResults={visibleSearchResults}
         searchResultsCount={listingResults.length}
         query={query}
@@ -1592,7 +1664,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
         paginationInfoLabel={paginationInfoLabel}
         loading={loading}
         usesSearchTemplatePaging={usesActiveTemplatePaging}
-        headerAction={authorFavoriteAction}
+        headerAction={authorHeaderAction}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
         getViewState={getSearchResultViewState}

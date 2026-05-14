@@ -322,12 +322,15 @@ export interface ScraperAuthorFeatureConfig extends ScraperCardListConfig {
   urlTemplate?: string;
   testUrl?: string;
   testValue?: string;
+  authorNameSelector?: ScraperFieldSelector;
 }
 
 export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
   authorUrl?: string;
+  authorUrls?: string[];
+  authorNames?: string[];
   thumbnailUrl?: string;
   summary?: string;
   pageCount?: string;

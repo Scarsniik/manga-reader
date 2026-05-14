@@ -37,6 +37,23 @@ export const buildInitialRun = (
   hasNextPage: searchTerms.length > 0,
 });
 
+export const isMultiSearchRunActive = (run: MultiSearchScraperRun): boolean => (
+  run.status === "waiting" || run.status === "loading"
+);
+
+export const cancelMultiSearchRun = (run: MultiSearchScraperRun): MultiSearchScraperRun => ({
+  ...run,
+  status: "cancelled",
+  searchTerms: run.searchTerms.map((termRun) => ({
+    ...termRun,
+    hasNextPage: false,
+    nextPageUrl: undefined,
+  })),
+  hasNextPage: false,
+  nextPageUrl: undefined,
+  error: undefined,
+});
+
 export const ensureRunSearchTerms = (
   run: MultiSearchScraperRun,
   fallbackTerms: string[],

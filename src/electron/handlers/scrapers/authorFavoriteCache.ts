@@ -93,6 +93,8 @@ const sanitizeSearchResult = (value: unknown): ScraperSearchResultItem | null =>
     title,
     detailUrl: normalizeOptionalString(raw.detailUrl),
     authorUrl: normalizeOptionalString(raw.authorUrl),
+    authorUrls: normalizeStringList(raw.authorUrls),
+    authorNames: normalizeStringList(raw.authorNames),
     thumbnailUrl: normalizeOptionalString(raw.thumbnailUrl),
     summary: normalizeOptionalString(raw.summary),
     pageCount: normalizeOptionalString(raw.pageCount),

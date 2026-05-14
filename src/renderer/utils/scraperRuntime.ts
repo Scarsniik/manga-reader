@@ -90,6 +90,7 @@ export type ScraperReaderSession = {
 export type ScraperRuntimeSearchPageResult = {
   currentPageUrl: string;
   nextPageUrl?: string;
+  authorNames?: string[];
   items: ScraperSearchResultItem[];
 };
 
@@ -384,6 +385,7 @@ export const getScraperAuthorFeatureConfig = (
     urlTemplate: trimOptional(raw.urlTemplate),
     testUrl: trimOptional(raw.testUrl),
     testValue: trimOptional(raw.testValue),
+    authorNameSelector: trimOptionalFieldSelector(raw.authorNameSelector),
   };
 };
 
@@ -731,6 +733,25 @@ const extractUrlFieldSelectorValuesFromRoot = (
     : extractUrlSelectorValuesFromRoot(root, selector.value);
 };
 
+const extractTextFieldSelectorValuesFromRoot = (
+  root: ParentNode,
+  input: ScraperFieldSelector | string,
+): string[] => {
+  const selector = normalizeScraperFieldSelector(input);
+  if (!selector || selector.kind === 'regex') {
+    return [];
+  }
+
+  const { selector: cssSelector } = parseSelectorExpression(selector.value);
+  if (!cssSelector) {
+    return [];
+  }
+
+  return Array.from(root.querySelectorAll(cssSelector))
+    .map((element) => element.textContent?.trim() || '')
+    .filter(Boolean);
+};
+
 const hasLanguageDetectionConfig = (
   config: ScraperLanguageDetectionConfig | undefined,
 ): config is ScraperLanguageDetectionConfig => Boolean(
@@ -800,6 +821,14 @@ const uniqueValues = (values: string[]): string[] => {
     return true;
   });
 };
+
+const getAuthorPageNameSelector = (
+  config: ScraperCardListConfig,
+): ScraperFieldSelector | undefined => (
+  'authorNameSelector' in config
+    ? (config as ScraperAuthorFeatureConfig).authorNameSelector
+    : undefined
+);
 
 const uniqueChapterResults = (
   chapters: ScraperRuntimeChapterResult[],
@@ -974,6 +1003,10 @@ export const extractScraperSearchPageFromDocument = (
   },
 ): ScraperRuntimeSearchPageResult => {
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const authorNameSelector = getAuthorPageNameSelector(config);
+  const authorNames = authorNameSelector
+    ? uniqueValues(extractFieldSelectorValuesFromRoot(doc, authorNameSelector))
+    : [];
   const searchRoots = config.resultListSelector
     ? Array.from(doc.querySelectorAll(config.resultListSelector))
     : [doc];
@@ -992,9 +1025,12 @@ export const extractScraperSearchPageFromDocument = (
     const detailUrlValue = config.detailUrlSelector
       ? extractUrlFieldSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
       : undefined;
-    const authorUrlValue = config.authorUrlSelector
-      ? extractUrlFieldSelectorValuesFromRoot(item, config.authorUrlSelector)[0]
-      : undefined;
+    const authorUrlValues = config.authorUrlSelector
+      ? uniqueValues(extractUrlFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
+      : [];
+    const authorNameValues = config.authorUrlSelector
+      ? uniqueValues(extractTextFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
+      : [];
     const thumbnailValue = config.thumbnailSelector
       ? extractFieldSelectorValuesFromRoot(item, config.thumbnailSelector)[0]
       : undefined;
@@ -1011,9 +1047,13 @@ export const extractScraperSearchPageFromDocument = (
       detailUrl: detailUrlValue
         ? toAbsoluteScraperUrl(detailUrlValue, documentUrl)
         : undefined,
-      authorUrl: authorUrlValue
-        ? toAbsoluteScraperUrl(authorUrlValue, documentUrl)
+      authorUrl: authorUrlValues[0]
+        ? toAbsoluteScraperUrl(authorUrlValues[0], documentUrl)
         : undefined,
+      authorUrls: authorUrlValues.length
+        ? authorUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
+        : undefined,
+      authorNames: authorNameValues.length ? authorNameValues : undefined,
       thumbnailUrl: thumbnailValue
         ? toAbsoluteScraperUrl(thumbnailValue, documentUrl)
         : undefined,
@@ -1034,6 +1074,7 @@ export const extractScraperSearchPageFromDocument = (
     nextPageUrl: nextPageValue
       ? toAbsoluteScraperUrl(nextPageValue, documentUrl)
       : undefined,
+    authorNames: authorNames.length ? authorNames : undefined,
     items: uniqueSearchResults(results),
   };
 };

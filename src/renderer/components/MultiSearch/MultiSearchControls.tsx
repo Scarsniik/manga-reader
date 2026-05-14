@@ -15,7 +15,9 @@ type Props = {
   viewMode: MultiSearchViewMode;
   isSearching: boolean;
   canSubmit: boolean;
+  canStopSearch: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onStopSearch: () => void;
   onQueryChange: (value: string) => void;
   onDepthModeChange: (value: MultiSearchDepthMode) => void;
   onAdvancedPagesChange: (value: MultiSearchAdvancedPages) => void;
@@ -48,7 +50,9 @@ export default function MultiSearchControls({
   viewMode,
   isSearching,
   canSubmit,
+  canStopSearch,
   onSubmit,
+  onStopSearch,
   onQueryChange,
   onDepthModeChange,
   onAdvancedPagesChange,
@@ -66,6 +70,14 @@ export default function MultiSearchControls({
         />
         <button type="submit" disabled={isSearching || !canSubmit}>
           {isSearching ? "Recherche..." : "Lancer"}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onStopSearch}
+          disabled={!canStopSearch}
+        >
+          Arreter
         </button>
       </div>
 
