@@ -422,6 +422,7 @@ export interface FetchScraperDocumentRequest {
   baseUrl: string;
   targetUrl: string;
   requestConfig?: ScraperRequestConfig;
+  validateImage?: boolean;
 }
 
 export interface FetchScraperDocumentResult {

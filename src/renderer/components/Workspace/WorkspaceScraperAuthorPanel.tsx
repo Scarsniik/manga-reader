@@ -7,7 +7,7 @@ import {
 } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
-  extractScraperSearchPageFromDocument,
+  extractScraperSearchPageFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
   getScraperAuthorFeatureConfig,
   getScraperFeature,
@@ -124,10 +124,10 @@ export default function WorkspaceScraperAuthorPanel({
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const authorPage = extractScraperSearchPageFromDocument(documentNode, authorConfig, {
+      const authorPage = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
         requestedUrl: documentResult.requestedUrl,
         finalUrl: documentResult.finalUrl,
-      });
+      }, async (request) => api.fetchScraperDocument(request));
       const displayQuery = formatScraperValueForDisplay(query);
       const resolvedAuthorName = authorPage.authorNames?.[0] || title || displayQuery;
       const nextInitialState: ScraperBrowserInitialState = {

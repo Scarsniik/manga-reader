@@ -6,7 +6,7 @@ import type {
 } from "@/shared/scraper";
 import { hasScraperFieldSelectorValue } from "@/shared/scraper";
 import {
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   hasRenderableDetails,
@@ -300,13 +300,13 @@ export const enrichScraperBookmarkRequestFromDetails = async (
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, "text/html");
-    const extractedDetails = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+    const extractedDetails = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
       status: documentResult.status,
       contentType: documentResult.contentType,
       html: documentResult.html,
-    });
+    }, async (request) => api.fetchScraperDocument(request));
 
     if (!hasRenderableDetails(extractedDetails)) {
       return requestWithLanguageFallback;

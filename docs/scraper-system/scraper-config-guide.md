@@ -495,7 +495,8 @@ optionnel : s'il est absent, le template doit pointer directement vers une image
 
 ### Extraction HTML
 
-Quand `pageImageSelector` est renseigne :
+Quand `pageImageSelector` est renseigne en mode `details_page`, `chapter_page` ou avec un template
+sans placeholder de page :
 
 1. le module charge la source cible
 2. il parse le HTML
@@ -505,6 +506,11 @@ Quand `pageImageSelector` est renseigne :
 
 Ce mode convient aux pages qui contiennent deja des balises `img`, par exemple `#reader img@src` ou
 `.page img@data-src`.
+
+Avec un template qui contient `{{page}}` ou `{{pageIndex}}`, `pageImageSelector` change de portee :
+le runtime charge chaque URL de page HTML construite par le template, extrait l'image avec le
+selecteur, puis passe a la page suivante. La resolution s'arrete au nombre de pages connu depuis
+`pageCount`, sinon a la premiere page qui ne donne plus de nouvelle image exploitable.
 
 ### Template vers image directe
 
@@ -517,7 +523,8 @@ Cas possibles :
 - template avec `{{page}}` ou `{{pageIndex}}` : le runtime incremente les pages jusqu'a la premiere
   reponse non image, avec une limite par defaut de 2000 pages
 
-La validation de l'ecran ne teste que les 8 premieres pages directes pour l'apercu.
+La validation de l'ecran ne teste que les 8 premieres pages directes ou pages HTML sequentielles
+pour l'apercu.
 
 Si le template direct ne donne pas d'image au runtime, un fallback essaie de deduire une sequence
 depuis la couverture de `Fiche` quand son URL finit par un nombre et une extension, par exemple

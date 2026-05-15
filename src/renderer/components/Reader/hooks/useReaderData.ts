@@ -6,7 +6,7 @@ import {
     ScraperReaderProgressRecord,
 } from '@/shared/scraper';
 import {
-    extractScraperDetailsFromDocument,
+    extractScraperDetailsFromDocumentWithImageFallbacks,
     getScraperDetailsFeatureConfig,
     getScraperFeature,
     getScraperPagesFeatureConfig,
@@ -182,13 +182,13 @@ const useReaderData = ({
 
                 const parser = new DOMParser();
                 const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-                const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+                const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
                     requestedUrl: documentResult.requestedUrl,
                     finalUrl: documentResult.finalUrl,
                     status: documentResult.status,
                     contentType: documentResult.contentType,
                     html: documentResult.html,
-                });
+                }, async (request) => window.api.fetchScraperDocument(request));
                 if (!hasRenderableDetails(details)) {
                     throw new Error('La fiche distante a ete chargee, mais aucun contenu exploitable n\'a ete extrait.');
                 }

@@ -57,6 +57,8 @@ type Props = {
   onBack: () => void;
 };
 
+const MAX_TEMPLATE_SELECTOR_VALIDATION_PAGES = 8;
+
 export default function ScraperPagesFeatureEditor({
   feature,
   onBack,
@@ -389,50 +391,135 @@ export default function ScraperPagesFeatureEditor({
               issueCode: 'no_match',
             };
         }
-      } else if (!typedDocumentResult.html) {
-        pagesCheck = {
-          key: 'pages',
-          selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
-          required: true,
-          matchedCount: 0,
-          issueCode: 'no_match',
-        };
       } else {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(typedDocumentResult.html, 'text/html');
         const pageImageSelector = config.pageImageSelector;
         if (!pageImageSelector) {
           throw new Error('Le selecteur des pages est requis.');
         }
 
-        try {
-          const pageDocumentUrl = typedDocumentResult.finalUrl || typedDocumentResult.requestedUrl;
-          const values = extractSelectorValues(doc, pageImageSelector)
-            .map((value) => toAbsoluteUrl(value, pageDocumentUrl));
-          pagesCheck = values.length > 0
+        const selectorLabel = formatScraperFieldSelectorForDisplay(config.pageImageSelector);
+        if (config.urlStrategy === 'template' && hasPagePlaceholder(config.urlTemplate)) {
+          const templatePageUrls: string[] = [];
+          const seenTemplatePageUrls = new Set<string>();
+          const parser = new DOMParser();
+          const templateBaseUrl = resolveTemplateBaseUrl(
+            scraper.baseUrl,
+            config,
+            usesScraperPagesTemplateChapterContext(config)
+              ? selectedValidationChapter?.url || detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl
+              : detailsFeature.validation.finalUrl || detailsFeature.validation.requestedUrl,
+          );
+          let hasInvalidSelector = false;
+
+          for (let pageIndex = 0; pageIndex < MAX_TEMPLATE_SELECTOR_VALIDATION_PAGES; pageIndex += 1) {
+            const resourceResult = pageIndex === 0
+              ? typedDocumentResult
+              : await (window as any).api.fetchScraperDocument({
+                baseUrl: scraper.baseUrl,
+                targetUrl: buildTemplatePageUrl(
+                  scraper.baseUrl,
+                  config.urlTemplate || '',
+                  buildTemplateContextForPage,
+                  pageIndex,
+                  {
+                    relativeToUrl: templateBaseUrl,
+                  },
+                ),
+              }) as FetchScraperDocumentResult;
+
+            if (!resourceResult.ok || !resourceResult.html) {
+              break;
+            }
+
+            try {
+              const pageDocumentUrl = resourceResult.finalUrl || resourceResult.requestedUrl;
+              const doc = parser.parseFromString(resourceResult.html, 'text/html');
+              const nextPageUrls = extractSelectorValues(doc, pageImageSelector)
+                .map((value) => toAbsoluteUrl(value, pageDocumentUrl))
+                .filter((pageUrl) => {
+                  if (seenTemplatePageUrls.has(pageUrl)) {
+                    return false;
+                  }
+
+                  seenTemplatePageUrls.add(pageUrl);
+                  return true;
+                });
+
+              if (!nextPageUrls.length) {
+                break;
+              }
+
+              templatePageUrls.push(...nextPageUrls);
+            } catch {
+              hasInvalidSelector = true;
+              break;
+            }
+          }
+
+          pagesCheck = hasInvalidSelector
             ? {
               key: 'pages',
-              selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
-              required: true,
-              matchedCount: values.length,
-              sample: values[0],
-              samples: values.slice(0, 12),
-            }
-            : {
-              key: 'pages',
-              selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
+              selector: selectorLabel,
               required: true,
               matchedCount: 0,
-              issueCode: 'no_match',
-            };
-        } catch {
+              issueCode: 'invalid_selector',
+            }
+            : templatePageUrls.length > 0
+              ? {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: templatePageUrls.length,
+                sample: templatePageUrls[0],
+                samples: templatePageUrls.slice(0, 12),
+              }
+              : {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: 0,
+                issueCode: 'no_match',
+              };
+        } else if (!typedDocumentResult.html) {
           pagesCheck = {
             key: 'pages',
-            selector: formatScraperFieldSelectorForDisplay(config.pageImageSelector),
+            selector: selectorLabel,
             required: true,
             matchedCount: 0,
-            issueCode: 'invalid_selector',
+            issueCode: 'no_match',
           };
+        } else {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(typedDocumentResult.html, 'text/html');
+          try {
+            const pageDocumentUrl = typedDocumentResult.finalUrl || typedDocumentResult.requestedUrl;
+            const values = extractSelectorValues(doc, pageImageSelector)
+              .map((value) => toAbsoluteUrl(value, pageDocumentUrl));
+            pagesCheck = values.length > 0
+              ? {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: values.length,
+                sample: values[0],
+                samples: values.slice(0, 12),
+              }
+              : {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: 0,
+                issueCode: 'no_match',
+              };
+          } catch {
+            pagesCheck = {
+              key: 'pages',
+              selector: selectorLabel,
+              required: true,
+              matchedCount: 0,
+              issueCode: 'invalid_selector',
+            };
+          }
         }
       }
 

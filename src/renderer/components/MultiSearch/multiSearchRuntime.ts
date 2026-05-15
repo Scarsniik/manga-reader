@@ -7,7 +7,7 @@ import {
   ScraperSearchResultItem,
 } from "@/shared/scraper";
 import {
-  extractScraperSearchPageFromDocument,
+  extractScraperSearchPageFromDocumentWithImageFallbacks,
   getScraperFeature,
   getScraperAuthorFeatureConfig,
   getScraperSearchFeatureConfig,
@@ -140,10 +140,10 @@ const fetchSearchPage = async (
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  return extractScraperSearchPageFromDocument(documentNode, searchConfig, {
+  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
-  });
+  }, async (request) => fetchScraperDocument(request));
 };
 
 export const fetchSearchPageWithRetry = async (
@@ -215,10 +215,10 @@ const fetchAuthorPage = async (
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  return extractScraperSearchPageFromDocument(documentNode, authorConfig, {
+  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
-  });
+  }, async (request) => fetchScraperDocument(request));
 };
 
 export const fetchAuthorPageWithRetry = async (

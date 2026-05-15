@@ -12,7 +12,7 @@ import type { Manga } from '@/renderer/types';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
 import {
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   hasRenderableDetails,
   resolveScraperPageUrls,
   ScraperRuntimeDetailsResult,
@@ -144,13 +144,13 @@ export async function queueStandaloneScraperCardDownload({
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-  const details = extractScraperDetailsFromDocument(documentNode, detailsConfig as ScraperDetailsFeatureConfig, {
+  const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig as ScraperDetailsFeatureConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
     status: documentResult.status,
     contentType: documentResult.contentType,
     html: documentResult.html,
-  });
+  }, async (request) => fetchScraperDocument(request));
 
   if (!hasRenderableDetails(details)) {
     throw new Error('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');

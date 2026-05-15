@@ -3,7 +3,7 @@ import {
   type FetchScraperDocumentResult,
 } from "@/shared/scraper";
 import {
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -182,13 +182,13 @@ const fetchDetailsAuthors = async (
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+  const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
     status: documentResult.status,
     contentType: documentResult.contentType,
     html: documentResult.html,
-  });
+  }, async (request) => api.fetchScraperDocument(request));
 
   return details.authorUrls.reduce((hasAuthor, authorUrl, index) => (
     addAuthorResult(

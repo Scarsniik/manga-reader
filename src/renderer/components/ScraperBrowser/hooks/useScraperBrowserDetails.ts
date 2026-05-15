@@ -16,7 +16,7 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
   createScraperMangaId,
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   extractScraperDetailsThumbnailsPageFromDocument,
   hasRenderableDetails,
   resolveScraperChapters,
@@ -166,13 +166,13 @@ export function useScraperBrowserDetails({
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-      const extractedDetails = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+      const extractedDetails = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
         requestedUrl: documentResult.requestedUrl,
         finalUrl: documentResult.finalUrl,
         status: documentResult.status,
         contentType: documentResult.contentType,
         html: documentResult.html,
-      });
+      }, async (request) => fetchScraperDocument(request));
       const extractedChapters = chaptersConfig
         ? await (async () => {
           try {

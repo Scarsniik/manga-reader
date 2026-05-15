@@ -10,7 +10,7 @@ import {
 import type { WorkspaceTarget } from "@/renderer/types/workspace";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -205,13 +205,13 @@ function ScraperDetailsPanel({
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const detailsResult = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+      const detailsResult = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
         requestedUrl: documentResult.requestedUrl,
         finalUrl: documentResult.finalUrl,
         status: documentResult.status,
         contentType: documentResult.contentType,
         html: documentResult.html,
-      });
+      }, async (request) => api.fetchScraperDocument(request));
 
       if (!hasRenderableDetails(detailsResult)) {
         setScraper(nextScraper);

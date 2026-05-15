@@ -1,4 +1,5 @@
 import { type IpcMainInvokeEvent } from "electron";
+import sharp from "sharp";
 import {
   normalizeScraperBaseUrl,
   resolveScraperUrl,
@@ -13,6 +14,8 @@ import {
   DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS,
   sanitizeRequestConfig,
 } from "./shared";
+
+const MAX_VALIDATED_IMAGE_BYTES = 16 * 1024 * 1024;
 
 const buildContentTypeWarning = (
   kind: ScraperAccessValidationRequest["kind"],
@@ -146,13 +149,77 @@ export async function fetchScraperDocument(
     let html: string | undefined;
 
     if (response.ok && contentType && contentType.toLowerCase().startsWith("image/")) {
+      if (request.validateImage) {
+        const contentLength = Number(response.headers.get("content-length") || 0);
+        if (contentLength > MAX_VALIDATED_IMAGE_BYTES) {
+          return {
+            ok: false,
+            checkedAt,
+            requestedUrl,
+            finalUrl: response.url || requestedUrl,
+            status: response.status,
+            contentType,
+            error: "L'image distante est trop volumineuse pour etre validee.",
+          };
+        }
+
+        const imageBuffer = Buffer.from(await response.arrayBuffer());
+        if (imageBuffer.length > MAX_VALIDATED_IMAGE_BYTES) {
+          return {
+            ok: false,
+            checkedAt,
+            requestedUrl,
+            finalUrl: response.url || requestedUrl,
+            status: response.status,
+            contentType,
+            error: "L'image distante est trop volumineuse pour etre validee.",
+          };
+        }
+
+        try {
+          await sharp(imageBuffer).metadata();
+        } catch {
+          return {
+            ok: false,
+            checkedAt,
+            requestedUrl,
+            finalUrl: response.url || requestedUrl,
+            status: response.status,
+            contentType,
+            error: "L'image distante n'est pas exploitable.",
+          };
+        }
+      } else {
+        try {
+          await response.body?.cancel();
+        } catch {
+          // no-op
+        }
+      }
+    } else {
+      html = await response.text();
+    }
+
+    if (
+      response.ok
+      && request.validateImage
+      && (!contentType || !contentType.toLowerCase().startsWith("image/"))
+    ) {
       try {
         await response.body?.cancel();
       } catch {
         // no-op
       }
-    } else {
-      html = await response.text();
+
+      return {
+        ok: false,
+        checkedAt,
+        requestedUrl,
+        finalUrl: response.url || requestedUrl,
+        status: response.status,
+        contentType,
+        error: "La ressource distante ne repond pas comme une image.",
+      };
     }
 
     return {

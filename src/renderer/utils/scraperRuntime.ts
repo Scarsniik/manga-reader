@@ -97,6 +97,7 @@ export type ScraperRuntimeSearchPageResult = {
 export type ScraperDocumentFetcher = (request: {
   baseUrl: string;
   targetUrl: string;
+  validateImage?: boolean;
 }) => Promise<FetchScraperDocumentResult>;
 
 export type ScraperResolvedChaptersResult = {
@@ -803,10 +804,15 @@ export const extractSelectorValues = (
 );
 
 export const toAbsoluteScraperUrl = (value: string, baseUrl: string): string => {
+  const normalizedValue = value
+    .trim()
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/g, '&');
+
   try {
-    return new URL(value, baseUrl).toString();
+    return new URL(normalizedValue, baseUrl).toString();
   } catch {
-    return value;
+    return normalizedValue;
   }
 };
 
@@ -821,6 +827,94 @@ const uniqueValues = (values: string[]): string[] => {
     return true;
   });
 };
+
+const normalizeExtractedScraperUrlValue = (value: string): string => (
+  value
+    .trim()
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/g, '&')
+);
+
+const extractImageCandidateValues = (value: string): string[] => {
+  const normalizedValue = normalizeExtractedScraperUrlValue(value);
+  if (!normalizedValue) {
+    return [];
+  }
+
+  if (normalizedValue.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(normalizedValue) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((candidate) => String(candidate ?? '').trim())
+          .filter(Boolean);
+      }
+    } catch {
+      // Fall through to URL extraction.
+    }
+  }
+
+  const absoluteUrls = normalizedValue.match(/https?:\/\/[^\s"'<>]+/g);
+  if (absoluteUrls?.length) {
+    return absoluteUrls;
+  }
+
+  return [normalizedValue];
+};
+
+const getImageSelectorCandidateUrls = (
+  root: ParentNode,
+  selector: ScraperFieldSelector | undefined,
+  documentUrl: string,
+): string[] => {
+  if (!selector || !hasScraperFieldSelectorValue(selector)) {
+    return [];
+  }
+
+  return uniqueValues(
+    extractFieldSelectorValuesFromRoot(root, selector)
+      .flatMap((value) => extractImageCandidateValues(value))
+      .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+      .filter(Boolean),
+  );
+};
+
+const resolveFirstAvailableImageUrl = async (
+  candidates: string[],
+  fetchDocument: ScraperDocumentFetcher | undefined,
+): Promise<string | undefined> => {
+  if (candidates.length <= 1 || !fetchDocument) {
+    return candidates[0];
+  }
+
+  for (const candidate of candidates) {
+    const result = await fetchDocument({
+      baseUrl: candidate,
+      targetUrl: candidate,
+      validateImage: true,
+    });
+
+    if (result.ok && isImageLikeContentType(result.contentType)) {
+      return result.finalUrl || result.requestedUrl || candidate;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveImageSelectorValueFromRoot = async (
+  root: ParentNode,
+  selector: ScraperFieldSelector | undefined,
+  documentUrl: string,
+  fetchDocument: ScraperDocumentFetcher | undefined,
+): Promise<string | undefined> => (
+  resolveFirstAvailableImageUrl(
+    getImageSelectorCandidateUrls(root, selector, documentUrl),
+    fetchDocument,
+  )
+);
 
 const getAuthorPageNameSelector = (
   config: ScraperCardListConfig,
@@ -905,6 +999,40 @@ export const hasAuthorPagePlaceholder = (
 const isImageLikeContentType = (contentType: string | undefined): boolean => (
   typeof contentType === 'string' && contentType.toLowerCase().startsWith('image/')
 );
+
+const normalizePositiveInteger = (value: unknown): number | null => {
+  const parsed = typeof value === 'number'
+    ? value
+    : Number.parseInt(String(value ?? '').match(/\d+/)?.[0] ?? '', 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+};
+
+const inferTemplateSelectorPageLimit = (
+  details: ScraperRuntimeDetailsResult,
+  pagesConfig: ScraperPagesFeatureConfig,
+  chapter: ScraperRuntimeChapterResult | null,
+  maxTemplatePages: number,
+): { isKnownTotal: boolean; pageLimit: number } => {
+  if (!chapter && !usesScraperPagesChapters(pagesConfig)) {
+    const detailsPageCount = normalizePositiveInteger(details.pageCount);
+    if (detailsPageCount) {
+      return {
+        isKnownTotal: true,
+        pageLimit: Math.min(detailsPageCount, maxTemplatePages),
+      };
+    }
+  }
+
+  return {
+    isKnownTotal: false,
+    pageLimit: maxTemplatePages,
+  };
+};
 
 const buildSequentialImageUrl = (
   prefix: string,
@@ -1032,7 +1160,7 @@ export const extractScraperSearchPageFromDocument = (
       ? uniqueValues(extractTextFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
       : [];
     const thumbnailValue = config.thumbnailSelector
-      ? extractFieldSelectorValuesFromRoot(item, config.thumbnailSelector)[0]
+      ? getImageSelectorCandidateUrls(item, config.thumbnailSelector, documentUrl)[0]
       : undefined;
     const summaryValue = config.summarySelector
       ? extractFieldSelectorValuesFromRoot(item, config.summarySelector)[0]
@@ -1054,9 +1182,7 @@ export const extractScraperSearchPageFromDocument = (
         ? authorUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
         : undefined,
       authorNames: authorNameValues.length ? authorNameValues : undefined,
-      thumbnailUrl: thumbnailValue
-        ? toAbsoluteScraperUrl(thumbnailValue, documentUrl)
-        : undefined,
+      thumbnailUrl: thumbnailValue,
       summary: summaryValue,
       pageCount: pageCountValue,
       languageCodes,
@@ -1087,6 +1213,104 @@ export const extractScraperSearchResultsFromDocument = (
     finalUrl?: string;
   },
 ): ScraperSearchResultItem[] => extractScraperSearchPageFromDocument(doc, config, requestMeta).items;
+
+export const extractScraperSearchPageFromDocumentWithImageFallbacks = async (
+  doc: Document,
+  config: ScraperCardListConfig,
+  requestMeta: {
+    requestedUrl: string;
+    finalUrl?: string;
+  },
+  fetchDocument: ScraperDocumentFetcher | undefined,
+): Promise<ScraperRuntimeSearchPageResult> => {
+  const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
+  const authorNameSelector = getAuthorPageNameSelector(config);
+  const authorNames = authorNameSelector
+    ? uniqueValues(extractFieldSelectorValuesFromRoot(doc, authorNameSelector))
+    : [];
+  const searchRoots = config.resultListSelector
+    ? Array.from(doc.querySelectorAll(config.resultListSelector))
+    : [doc];
+  const resultItems = Array.from(
+    new Set(
+      searchRoots.flatMap((root) => Array.from(root.querySelectorAll(config.resultItemSelector))),
+    ),
+  );
+
+  const extractedResults = await Promise.all(resultItems.map(async (item): Promise<ScraperSearchResultItem | null> => {
+    const title = extractFieldSelectorValuesFromRoot(item, config.titleSelector)[0];
+    if (!title) {
+      return null;
+    }
+
+    const detailUrlValue = config.detailUrlSelector
+      ? extractUrlFieldSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
+      : undefined;
+    const authorUrlValues = config.authorUrlSelector
+      ? uniqueValues(extractUrlFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
+      : [];
+    const authorNameValues = config.authorUrlSelector
+      ? uniqueValues(extractTextFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
+      : [];
+    const thumbnailUrl = await resolveImageSelectorValueFromRoot(
+      item,
+      config.thumbnailSelector,
+      documentUrl,
+      fetchDocument,
+    );
+    const summaryValue = config.summarySelector
+      ? extractFieldSelectorValuesFromRoot(item, config.summarySelector)[0]
+      : undefined;
+    const pageCountValue = config.pageCountSelector
+      ? extractFieldSelectorValuesFromRoot(item, config.pageCountSelector)[0]
+      : undefined;
+    const languageCodes = extractLanguageCodesFromRoot(item, config.languageDetection, title);
+
+    return {
+      title,
+      detailUrl: detailUrlValue
+        ? toAbsoluteScraperUrl(detailUrlValue, documentUrl)
+        : undefined,
+      authorUrl: authorUrlValues[0]
+        ? toAbsoluteScraperUrl(authorUrlValues[0], documentUrl)
+        : undefined,
+      authorUrls: authorUrlValues.length
+        ? authorUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
+        : undefined,
+      authorNames: authorNameValues.length ? authorNameValues : undefined,
+      thumbnailUrl,
+      summary: summaryValue,
+      pageCount: pageCountValue,
+      languageCodes,
+    };
+  }));
+
+  const nextPageValue = config.nextPageSelector
+    ? extractUrlFieldSelectorValuesFromRoot(doc, config.nextPageSelector)[0]
+    : undefined;
+
+  return {
+    currentPageUrl: documentUrl,
+    nextPageUrl: nextPageValue
+      ? toAbsoluteScraperUrl(nextPageValue, documentUrl)
+      : undefined,
+    authorNames: authorNames.length ? authorNames : undefined,
+    items: uniqueSearchResults(extractedResults.filter((result): result is ScraperSearchResultItem => Boolean(result))),
+  };
+};
+
+export const extractScraperSearchResultsFromDocumentWithImageFallbacks = async (
+  doc: Document,
+  config: ScraperCardListConfig,
+  requestMeta: {
+    requestedUrl: string;
+    finalUrl?: string;
+  },
+  fetchDocument: ScraperDocumentFetcher | undefined,
+): Promise<ScraperSearchResultItem[]> => (
+  extractScraperSearchPageFromDocumentWithImageFallbacks(doc, config, requestMeta, fetchDocument)
+    .then((page) => page.items)
+);
 
 export type ScraperRuntimeDetailsRequestMeta = {
   requestedUrl: string;
@@ -1187,7 +1411,7 @@ export const extractScraperDetailsFieldValues = (
 
     const values = extractSelectorValues(doc, selector);
     fieldValuesByKey[fieldKey] = fieldKey === 'cover'
-      ? values.map((value) => toAbsoluteScraperUrl(value, documentUrl))
+      ? getImageSelectorCandidateUrls(doc, selector, documentUrl)
       : values;
   });
 
@@ -1301,6 +1525,54 @@ export const extractScraperDetailsFromDocument = (
   requestMeta: ScraperRuntimeDetailsRequestMeta,
 ): ScraperRuntimeDetailsResult => {
   const fieldValuesByKey = extractScraperDetailsFieldValues(doc, config, requestMeta);
+  const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
+  const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta);
+  const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta);
+  const title = fieldValuesByKey.title?.[0];
+  const languageCodes = extractLanguageCodesFromRoot(doc, config.languageDetection, title);
+  const derivedValues = derivedValueResults.reduce<Record<string, string>>((accumulator, derivedValue) => {
+    if (derivedValue.value) {
+      accumulator[derivedValue.key] = derivedValue.value;
+    }
+
+    return accumulator;
+  }, {});
+
+  return {
+    requestedUrl: requestMeta.requestedUrl,
+    finalUrl: requestMeta.finalUrl,
+    status: requestMeta.status,
+    contentType: requestMeta.contentType,
+    title,
+    cover: fieldValuesByKey.cover?.[0],
+    description: fieldValuesByKey.description?.[0],
+    authors: uniqueValues(fieldValuesByKey.authors ?? []),
+    authorUrls,
+    tags: uniqueValues(fieldValuesByKey.tags ?? []),
+    thumbnails: config.thumbnailsSelector && hasScraperFieldSelectorValue(config.thumbnailsSelector)
+      ? thumbnailsPage.thumbnails
+      : undefined,
+    thumbnailsNextPageUrl: thumbnailsPage.nextPageUrl,
+    mangaStatus: fieldValuesByKey.status?.[0],
+    pageCount: fieldValuesByKey.pageCount?.[0],
+    languageCodes,
+    derivedValues,
+  };
+};
+
+export const extractScraperDetailsFromDocumentWithImageFallbacks = async (
+  doc: Document,
+  config: ScraperDetailsFeatureConfig,
+  requestMeta: ScraperRuntimeDetailsRequestMeta,
+  fetchDocument: ScraperDocumentFetcher | undefined,
+): Promise<ScraperRuntimeDetailsResult> => {
+  const fieldValuesByKey = extractScraperDetailsFieldValues(doc, config, requestMeta);
+  const resolvedCover = await resolveFirstAvailableImageUrl(
+    uniqueValues(fieldValuesByKey.cover ?? []),
+    fetchDocument,
+  );
+  fieldValuesByKey.cover = resolvedCover ? [resolvedCover] : [];
+
   const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
   const authorUrls = extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta);
   const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta);
@@ -1560,6 +1832,75 @@ export async function resolveScraperPageUrls(
   const templateContext = buildScraperTemplateContextFromDetails(details, chapter);
 
   if (pagesConfig.pageImageSelector && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)) {
+    if (hasPagePlaceholder(pagesConfig.urlTemplate)) {
+      const pageUrls: string[] = [];
+      const seenPageUrls = new Set<string>();
+      const { isKnownTotal, pageLimit } = inferTemplateSelectorPageLimit(
+        details,
+        pagesConfig,
+        chapter,
+        maxTemplatePages,
+      );
+
+      for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
+        const targetUrl = buildScraperContextTemplateUrl(
+          scraper.baseUrl,
+          pagesConfig.urlTemplate,
+          buildTemplateContextForPage(templateContext, pageIndex),
+          {
+            relativeToUrl: templateBaseUrl,
+          },
+        );
+        const result = await fetchDocument({
+          baseUrl: scraper.baseUrl,
+          targetUrl,
+        });
+
+        if (!result.ok || !result.html) {
+          if (pageIndex === 0 || isKnownTotal) {
+            throw new Error(
+              result.error
+              || (typeof result.status === 'number'
+                ? `La source des pages a repondu avec le code HTTP ${result.status}.`
+                : 'Impossible de recuperer la source des pages.'),
+            );
+          }
+
+          break;
+        }
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(result.html, 'text/html');
+        const documentUrl = result.finalUrl || result.requestedUrl;
+        const nextPageUrls = extractSelectorValues(doc, pagesConfig.pageImageSelector)
+          .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+          .filter((pageUrl) => {
+            if (seenPageUrls.has(pageUrl)) {
+              return false;
+            }
+
+            seenPageUrls.add(pageUrl);
+            return true;
+          });
+
+        if (!nextPageUrls.length) {
+          if (pageIndex === 0 || isKnownTotal) {
+            throw new Error('Aucune page n\'a ete trouvee avec le selecteur fourni.');
+          }
+
+          break;
+        }
+
+        pageUrls.push(...nextPageUrls);
+      }
+
+      if (!pageUrls.length) {
+        throw new Error('Aucune page n\'a ete trouvee avec le selecteur fourni.');
+      }
+
+      return pageUrls;
+    }
+
     const targetUrl = buildScraperContextTemplateUrl(
       scraper.baseUrl,
       pagesConfig.urlTemplate,

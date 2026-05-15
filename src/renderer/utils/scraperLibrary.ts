@@ -8,7 +8,7 @@ import {
 } from '@/shared/scraper';
 import type { Manga } from '@/renderer/types';
 import {
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   hasRenderableDetails,
   resolveScraperPageUrls,
   ScraperRuntimeChapterResult,
@@ -213,13 +213,13 @@ export async function saveStandaloneScraperCardToLibrary({
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-  const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+  const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
     status: documentResult.status,
     contentType: documentResult.contentType,
     html: documentResult.html,
-  });
+  }, async (request) => fetchScraperDocument(request));
 
   if (!hasRenderableDetails(details)) {
     throw new Error('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');

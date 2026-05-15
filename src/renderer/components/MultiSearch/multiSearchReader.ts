@@ -11,7 +11,7 @@ import { usesScraperPagesChapters } from "@/renderer/utils/scraperPages";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import {
   createScraperMangaId,
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -117,13 +117,13 @@ export const openMultiSearchSourceReader = async ({
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const detailsResult = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+  const detailsResult = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
     status: documentResult.status,
     contentType: documentResult.contentType,
     html: documentResult.html,
-  });
+  }, async (request) => fetchScraperDocument(request));
 
   if (!hasRenderableDetails(detailsResult)) {
     throw new Error("La fiche a ete chargee, mais aucun contenu exploitable n'a ete extrait.");

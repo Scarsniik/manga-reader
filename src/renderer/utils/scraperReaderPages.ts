@@ -80,6 +80,15 @@ const canBuildSequentialTemplateReaderPages = (
   && hasPagePlaceholder(pagesConfig.urlTemplate)
 );
 
+const usesTemplateSelectorReaderPages = (
+  pagesConfig: ScraperPagesFeatureConfig,
+): boolean => Boolean(
+  !usesScraperPagesSelectorSource(pagesConfig)
+  && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)
+  && pagesConfig.urlTemplate
+  && hasPagePlaceholder(pagesConfig.urlTemplate)
+);
+
 const inferKnownTotalPages = (
   details: ScraperRuntimeDetailsResult,
   pagesConfig: ScraperPagesFeatureConfig,
@@ -223,10 +232,12 @@ export async function resolveScraperReaderPageUrls(
 ): Promise<string[]> {
   const chapter = options?.chapter ?? null;
   const knownTotalPages = normalizePositiveInteger(options?.knownTotalPages);
+  const configuredMaxTemplatePages = normalizePositiveInteger(options?.maxTemplatePages);
+  const shouldIgnoreKnownTotalAsLimit = usesTemplateSelectorReaderPages(pagesConfig);
   const maxTemplatePages = Math.max(
     1,
-    normalizePositiveInteger(options?.maxTemplatePages)
-      ?? knownTotalPages
+    configuredMaxTemplatePages
+      ?? (shouldIgnoreKnownTotalAsLimit ? null : knownTotalPages)
       ?? DEFAULT_MAX_TEMPLATE_PAGES,
   );
 

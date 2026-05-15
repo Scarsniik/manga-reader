@@ -9,7 +9,7 @@ import { findMangaLinkedToSource, normalizeMangaSourceUrl } from "@/renderer/uti
 import { resolveScraperReaderPageUrls } from "@/renderer/utils/scraperReaderPages";
 import {
   createScraperMangaId,
-  extractScraperDetailsFromDocument,
+  extractScraperDetailsFromDocumentWithImageFallbacks,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
@@ -102,13 +102,13 @@ const getResolvedDetails = async (
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+  const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
     status: documentResult.status,
     contentType: documentResult.contentType,
     html: documentResult.html,
-  });
+  }, async (request) => fetchScraperDocument(request));
 
   if (!hasRenderableDetails(details)) {
     throw new Error("La fiche a bien ete chargee, mais aucun contenu exploitable n'a ete extrait avec la configuration actuelle.");

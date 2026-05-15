@@ -19,7 +19,7 @@ import {
   buildSearchPageLoadedMessage,
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
-  extractScraperSearchPageFromDocument,
+  extractScraperSearchPageFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
@@ -273,10 +273,10 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocument(documentNode, homepageConfig, {
+    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, homepageConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
-    });
+    }, async (request) => fetchScraperDocument(request));
   }, [homepageConfig, scraper.baseUrl]);
 
   const fetchSearchPage = useCallback(async (
@@ -318,10 +318,10 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocument(documentNode, searchConfig, {
+    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
-    });
+    }, async (request) => fetchScraperDocument(request));
   }, [scraper.baseUrl, searchConfig]);
 
   const fetchAuthorPage = useCallback(async (
@@ -352,10 +352,10 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocument(documentNode, authorConfig, {
+    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
-    });
+    }, async (request) => fetchScraperDocument(request));
   }, [authorConfig, scraper.baseUrl]);
 
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
