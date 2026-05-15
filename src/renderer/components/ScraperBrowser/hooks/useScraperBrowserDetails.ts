@@ -499,6 +499,7 @@ export function useScraperBrowserDetails({
         && typeof (window as any).api.getScraperReaderProgress === 'function'
         ? await (window as any).api.getScraperReaderProgress(readerMangaId)
         : null;
+      const preferredInitialPage = options?.page ?? savedProgress?.currentPage ?? 1;
       const pageUrls = await resolveScraperReaderPageUrls(
         scraper,
         detailsResult,
@@ -506,6 +507,7 @@ export function useScraperBrowserDetails({
         async (request) => fetchScraperDocument(request),
         {
           chapter: normalizedChapter ?? null,
+          initialPage: preferredInitialPage,
           knownTotalPages: savedProgress?.totalPages,
         },
       );

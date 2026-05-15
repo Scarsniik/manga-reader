@@ -1,6 +1,7 @@
 import {
   buildScraperContextTemplateUrl,
   hasScraperFieldSelectorValue,
+  ScraperFieldSelector,
   ScraperPagesFeatureConfig,
   ScraperRecord,
 } from "@/shared/scraper";
@@ -15,19 +16,23 @@ import {
   usesScraperPagesTemplateChapterContext,
 } from "@/renderer/utils/scraperPages";
 import {
+  extractSelectorValues,
   resolveScraperPageUrls,
   ScraperDocumentFetcher,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
+  toAbsoluteScraperUrl,
 } from "@/renderer/utils/scraperRuntime";
 
 type ResolveScraperReaderPageUrlsOptions = {
   chapter?: ScraperRuntimeChapterResult | null;
+  initialPage?: number | null;
   knownTotalPages?: number | null;
   maxTemplatePages?: number;
 };
 
 const DEFAULT_MAX_TEMPLATE_PAGES = 2000;
+const LAZY_TEMPLATE_SELECTOR_PAGE_URL = "scraper-lazy-page://image";
 
 const hasPagePlaceholder = (template: string | undefined): boolean => (
   typeof template === "string" && /{{\s*page(?:Index)?\d*\s*}}/.test(template)
@@ -117,6 +122,18 @@ const inferKnownTotalPages = (
   return null;
 };
 
+const inferDetailsConfiguredPageCount = (
+  details: ScraperRuntimeDetailsResult,
+  pagesConfig: ScraperPagesFeatureConfig,
+  chapter: ScraperRuntimeChapterResult | null,
+): number | null => {
+  if (chapter || usesScraperPagesChapters(pagesConfig)) {
+    return null;
+  }
+
+  return parseReaderPageCount(details.pageCount);
+};
+
 const createSequentialTemplateReaderPageUrlFactory = (
   scraper: ScraperRecord,
   details: ScraperRuntimeDetailsResult,
@@ -155,6 +172,121 @@ const buildSequentialTemplateReaderPageUrls = (
   }
 
   return Array.from(new Set(pageUrls));
+};
+
+const buildLazyTemplateSelectorReaderPageUrl = (
+  buildPageUrl: (pageNumber: number) => string,
+  baseUrl: string,
+  pageImageSelector: ScraperFieldSelector,
+  pageNumber: number,
+): string => {
+  const params = new URLSearchParams({
+    baseUrl,
+    pageUrl: buildPageUrl(pageNumber),
+    selectorKind: pageImageSelector.kind,
+    selectorValue: pageImageSelector.value,
+  });
+
+  return `${LAZY_TEMPLATE_SELECTOR_PAGE_URL}?${params.toString()}`;
+};
+
+const buildLazyTemplateSelectorReaderPageUrls = (
+  buildPageUrl: (pageNumber: number) => string,
+  baseUrl: string,
+  pageImageSelector: ScraperFieldSelector,
+  totalPages: number,
+): string[] => {
+  const pageUrls: string[] = [];
+
+  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    pageUrls.push(buildLazyTemplateSelectorReaderPageUrl(
+      buildPageUrl,
+      baseUrl,
+      pageImageSelector,
+      pageNumber,
+    ));
+  }
+
+  return pageUrls;
+};
+
+const parseLazyTemplateSelectorReaderPageUrl = (
+  source: string,
+): {
+  baseUrl: string;
+  pageUrl: string;
+  pageImageSelector: ScraperFieldSelector;
+} | null => {
+  if (!source.startsWith(LAZY_TEMPLATE_SELECTOR_PAGE_URL)) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(source);
+    const baseUrl = parsed.searchParams.get("baseUrl")?.trim() ?? "";
+    const pageUrl = parsed.searchParams.get("pageUrl")?.trim() ?? "";
+    const selectorKind = parsed.searchParams.get("selectorKind") === "regex" ? "regex" : "css";
+    const selectorValue = parsed.searchParams.get("selectorValue")?.trim() ?? "";
+
+    if (!baseUrl || !pageUrl || !selectorValue) {
+      return null;
+    }
+
+    return {
+      baseUrl,
+      pageUrl,
+      pageImageSelector: {
+        kind: selectorKind,
+        value: selectorValue,
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const isLazyScraperReaderPageUrl = (source: string | null | undefined): boolean => (
+  typeof source === "string" && source.startsWith(LAZY_TEMPLATE_SELECTOR_PAGE_URL)
+);
+
+const resolveTemplateSelectorReaderPageImageUrl = async (
+  fetchDocument: ScraperDocumentFetcher,
+  baseUrl: string,
+  pageUrl: string,
+  pageImageSelector: ScraperFieldSelector,
+): Promise<string | null> => {
+  const result = await fetchDocument({
+    baseUrl,
+    targetUrl: pageUrl,
+  });
+
+  if (!result.ok || !result.html) {
+    return null;
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(result.html, "text/html");
+  const documentUrl = result.finalUrl || result.requestedUrl;
+  return extractSelectorValues(doc, pageImageSelector)
+    .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+    .filter(Boolean)[0] ?? null;
+};
+
+export const resolveLazyScraperReaderPageUrl = async (
+  source: string,
+  fetchDocument: ScraperDocumentFetcher,
+): Promise<string | null> => {
+  const lazyPage = parseLazyTemplateSelectorReaderPageUrl(source);
+  if (!lazyPage) {
+    return null;
+  }
+
+  return resolveTemplateSelectorReaderPageImageUrl(
+    fetchDocument,
+    lazyPage.baseUrl,
+    lazyPage.pageUrl,
+    lazyPage.pageImageSelector,
+  );
 };
 
 const detectSequentialTemplateReaderPageCount = async (
@@ -223,6 +355,62 @@ const detectSequentialTemplateReaderPageCount = async (
   return left;
 };
 
+const detectTemplateSelectorReaderPageCount = async (
+  buildPageUrl: (pageNumber: number) => string,
+  fetchDocument: ScraperDocumentFetcher,
+  baseUrl: string,
+  pageImageSelector: ScraperFieldSelector,
+  maxTemplatePages: number,
+): Promise<number | null> => {
+  const existenceCache = new Map<number, Promise<boolean>>();
+
+  const pageExists = (pageNumber: number): Promise<boolean> => {
+    const normalizedPageNumber = Math.max(1, Math.floor(pageNumber));
+    const cached = existenceCache.get(normalizedPageNumber);
+    if (cached) {
+      return cached;
+    }
+
+    const request = resolveTemplateSelectorReaderPageImageUrl(
+      fetchDocument,
+      baseUrl,
+      buildPageUrl(normalizedPageNumber),
+      pageImageSelector,
+    )
+      .then(Boolean)
+      .catch(() => false);
+
+    existenceCache.set(normalizedPageNumber, request);
+    return request;
+  };
+
+  if (!(await pageExists(1))) {
+    return null;
+  }
+
+  let low = 1;
+  let high = 2;
+
+  while (high <= maxTemplatePages && await pageExists(high)) {
+    low = high;
+    high *= 2;
+  }
+
+  let left = low;
+  let right = Math.min(high, maxTemplatePages + 1);
+
+  while (left + 1 < right) {
+    const mid = Math.floor((left + right) / 2);
+    if (await pageExists(mid)) {
+      left = mid;
+    } else {
+      right = mid;
+    }
+  }
+
+  return left;
+};
+
 export async function resolveScraperReaderPageUrls(
   scraper: ScraperRecord,
   details: ScraperRuntimeDetailsResult,
@@ -240,6 +428,56 @@ export async function resolveScraperReaderPageUrls(
       ?? (shouldIgnoreKnownTotalAsLimit ? null : knownTotalPages)
       ?? DEFAULT_MAX_TEMPLATE_PAGES,
   );
+
+  if (usesTemplateSelectorReaderPages(pagesConfig) && pagesConfig.pageImageSelector) {
+    const buildPageUrl = createSequentialTemplateReaderPageUrlFactory(
+      scraper,
+      details,
+      pagesConfig,
+      chapter,
+    );
+    const detailsTotalPages = inferDetailsConfiguredPageCount(details, pagesConfig, chapter);
+    const totalPages = detailsTotalPages
+      ?? (knownTotalPages && knownTotalPages > 1 ? knownTotalPages : null)
+      ?? await detectTemplateSelectorReaderPageCount(
+        buildPageUrl,
+        fetchDocument,
+        scraper.baseUrl,
+        pagesConfig.pageImageSelector,
+        maxTemplatePages,
+      );
+
+    if (!totalPages) {
+      return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+        chapter,
+        maxTemplatePages,
+      });
+    }
+
+    const pageUrls = buildLazyTemplateSelectorReaderPageUrls(
+      buildPageUrl,
+      scraper.baseUrl,
+      pagesConfig.pageImageSelector,
+      totalPages,
+    );
+    const initialPage = Math.max(
+      1,
+      Math.min(totalPages, normalizePositiveInteger(options?.initialPage) ?? 1),
+    );
+    const initialPageUrl = await resolveTemplateSelectorReaderPageImageUrl(
+      fetchDocument,
+      scraper.baseUrl,
+      buildPageUrl(initialPage),
+      pagesConfig.pageImageSelector,
+    );
+
+    if (!initialPageUrl) {
+      throw new Error("La page demandee n'a pas pu etre resolue.");
+    }
+
+    pageUrls[initialPage - 1] = initialPageUrl;
+    return pageUrls;
+  }
 
   if (!canBuildSequentialTemplateReaderPages(pagesConfig)) {
     return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {

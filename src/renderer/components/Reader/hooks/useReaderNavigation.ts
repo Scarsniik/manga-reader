@@ -641,6 +641,9 @@ const useReaderNavigation = ({
                 async (request) => window.api.fetchScraperDocument(request),
                 {
                     chapter: target.adjacentChapter,
+                    initialPage: direction === 'previous'
+                        ? savedProgress?.totalPages
+                        : savedProgress?.currentPage ?? 1,
                     knownTotalPages: savedProgress?.totalPages,
                 },
             );

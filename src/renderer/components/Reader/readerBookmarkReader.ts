@@ -160,6 +160,9 @@ export const resolveBookmarkRecommendationForReader = async (
     && typeof (window as any).api.getScraperReaderProgress === "function"
     ? await (window as any).api.getScraperReaderProgress(readerMangaId)
     : null;
+  const savedPage = toPositiveInteger(savedProgress?.currentPage)
+    ?? toPositiveInteger(targetManga.currentPage)
+    ?? 1;
   const fetchScraperDocument = getFetchScraperDocumentApi();
   const pageUrls = await resolveScraperReaderPageUrls(
     scraper,
@@ -167,6 +170,7 @@ export const resolveBookmarkRecommendationForReader = async (
     pagesConfig,
     async (request) => fetchScraperDocument(request),
     {
+      initialPage: savedPage,
       knownTotalPages: toPositiveInteger(savedProgress?.totalPages) ?? toPositiveInteger(targetManga.pages),
     },
   );
@@ -174,9 +178,6 @@ export const resolveBookmarkRecommendationForReader = async (
     throw new Error("Aucune page n'a ete resolue pour ce bookmark.");
   }
 
-  const savedPage = toPositiveInteger(savedProgress?.currentPage)
-    ?? toPositiveInteger(targetManga.currentPage)
-    ?? 1;
   const initialPage = pageUrls.length > 0 && savedPage < pageUrls.length
     ? savedPage
     : 1;

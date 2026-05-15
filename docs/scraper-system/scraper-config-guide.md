@@ -508,8 +508,11 @@ Ce mode convient aux pages qui contiennent deja des balises `img`, par exemple `
 `.page img@data-src`.
 
 Avec un template qui contient `{{page}}` ou `{{pageIndex}}`, `pageImageSelector` change de portee :
-le runtime charge chaque URL de page HTML construite par le template, extrait l'image avec le
-selecteur, puis passe a la page suivante. La resolution s'arrete au nombre de pages connu depuis
+le runtime peut construire les URLs de pages HTML depuis le template, puis extraire l'image de chaque
+page avec le selecteur. En lecture directe, le lecteur ouvre rapidement avec la page courante et
+resout les autres pages a la demande, selon la navigation et le prechargement. Les actions qui ont
+besoin de toutes les URLs, comme le telechargement ou l'ajout en bibliotheque avec pages resolues,
+continuent de resoudre la liste complete. La resolution s'arrete au nombre de pages connu depuis
 `pageCount`, sinon a la premiere page qui ne donne plus de nouvelle image exploitable.
 
 ### Template vers image directe

@@ -13,7 +13,11 @@ import {
     hasRenderableDetails,
     ScraperRuntimeChapterResult,
 } from '@/renderer/utils/scraperRuntime';
-import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
+import {
+    isLazyScraperReaderPageUrl,
+    resolveLazyScraperReaderPageUrl,
+    resolveScraperReaderPageUrls,
+} from '@/renderer/utils/scraperReaderPages';
 import { ReaderLocationState } from '../types';
 import { isRemoteScraperManga, isScraperReaderManga } from '../utils';
 
@@ -40,6 +44,7 @@ const useReaderData = ({
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = React.useRef<boolean>(false);
     const preloadedImagesRef = React.useRef<Map<string, HTMLImageElement>>(new Map());
+    const resolvingLazyPagesRef = React.useRef<Set<string>>(new Set());
     const query = React.useMemo(() => new URLSearchParams(locationSearch), [locationSearch]);
 
     React.useEffect(() => {
@@ -208,6 +213,7 @@ const useReaderData = ({
                     async (request) => window.api.fetchScraperDocument(request),
                     {
                         chapter,
+                        initialPage: startPage,
                         knownTotalPages: remoteManga.pages,
                     },
                 );
@@ -313,6 +319,59 @@ const useReaderData = ({
     }, [currentIndex, images, manga]);
 
     React.useEffect(() => {
+        if (!window.api || typeof window.api.fetchScraperDocument !== 'function') {
+            return;
+        }
+
+        const targetIndexes = new Set<number>([currentIndex]);
+        const additionalPages = Math.max(0, preloadPageCount ?? 0);
+        const endIndex = Math.min(images.length - 1, currentIndex + additionalPages);
+        const startIndex = Math.max(0, currentIndex - additionalPages);
+
+        for (let index = currentIndex + 1; index <= endIndex; index += 1) {
+            targetIndexes.add(index);
+        }
+
+        for (let index = currentIndex - 1; index >= startIndex; index -= 1) {
+            targetIndexes.add(index);
+        }
+
+        targetIndexes.forEach((index) => {
+            const source = images[index];
+            if (!isLazyScraperReaderPageUrl(source) || resolvingLazyPagesRef.current.has(source)) {
+                return;
+            }
+
+            resolvingLazyPagesRef.current.add(source);
+            void resolveLazyScraperReaderPageUrl(
+                source,
+                async (request) => window.api.fetchScraperDocument(request),
+            )
+                .then((resolvedSource) => {
+                    if (!resolvedSource) {
+                        return;
+                    }
+
+                    setImages((previousImages) => {
+                        if (previousImages[index] !== source) {
+                            return previousImages;
+                        }
+
+                        const nextImages = [...previousImages];
+                        nextImages[index] = resolvedSource;
+                        return nextImages;
+                    });
+                })
+                .catch((error) => {
+                    console.warn('Reader: failed to resolve lazy scraper page', error);
+                })
+                .finally(() => {
+                    resolvingLazyPagesRef.current.delete(source);
+                });
+        });
+    }, [currentIndex, images, preloadPageCount]);
+
+    React.useEffect(() => {
         if (preloadPageCount === null || images.length === 0 || preloadPageCount <= 0) {
             preloadedImagesRef.current.clear();
             return;
@@ -328,7 +387,7 @@ const useReaderData = ({
             }
 
             const source = images[index];
-            if (source) {
+            if (source && !isLazyScraperReaderPageUrl(source)) {
                 targetSources.add(source);
             }
         }

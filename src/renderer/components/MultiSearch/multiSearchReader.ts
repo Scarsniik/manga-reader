@@ -176,6 +176,7 @@ export const openMultiSearchSourceReader = async ({
     sourceUrl = savedProgress?.sourceUrl || sourceUrl;
   }
 
+  const preferredInitialPage = page ?? savedProgress?.currentPage ?? 1;
   const pageUrls = await resolveScraperReaderPageUrls(
     source.scraper,
     detailsResult,
@@ -183,6 +184,7 @@ export const openMultiSearchSourceReader = async ({
     async (request) => fetchScraperDocument(request),
     {
       chapter: targetChapter,
+      initialPage: preferredInitialPage,
       knownTotalPages: knownTotalPages ?? savedProgress?.totalPages,
     },
   );
