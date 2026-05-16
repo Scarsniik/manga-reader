@@ -77,6 +77,17 @@ export const buildListingReturnStateFromRoute = (
       results: [],
       scrollTop: null,
     }
+    : routeState.tagActive
+    ? {
+      mode: 'tag',
+      hasExecutedListing: true,
+      query: routeState.tagQuery ?? '',
+      page: null,
+      visitedPageUrls: [],
+      pageIndex: Math.max(0, (routeState.tagPage ?? 1) - 1),
+      results: [],
+      scrollTop: null,
+    }
     : routeState.searchActive
     ? {
       mode: 'search',
@@ -108,6 +119,8 @@ export const buildQueryPlaceholder = (
   detailsMode: 'template' | 'result_url' | null,
   hasAuthor: boolean,
   authorMode: 'template' | 'result_url' | null,
+  hasTag = false,
+  tagMode: 'template' | 'result_url' | null = null,
 ): string => {
   if (mode === 'homepage') {
     return 'Homepage sans terme de recherche';
@@ -127,6 +140,18 @@ export const buildQueryPlaceholder = (
     }
 
     return 'Exemple : URL auteur complete, chemin relatif ou lien detecte';
+  }
+
+  if (mode === 'tag') {
+    if (!hasTag) {
+      return 'La page tag n\'est pas encore configuree.';
+    }
+
+    if (tagMode === 'template') {
+      return 'Exemple : nom de tag, slug ou URL tag detectee';
+    }
+
+    return 'Exemple : URL tag complete, chemin relatif ou lien detecte';
   }
 
   if (!hasDetails) {
@@ -161,21 +186,27 @@ export const buildScraperBrowserHelperText = (options: {
   mode: ScraperBrowseMode;
   usesSearchTemplatePaging: boolean;
   usesAuthorTemplatePaging: boolean;
+  usesTagTemplatePaging?: boolean;
   hasSearchNextPageSelector: boolean;
   hasAuthorNextPageSelector: boolean;
+  hasTagNextPageSelector?: boolean;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
   hasDetails: boolean;
   hasAuthor: boolean;
+  hasTag?: boolean;
 }): string | undefined => {
   const {
     mode,
     usesSearchTemplatePaging,
     hasSearchNextPageSelector,
     usesAuthorTemplatePaging,
+    usesTagTemplatePaging,
     hasAuthorNextPageSelector,
+    hasTagNextPageSelector,
     hasDetails,
     hasAuthor,
+    hasTag,
   } = options;
 
   if (mode === 'homepage') {
@@ -214,6 +245,28 @@ export const buildScraperBrowserHelperText = (options: {
     }
   }
 
+  if (mode === 'tag') {
+    if (usesTagTemplatePaging && hasTagNextPageSelector) {
+      return 'Cette vue ouvre une page tag. Tu peux saisir une URL tag ou un nom de tag, et la pagination peut venir du template `{{page}}` ou du lien HTML de page suivante.';
+    }
+
+    if (usesTagTemplatePaging) {
+      return 'Cette vue ouvre une page tag a partir d\'une URL ou d\'un nom. La pagination est pilotee via le template `{{page}}`.';
+    }
+
+    if (hasTagNextPageSelector) {
+      return 'Cette vue ouvre une page tag a partir d\'une URL ou d\'un nom. La pagination HTML est detectee pour parcourir plusieurs pages d\'archive.';
+    }
+
+    if (hasDetails) {
+      return 'Cette vue charge une page tag et affiche les cards extraites. Tu peux ouvrir une fiche manga directement depuis les resultats.';
+    }
+
+    if (hasTag) {
+      return 'Cette vue charge une page tag et affiche les cards extraites a partir de la configuration `Tag`.';
+    }
+  }
+
   return undefined;
 };
 
@@ -222,12 +275,14 @@ export const buildScraperCapabilities = (options: {
   searchFeature: ScraperFeatureDefinition | null;
   detailsFeature: ScraperFeatureDefinition | null;
   authorFeature: ScraperFeatureDefinition | null;
+  tagFeature?: ScraperFeatureDefinition | null;
   chaptersFeature: ScraperFeatureDefinition | null;
   pagesFeature: ScraperFeatureDefinition | null;
   hasHomepage: boolean;
   hasSearch: boolean;
   hasDetails: boolean;
   hasAuthor: boolean;
+  hasTag?: boolean;
   hasChapters: boolean;
   hasPages: boolean;
 }): ScraperCapability[] => {
@@ -236,12 +291,14 @@ export const buildScraperCapabilities = (options: {
     searchFeature,
     detailsFeature,
     authorFeature,
+    tagFeature = null,
     chaptersFeature,
     pagesFeature,
     hasHomepage,
     hasSearch,
     hasDetails,
     hasAuthor,
+    hasTag = false,
     hasChapters,
     hasPages,
   } = options;
@@ -251,6 +308,7 @@ export const buildScraperCapabilities = (options: {
     { label: 'Recherche', feature: searchFeature, enabled: hasSearch },
     { label: 'Fiche', feature: detailsFeature, enabled: hasDetails },
     { label: 'Auteur', feature: authorFeature, enabled: hasAuthor },
+    { label: 'Tag', feature: tagFeature, enabled: hasTag },
     { label: 'Chapitres', feature: chaptersFeature, enabled: hasChapters },
     { label: 'Pages', feature: pagesFeature, enabled: hasPages },
   ];

@@ -6,9 +6,12 @@ import type {
     RecordScraperCardsSeenRequest,
     RemoveScraperAuthorFavoriteRequest,
     RemoveScraperAuthorFavoriteSourceRequest,
+    RemoveScraperTagFavoriteRequest,
+    RemoveScraperTagFavoriteSourceRequest,
     RemoveScraperBookmarkRequest,
     SaveScraperAuthorFavoriteRequest,
     SaveScraperAuthorFavoriteCacheRequest,
+    SaveScraperTagFavoriteRequest,
     SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
     SaveScraperReaderProgressRequest,
@@ -122,6 +125,14 @@ ipcRenderer.on('scraper-author-favorites-updated', () => {
     }
 });
 
+ipcRenderer.on('scraper-tag-favorites-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-tag-favorites-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-tag-favorites-updated event', error);
+    }
+});
+
 ipcRenderer.on('scraper-view-history-updated', () => {
     try {
         window.dispatchEvent(new CustomEvent('scraper-view-history-updated'));
@@ -231,6 +242,10 @@ contextBridge.exposeInMainWorld('api', {
     saveScraperAuthorFavorite: (request: SaveScraperAuthorFavoriteRequest) => ipcRenderer.invoke('save-scraper-author-favorite', request),
     removeScraperAuthorFavorite: (request: RemoveScraperAuthorFavoriteRequest) => ipcRenderer.invoke('remove-scraper-author-favorite', request),
     removeScraperAuthorFavoriteSource: (request: RemoveScraperAuthorFavoriteSourceRequest) => ipcRenderer.invoke('remove-scraper-author-favorite-source', request),
+    getScraperTagFavorites: () => ipcRenderer.invoke('get-scraper-tag-favorites'),
+    saveScraperTagFavorite: (request: SaveScraperTagFavoriteRequest) => ipcRenderer.invoke('save-scraper-tag-favorite', request),
+    removeScraperTagFavorite: (request: RemoveScraperTagFavoriteRequest) => ipcRenderer.invoke('remove-scraper-tag-favorite', request),
+    removeScraperTagFavoriteSource: (request: RemoveScraperTagFavoriteSourceRequest) => ipcRenderer.invoke('remove-scraper-tag-favorite-source', request),
     getScraperAuthorFavoriteCache: (favoriteId: string) => ipcRenderer.invoke('get-scraper-author-favorite-cache', favoriteId),
     saveScraperAuthorFavoriteCache: (request: SaveScraperAuthorFavoriteCacheRequest) => ipcRenderer.invoke('save-scraper-author-favorite-cache', request),
     getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),

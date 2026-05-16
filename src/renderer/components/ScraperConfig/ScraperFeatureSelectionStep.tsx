@@ -9,6 +9,7 @@ import ScraperDetailsFeatureEditor from '@/renderer/components/ScraperConfig/Scr
 import ScraperGlobalSettingsEditor from '@/renderer/components/ScraperConfig/ScraperGlobalSettingsEditor';
 import ScraperPagesFeatureEditor from '@/renderer/components/ScraperConfig/ScraperPagesFeatureEditor';
 import ScraperSearchFeatureEditor from '@/renderer/components/ScraperConfig/ScraperSearchFeatureEditor';
+import ScraperTagFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagFeatureEditor';
 import ScraperFeaturePlaceholderEditor from '@/renderer/components/ScraperConfig/ScraperFeaturePlaceholderEditor';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import { FEATURE_STATUS_META } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
@@ -92,6 +93,15 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'author') {
       return (
         <ScraperAuthorFeatureEditor
+          feature={activeFeature}
+          onBack={() => setActiveFeatureKind(null)}
+        />
+      );
+    }
+
+    if (activeFeature.kind === 'tag') {
+      return (
+        <ScraperTagFeatureEditor
           feature={activeFeature}
           onBack={() => setActiveFeatureKind(null)}
         />

@@ -1,7 +1,8 @@
-export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author';
+export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author' | 'tag';
 
 export const SCRAPER_MULTI_SEARCH_VIEW_ID = 'multi-search';
 export const SCRAPER_AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
+export const SCRAPER_TAG_FAVORITES_VIEW_ID = 'tag-favorites';
 
 export type MultiSearchPrefillLocationState = {
   multiSearchPrefillQuery?: string;
@@ -18,6 +19,9 @@ export type ScraperRouteState = {
   authorActive: boolean;
   authorQuery: string;
   authorPage: number;
+  tagActive?: boolean;
+  tagQuery?: string;
+  tagPage?: number;
   mangaQuery: string;
   mangaUrl?: string;
   bookmarksFilterScraperId?: string | null;
@@ -33,10 +37,14 @@ const SCRAPER_SEARCH_PAGE_PARAM = 'scraperSearchPage';
 const SCRAPER_AUTHOR_ACTIVE_PARAM = 'scraperAuthorActive';
 const SCRAPER_AUTHOR_QUERY_PARAM = 'scraperAuthorQuery';
 const SCRAPER_AUTHOR_PAGE_PARAM = 'scraperAuthorPage';
+const SCRAPER_TAG_ACTIVE_PARAM = 'scraperTagActive';
+const SCRAPER_TAG_QUERY_PARAM = 'scraperTagQuery';
+const SCRAPER_TAG_PAGE_PARAM = 'scraperTagPage';
 const SCRAPER_MANGA_QUERY_PARAM = 'scraperMangaQuery';
 const SCRAPER_MANGA_URL_PARAM = 'scraperMangaUrl';
 const SCRAPER_BOOKMARK_FILTER_PARAM = 'scraperBookmarkFilter';
 const SCRAPER_AUTHOR_FAVORITE_PARAM = 'scraperAuthorFavorite';
+const SCRAPER_TAG_FAVORITE_PARAM = 'scraperTagFavorite';
 
 const normalizeSearch = (search: string): URLSearchParams => (
   new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
@@ -63,9 +71,11 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     ? 'manga'
     : rawMode === 'author'
       ? 'author'
-      : rawMode === 'homepage'
-        ? 'homepage'
-        : 'search';
+      : rawMode === 'tag'
+        ? 'tag'
+        : rawMode === 'homepage'
+          ? 'homepage'
+          : 'search';
 
   return {
     scraperId,
@@ -78,6 +88,9 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     authorActive: params.get(SCRAPER_AUTHOR_ACTIVE_PARAM) === '1',
     authorQuery: params.get(SCRAPER_AUTHOR_QUERY_PARAM) ?? '',
     authorPage: normalizePage(params.get(SCRAPER_AUTHOR_PAGE_PARAM)),
+    tagActive: params.get(SCRAPER_TAG_ACTIVE_PARAM) === '1',
+    tagQuery: params.get(SCRAPER_TAG_QUERY_PARAM) ?? '',
+    tagPage: normalizePage(params.get(SCRAPER_TAG_PAGE_PARAM)),
     mangaQuery: params.get(SCRAPER_MANGA_QUERY_PARAM) ?? '',
     mangaUrl: params.get(SCRAPER_MANGA_URL_PARAM) || undefined,
     bookmarksFilterScraperId: params.get(SCRAPER_BOOKMARK_FILTER_PARAM) || null,
@@ -100,10 +113,14 @@ export const writeScraperRouteState = (
   params.delete(SCRAPER_AUTHOR_ACTIVE_PARAM);
   params.delete(SCRAPER_AUTHOR_QUERY_PARAM);
   params.delete(SCRAPER_AUTHOR_PAGE_PARAM);
+  params.delete(SCRAPER_TAG_ACTIVE_PARAM);
+  params.delete(SCRAPER_TAG_QUERY_PARAM);
+  params.delete(SCRAPER_TAG_PAGE_PARAM);
   params.delete(SCRAPER_MANGA_QUERY_PARAM);
   params.delete(SCRAPER_MANGA_URL_PARAM);
   params.delete(SCRAPER_BOOKMARK_FILTER_PARAM);
   params.delete(SCRAPER_AUTHOR_FAVORITE_PARAM);
+  params.delete(SCRAPER_TAG_FAVORITE_PARAM);
 
   if (!state.scraperId) {
     const nextSearch = params.toString();
@@ -133,6 +150,15 @@ export const writeScraperRouteState = (
 
     if (state.authorQuery) {
       params.set(SCRAPER_AUTHOR_QUERY_PARAM, state.authorQuery);
+    }
+  }
+
+  if (state.tagActive) {
+    params.set(SCRAPER_TAG_ACTIVE_PARAM, '1');
+    params.set(SCRAPER_TAG_PAGE_PARAM, String(Math.max(1, state.tagPage ?? 1)));
+
+    if (state.tagQuery) {
+      params.set(SCRAPER_TAG_QUERY_PARAM, state.tagQuery);
     }
   }
 
@@ -166,6 +192,9 @@ export const clearScraperRouteState = (search: string): string => (
     authorActive: false,
     authorQuery: '',
     authorPage: 1,
+    tagActive: false,
+    tagQuery: '',
+    tagPage: 1,
     mangaQuery: '',
     bookmarksFilterScraperId: null,
   })
@@ -185,6 +214,26 @@ export const writeScraperAuthorFavoriteRouteState = (
   params.delete(SCRAPER_AUTHOR_FAVORITE_PARAM);
   if (trimmedFavoriteId) {
     params.set(SCRAPER_AUTHOR_FAVORITE_PARAM, trimmedFavoriteId);
+  }
+
+  const nextSearch = params.toString();
+  return nextSearch ? `?${nextSearch}` : '';
+};
+
+export const readScraperTagFavoriteRouteId = (search: string): string | null => (
+  normalizeSearch(search).get(SCRAPER_TAG_FAVORITE_PARAM) || null
+);
+
+export const writeScraperTagFavoriteRouteState = (
+  search: string,
+  favoriteId: string | null | undefined,
+): string => {
+  const params = normalizeSearch(search);
+  const trimmedFavoriteId = String(favoriteId ?? '').trim();
+
+  params.delete(SCRAPER_TAG_FAVORITE_PARAM);
+  if (trimmedFavoriteId) {
+    params.set(SCRAPER_TAG_FAVORITE_PARAM, trimmedFavoriteId);
   }
 
   const nextSearch = params.toString();

@@ -17,8 +17,10 @@ type Props = {
   detailsResult: ScraperRuntimeDetailsResult | null;
   chapters: ScraperRuntimeChapterResult[];
   hasAuthor: boolean;
+  hasTag: boolean;
   backLabel?: string | null;
   canResolveAuthorName: boolean;
+  canResolveTagName: boolean;
   hasPages: boolean;
   usesChapters: boolean;
   displaysThumbnails?: boolean;
@@ -31,6 +33,7 @@ type Props = {
   onBack?: () => void;
   onOpenAuthor: (value: string, title: string) => void;
   onOpenAuthorInWorkspace?: (value: string, title: string) => void;
+  onOpenTag: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onAddToLibrary: (chapter?: ScraperRuntimeChapterResult) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
@@ -44,8 +47,10 @@ export default function ScraperDetailsPanel({
   detailsResult,
   chapters,
   hasAuthor,
+  hasTag,
   backLabel = null,
   canResolveAuthorName,
+  canResolveTagName,
   displaysThumbnails = true,
   hasPages,
   usesChapters,
@@ -58,6 +63,7 @@ export default function ScraperDetailsPanel({
   onBack,
   onOpenAuthor,
   onOpenAuthorInWorkspace,
+  onOpenTag,
   onOpenReader,
   onAddToLibrary,
   onLinkSourceToManga,
@@ -253,9 +259,29 @@ export default function ScraperDetailsPanel({
 
           {detailsResult.tags.length ? (
             <div className="scraper-card__chips">
-              {detailsResult.tags.map((tag) => (
-                <span key={tag} className="scraper-card__chip is-tag">{tag}</span>
-              ))}
+              {detailsResult.tags.map((tag, index) => {
+                const tagUrl = (detailsResult.tagUrls ?? [])[index];
+                const canOpenTag = hasTag && Boolean(tagUrl || (canResolveTagName && tag));
+                const tagTarget = tagUrl || tag;
+
+                if (!canOpenTag || !tagTarget) {
+                  return (
+                    <span key={`${tag}-${index}`} className="scraper-card__chip is-tag">{tag}</span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={`${tag}-${index}`}
+                    type="button"
+                    className="scraper-card__chip is-tag is-clickable"
+                    onClick={() => onOpenTag(tagTarget, tag)}
+                    title={`Ouvrir la page tag pour ${tag}`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
             </div>
           ) : null}
 

@@ -153,6 +153,7 @@ Champs minimum proposes :
 - `authorsSelector`
 - `authorUrlSelector` optionnel
 - `tagsSelector`
+- `tagUrlSelector` optionnel
 - `statusSelector`
 - `pageCountSelector`
 - `thumbnailsListSelector` optionnel

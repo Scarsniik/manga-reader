@@ -35,6 +35,7 @@ export const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> 
   authors: 'Auteurs',
   authorUrl: 'Lien auteur',
   tags: 'Tags',
+  tagUrl: 'Cible tag',
   status: 'Statut',
   pageCount: 'Nombre de pages',
   language: 'Langue',

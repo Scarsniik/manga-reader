@@ -41,6 +41,12 @@ const notifyScraperAuthorFavoritesUpdated = () => {
     }
 };
 
+const notifyScraperTagFavoritesUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-tag-favorites-updated");
+    }
+};
+
 const notifyScraperViewHistoryUpdated = () => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("scraper-view-history-updated");
@@ -200,6 +206,24 @@ ipcMain.handle("remove-scraper-author-favorite", async (event: IpcMainInvokeEven
 ipcMain.handle("remove-scraper-author-favorite-source", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.removeScraperAuthorFavoriteSource(event, request);
     notifyScraperAuthorFavoritesUpdated();
+    return updated;
+});
+ipcMain.handle("get-scraper-tag-favorites", async (event: IpcMainInvokeEvent) => (
+    scrapers.getScraperTagFavorites(event)
+));
+ipcMain.handle("save-scraper-tag-favorite", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperTagFavorite(event, request);
+    notifyScraperTagFavoritesUpdated();
+    return updated;
+});
+ipcMain.handle("remove-scraper-tag-favorite", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.removeScraperTagFavorite(event, request);
+    notifyScraperTagFavoritesUpdated();
+    return updated;
+});
+ipcMain.handle("remove-scraper-tag-favorite-source", async (event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.removeScraperTagFavoriteSource(event, request);
+    notifyScraperTagFavoritesUpdated();
     return updated;
 });
 ipcMain.handle("get-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, favoriteId: string) => (

@@ -1,9 +1,9 @@
 import {
-  ScraperAuthorFeatureConfig,
   ScraperCardListConfig,
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperSearchResultItem,
+  ScraperTagFeatureConfig,
 } from '@/shared/scraper';
 import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
 import { ScraperValidationPresentation } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
@@ -32,22 +32,22 @@ export {
   getConfigSignature,
 };
 
-export type AuthorFeatureFormState = ScraperAuthorFeatureConfig;
+export type TagFeatureFormState = ScraperTagFeatureConfig;
 
-export const AUTHOR_SCRAPING_FIELD_NAMES = LISTING_SCRAPING_FIELD_NAMES;
+export const TAG_SCRAPING_FIELD_NAMES = LISTING_SCRAPING_FIELD_NAMES;
 
-export type AuthorScrapingFieldName = ListingScrapingFieldName;
+export type TagScrapingFieldName = ListingScrapingFieldName;
 
-export const AUTHOR_NAME_SELECTOR_FIELD: Field = {
-  name: 'authorNameSelector',
-  label: 'Selecteur du nom auteur',
+export const TAG_NAME_SELECTOR_FIELD: Field = {
+  name: 'tagNameSelector',
+  label: 'Selecteur du nom tag',
   type: 'text',
-  placeholder: 'Optionnel : h1, .author-title, .profile-name',
+  placeholder: 'Optionnel : h1, .tag-title, .archive-title',
 };
 
 export const URL_STRATEGY_FIELD: Field = {
   name: 'urlStrategy',
-  label: 'Strategie de construction de l\'URL auteur',
+  label: 'Strategie de construction de l\'URL tag',
   type: 'radio',
   layout: 'cards',
   required: true,
@@ -55,35 +55,35 @@ export const URL_STRATEGY_FIELD: Field = {
     {
       label: 'Depuis une URL',
       value: 'result_url',
-      description: 'La page auteur sera ouverte a partir d\'une URL deja connue, par exemple depuis `Fiche` ou `Recherche`.',
+      description: 'La page tag sera ouverte a partir d\'une URL deja connue.',
     },
     {
       label: 'Depuis un template',
       value: 'template',
-      description: 'La page auteur sera construite a partir d\'un pattern qui reutilise le nom ou le slug de l\'auteur.',
+      description: 'La page tag sera construite a partir d\'un pattern qui reutilise le nom ou le slug du tag.',
     },
   ],
 };
 
 export const URL_TEMPLATE_FIELD: Field = {
   name: 'urlTemplate',
-  label: 'Template d\'URL auteur',
+  label: 'Template d\'URL tag',
   type: 'text',
-  placeholder: 'Exemple : /cartoonist/{{value}}/ ou /author/{{rawValue}}/',
+  placeholder: 'Exemple : /tag/{{value}}/ ou /genre/{{rawValue}}/',
 };
 
 export const TEST_URL_FIELD: Field = {
   name: 'testUrl',
   label: 'URL ou chemin de test',
   type: 'text',
-  placeholder: 'Exemple : /cartoonist/poliu.../ ou https://momoniji.com/...',
+  placeholder: 'Exemple : /tag/action/ ou https://example.com/tag/action',
 };
 
 export const TEST_VALUE_FIELD: Field = {
   name: 'testValue',
-  label: 'Valeur auteur de test',
+  label: 'Valeur tag de test',
   type: 'text',
-  placeholder: 'Exemple : ぽりうれたん, poliu..., slug-auteur',
+  placeholder: 'Exemple : action, romance, slug-tag',
 };
 
 export const SCRAPING_FIELDS: Field[] = [
@@ -91,7 +91,7 @@ export const SCRAPING_FIELDS: Field[] = [
     name: 'resultListSelector',
     label: 'Conteneur de resultats',
     type: 'text',
-    placeholder: 'Optionnel : .author-archive, .search-results',
+    placeholder: 'Optionnel : .tag-archive, .search-results',
   },
   {
     name: 'resultItemSelector',
@@ -147,17 +147,17 @@ export const SCRAPING_FIELDS: Field[] = [
 
 export const SCRAPING_FIELD_SELECTOR_NAMES = LISTING_SCRAPING_FIELD_SELECTOR_NAMES;
 
-const AUTHOR_FEATURE_FIELD_SELECTOR_NAMES = [
-  'authorNameSelector',
+const TAG_FEATURE_FIELD_SELECTOR_NAMES = [
+  'tagNameSelector',
   ...SCRAPING_FIELD_SELECTOR_NAMES,
 ] as const;
 
-export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
+export const DEFAULT_TAG_CONFIG: TagFeatureFormState = {
   urlStrategy: 'result_url',
   urlTemplate: '',
   testUrl: '',
   testValue: '',
-  authorNameSelector: undefined,
+  tagNameSelector: undefined,
   resultListSelector: '',
   resultItemSelector: '',
   titleSelector: { kind: 'css', value: '' },
@@ -173,23 +173,23 @@ export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   },
 };
 
-export const buildAuthorScrapingFields = (
+export const buildTagScrapingFields = (
   values: Partial<ScraperCardListConfig>,
-): Pick<AuthorFeatureFormState, AuthorScrapingFieldName> => buildListingScrapingFields(values);
+): Pick<TagFeatureFormState, TagScrapingFieldName> => buildListingScrapingFields(values);
 
-export const buildAuthorConfig = (
-  values: Partial<AuthorFeatureFormState>,
-): ScraperAuthorFeatureConfig => ({
+export const buildTagConfig = (
+  values: Partial<TagFeatureFormState>,
+): ScraperTagFeatureConfig => ({
   urlStrategy: values.urlStrategy === 'template' ? 'template' : 'result_url',
   urlTemplate: trimOptional(values.urlTemplate),
   testUrl: trimOptional(values.testUrl),
   testValue: trimOptional(values.testValue),
-  authorNameSelector: trimOptionalFieldSelector(values.authorNameSelector),
+  tagNameSelector: trimOptionalFieldSelector(values.tagNameSelector),
   languageDetection: buildLanguageDetectionConfig(values.languageDetection),
-  ...buildAuthorScrapingFields(values),
+  ...buildTagScrapingFields(values),
 });
 
-export const getInitialConfig = (feature: ScraperFeatureDefinition): AuthorFeatureFormState => {
+export const getInitialConfig = (feature: ScraperFeatureDefinition): TagFeatureFormState => {
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
   return {
@@ -197,24 +197,24 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): AuthorFeatu
     urlTemplate: trimOptional(raw.urlTemplate),
     testUrl: trimOptional(raw.testUrl),
     testValue: trimOptional(raw.testValue),
-    authorNameSelector: trimOptionalFieldSelector(raw.authorNameSelector),
+    tagNameSelector: trimOptionalFieldSelector(raw.tagNameSelector),
     languageDetection: buildLanguageDetectionConfig(raw.languageDetection as Record<string, unknown> | undefined),
-    ...buildAuthorScrapingFields(raw),
+    ...buildTagScrapingFields(raw),
   };
 };
 
 export const getSaveFieldErrors = (
-  config: ScraperAuthorFeatureConfig,
+  config: ScraperTagFeatureConfig,
 ): Record<string, string> => getListingSaveFieldErrors(config, {
-  listingLabel: 'auteur',
-  fieldSelectorNames: AUTHOR_FEATURE_FIELD_SELECTOR_NAMES,
+  listingLabel: 'tag',
+  fieldSelectorNames: TAG_FEATURE_FIELD_SELECTOR_NAMES,
 });
 
 export const getValidationFieldErrors = (
-  config: ScraperAuthorFeatureConfig,
+  config: ScraperTagFeatureConfig,
 ): Record<string, string> => getListingValidationFieldErrors(config, {
-  listingLabel: 'auteur',
-  fieldSelectorNames: AUTHOR_FEATURE_FIELD_SELECTOR_NAMES,
+  listingLabel: 'tag',
+  fieldSelectorNames: TAG_FEATURE_FIELD_SELECTOR_NAMES,
 });
 
 export const buildValidationPresentation = (
@@ -222,7 +222,7 @@ export const buildValidationPresentation = (
   previewResults: ScraperSearchResultItem[],
   previewPage: ScraperRuntimeSearchPageResult | null,
 ): ScraperValidationPresentation => buildListingValidationPresentation(validationResult, previewResults, previewPage, {
-  listingLabel: 'auteur',
-  listingNameCheckKey: 'authors',
-  listingNameDetailsLabel: 'Nom(s) auteur detecte(s)',
+  listingLabel: 'tag',
+  listingNameCheckKey: 'tags',
+  listingNameDetailsLabel: 'Nom(s) tag detecte(s)',
 });

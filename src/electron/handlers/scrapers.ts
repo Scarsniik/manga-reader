@@ -20,6 +20,12 @@ export {
   saveScraperAuthorFavorite,
 } from "./scrapers/authorFavorites";
 export {
+  getScraperTagFavorites,
+  removeScraperTagFavorite,
+  removeScraperTagFavoriteSource,
+  saveScraperTagFavorite,
+} from "./scrapers/tagFavorites";
+export {
   getScraperAuthorFavoriteCache,
   removeScraperAuthorFavoriteCache,
   saveScraperAuthorFavoriteCache,

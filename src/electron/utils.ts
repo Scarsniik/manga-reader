@@ -15,6 +15,7 @@ export const seriesFilePath = path.join(dataDir, "series.json");
 export const scrapersFilePath = path.join(dataDir, "scrapers.json");
 export const scraperBookmarksFilePath = path.join(dataDir, "scraper-bookmarks.json");
 export const scraperAuthorFavoritesFilePath = path.join(dataDir, "scraper-author-favorites.json");
+export const scraperTagFavoritesFilePath = path.join(dataDir, "scraper-tag-favorites.json");
 export const scraperAuthorFavoriteCacheDir = path.join(dataDir, "scraper-author-favorite-cache");
 export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-progress.json");
 export const scraperViewHistoryFilePath = path.join(dataDir, "scraper-view-history.json");

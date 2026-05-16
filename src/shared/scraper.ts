@@ -1,5 +1,5 @@
 export type ScraperSourceKind = 'site' | 'api';
-export type ScraperFeatureKind = 'homepage' | 'search' | 'details' | 'author' | 'chapters' | 'pages';
+export type ScraperFeatureKind = 'homepage' | 'search' | 'details' | 'author' | 'tag' | 'chapters' | 'pages';
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
 export type ScraperRequestMethod = 'GET' | 'POST';
 export type ScraperRequestBodyMode = 'form' | 'raw';
@@ -224,6 +224,7 @@ export type ScraperFeatureValidationCheckKey =
   | 'authors'
   | 'authorUrl'
   | 'tags'
+  | 'tagUrl'
   | 'status'
   | 'pageCount'
   | 'language'
@@ -325,6 +326,14 @@ export interface ScraperAuthorFeatureConfig extends ScraperCardListConfig {
   authorNameSelector?: ScraperFieldSelector;
 }
 
+export interface ScraperTagFeatureConfig extends ScraperCardListConfig {
+  urlStrategy: ScraperDetailsUrlStrategy;
+  urlTemplate?: string;
+  testUrl?: string;
+  testValue?: string;
+  tagNameSelector?: ScraperFieldSelector;
+}
+
 export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
@@ -348,6 +357,7 @@ export interface ScraperDetailsFeatureConfig {
   authorsSelector?: ScraperFieldSelector;
   authorUrlSelector?: ScraperFieldSelector;
   tagsSelector?: ScraperFieldSelector;
+  tagUrlSelector?: ScraperFieldSelector;
   statusSelector?: ScraperFieldSelector;
   pageCountSelector?: ScraperFieldSelector;
   thumbnailsListSelector?: string;
@@ -573,6 +583,46 @@ export interface RemoveScraperAuthorFavoriteSourceRequest {
   authorUrl: string;
 }
 
+export interface ScraperTagFavoriteSource {
+  scraperId: string;
+  tagUrl: string;
+  name: string;
+  cover?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScraperTagFavoriteRecord {
+  id: string;
+  name: string;
+  cover?: string;
+  sources: ScraperTagFavoriteSource[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveScraperTagFavoriteRequest {
+  favoriteId?: string;
+  name: string;
+  cover?: string;
+  source: {
+    scraperId: string;
+    tagUrl: string;
+    name: string;
+    cover?: string;
+  };
+}
+
+export interface RemoveScraperTagFavoriteRequest {
+  favoriteId: string;
+}
+
+export interface RemoveScraperTagFavoriteSourceRequest {
+  favoriteId: string;
+  scraperId: string;
+  tagUrl: string;
+}
+
 export interface ScraperAuthorFavoriteCachedResult {
   pageIndex: number;
   searchTerm: string;
@@ -742,6 +792,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     kind: 'author',
     label: 'Auteur',
     description: 'Definir comment ouvrir une page auteur et extraire la liste de cards retournee.',
+  },
+  {
+    kind: 'tag',
+    label: 'Tag',
+    description: 'Definir comment ouvrir une page tag et extraire la liste de cards retournee.',
   },
   {
     kind: 'chapters',

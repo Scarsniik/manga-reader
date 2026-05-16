@@ -55,6 +55,7 @@ import {
   extractScraperDetailsFieldValues,
   extractScraperDetailsThumbnailsFromDocument,
   extractScraperDetailsThumbnailsPageFromDocument,
+  extractScraperTagUrlsFromDocument,
   extractScraperLanguageCodesFromRoot,
 } from '@/renderer/utils/scraperRuntime';
 
@@ -395,6 +396,39 @@ export default function ScraperDetailsFeatureEditor({
         }
       }
       testSelector('tags', config.tagsSelector, false);
+      if (config.tagUrlSelector) {
+        try {
+          const tagUrls = extractScraperTagUrlsFromDocument(doc, config.tagUrlSelector, {
+            requestedUrl: typedDocumentResult.requestedUrl,
+            finalUrl: typedDocumentResult.finalUrl,
+          });
+          if (tagUrls.length > 0) {
+            checks.push({
+              key: 'tagUrl',
+              selector: formatScraperFieldSelectorForDisplay(config.tagUrlSelector),
+              required: false,
+              matchedCount: tagUrls.length,
+              sample: tagUrls[0],
+            });
+          } else {
+            checks.push({
+              key: 'tagUrl',
+              selector: formatScraperFieldSelectorForDisplay(config.tagUrlSelector),
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match',
+            });
+          }
+        } catch {
+          checks.push({
+            key: 'tagUrl',
+            selector: formatScraperFieldSelectorForDisplay(config.tagUrlSelector),
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
       testSelector('status', config.statusSelector, false);
       testSelector('pageCount', config.pageCountSelector, false);
       if (

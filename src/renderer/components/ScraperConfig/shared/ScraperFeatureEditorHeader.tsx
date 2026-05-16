@@ -2,9 +2,9 @@ import React from 'react';
 
 type Props = {
   title: string;
-  description: string;
+  description: React.ReactNode;
   noteTitle: string;
-  noteText: string;
+  noteText: React.ReactNode;
   statusClassName: string;
   statusLabel: string;
   onBack: () => void;

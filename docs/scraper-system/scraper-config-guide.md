@@ -4,7 +4,7 @@ Date : 2026-04-16
 
 Ce document explique le fonctionnement technique de la configuration des scrapers. Il decrit le
 modele commun, les regles de selecteurs et de templates, puis chaque module de scraping branche en
-V1 : `Recherche`, `Fiche`, `Auteur`, `Chapitres` et `Pages`.
+V1 : `Recherche`, `Fiche`, `Auteur`, `Tag`, `Chapitres` et `Pages`.
 
 ## Perimetre
 
@@ -65,7 +65,7 @@ HTML present dans la reponse HTTP.
 
 En mode regex, la regex s'applique uniquement au HTML du bloc courant :
 
-- pour `Recherche` et `Auteur`, au HTML de la card trouvee par `resultItemSelector`
+- pour `Recherche`, `Auteur` et `Tag`, au HTML de la card trouvee par `resultItemSelector`
 - pour `Chapitres`, au HTML du chapitre trouve par `chapterItemSelector`
 - pour `Fiche`, `Pages` et les liens de pagination, au HTML du document ou du conteneur courant
 
@@ -82,15 +82,15 @@ automatiquement le flag global pour recuperer toutes les correspondances.
 
 ## Detection de langue
 
-Les modules `Recherche`, `Auteur` et `Fiche` ont une section `Langue` separee. Elle peut combiner
+Les modules `Recherche`, `Auteur`, `Tag` et `Fiche` ont une section `Langue` separee. Elle peut combiner
 trois sources :
 
 - detection dans le titre, avec les marqueurs explicites comme `[EN]`, `(FR)`, `English`, `RAW`
 - selecteur de langue classique, pour une metadonnee texte comme `English`
 - selecteur de langue processed, pour une metadonnee non textuelle transformee ensuite
 
-Dans `Auteur`, la configuration de langue peut etre copiee depuis `Recherche`, comme les selecteurs
-de scraping. Cela copie aussi la table de correspondance du mode processed.
+Dans `Auteur` et `Tag`, la configuration de langue peut etre copiee depuis `Recherche`, comme les
+selecteurs de scraping. Cela copie aussi la table de correspondance du mode processed.
 
 Pour le mode processed, la normalisation gere pour l'instant le modele 3hentai : une valeur ou une
 classe comme `flag-eng` est convertie en `en`. Le selecteur peut donc etre un CSS comme
@@ -144,7 +144,7 @@ Si un template de contexte contient une variable non resolue, la construction de
 
 ### Variables de recherche
 
-Utilisees par `Recherche` et par une partie du template `Auteur` :
+Utilisees par `Recherche` et par une partie des templates `Auteur` et `Tag` :
 
 | Variable | Valeur |
 | --- | --- |
@@ -164,8 +164,8 @@ Utilisees par `Fiche` en mode template :
 | `{{value}}`, `{{id}}`, `{{slug}}` | valeur de test ou valeur runtime encodee |
 | `{{rawValue}}`, `{{rawId}}`, `{{rawSlug}}` | valeur brute |
 
-En runtime, `Fiche` et `Auteur` acceptent aussi une URL directe meme si le mode template est actif :
-si la saisie ressemble a une URL, un chemin relatif ou une ancre, elle est resolue directement.
+En runtime, `Fiche`, `Auteur` et `Tag` acceptent aussi une URL directe meme si le mode template est
+actif : si la saisie ressemble a une URL, un chemin relatif ou une ancre, elle est resolue directement.
 
 ### Variables issues de Fiche
 
@@ -307,6 +307,7 @@ injectee dans le template.
 | `authorsSelector` | non | auteurs ; plusieurs valeurs possibles, dedoublonnees |
 | `authorUrlSelector` | non | liens auteur ; doit viser la meme logique d'ordre que `authorsSelector` |
 | `tagsSelector` | non | tags ; plusieurs valeurs possibles, dedoublonnees |
+| `tagUrlSelector` | non | cible tag ; doit viser la meme logique d'ordre que `tagsSelector`. Un `href` est resolu en URL, un `data-id` ou un texte reste une valeur brute utilisable par le template `Tag` |
 | `statusSelector` | non | statut du manga |
 | `pageCountSelector` | non | nombre de pages du manga |
 | `thumbnailsListSelector` | non | conteneur optionnel des vignettes/pages visibles sur la fiche |
@@ -426,6 +427,55 @@ recherche, sans lancer la recherche automatiquement.
 
 Quand `authorNameSelector` extrait un nom, ce nom remplace le titre generique `Resultats auteur`
 dans la page auteur, avec une majuscule au debut de chaque mot.
+
+## Module Tag
+
+`Tag` charge une page tag et extrait une liste de cards, avec le meme modele que `Recherche`.
+
+### Construction de l'URL
+
+| Champ | Requis | Description |
+| --- | --- | --- |
+| `urlStrategy` | oui | `result_url` ou `template` |
+| `urlTemplate` | si template | URL tag construite avec la valeur tag et la pagination |
+| `testUrl` | validation en `result_url` | URL ou chemin de test |
+| `testValue` | selon template | requis en validation si le template contient `{{value}}`, `{{rawValue}}`, `{{query}}` ou `{{rawQuery}}` |
+
+En mode template, `Tag` accepte les variables de recherche et les variables de pagination. Le module
+peut aussi ouvrir une URL directe si elle est fournie depuis le navigateur de scraper ou depuis un
+favori tag.
+
+### Selecteurs
+
+| Selecteur | Requis | Zone | Description |
+| --- | --- | --- | --- |
+| `tagNameSelector` | non | document | extrait le nom du tag affiche sur la page tag ; il sert aux favoris tag et au titre de la page |
+| `resultListSelector` | non | document | limite la zone de parsing |
+| `resultItemSelector` | oui | conteneur ou document | detecte chaque card |
+| `titleSelector` | oui | card | titre de la card ; une card sans titre est ignoree |
+| `detailUrlSelector` | non | card | URL de fiche pour ouvrir `Fiche` depuis la page tag |
+| `authorUrlSelector` | non | card | URL auteur si les cards exposent aussi un auteur |
+| `thumbnailSelector` | non | card | miniature |
+| `summarySelector` | non | card | resume |
+| `pageCountSelector` | non | card | nombre de pages affiche sur la card |
+| `nextPageSelector` | non | document | lien de page suivante |
+
+L'ecran peut copier les selecteurs de `Recherche` pour accelerer une page tag qui rend les memes
+cards. Le selecteur `tagNameSelector` reste optionnel et separe, car il cible la page tag elle-meme.
+
+### Validation et runtime
+
+La validation reussit si au moins un titre de card est extrait. La pagination fonctionne comme pour
+`Recherche` : template de page en priorite, sinon `nextPageSelector`.
+
+Le runtime peut ouvrir `Tag` :
+
+- depuis une URL tag directe
+- depuis une valeur tag si `Tag` est en mode template
+- depuis une fiche quand `tagUrlSelector` ou le nom du tag donne une cible exploitable
+- depuis un tag favori sauvegarde
+
+Quand `tagNameSelector` extrait un nom, ce nom remplace le titre generique `Resultats tag`.
 
 ## Module Chapitres
 
@@ -555,9 +605,10 @@ Pour une source HTML classique :
    variables derivees.
 2. `Recherche` : ajouter les cards et le lien fiche.
 3. `Auteur` : optionnel, souvent en copiant les selecteurs de `Recherche`.
-4. `Chapitres` : si le site a une lecture par chapitre.
-5. `Pages` : brancher le lecteur et le telechargement.
-6. Reglages globaux : tags, langue, bookmarks, recherche d'accueil.
+4. `Tag` : optionnel, souvent en copiant les selecteurs de `Recherche`.
+5. `Chapitres` : si le site a une lecture par chapitre.
+6. `Pages` : brancher le lecteur et le telechargement.
+7. Reglages globaux : tags, langue, bookmarks, recherche d'accueil.
 
 Si le site ne propose pas de recherche utile, `Fiche` peut suffire pour ouvrir une URL ou une valeur
 manuelle. Si le site ne propose pas de chapitres, `Pages` peut lire directement depuis la fiche ou

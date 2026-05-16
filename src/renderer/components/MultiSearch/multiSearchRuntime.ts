@@ -2,20 +2,25 @@ import {
   FetchScraperDocumentResult,
   hasScraperFieldSelectorValue,
   ScraperAuthorFeatureConfig,
+  ScraperCardListConfig,
   ScraperRecord,
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
+  ScraperTagFeatureConfig,
 } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocumentWithImageFallbacks,
   getScraperFeature,
   getScraperAuthorFeatureConfig,
   getScraperSearchFeatureConfig,
+  getScraperTagFeatureConfig,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
+  hasTagPagePlaceholder,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
   resolveScraperAuthorTargetUrl,
+  resolveScraperTagTargetUrl,
   ScraperRuntimeSearchPageResult,
 } from "@/renderer/utils/scraperRuntime";
 import {
@@ -56,6 +61,32 @@ const wait = (delayMs: number): Promise<void> => (
     ? new Promise((resolve) => window.setTimeout(resolve, delayMs))
     : Promise.resolve()
 );
+
+const fetchPageWithRetry = async (
+  pageIndex: number,
+  paceConfig: PaceConfig,
+  loadPage: () => Promise<ScraperRuntimeSearchPageResult>,
+  failureMessage: string,
+): Promise<ScraperRuntimeSearchPageResult> => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
+    try {
+      if (attempt > 0 || pageIndex > 0) {
+        await wait(paceConfig.pageDelayMs);
+      }
+
+      return await loadPage();
+    } catch (error) {
+      lastError = error;
+      if (attempt < paceConfig.retryCount) {
+        await wait(paceConfig.pageDelayMs);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(failureMessage);
+};
 
 export const runWithConcurrency = async (
   tasks: Array<() => Promise<void>>,
@@ -100,6 +131,18 @@ export const getAuthorConfig = (scraper: ScraperRecord): ScraperAuthorFeatureCon
   }
 
   return authorConfig;
+};
+
+export const getTagConfig = (scraper: ScraperRecord): ScraperTagFeatureConfig => {
+  const tagConfig = getScraperTagFeatureConfig(getScraperFeature(scraper, "tag"));
+  if (
+    !tagConfig?.resultItemSelector
+    || !hasScraperFieldSelectorValue(tagConfig.titleSelector)
+  ) {
+    throw new Error("Le composant Tag n'est pas suffisamment configure.");
+  }
+
+  return tagConfig;
 };
 
 const fetchSearchPage = async (
@@ -153,46 +196,38 @@ export const fetchSearchPageWithRetry = async (
   pageIndex: number,
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
-): Promise<ScraperRuntimeSearchPageResult> => {
-  let lastError: unknown = null;
+): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
+  pageIndex,
+  paceConfig,
+  () => fetchSearchPage(scraper, searchConfig, query, pageIndex, nextPageUrl),
+  "Impossible de charger la page de recherche.",
+);
 
-  for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
-    try {
-      if (attempt > 0 || pageIndex > 0) {
-        await wait(paceConfig.pageDelayMs);
-      }
-
-      return await fetchSearchPage(scraper, searchConfig, query, pageIndex, nextPageUrl);
-    } catch (error) {
-      lastError = error;
-      if (attempt < paceConfig.retryCount) {
-        await wait(paceConfig.pageDelayMs);
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Impossible de charger la page de recherche.");
-};
-
-const fetchAuthorPage = async (
+const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
   scraper: ScraperRecord,
-  authorConfig: ScraperAuthorFeatureConfig,
+  config: TConfig,
   query: string,
   pageIndex: number,
-  nextPageUrl?: string,
-  templateContext?: ScraperTemplateContext | null,
+  nextPageUrl: string | undefined,
+  options: {
+    label: string;
+    hasPagePlaceholder: (config: TConfig) => boolean;
+    resolveTargetUrl: (
+      baseUrl: string,
+      config: TConfig,
+      query: string,
+      pageIndex: number,
+    ) => string;
+  },
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
   if (typeof fetchScraperDocument !== "function") {
     throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
   }
 
-  const usesTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
+  const usesTemplatePaging = options.hasPagePlaceholder(config);
   const targetUrl = usesTemplatePaging || pageIndex === 0
-    ? resolveScraperAuthorTargetUrl(scraper.baseUrl, authorConfig, query, {
-      pageIndex,
-      templateContext: templateContext ?? undefined,
-    })
+    ? options.resolveTargetUrl(scraper.baseUrl, config, query, pageIndex)
     : nextPageUrl;
 
   if (!targetUrl) {
@@ -208,18 +243,46 @@ const fetchAuthorPage = async (
     throw new Error(
       documentResult?.error
       || (typeof documentResult?.status === "number"
-        ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
-        : "Impossible de charger la page auteur."),
+        ? `La page ${options.label} a repondu avec le code HTTP ${documentResult.status}.`
+        : `Impossible de charger la page ${options.label}.`),
     );
   }
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
+  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, config, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
   }, async (request) => fetchScraperDocument(request));
 };
+
+const fetchAuthorPage = async (
+  scraper: ScraperRecord,
+  authorConfig: ScraperAuthorFeatureConfig,
+  query: string,
+  pageIndex: number,
+  nextPageUrl?: string,
+  templateContext?: ScraperTemplateContext | null,
+): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
+  scraper,
+  authorConfig,
+  query,
+  pageIndex,
+  nextPageUrl,
+  {
+    label: "auteur",
+    hasPagePlaceholder: hasAuthorPagePlaceholder,
+    resolveTargetUrl: (baseUrl, config, value, targetPageIndex) => resolveScraperAuthorTargetUrl(
+      baseUrl,
+      config,
+      value,
+      {
+        pageIndex: targetPageIndex,
+        templateContext: templateContext ?? undefined,
+      },
+    ),
+  },
+);
 
 export const fetchAuthorPageWithRetry = async (
   scraper: ScraperRecord,
@@ -229,33 +292,50 @@ export const fetchAuthorPageWithRetry = async (
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
   templateContext?: ScraperTemplateContext | null,
-): Promise<ScraperRuntimeSearchPageResult> => {
-  let lastError: unknown = null;
+): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
+  pageIndex,
+  paceConfig,
+  () => fetchAuthorPage(scraper, authorConfig, query, pageIndex, nextPageUrl, templateContext),
+  "Impossible de charger la page auteur.",
+);
 
-  for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
-    try {
-      if (attempt > 0 || pageIndex > 0) {
-        await wait(paceConfig.pageDelayMs);
-      }
+const fetchTagPage = async (
+  scraper: ScraperRecord,
+  tagConfig: ScraperTagFeatureConfig,
+  query: string,
+  pageIndex: number,
+  nextPageUrl?: string,
+): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
+  scraper,
+  tagConfig,
+  query,
+  pageIndex,
+  nextPageUrl,
+  {
+    label: "tag",
+    hasPagePlaceholder: hasTagPagePlaceholder,
+    resolveTargetUrl: (baseUrl, config, value, targetPageIndex) => resolveScraperTagTargetUrl(
+      baseUrl,
+      config,
+      value,
+      { pageIndex: targetPageIndex },
+    ),
+  },
+);
 
-      return await fetchAuthorPage(
-        scraper,
-        authorConfig,
-        query,
-        pageIndex,
-        nextPageUrl,
-        templateContext,
-      );
-    } catch (error) {
-      lastError = error;
-      if (attempt < paceConfig.retryCount) {
-        await wait(paceConfig.pageDelayMs);
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Impossible de charger la page auteur.");
-};
+export const fetchTagPageWithRetry = async (
+  scraper: ScraperRecord,
+  tagConfig: ScraperTagFeatureConfig,
+  query: string,
+  pageIndex: number,
+  nextPageUrl: string | undefined,
+  paceConfig: PaceConfig,
+): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
+  pageIndex,
+  paceConfig,
+  () => fetchTagPage(scraper, tagConfig, query, pageIndex, nextPageUrl),
+  "Impossible de charger la page tag.",
+);
 
 export const buildSourceResults = (
   scraper: ScraperRecord,
@@ -303,24 +383,41 @@ export const buildSourceResultsFromItems = (
   }, getPageIndex(result, index), getSearchTerm(result, index)))
 );
 
-export const resolveHasNextPage = (
-  searchConfig: ScraperSearchFeatureConfig,
+const resolveHasNextListingPage = (
+  hasTemplatePaging: boolean,
+  nextPageSelector: ScraperCardListConfig["nextPageSelector"],
   page: ScraperRuntimeSearchPageResult,
 ): boolean => (
-  hasSearchPagePlaceholder(searchConfig)
-    ? hasScraperFieldSelectorValue(searchConfig.nextPageSelector)
+  hasTemplatePaging
+    ? hasScraperFieldSelectorValue(nextPageSelector)
       ? Boolean(page.nextPageUrl)
       : page.items.length > 0
     : Boolean(page.nextPageUrl)
 );
 
+export const resolveHasNextPage = (
+  searchConfig: ScraperSearchFeatureConfig,
+  page: ScraperRuntimeSearchPageResult,
+): boolean => resolveHasNextListingPage(
+  hasSearchPagePlaceholder(searchConfig),
+  searchConfig.nextPageSelector,
+  page,
+);
+
 export const resolveHasNextAuthorPage = (
   authorConfig: ScraperAuthorFeatureConfig,
   page: ScraperRuntimeSearchPageResult,
-): boolean => (
-  hasAuthorPagePlaceholder(authorConfig)
-    ? hasScraperFieldSelectorValue(authorConfig.nextPageSelector)
-      ? Boolean(page.nextPageUrl)
-      : page.items.length > 0
-    : Boolean(page.nextPageUrl)
+): boolean => resolveHasNextListingPage(
+  hasAuthorPagePlaceholder(authorConfig),
+  authorConfig.nextPageSelector,
+  page,
+);
+
+export const resolveHasNextTagPage = (
+  tagConfig: ScraperTagFeatureConfig,
+  page: ScraperRuntimeSearchPageResult,
+): boolean => resolveHasNextListingPage(
+  hasTagPagePlaceholder(tagConfig),
+  tagConfig.nextPageSelector,
+  page,
 );

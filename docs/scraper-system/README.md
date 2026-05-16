@@ -11,6 +11,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - [`scraper-config-guide.md`](./scraper-config-guide.md) : guide technique de configuration des scrapers, des selecteurs et des modules V1
 - [`source-linking.md`](./source-linking.md) : liaison entre une fiche scraper, un manga local et sa source externe
 - [`author-favorites.md`](./author-favorites.md) : favoris auteur scraper, rattachement multi-source et vue combinee
+- [`tag-favorites.md`](./tag-favorites.md) : favoris tag scraper, rattachement multi-source et vue de resultats paginee
 - [`v1-implementation-status.md`](./v1-implementation-status.md) : ce qui est effectivement branche dans l'application aujourd'hui
 - [`first-draft-archive.md`](./first-draft-archive.md) : archive integrale du brouillon initial, conservee sans perte d'information
 
@@ -36,5 +37,6 @@ Il sert a verifier en priorite :
 - la configuration de `Recherche`
 - la configuration de `Fiche`
 - la configuration de `Auteur`
+- la configuration de `Tag`
 - la configuration de `Chapitres`
 - la configuration de `Pages`

@@ -192,6 +192,7 @@ Le composant permet :
 - un selecteur de titre obligatoire
 - des selecteurs optionnels pour couverture, description, auteurs, tags, statut et nombre de pages
 - un selecteur optionnel de lien auteur, pour rendre les tags auteur cliquables
+- un selecteur optionnel de cible tag, pour rendre les tags cliquables vers le composant `Tag`
 - des selecteurs optionnels pour extraire une liste ordonnee de vignettes depuis la fiche et son lien de page suivante
 - une liste de variables derivees reutilisables par d'autres composants
 
@@ -267,6 +268,7 @@ Regles actuelles :
 - pour les champs URL, un selecteur place sur un lien HTML utilise `href` par defaut meme sans `@href`
 - le composant `Recherche` peut stocker un lien auteur optionnel par card
 - le composant `Fiche` peut stocker un lien auteur optionnel pour ses tags auteur
+- le composant `Fiche` peut stocker une cible tag optionnelle pour rendre les tags cliquables vers `Tag`
 
 Validation actuelle de `Auteur` :
 
@@ -275,6 +277,28 @@ Validation actuelle de `Auteur` :
 - parsing cote renderer
 - extraction de la liste de cards
 - affichage d'un apercu pagine si besoin
+
+## Configuration actuelle de `Tag`
+
+La configuration de `Tag` repose sur :
+
+- une section `Construction de l'URL`
+- une section `Scraping`
+- une section `Test`
+
+Le composant permet :
+
+- un acces par URL tag connue
+- ou un acces par template d'URL tag
+- de recopier en un clic les selecteurs de `Recherche` vers `Tag` quand `Recherche` est deja configuree
+- un selecteur optionnel pour le nom du tag affiche sur la page
+- un selecteur de titre de card obligatoire
+- des selecteurs optionnels pour lien fiche, lien auteur, miniature, resume, nombre de pages et page suivante
+- un rendu de previsualisation identique a une liste de `Recherche`
+
+La vue `Tags favoris` est branchee dans le menu principal. Elle liste les tags sauvegardes et ouvre
+un favori sous forme de liste unique de cards, sans separation par scraper. La pagination charge la
+meme page sur chaque source rattachee au favori.
 
 ## Configuration actuelle de `Chapitres`
 

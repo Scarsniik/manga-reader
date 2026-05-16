@@ -73,6 +73,7 @@ const MANAGED_DATA_FILE_NAMES = [
     "scraper-author-favorites.json",
     "scraper-bookmarks.json",
     "scraper-reader-progress.json",
+    "scraper-tag-favorites.json",
     "scraper-view-history.json",
     "scrapers.json",
     "series.json",

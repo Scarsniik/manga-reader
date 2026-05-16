@@ -136,6 +136,12 @@ export const SELECTOR_FIELDS: Field[] = [
     placeholder: 'Exemple : .tagcloud a',
   },
   {
+    name: 'tagUrlSelector',
+    label: 'Selecteur de l\'id / lien tag',
+    type: 'text',
+    placeholder: 'Optionnel : .tagcloud a@href ou .tagcloud a@data-id',
+  },
+  {
     name: 'statusSelector',
     label: 'Selecteur du statut',
     type: 'text',
@@ -174,6 +180,7 @@ export const FIELD_SELECTOR_FIELD_NAMES = [
   'authorsSelector',
   'authorUrlSelector',
   'tagsSelector',
+  'tagUrlSelector',
   'statusSelector',
   'pageCountSelector',
   'thumbnailsSelector',
@@ -209,6 +216,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   authorsSelector: undefined,
   authorUrlSelector: undefined,
   tagsSelector: undefined,
+  tagUrlSelector: undefined,
   statusSelector: undefined,
   pageCountSelector: undefined,
   thumbnailsListSelector: '',
@@ -295,6 +303,7 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   authorsSelector: trimOptionalFieldSelector(values.authorsSelector),
   authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
   tagsSelector: trimOptionalFieldSelector(values.tagsSelector),
+  tagUrlSelector: trimOptionalFieldSelector(values.tagUrlSelector),
   statusSelector: trimOptionalFieldSelector(values.statusSelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
   thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
@@ -324,6 +333,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     authorsSelector: trimOptionalFieldSelector(raw.authorsSelector),
     authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalFieldSelector(raw.tagsSelector),
+    tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
     statusSelector: trimOptionalFieldSelector(raw.statusSelector),
     pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
@@ -390,6 +400,7 @@ export const buildValidationPresentation = (
           truncate: 160,
           treatAsUrl: check.key === 'cover'
             || check.key === 'authorUrl'
+            || check.key === 'tagUrl'
             || check.key === 'thumbnails'
             || check.key === 'thumbnailsNextPage',
         })

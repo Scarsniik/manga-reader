@@ -30,6 +30,9 @@ Quand l'utilisateur ajoute la page :
 - ou rattacher cette source a un auteur favori existant
 - il peut renseigner le nom de l'auteur propre au scraper courant
 
+Dans l'onglet auteur existant, le formulaire selectionne par defaut le favori dont le nom commun
+ou les noms de sources existantes se rapprochent le plus du nom auteur courant.
+
 L'etoile devient active quand la source auteur courante est deja rattachee a un favori.
 
 ## Vue combinee

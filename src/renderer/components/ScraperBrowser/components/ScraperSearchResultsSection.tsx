@@ -7,7 +7,7 @@ import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/compon
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
-  mode: 'homepage' | 'search' | 'author';
+  mode: 'homepage' | 'search' | 'author' | 'tag';
   backLabel?: string | null;
   authorTitle?: string | null;
   visibleSearchResults: ScraperSearchResultItem[];
@@ -80,12 +80,15 @@ export default function ScraperSearchResultsSection({
   }
 
   const isAuthorMode = mode === 'author';
+  const isTagMode = mode === 'tag';
   const isHomepageMode = mode === 'homepage';
   const heading = isAuthorMode
     ? authorTitle || 'Resultats auteur'
-    : isHomepageMode
-      ? 'Homepage'
-      : 'Resultats de recherche';
+    : isTagMode
+      ? authorTitle || 'Resultats tag'
+      : isHomepageMode
+        ? 'Homepage'
+        : 'Resultats de recherche';
 
   return (
     <section className="scraper-browser__results">
@@ -116,6 +119,12 @@ export default function ScraperSearchResultsSection({
                     {searchResultsCount} resultat(s) extrait(s) depuis la page auteur courante.
                   </>
                 )
+                : isTagMode
+                  ? (
+                    <>
+                      {searchResultsCount} resultat(s) extrait(s) depuis la page tag courante.
+                    </>
+                  )
                 : isHomepageMode
                   ? (
                     <>
