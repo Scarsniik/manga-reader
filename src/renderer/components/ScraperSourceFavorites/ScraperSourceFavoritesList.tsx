@@ -1,21 +1,42 @@
 import React from "react";
-import type {
-  ScraperRecord,
-  ScraperTagFavoriteRecord,
-} from "@/shared/scraper";
+import type { ScraperRecord } from "@/shared/scraper";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 
-type Props = {
-  favorites: ScraperTagFavoriteRecord[];
+type ScraperSourceFavoriteSource = {
+  scraperId: string;
+  name: string;
+};
+
+type ScraperSourceFavoriteRecord<TSource extends ScraperSourceFavoriteSource> = {
+  id: string;
+  name: string;
+  cover?: string;
+  sources: TSource[];
+};
+
+type Props<
+  TRecord extends ScraperSourceFavoriteRecord<TSource>,
+  TSource extends ScraperSourceFavoriteSource,
+> = {
+  favorites: TRecord[];
   loading: boolean;
   error: string | null;
   scrapersById: Map<string, ScraperRecord>;
+  title: string;
+  description: string;
+  loadingMessage: string;
+  emptyMessage: string;
+  actionPrefix: string;
+  favoriteKindLabel: string;
   onSelectFavorite: (favoriteId: string) => void;
-  onRemoveFavorite: (favorite: ScraperTagFavoriteRecord) => void;
+  onRemoveFavorite: (favorite: TRecord) => void;
 };
 
-const formatSourceSummary = (
-  favorite: ScraperTagFavoriteRecord,
+const formatSourceSummary = <
+  TRecord extends ScraperSourceFavoriteRecord<TSource>,
+  TSource extends ScraperSourceFavoriteSource,
+>(
+  favorite: TRecord,
   scrapersById: Map<string, ScraperRecord>,
 ) => (
   favorite.sources
@@ -26,20 +47,29 @@ const formatSourceSummary = (
     .join("\n")
 );
 
-export default function ScraperTagFavoritesList({
+export default function ScraperSourceFavoritesList<
+  TRecord extends ScraperSourceFavoriteRecord<TSource>,
+  TSource extends ScraperSourceFavoriteSource,
+>({
   favorites,
   loading,
   error,
   scrapersById,
+  title,
+  description,
+  loadingMessage,
+  emptyMessage,
+  actionPrefix,
+  favoriteKindLabel,
   onSelectFavorite,
   onRemoveFavorite,
-}: Props) {
+}: Props<TRecord, TSource>) {
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
       <div className="scraper-author-favorites-view__header">
         <div>
-          <h2>Tags favoris</h2>
-          <p>Cette vue regroupe les pages tag sauvegardees depuis les scrappers.</p>
+          <h2>{title}</h2>
+          <p>{description}</p>
         </div>
       </div>
 
@@ -50,13 +80,13 @@ export default function ScraperTagFavoritesList({
           {favorites.map((favorite) => {
             const actions: ScraperCardAction[] = [
               {
-                id: "open-tag-favorite",
+                id: `open-${actionPrefix}-favorite`,
                 type: "primary",
                 label: "Ouvrir",
                 onClick: () => onSelectFavorite(favorite.id),
               },
               {
-                id: "remove-tag-favorite",
+                id: `remove-${actionPrefix}-favorite`,
                 type: "secondary",
                 label: "Supprimer",
                 onClick: () => onRemoveFavorite(favorite),
@@ -84,16 +114,16 @@ export default function ScraperTagFavoritesList({
                     onSelectFavorite(favorite.id);
                   }
                 }}
-                ariaLabel={`Ouvrir le tag favori ${favorite.name}`}
+                ariaLabel={`Ouvrir ${favoriteKindLabel} ${favorite.name}`}
               />
             );
           })}
         </div>
       ) : loading ? (
-        <div className="scraper-browser__message">Chargement des tags favoris...</div>
+        <div className="scraper-browser__message">{loadingMessage}</div>
       ) : (
         <div className="scraper-browser__message">
-          Aucun tag favori. Ouvre une page tag dans un scrapper puis utilise l'etoile.
+          {emptyMessage}
         </div>
       )}
     </section>
