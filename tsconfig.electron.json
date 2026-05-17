@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src/electron"
+    "rootDir": "src"
   },
-  "include": ["src/electron/**/*"]
+  "include": ["src/electron/**/*", "src/shared/scraper.ts"]
 }

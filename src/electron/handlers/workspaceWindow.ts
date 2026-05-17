@@ -161,7 +161,7 @@ const createWorkspaceWindow = (): BrowserWindow => {
         minHeight: WORKSPACE_WINDOW_MIN_HEIGHT,
         frame: false,
         webPreferences: {
-            preload: path.join(basePath, "dist", "preload.js"),
+            preload: path.join(basePath, "dist", "electron", "preload.js"),
             contextIsolation: true,
             webSecurity: false,
             sandbox: false,

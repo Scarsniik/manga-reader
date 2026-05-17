@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Scarsniik/manga-reader.git"
   },
-  "main": "dist/main.js",
+  "main": "dist/electron/main.js",
   "scripts": {
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-electron.ps1",
     "prestart": "tsc -p tsconfig.json",

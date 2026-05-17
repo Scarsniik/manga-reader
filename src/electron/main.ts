@@ -65,7 +65,7 @@ const startOcrPrewarmInBackground = () => {
 
 const createWindow = () => {
     const basePath = app.getAppPath();
-    const preloadPath = path.join(basePath, "dist", "preload.js");
+    const preloadPath = path.join(basePath, "dist", "electron", "preload.js");
     const packagedIndexPath = path.join(app.getAppPath(), "dist", "renderer", "index.html");
 
     mainWindow = new BrowserWindow({
