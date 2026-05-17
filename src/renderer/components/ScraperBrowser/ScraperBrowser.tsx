@@ -76,6 +76,7 @@ import {
   saveScraperMangaToLibrary,
   saveStandaloneScraperCardToLibrary,
 } from '@/renderer/utils/scraperLibrary';
+import { recordSearchHistorySafe } from '@/renderer/utils/history';
 import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import {
   buildSearchResultViewHistoryIdentity,
@@ -623,12 +624,27 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     loadDetailsFromTargetUrl,
   });
 
+  const recordScraperSearchHistory = useCallback((searchQuery: string) => {
+    const trimmedSearchQuery = searchQuery.trim();
+    if (!trimmedSearchQuery) {
+      return;
+    }
+
+    void recordSearchHistorySafe({
+      sourceKind: 'scraper',
+      query: trimmedSearchQuery,
+      scraperId: scraper.id,
+      scraperName: scraper.name,
+    });
+  }, [scraper.id, scraper.name]);
+
   const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmedQuery = query.trim();
     if (mode === 'search') {
       await runSearchLookup(trimmedQuery);
+      recordScraperSearchHistory(trimmedQuery);
       return;
     }
 
@@ -654,7 +670,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     }
 
     await runDetailsLookup(trimmedQuery);
-  }, [mode, query, runAuthorLookup, runDetailsLookup, runHomepageLookup, runSearchLookup, runTagLookup, setQuery]);
+  }, [mode, query, recordScraperSearchHistory, runAuthorLookup, runDetailsLookup, runHomepageLookup, runSearchLookup, runTagLookup, setQuery]);
 
   const canSaveScraperSearch = showSavedScraperSearches
     && (mode === 'search' || mode === 'author')
@@ -746,6 +762,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
 
     if (nextMode === 'search') {
       await runSearchLookup(search.query);
+      recordScraperSearchHistory(search.query);
       return;
     }
 
@@ -758,6 +775,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     runSearchLookup,
     savedScraperSearches,
     savedSearchDeleteMode,
+    recordScraperSearchHistory,
     scraper.id,
     setAuthorTemplateContext,
     setMode,

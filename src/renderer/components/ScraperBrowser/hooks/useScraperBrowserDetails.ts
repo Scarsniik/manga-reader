@@ -13,6 +13,7 @@ import type {
 } from '@/renderer/components/ScraperBrowser/types';
 import { isScraperRuntimeChapterResult } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraperTemplateContext';
+import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
   createScraperMangaId,
@@ -208,6 +209,12 @@ export function useScraperBrowserDetails({
 
       setDetailsResult(extractedDetails);
       setChaptersResult(extractedChapters);
+      void recordDetailsHistorySafe({
+        scraperId: scraper.id,
+        sourceUrl: extractedDetails.finalUrl || extractedDetails.requestedUrl || targetUrl,
+        title: extractedDetails.title || targetUrl,
+        cover: extractedDetails.cover,
+      });
     } catch (error) {
       if (canCommit()) {
         setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du scrapper.');
@@ -224,6 +231,7 @@ export function useScraperBrowserDetails({
     resetDetailsState,
     resetListingState,
     scraper.baseUrl,
+    scraper.id,
     setChaptersResult,
     setDetailsResult,
     setLoading,

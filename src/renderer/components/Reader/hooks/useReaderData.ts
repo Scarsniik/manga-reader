@@ -18,6 +18,7 @@ import {
     resolveLazyScraperReaderPageUrl,
     resolveScraperReaderPageUrls,
 } from '@/renderer/utils/scraperReaderPages';
+import { recordReadingHistorySafe, toLocalImageUrl } from '@/renderer/utils/history';
 import { ReaderLocationState } from '../types';
 import { isRemoteScraperManga, isScraperReaderManga } from '../utils';
 
@@ -469,6 +470,18 @@ const useReaderData = ({
                         currentPage: persistedPage,
                         totalPages,
                     });
+                    await recordReadingHistorySafe({
+                        sourceKind: "scraper",
+                        scraperId: String(manga.scraperId || ''),
+                        title: manga.title,
+                        sourceUrl: String(manga.sourceUrl || ''),
+                        readerProgressId: manga.id,
+                        cover: locationState?.scraperReader?.cover || manga.thumbnailPath,
+                        chapterUrl: locationState?.scraperReader?.chapter?.url,
+                        chapterLabel: locationState?.scraperReader?.chapter?.label,
+                        currentPage: persistedPage,
+                        totalPages,
+                    });
                     return;
                 }
 
@@ -480,6 +493,14 @@ const useReaderData = ({
                     id: manga.id,
                     currentPage: persistedPage,
                     pages: totalPages,
+                });
+                await recordReadingHistorySafe({
+                    sourceKind: "library",
+                    mangaId: manga.id,
+                    title: manga.title,
+                    cover: toLocalImageUrl(manga.thumbnailPath),
+                    currentPage: persistedPage,
+                    totalPages,
                 });
                 try {
                     window.dispatchEvent(new CustomEvent('mangas-updated'));
@@ -495,7 +516,7 @@ const useReaderData = ({
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [currentIndex, images, manga]);
+    }, [currentIndex, images, locationState?.scraperReader, manga]);
 
     const runDebugListPages = React.useCallback(async () => {
         setDebugError(null);

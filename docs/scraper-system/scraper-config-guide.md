@@ -140,6 +140,11 @@ Par defaut, `{{variable}}` insere une valeur encodee avec `encodeURIComponent`. 
 brute existe, elle insere la valeur sans encodage. Pour les templates bases sur le contexte de
 `Fiche`, la forme brute est `{{raw:variable}}`.
 
+Exception : dans les templates bases sur le contexte de `Fiche`, si le template commence par une
+variable dont la valeur est deja une URL absolue `http(s)://...` ou `//...`, cette valeur est
+inseree brute. Le template peut donc commencer par `{{pageAdress}}/{{pageIndex3}}.webp` sans
+prefixer le `baseUrl` du scraper ni encoder les `/` de l'URL extraite.
+
 Si un template de contexte contient une variable non resolue, la construction de l'URL echoue.
 
 ### Variables de recherche
@@ -183,7 +188,7 @@ utiliser ce contexte :
 | `{{tags}}` | tags extraits, joints par virgule + espace |
 | `{{status}}` | statut extrait |
 | `{{pageCount}}` | nombre de pages extrait |
-| `{{nomVariable}}` | variable derivee configuree dans `Fiche` |
+| `{{nomVariable}}` | variable derivee configuree dans `Fiche`, encodee sauf si elle est une URL absolue en debut de template |
 | `{{raw:nomVariable}}` | meme valeur sans encodage |
 
 `Chapitres` ajoute `{{chapterPage}}` pour paginer les listes de chapitres.

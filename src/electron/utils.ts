@@ -19,6 +19,7 @@ export const scraperTagFavoritesFilePath = path.join(dataDir, "scraper-tag-favor
 export const scraperAuthorFavoriteCacheDir = path.join(dataDir, "scraper-author-favorite-cache");
 export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-progress.json");
 export const scraperViewHistoryFilePath = path.join(dataDir, "scraper-view-history.json");
+export const appHistoryFilePath = path.join(dataDir, "history.json");
 export const workspaceWindowStateFilePath = path.join(dataDir, "workspace-window-state.json");
 
 export async function ensureDataDir() {

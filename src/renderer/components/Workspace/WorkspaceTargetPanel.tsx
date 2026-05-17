@@ -19,6 +19,7 @@ import {
   resolveScraperChapters,
 } from "@/renderer/utils/scraperRuntime";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
+import { recordDetailsHistorySafe } from "@/renderer/utils/history";
 
 type Props = {
   tabId: string;
@@ -150,6 +151,14 @@ function ScraperDetailsPanel({
       setError(null);
       setLoading(false);
       onTitleChange(cachedState.resolvedTitle);
+      void recordDetailsHistorySafe({
+        scraperId: cachedState.scraper.id,
+        sourceUrl: cachedState.initialState.detailsResult?.finalUrl
+          || cachedState.initialState.detailsResult?.requestedUrl
+          || sourceUrl,
+        title: cachedState.resolvedTitle || title || sourceUrl,
+        cover: cachedState.initialState.detailsResult?.cover,
+      });
       return;
     }
 
@@ -269,6 +278,12 @@ function ScraperDetailsPanel({
         resolvedTitle,
       });
       onTitleChange(resolvedTitle);
+      void recordDetailsHistorySafe({
+        scraperId: nextScraper.id,
+        sourceUrl: canonicalDetailsQuery,
+        title: resolvedTitle,
+        cover: detailsResult.cover,
+      });
     } catch (loadError) {
       if (requestId !== requestIdRef.current) {
         return;

@@ -363,9 +363,9 @@ Le mode `Depuis un template` reutilise :
 
 Regles actuelles du template :
 
-- `{{nomVariable}}` insere une valeur encodee
+- `{{nomVariable}}` insere une valeur encodee, sauf si le template commence par une variable contenant une URL absolue
 - `{{raw:nomVariable}}` insere une valeur brute
-- `{{requestedUrl}}` et `{{finalUrl}}` encodent donc les `/` en `%2F`
+- `{{requestedUrl}}` et `{{finalUrl}}` encodent donc les `/` en `%2F`, sauf quand l'une de ces URLs ouvre le template
 - `{{chapter}}` insere l'URL du chapitre choisi quand `Pages` est lie a des chapitres
 - `{{page}}` insere un numero 1-based
 - `{{page3}}` insere un numero 1-based zero-padde sur 3 chiffres

@@ -18,6 +18,7 @@ import * as windowControls from "./handlers/windowControls";
 import * as workspaceWindow from "./handlers/workspaceWindow";
 import * as appUpdate from "./handlers/appUpdate";
 import * as jsonDocuments from "./handlers/jsonDocuments";
+import * as history from "./handlers/history";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -65,6 +66,12 @@ const notifyMangasUpdated = () => {
     }
 };
 
+const notifyHistoryUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("history-updated");
+    }
+};
+
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
@@ -84,6 +91,39 @@ ipcMain.handle("app-runtime-info", async () => windowControls.getAppRuntimeInfo(
 ipcMain.handle("workspace-open-target", async (event: IpcMainInvokeEvent, target: unknown) => (
     workspaceWindow.openWorkspaceTarget(event, target)
 ));
+
+// History
+ipcMain.handle("get-history-records", async () => history.getHistoryRecords());
+ipcMain.handle("record-reading-history", async (event: IpcMainInvokeEvent, request: unknown) => {
+    const record = await history.recordReadingHistory(event, request as any);
+    notifyHistoryUpdated();
+    return record;
+});
+ipcMain.handle("record-details-history", async (event: IpcMainInvokeEvent, request: unknown) => {
+    const record = await history.recordDetailsHistory(event, request as any);
+    notifyHistoryUpdated();
+    return record;
+});
+ipcMain.handle("record-search-history", async (event: IpcMainInvokeEvent, request: unknown) => {
+    const record = await history.recordSearchHistory(event, request as any);
+    notifyHistoryUpdated();
+    return record;
+});
+ipcMain.handle("remove-reading-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
+    const records = await history.removeReadingHistoryRecord(event, historyId);
+    notifyHistoryUpdated();
+    return records;
+});
+ipcMain.handle("remove-details-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
+    const records = await history.removeDetailsHistoryRecord(event, historyId);
+    notifyHistoryUpdated();
+    return records;
+});
+ipcMain.handle("remove-search-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
+    const records = await history.removeSearchHistoryRecord(event, historyId);
+    notifyHistoryUpdated();
+    return records;
+});
 
 // Mangas
 ipcMain.handle("get-mangas", async () => mangas.getMangas());

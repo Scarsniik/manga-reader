@@ -875,6 +875,45 @@ const encodeScraperTemplateValue = (value: string): string => {
   }
 };
 
+const isAbsoluteScraperTemplateUrlValue = (value: string): boolean => {
+  const trimmed = value.trim();
+
+  try {
+    if (trimmed.startsWith('//')) {
+      const parsed = new URL(trimmed, 'https://scraper-template.local');
+      return Boolean(parsed.hostname);
+    }
+
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const replaceScraperTemplateToken = (
+  template: string,
+  token: string,
+  getReplacement: (tokenIndex: number) => string,
+): string => {
+  let nextTemplate = '';
+  let cursor = 0;
+
+  while (cursor < template.length) {
+    const tokenIndex = template.indexOf(token, cursor);
+    if (tokenIndex < 0) {
+      nextTemplate += template.slice(cursor);
+      break;
+    }
+
+    nextTemplate += template.slice(cursor, tokenIndex);
+    nextTemplate += getReplacement(tokenIndex);
+    cursor = tokenIndex + token.length;
+  }
+
+  return nextTemplate;
+};
+
 const applyScraperTemplateReplacements = (
   template: string,
   replacements: Array<[string, string]>,
@@ -1008,11 +1047,24 @@ export function buildScraperContextTemplateUrl(
       return;
     }
 
-    resolvedTemplate = resolvedTemplate
-      .split(`{{raw:${key}}}`)
-      .join(rawValue)
-      .split(`{{${key}}}`)
-      .join(encodeScraperTemplateValue(rawValue));
+    const rawToken = `{{raw:${key}}}`;
+    const encodedToken = `{{${key}}}`;
+    const encodedValue = encodeScraperTemplateValue(rawValue);
+
+    resolvedTemplate = replaceScraperTemplateToken(
+      resolvedTemplate,
+      rawToken,
+      () => rawValue,
+    );
+    resolvedTemplate = replaceScraperTemplateToken(
+      resolvedTemplate,
+      encodedToken,
+      (tokenIndex) => (
+        tokenIndex === 0 && isAbsoluteScraperTemplateUrlValue(rawValue)
+          ? rawValue.trim()
+          : encodedValue
+      ),
+    );
   });
 
   const unresolvedMatches = resolvedTemplate.match(/{{\s*[^}]+\s*}}/g);

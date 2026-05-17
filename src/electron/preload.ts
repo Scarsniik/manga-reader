@@ -20,6 +20,11 @@ import type {
     ScraperAccessValidationRequest,
     SetScraperCardReadRequest,
 } from './scraper';
+import type {
+    RecordDetailsHistoryRequest,
+    RecordReadingHistoryRequest,
+    RecordSearchHistoryRequest,
+} from './history';
 
 type WindowState = {
     isFocused: boolean;
@@ -141,6 +146,14 @@ ipcRenderer.on('scraper-view-history-updated', () => {
     }
 });
 
+ipcRenderer.on('history-updated', () => {
+    try {
+        window.dispatchEvent(new CustomEvent('history-updated'));
+    } catch (error) {
+        console.warn('preload: failed to dispatch history-updated event', error);
+    }
+});
+
 ipcRenderer.on('ocr-runtime-notification', (_event: IpcRendererEvent, payload: unknown) => {
     try {
         window.dispatchEvent(new CustomEvent('ocr-runtime-notification', { detail: payload }));
@@ -181,6 +194,13 @@ contextBridge.exposeInMainWorld('api', {
     onWindowStateChanged,
     openWorkspaceTarget: (target: WorkspaceTarget) => ipcRenderer.invoke("workspace-open-target", target),
     onWorkspaceOpenTarget,
+    getHistoryRecords: () => ipcRenderer.invoke("get-history-records"),
+    recordReadingHistory: (request: RecordReadingHistoryRequest) => ipcRenderer.invoke("record-reading-history", request),
+    recordDetailsHistory: (request: RecordDetailsHistoryRequest) => ipcRenderer.invoke("record-details-history", request),
+    recordSearchHistory: (request: RecordSearchHistoryRequest) => ipcRenderer.invoke("record-search-history", request),
+    removeReadingHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-reading-history-record", historyId),
+    removeDetailsHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-details-history-record", historyId),
+    removeSearchHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-search-history-record", historyId),
     // Mangas API
     getMangas: () => ipcRenderer.invoke('get-mangas'),
     addManga: (manga: any) => ipcRenderer.invoke('add-manga', manga),

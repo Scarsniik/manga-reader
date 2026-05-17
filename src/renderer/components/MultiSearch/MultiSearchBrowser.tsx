@@ -30,8 +30,10 @@ import {
   getScraperSourceLanguages,
   isSearchableScraper,
   matchesMultiSearchFilters,
+  parseMultiSearchTerms,
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
+import { buildMultiSearchHistorySettings } from "@/renderer/components/MultiSearch/multiSearchHistory";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
@@ -61,6 +63,7 @@ import {
   buildMultiSearchExportPayload,
   buildMultiSearchMergedResultsExportPayload,
 } from "@/renderer/components/MultiSearch/multiSearchExport";
+import { openMultiSearchJsonDocument } from "@/renderer/components/MultiSearch/multiSearchJsonExport";
 import {
   extractMultiSearchAuthors,
   type MultiSearchAuthorExtractionProgress,
@@ -86,6 +89,7 @@ import {
   getScraperAuthorFeatureConfig,
   getScraperFeature,
 } from "@/renderer/utils/scraperRuntime";
+import { recordSearchHistorySafe } from "@/renderer/utils/history";
 import { useModal } from "@/renderer/hooks/useModal";
 import "./style.scss";
 
@@ -447,6 +451,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const searchTerms = parseMultiSearchTerms(query);
+
     setOpenError(null);
     setResultLanguageFilterModes({});
     setResultReadingStatusFilters([]);
@@ -459,6 +465,22 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       maxPages: getDepthPages(depthMode, advancedPages),
       paceMode,
     });
+
+    if (searchTerms.length && selectedScrapers.length) {
+      void recordSearchHistorySafe({
+        sourceKind: "multiSource",
+        query: query.trim(),
+        settings: buildMultiSearchHistorySettings({
+          selectedScrapers,
+          selectedLanguageCodes,
+          selectedContentTypes,
+          depthMode,
+          advancedPages,
+          paceMode,
+          viewMode,
+        }),
+      });
+    }
   };
 
   const handleToggleResultLanguageFilterMode = (
@@ -711,61 +733,29 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   };
 
   const handleExportJson = async () => {
-    if (!window.api || typeof window.api.openJsonDocument !== "function") {
-      setOpenError("L'export JSON n'est pas disponible dans cette version.");
-      return;
-    }
-
-    setIsExportingJson(true);
-    setOpenError(null);
-
-    try {
-      const payload = buildMultiSearchExportPayload({
-        query,
-        viewMode,
-        runs,
-        mergedResults,
-        sourceCount: allSources.length,
-      });
-      const result = await window.api.openJsonDocument({
-        filename: "multi-search-results",
-        content: JSON.stringify(payload, null, 2),
-      });
-
-      if (!result?.success) {
-        throw new Error(String(result?.error || "Impossible d'ouvrir le JSON."));
-      }
-    } catch (exportError) {
-      setOpenError(exportError instanceof Error ? exportError.message : String(exportError));
-    } finally {
-      setIsExportingJson(false);
-    }
+    const payload = buildMultiSearchExportPayload({
+      query,
+      viewMode,
+      runs,
+      mergedResults,
+      sourceCount: allSources.length,
+    });
+    await openMultiSearchJsonDocument({
+      filename: "multi-search-results",
+      content: JSON.stringify(payload, null, 2),
+      setIsExportingJson,
+      setOpenError,
+    });
   };
 
   const handleExportMergedResultsJson = async () => {
-    if (!window.api || typeof window.api.openJsonDocument !== "function") {
-      setOpenError("L'export JSON n'est pas disponible dans cette version.");
-      return;
-    }
-
-    setIsExportingJson(true);
-    setOpenError(null);
-
-    try {
-      const payload = buildMultiSearchMergedResultsExportPayload(mergedResults);
-      const result = await window.api.openJsonDocument({
-        filename: "multi-search-merged-results",
-        content: JSON.stringify(payload, null, 2),
-      });
-
-      if (!result?.success) {
-        throw new Error(String(result?.error || "Impossible d'ouvrir le JSON."));
-      }
-    } catch (exportError) {
-      setOpenError(exportError instanceof Error ? exportError.message : String(exportError));
-    } finally {
-      setIsExportingJson(false);
-    }
+    const payload = buildMultiSearchMergedResultsExportPayload(mergedResults);
+    await openMultiSearchJsonDocument({
+      filename: "multi-search-merged-results",
+      content: JSON.stringify(payload, null, 2),
+      setIsExportingJson,
+      setOpenError,
+    });
   };
 
   return (

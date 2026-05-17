@@ -611,7 +611,8 @@ export default function ScraperPagesFeatureEditor({
               Variables disponibles depuis `Fiche` : <code>{'{{requestedUrl}}'}</code>,
               <code>{' {{finalUrl}}'}</code> et les variables extraites. Utilise
               <code>{' {{raw:nomVariable}}'}</code> pour inserer une valeur brute sans encodage.
-              Les variables URL sont encodees par defaut, et la base relative du template peut
+              Les variables URL sont encodees par defaut, sauf quand une variable en debut de template
+              contient deja une URL absolue. La base relative du template peut
               partir soit du scraper, soit de la fiche validee ou du chapitre courant. Pour les pages directes, tu peux
               aussi utiliser <code>{'{{page}}'}</code>,
               <code>{' {{page3}}'}</code>, <code>{'{{pageIndex}}'}</code> ou
