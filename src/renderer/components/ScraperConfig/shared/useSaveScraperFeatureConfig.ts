@@ -45,7 +45,7 @@ export default function useSaveScraperFeatureConfig<TConfig>({
 
     if (Object.keys(errors).length > 0) {
       setSaveError('Complete les champs requis avant d\'enregistrer.');
-      return;
+      return false;
     }
 
     const matchingValidation = validationResult?.ok && lastValidatedSignature === signature
@@ -54,7 +54,7 @@ export default function useSaveScraperFeatureConfig<TConfig>({
 
     if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
       setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
-      return;
+      return false;
     }
 
     setSaving(true);
@@ -75,8 +75,10 @@ export default function useSaveScraperFeatureConfig<TConfig>({
           ? 'Configuration enregistree et validee.'
           : 'Configuration enregistree. Le composant reste a valider.',
       );
+      return true;
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Echec de l\'enregistrement.');
+      return false;
     } finally {
       setSaving(false);
     }

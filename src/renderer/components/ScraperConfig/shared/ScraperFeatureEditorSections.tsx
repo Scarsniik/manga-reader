@@ -1,36 +1,139 @@
-import React, { ChangeEvent } from 'react';
+import React, { ChangeEvent, useCallback, useContext, useEffect, useRef } from 'react';
 import { ScraperFieldSelector } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
 import ScraperConfigField from '@/renderer/components/ScraperConfig/shared/ScraperConfigField';
 import ScraperFieldSelectorField from '@/renderer/components/ScraperConfig/shared/ScraperFieldSelectorField';
 import { formatDisplayUrl } from '@/renderer/components/ScraperConfig/shared/validationDisplay';
+import { useModal } from '@/renderer/hooks/useModal';
+import { ModalInstanceContext } from '@/renderer/context/ModalContext';
+import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+
+export type ScraperFeatureActionSurface = 'inline' | 'modal';
 
 type ScraperFeatureActionsProps = {
   validating: boolean;
   saving: boolean;
   validateLabel: string;
+  actionSurface?: ScraperFeatureActionSurface;
+  hasUnsavedChanges?: boolean;
   onBack: () => void;
   onValidate: () => void;
-  onSave: () => void;
+  onSave: () => boolean | void | Promise<boolean | void>;
+};
+
+const closeModalAction = {
+  label: 'Fermer',
+  variant: 'secondary' as const,
 };
 
 export function ScraperFeatureActions({
   validating,
   saving,
   validateLabel,
+  actionSurface = 'inline',
+  hasUnsavedChanges = false,
   onBack,
   onValidate,
   onSave,
 }: ScraperFeatureActionsProps) {
+  const validationAnchorRef = useRef<HTMLSpanElement | null>(null);
+  const { setModalActions } = useModal();
+  const modalInstanceId = useContext(ModalInstanceContext);
+  const { requestClose, requestLeave } = useScraperUnsavedChangesGuard({
+    hasUnsavedChanges,
+    enableModalCloseGuard: actionSurface === 'modal',
+    onSave,
+  });
+
+  const scrollToValidationZone = useCallback(() => {
+    validationAnchorRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, []);
+
+  const handleValidate = useCallback(() => {
+    scrollToValidationZone();
+    onValidate();
+  }, [onValidate, scrollToValidationZone]);
+  const handleBack = useCallback(() => {
+    requestLeave(onBack);
+  }, [onBack, requestLeave]);
+  const handleSave = useCallback(() => {
+    void onSave();
+  }, [onSave]);
+
+  useEffect(() => {
+    if (actionSurface !== 'modal') {
+      return;
+    }
+
+    setModalActions([
+      {
+        label: 'Retour',
+        variant: 'secondary',
+        onClick: handleBack,
+        closeOnClick: false,
+        disabled: validating || saving,
+      },
+      {
+        label: validating ? 'Validation en cours...' : validateLabel,
+        variant: 'secondary',
+        onClick: handleValidate,
+        closeOnClick: false,
+        disabled: validating || saving,
+      },
+      {
+        label: saving ? 'Enregistrement...' : 'Enregistrer la configuration',
+        variant: 'primary',
+        onClick: handleSave,
+        closeOnClick: false,
+        disabled: validating || saving,
+      },
+      {
+        ...closeModalAction,
+        onClick: requestClose,
+        closeOnClick: false,
+      },
+    ], modalInstanceId);
+  }, [
+    actionSurface,
+    handleBack,
+    handleSave,
+    handleValidate,
+    modalInstanceId,
+    requestClose,
+    saving,
+    setModalActions,
+    validateLabel,
+    validating,
+  ]);
+
+  useEffect(() => () => {
+    if (actionSurface === 'modal') {
+      setModalActions([closeModalAction], modalInstanceId);
+    }
+  }, [actionSurface, modalInstanceId, setModalActions]);
+
+  if (actionSurface === 'modal') {
+    return (
+      <span
+        ref={validationAnchorRef}
+        className="scraper-feature-actions-anchor"
+        aria-hidden="true"
+      />
+    );
+  }
+
   return (
     <div className="scraper-config-step__actions">
-      <button type="button" className="secondary" onClick={onBack} disabled={validating || saving}>
+      <button type="button" className="secondary" onClick={handleBack} disabled={validating || saving}>
         Retour
       </button>
-      <button type="button" className="secondary" onClick={onValidate} disabled={validating || saving}>
+      <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
         {validating ? 'Validation en cours...' : validateLabel}
       </button>
-      <button type="button" className="primary" onClick={onSave} disabled={validating || saving}>
+      <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
         {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
       </button>
     </div>

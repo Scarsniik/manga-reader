@@ -12,13 +12,18 @@ import ScraperSearchFeatureEditor from '@/renderer/components/ScraperConfig/Scra
 import ScraperTagFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagFeatureEditor';
 import ScraperFeaturePlaceholderEditor from '@/renderer/components/ScraperConfig/ScraperFeaturePlaceholderEditor';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
+import { ScraperFeatureActionSurface } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
 import { FEATURE_STATUS_META } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 
 type Props = {
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onEditSource?: () => void;
 };
 
 export default function ScraperFeatureSelectionStep({
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   onEditSource,
 }: Props) {
   const { scraper } = useScraperConfig();
@@ -67,6 +72,8 @@ export default function ScraperFeatureSelectionStep({
         <ScraperSearchFeatureEditor
           feature={activeFeature}
           variant="homepage"
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -76,6 +83,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperSearchFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -85,6 +94,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperDetailsFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -94,6 +105,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperAuthorFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -103,6 +116,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperTagFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -112,6 +127,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperChaptersFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );
@@ -121,6 +138,8 @@ export default function ScraperFeatureSelectionStep({
       return (
         <ScraperPagesFeatureEditor
           feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}
         />
       );

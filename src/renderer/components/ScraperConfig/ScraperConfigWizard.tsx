@@ -3,6 +3,7 @@ import ScraperIdentityStep from '@/renderer/components/ScraperConfig/ScraperIden
 import ScraperValidationStep from '@/renderer/components/ScraperConfig/ScraperValidationStep';
 import ScraperFeatureSelectionStep from '@/renderer/components/ScraperConfig/ScraperFeatureSelectionStep';
 import { ScraperConfigProvider } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
+import { ScraperFeatureActionSurface } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
 import {
   ScraperAccessValidationResult,
   ScraperIdentityDraft,
@@ -33,6 +34,8 @@ const steps: Array<{ id: WizardStep; label: string }> = [
 
 type Props = {
   initialScraper?: ScraperRecord | null;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onScraperChange?: (scraper: ScraperRecord) => void;
 };
 
@@ -49,7 +52,12 @@ const buildDraftFromScraper = (scraper: ScraperRecord | null | undefined): Scrap
   };
 };
 
-export default function ScraperConfigWizard({ initialScraper = null, onScraperChange }: Props) {
+export default function ScraperConfigWizard({
+  initialScraper = null,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
+  onScraperChange,
+}: Props) {
   const [step, setStep] = useState<WizardStep>(initialScraper ? 'features' : 'identity');
   const [draft, setDraft] = useState<ScraperIdentityDraft>(buildDraftFromScraper(initialScraper));
   const [validating, setValidating] = useState(false);
@@ -189,7 +197,11 @@ export default function ScraperConfigWizard({ initialScraper = null, onScraperCh
 
         {step === 'features' && savedScraper ? (
           <ScraperConfigProvider scraper={savedScraper} onScraperChange={handleScraperChange}>
-            <ScraperFeatureSelectionStep onEditSource={() => setStep('identity')} />
+            <ScraperFeatureSelectionStep
+              actionSurface={actionSurface}
+              onUnsavedChangesChange={onUnsavedChangesChange}
+              onEditSource={() => setStep('identity')}
+            />
           </ScraperConfigProvider>
         ) : null}
       </div>

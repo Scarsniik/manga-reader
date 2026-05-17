@@ -106,7 +106,7 @@ export default function buildScraperLinkMangaModal({
         {error ? <div className="mh-form__global-error">{error}</div> : null}
 
         <div className="mh-form__actions">
-          <button type="button" onClick={closeModal} disabled={submitting}>
+          <button type="button" onClick={() => closeModal()} disabled={submitting}>
             Annuler
           </button>
           <button type="submit" disabled={submitting || mangas.length === 0 || !selectedMangaId}>

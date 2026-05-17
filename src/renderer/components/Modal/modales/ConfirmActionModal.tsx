@@ -1,5 +1,5 @@
 import React from "react";
-import type { ModalOptions } from "@/renderer/context/ModalContext";
+import type { ModalAction, ModalOptions } from "@/renderer/context/ModalContext";
 import ConfirmActionModalContent from "@/renderer/components/Modal/modales/ConfirmActionModalContent";
 
 type ConfirmActionModalInput = {
@@ -9,6 +9,8 @@ type ConfirmActionModalInput = {
   confirmLabel?: string;
   cancelLabel?: string;
   confirmVariant?: "primary" | "danger";
+  confirmCloseOnClick?: boolean;
+  extraActions?: ModalAction[];
   onConfirm: () => void;
 };
 
@@ -19,6 +21,8 @@ export default function buildConfirmActionModal({
   confirmLabel = "Confirmer",
   cancelLabel = "Annuler",
   confirmVariant = "primary",
+  confirmCloseOnClick = true,
+  extraActions = [],
   onConfirm,
 }: ConfirmActionModalInput): ModalOptions {
   return {
@@ -36,10 +40,12 @@ export default function buildConfirmActionModal({
         variant: "secondary",
         autoFocus: true,
       },
+      ...extraActions,
       {
         label: confirmLabel,
         variant: confirmVariant,
         onClick: onConfirm,
+        closeOnClick: confirmCloseOnClick,
       },
     ],
   };

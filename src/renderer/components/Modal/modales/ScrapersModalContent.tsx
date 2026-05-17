@@ -40,6 +40,7 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [hasUnsavedConfigChanges, setHasUnsavedConfigChanges] = useState(false);
 
   const loadScrapers = useCallback(async () => {
     if (!window.api || typeof window.api.getScrapers !== 'function') {
@@ -88,6 +89,33 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
       return [...previous, updatedScraper];
     });
   }, []);
+
+  const showUnsavedChangesConfirmation = useCallback((leave: () => void) => {
+    if (!hasUnsavedConfigChanges) {
+      leave();
+      return;
+    }
+
+    openModal(buildConfirmActionModal({
+      title: 'Modifications non enregistrees',
+      message: 'Quitter sans enregistrer ?',
+      details: 'Les changements apportes au composant en cours seront perdus.',
+      confirmLabel: 'Quitter sans enregistrer',
+      cancelLabel: 'Continuer l\'edition',
+      confirmVariant: 'danger',
+      onConfirm: () => {
+        setHasUnsavedConfigChanges(false);
+        leave();
+      },
+    }));
+  }, [hasUnsavedConfigChanges, openModal]);
+
+  const handleBackToList = useCallback(() => {
+    showUnsavedChangesConfirmation(() => {
+      setHasUnsavedConfigChanges(false);
+      setView({ kind: 'list' });
+    });
+  }, [showUnsavedChangesConfirmation]);
 
   const handleOpenScraperInWorkspace = useCallback(async (scraper: ScraperRecord) => {
     if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
@@ -147,13 +175,15 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
     return (
       <div className="scrapers-library">
         <div className="scrapers-library__toolbar">
-          <button type="button" className="secondary" onClick={() => setView({ kind: 'list' })}>
+          <button type="button" className="secondary" onClick={handleBackToList}>
             Retour a la liste
           </button>
         </div>
 
         <ScraperConfigWizard
           key="create-scraper"
+          actionSurface="modal"
+          onUnsavedChangesChange={setHasUnsavedConfigChanges}
           onScraperChange={handleScraperChange}
         />
       </div>
@@ -164,7 +194,7 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
     return (
       <div className="scrapers-library">
         <div className="scrapers-library__toolbar">
-          <button type="button" className="secondary" onClick={() => setView({ kind: 'list' })}>
+          <button type="button" className="secondary" onClick={handleBackToList}>
             Retour a la liste
           </button>
         </div>
@@ -172,6 +202,8 @@ export default function ScrapersModalContent({ initialView = { kind: 'list' } }:
         <ScraperConfigWizard
           key={activeScraper.id}
           initialScraper={activeScraper}
+          actionSurface="modal"
+          onUnsavedChangesChange={setHasUnsavedConfigChanges}
           onScraperChange={handleScraperChange}
         />
       </div>

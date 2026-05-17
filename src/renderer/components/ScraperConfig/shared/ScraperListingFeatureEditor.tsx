@@ -24,6 +24,7 @@ import ScraperValidationSummary, {
 } from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
   ScraperConfigFieldGrid,
+  ScraperFeatureActionSurface,
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
   ScraperUrlTemplateFields,
@@ -35,6 +36,7 @@ import {
 } from '@/renderer/components/ScraperConfig/shared/scraperFeatureEditor.utils';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
+import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import {
   extractScraperSearchPageFromDocument,
@@ -77,6 +79,8 @@ type ResolveListingTargetUrl<TConfig extends ListingFeatureConfig> = (
 type Props<TConfig extends ListingFeatureConfig> = {
   feature: ScraperFeatureDefinition;
   onBack: () => void;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   getInitialConfig: (feature: ScraperFeatureDefinition) => TConfig;
   buildConfig: (values: Partial<TConfig>) => TConfig;
   buildScrapingFields: (values: Partial<ScraperCardListConfig>) => Partial<TConfig>;
@@ -142,6 +146,8 @@ const buildSelectorCheck = (
 export default function ScraperListingFeatureEditor<TConfig extends ListingFeatureConfig>({
   feature,
   onBack,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   getInitialConfig,
   buildConfig,
   buildScrapingFields,
@@ -219,6 +225,28 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildConfig(formValues), [buildConfig, formValues]);
+  const savedConfigSignature = useMemo(
+    () => getConfigSignature(buildConfig(initialConfig)),
+    [buildConfig, getConfigSignature, initialConfig],
+  );
+  const currentConfigSignature = useMemo(
+    () => getConfigSignature(currentConfig),
+    [currentConfig, getConfigSignature],
+  );
+  const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
+  const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
+  const handleBack = useCallback(() => {
+    requestLeave(onBack);
+  }, [onBack, requestLeave]);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+
+    return () => {
+      onUnsavedChangesChange?.(false);
+    };
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
   const usesTemplatePaging = hasPagePlaceholder(currentConfig);
   const templateContext = useMemo<Record<string, string | undefined>>(() => (
     texts.templateContextEmptyMessage
@@ -689,7 +717,8 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
         noteText={texts.noteText}
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
-        onBack={onBack}
+        showBackButton={actionSurface !== 'modal'}
+        onBack={handleBack}
       />
 
       <div className="mh-form">
@@ -823,9 +852,11 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
             validating={validating}
             saving={saving}
             validateLabel={texts.validateLabel}
+            actionSurface={actionSurface}
+            hasUnsavedChanges={hasUnsavedChanges}
             onBack={onBack}
             onValidate={() => void handleValidate()}
-            onSave={() => void handleSave()}
+            onSave={handleSave}
           />
 
           <ScraperValidationSummary

@@ -578,6 +578,11 @@
   flex-wrap: wrap;
 }
 
+.scraper-feature-actions-anchor {
+  display: block;
+  scroll-margin-top: 14px;
+}
+
 .scraper-config-step button.primary,
 .scraper-config-step button.secondary,
 .scrapers-library button.primary,
@@ -838,6 +843,10 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.scraper-feature-editor__topbar--status-only {
+  justify-content: flex-end;
 }
 
 .scraper-feature-pill {

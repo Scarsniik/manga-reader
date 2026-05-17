@@ -7,6 +7,7 @@ type Props = {
   noteText: React.ReactNode;
   statusClassName: string;
   statusLabel: string;
+  showBackButton?: boolean;
   onBack: () => void;
 };
 
@@ -17,14 +18,20 @@ export default function ScraperFeatureEditorHeader({
   noteText,
   statusClassName,
   statusLabel,
+  showBackButton = true,
   onBack,
 }: Props) {
   return (
     <>
-      <div className="scraper-feature-editor__topbar">
-        <button type="button" className="secondary" onClick={onBack}>
-          Retour aux composants
-        </button>
+      <div className={[
+        'scraper-feature-editor__topbar',
+        showBackButton ? '' : 'scraper-feature-editor__topbar--status-only',
+      ].filter(Boolean).join(' ')}>
+        {showBackButton ? (
+          <button type="button" className="secondary" onClick={onBack}>
+            Retour aux composants
+          </button>
+        ) : null}
         <span className={`scraper-feature-pill ${statusClassName}`}>
           {statusLabel}
         </span>

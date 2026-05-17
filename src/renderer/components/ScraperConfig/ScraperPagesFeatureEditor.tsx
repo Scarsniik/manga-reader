@@ -16,6 +16,7 @@ import ScraperFeatureMessages from '@/renderer/components/ScraperConfig/shared/S
 import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/ScraperTemplateContext';
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
+  ScraperFeatureActionSurface,
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
   ScraperUrlTemplateFields,
@@ -23,6 +24,7 @@ import {
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
+import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
 import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
 import {
   buildDocumentFailure,
@@ -54,6 +56,8 @@ import { buildScraperTemplateContextFromValidation } from '@/renderer/utils/scra
 
 type Props = {
   feature: ScraperFeatureDefinition;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onBack: () => void;
 };
 
@@ -61,6 +65,8 @@ const MAX_TEMPLATE_SELECTOR_VALIDATION_PAGES = 8;
 
 export default function ScraperPagesFeatureEditor({
   feature,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   onBack,
 }: Props) {
   const { scraper } = useScraperConfig();
@@ -101,6 +107,22 @@ export default function ScraperPagesFeatureEditor({
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildPagesConfig(formValues), [formValues]);
+  const savedConfigSignature = useMemo(() => getConfigSignature(initialConfig), [initialConfig]);
+  const currentConfigSignature = useMemo(() => getConfigSignature(currentConfig), [currentConfig]);
+  const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
+  const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
+  const handleBack = useCallback(() => {
+    requestLeave(onBack);
+  }, [onBack, requestLeave]);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+
+    return () => {
+      onUnsavedChangesChange?.(false);
+    };
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
   const usesChapterSource = useMemo(
     () => usesScraperPagesChapterSource(currentConfig),
     [currentConfig],
@@ -582,7 +604,8 @@ export default function ScraperPagesFeatureEditor({
         }
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
-        onBack={onBack}
+        showBackButton={actionSurface !== 'modal'}
+        onBack={handleBack}
       />
 
       <div className="mh-form">
@@ -710,9 +733,11 @@ export default function ScraperPagesFeatureEditor({
             validating={validating}
             saving={saving}
             validateLabel="Valider les pages"
+            actionSurface={actionSurface}
+            hasUnsavedChanges={hasUnsavedChanges}
             onBack={onBack}
             onValidate={() => void handleValidate()}
-            onSave={() => void handleSave()}
+            onSave={handleSave}
           />
 
           <ScraperValidationSummary

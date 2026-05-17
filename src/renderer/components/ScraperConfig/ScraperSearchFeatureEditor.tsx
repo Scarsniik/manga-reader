@@ -23,6 +23,7 @@ import ScraperLanguageDetectionSection from '@/renderer/components/ScraperConfig
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
   ScraperConfigFieldGrid,
+  ScraperFeatureActionSurface,
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
 } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
@@ -30,6 +31,7 @@ import { buildLanguageDetectionConfig } from '@/renderer/components/ScraperConfi
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
+import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import SearchRequestSection from '@/renderer/components/ScraperConfig/search/SearchRequestSection';
 import {
@@ -54,6 +56,8 @@ import {
 type Props = {
   feature: ScraperFeatureDefinition;
   onBack: () => void;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   variant?: 'search' | 'homepage';
 };
 
@@ -72,6 +76,8 @@ const normalizeConfigForListingKind = (
 export default function ScraperSearchFeatureEditor({
   feature,
   onBack,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   variant = 'search',
 }: Props) {
   const { scraper } = useScraperConfig();
@@ -125,6 +131,28 @@ export default function ScraperSearchFeatureEditor({
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildSearchConfig(formValues), [formValues]);
+  const savedConfigSignature = useMemo(
+    () => getConfigSignature(normalizeConfigForListingKind(buildSearchConfig(initialConfig), listingKind)),
+    [initialConfig, listingKind],
+  );
+  const currentConfigSignature = useMemo(
+    () => getConfigSignature(normalizeConfigForListingKind(currentConfig, listingKind)),
+    [currentConfig, listingKind],
+  );
+  const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
+  const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
+  const handleBack = useCallback(() => {
+    requestLeave(onBack);
+  }, [onBack, requestLeave]);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+
+    return () => {
+      onUnsavedChangesChange?.(false);
+    };
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
   const usesTemplatePaging = hasSearchPagePlaceholder(currentConfig);
   const searchFeature = useMemo(
     () => scraper.features.find((candidate) => candidate.kind === 'search') || null,
@@ -797,7 +825,8 @@ export default function ScraperSearchFeatureEditor({
         noteText={editorCopy.noteText}
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
-        onBack={onBack}
+        showBackButton={actionSurface !== 'modal'}
+        onBack={handleBack}
       />
 
       <div className="mh-form">
@@ -986,9 +1015,11 @@ export default function ScraperSearchFeatureEditor({
             validating={validating}
             saving={saving}
             validateLabel={editorCopy.validateLabel}
+            actionSurface={actionSurface}
+            hasUnsavedChanges={hasUnsavedChanges}
             onBack={onBack}
             onValidate={() => void handleValidate()}
-            onSave={() => void handleSave()}
+            onSave={handleSave}
           />
 
           <ScraperValidationSummary

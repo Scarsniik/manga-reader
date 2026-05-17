@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useMemo, useState, ReactNode } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
 import Modal from '@/renderer/components/Modal/Modal';
 
 export type ModalAction = {
@@ -8,7 +16,10 @@ export type ModalAction = {
   id?: string;
   closeOnClick?: boolean;
   autoFocus?: boolean;
+  disabled?: boolean;
 };
+
+export type ModalCloseGuard = () => boolean;
 
 export type ModalOptions = {
   title?: ReactNode;
@@ -16,34 +27,89 @@ export type ModalOptions = {
   actions?: ModalAction[];
   className?: string;
   bodyClassName?: string;
+  closeGuard?: ModalCloseGuard | null;
+};
+
+export type CloseModalOptions = {
+  count?: number;
+  force?: boolean;
 };
 
 export type ModalContextValue = {
   openModal: (opts: ModalOptions) => void;
-  closeModal: () => void;
-  setModalActions: (actions: ModalAction[]) => void;
+  closeModal: (options?: CloseModalOptions) => void;
+  setModalActions: (actions: ModalAction[], instanceId?: number | null) => void;
+  setModalCloseGuard: (guard: ModalCloseGuard | null, instanceId?: number | null) => void;
 };
 
 export const ModalContext = createContext<ModalContextValue | undefined>(undefined);
+export const ModalInstanceContext = createContext<number | null>(null);
+
+type ModalStackItem = ModalOptions & {
+  instanceId: number;
+};
 
 export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [modalStack, setModalStack] = useState<ModalOptions[]>([]);
+  const [modalStack, setModalStack] = useState<ModalStackItem[]>([]);
+  const modalStackRef = useRef<ModalStackItem[]>([]);
+  const nextModalInstanceIdRef = useRef(1);
+
+  useEffect(() => {
+    modalStackRef.current = modalStack;
+  }, [modalStack]);
 
   const openModal = useCallback((opts: ModalOptions) => {
-    setModalStack((currentStack) => [...currentStack, opts]);
+    const instanceId = nextModalInstanceIdRef.current;
+    nextModalInstanceIdRef.current += 1;
+    setModalStack((currentStack) => [...currentStack, { ...opts, instanceId }]);
   }, []);
-  const closeModal = useCallback(() => {
-    setModalStack((currentStack) => currentStack.slice(0, -1));
+  const closeModal = useCallback((options: CloseModalOptions = {}) => {
+    const count = Math.max(1, options.count ?? 1);
+    const topModal = modalStackRef.current[modalStackRef.current.length - 1];
+    if (!options.force && count === 1 && topModal?.closeGuard && !topModal.closeGuard()) {
+      return;
+    }
+
+    setModalStack((currentStack) => currentStack.slice(0, Math.max(0, currentStack.length - count)));
   }, []);
-  const setModalActions = useCallback((actions: ModalAction[]) => {
+  const setModalActions = useCallback((actions: ModalAction[], instanceId?: number | null) => {
     setModalStack((currentStack) => {
       if (currentStack.length === 0) {
         return currentStack;
       }
 
+      const targetIndex = instanceId
+        ? currentStack.findIndex((modal) => modal.instanceId === instanceId)
+        : currentStack.length - 1;
+
+      if (targetIndex < 0) {
+        return currentStack;
+      }
+
       return currentStack.map((modal, index) => (
-        index === currentStack.length - 1
+        index === targetIndex
           ? { ...modal, actions }
+          : modal
+      ));
+    });
+  }, []);
+  const setModalCloseGuard = useCallback((guard: ModalCloseGuard | null, instanceId?: number | null) => {
+    setModalStack((currentStack) => {
+      if (currentStack.length === 0) {
+        return currentStack;
+      }
+
+      const targetIndex = instanceId
+        ? currentStack.findIndex((modal) => modal.instanceId === instanceId)
+        : currentStack.length - 1;
+
+      if (targetIndex < 0) {
+        return currentStack;
+      }
+
+      return currentStack.map((modal, index) => (
+        index === targetIndex
+          ? { ...modal, closeGuard: guard }
           : modal
       ));
     });
@@ -53,21 +119,23 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     openModal,
     closeModal,
     setModalActions,
-  }), [closeModal, openModal, setModalActions]);
+    setModalCloseGuard,
+  }), [closeModal, openModal, setModalActions, setModalCloseGuard]);
 
   return (
     <ModalContext.Provider value={value}>
       {children}
-      {modalStack.map((modal, index) => (
-        <Modal
-          key={index}
-          title={modal.title}
-          content={modal.content}
-          actions={modal.actions}
-          className={modal.className}
-          bodyClassName={modal.bodyClassName}
-          onClose={closeModal}
-        />
+      {modalStack.map((modal) => (
+        <ModalInstanceContext.Provider key={modal.instanceId} value={modal.instanceId}>
+          <Modal
+            title={modal.title}
+            content={modal.content}
+            actions={modal.actions}
+            className={modal.className}
+            bodyClassName={modal.bodyClassName}
+            onClose={closeModal}
+          />
+        </ModalInstanceContext.Provider>
       ))}
     </ModalContext.Provider>
   );

@@ -8,6 +8,7 @@ type Action = {
   id?: string;
   closeOnClick?: boolean;
   autoFocus?: boolean;
+  disabled?: boolean;
 };
 
 const Modal: React.FC<{
@@ -68,6 +69,7 @@ const Modal: React.FC<{
                 id={a.id}
                 className={`app-modal-btn ${a.variant || 'secondary'}`}
                 autoFocus={a.autoFocus}
+                disabled={a.disabled}
                 onClick={() => {
                   a.onClick?.();
                   if (a.closeOnClick !== false) {

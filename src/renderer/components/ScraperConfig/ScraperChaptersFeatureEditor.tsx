@@ -15,6 +15,7 @@ import ScraperTemplateContext from '@/renderer/components/ScraperConfig/shared/S
 import ScraperValidationSummary from '@/renderer/components/ScraperConfig/shared/ScraperValidationSummary';
 import {
   ScraperConfigFieldGrid,
+  ScraperFeatureActionSurface,
   ScraperFeatureActions,
   ScraperResolvedUrlPreview,
   ScraperUrlTemplateFields,
@@ -22,6 +23,7 @@ import {
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
+import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
 import FakeChaptersPreview from '@/renderer/components/ScraperConfig/chapters/FakeChaptersPreview';
 import {
   buildDocumentFailure,
@@ -52,11 +54,15 @@ import {
 
 type Props = {
   feature: ScraperFeatureDefinition;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onBack: () => void;
 };
 
 export default function ScraperChaptersFeatureEditor({
   feature,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   onBack,
 }: Props) {
   const { scraper } = useScraperConfig();
@@ -96,6 +102,22 @@ export default function ScraperChaptersFeatureEditor({
 
   const currentStatusMeta = FEATURE_STATUS_META[feature.status];
   const currentConfig = useMemo(() => buildChaptersConfig(formValues), [formValues]);
+  const savedConfigSignature = useMemo(() => getConfigSignature(initialConfig), [initialConfig]);
+  const currentConfigSignature = useMemo(() => getConfigSignature(currentConfig), [currentConfig]);
+  const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
+  const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
+  const handleBack = useCallback(() => {
+    requestLeave(onBack);
+  }, [onBack, requestLeave]);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+
+    return () => {
+      onUnsavedChangesChange?.(false);
+    };
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
   const detailsFeature = useMemo(
     () => scraper.features.find((candidate) => candidate.kind === 'details') || null,
     [scraper.features],
@@ -297,7 +319,8 @@ export default function ScraperChaptersFeatureEditor({
         }
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
-        onBack={onBack}
+        showBackButton={actionSurface !== 'modal'}
+        onBack={handleBack}
       />
 
       <div className="mh-form">
@@ -401,9 +424,11 @@ export default function ScraperChaptersFeatureEditor({
             validating={validating}
             saving={saving}
             validateLabel="Valider les chapitres"
+            actionSurface={actionSurface}
+            hasUnsavedChanges={hasUnsavedChanges}
             onBack={onBack}
             onValidate={() => void handleValidate()}
-            onSave={() => void handleSave()}
+            onSave={handleSave}
           />
 
           <ScraperValidationSummary

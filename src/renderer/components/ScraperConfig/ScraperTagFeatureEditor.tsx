@@ -4,6 +4,7 @@ import {
   ScraperTagFeatureConfig,
 } from '@/shared/scraper';
 import ScraperListingFeatureEditor from '@/renderer/components/ScraperConfig/shared/ScraperListingFeatureEditor';
+import { ScraperFeatureActionSurface } from '@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorSections';
 import {
   hasTagPagePlaceholder,
   resolveScraperTagTargetUrl,
@@ -29,17 +30,23 @@ import {
 
 type Props = {
   feature: ScraperFeatureDefinition;
+  actionSurface?: ScraperFeatureActionSurface;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onBack: () => void;
 };
 
 export default function ScraperTagFeatureEditor({
   feature,
+  actionSurface = 'inline',
+  onUnsavedChangesChange,
   onBack,
 }: Props) {
   return (
     <ScraperListingFeatureEditor<ScraperTagFeatureConfig>
       feature={feature}
       onBack={onBack}
+      actionSurface={actionSurface}
+      onUnsavedChangesChange={onUnsavedChangesChange}
       getInitialConfig={getInitialConfig}
       buildConfig={buildTagConfig}
       buildScrapingFields={buildTagScrapingFields}
