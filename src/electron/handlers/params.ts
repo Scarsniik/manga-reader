@@ -259,6 +259,9 @@ const defaultSettings = {
     savedLibrarySearches: [],
     showSavedScraperSearches: true,
     savedScraperSearches: [],
+    multiSearchShowUnseenFirst: false,
+    scraperAuthorFavoriteShowUnseenFirst: false,
+    scraperTagFavoriteShowUnseenFirst: true,
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     stackMangaInSeries: true,
@@ -314,6 +317,15 @@ const normalizeSettings = (value: unknown) => {
         ? merged.readerRecommendBookmarks
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
+    merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
+        ? merged.multiSearchShowUnseenFirst
+        : defaultSettings.multiSearchShowUnseenFirst;
+    merged.scraperAuthorFavoriteShowUnseenFirst = typeof merged.scraperAuthorFavoriteShowUnseenFirst === "boolean"
+        ? merged.scraperAuthorFavoriteShowUnseenFirst
+        : defaultSettings.scraperAuthorFavoriteShowUnseenFirst;
+    merged.scraperTagFavoriteShowUnseenFirst = typeof merged.scraperTagFavoriteShowUnseenFirst === "boolean"
+        ? merged.scraperTagFavoriteShowUnseenFirst
+        : defaultSettings.scraperTagFavoriteShowUnseenFirst;
     const legacyAuthorFavoriteScrapeAllPages = (merged as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
     merged.scraperAuthorFavoriteCacheResults = typeof merged.scraperAuthorFavoriteCacheResults === "boolean"
         ? merged.scraperAuthorFavoriteCacheResults

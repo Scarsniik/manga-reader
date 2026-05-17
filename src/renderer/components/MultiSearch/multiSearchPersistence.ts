@@ -22,6 +22,7 @@ export type MultiSearchPersistentFormState = {
   resultLanguageFilterModes: MultiSearchLanguageFilterModes;
   resultReadingStatusFilters: MultiSearchReadingStatusFilter[];
   resultTextFilter: string;
+  newSourceHistoryIds: string[];
   depthMode: MultiSearchDepthMode;
   advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
@@ -269,6 +270,7 @@ export const readMultiSearchState = (
       resultLanguageFilterModes: restoreLanguageFilterModes(parsed.resultLanguageFilterModes),
       resultReadingStatusFilters: restoreReadingStatusFilters(parsed.resultReadingStatusFilters),
       resultTextFilter: typeof parsed.resultTextFilter === "string" ? parsed.resultTextFilter : "",
+      newSourceHistoryIds: isStringArray(parsed.newSourceHistoryIds) ? parsed.newSourceHistoryIds : [],
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
       advancedPages: restoreAdvancedPages(parsed.advancedPages),
       paceMode: isPaceMode(parsed.paceMode) ? parsed.paceMode : "fast",

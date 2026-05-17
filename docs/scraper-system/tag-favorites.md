@@ -46,6 +46,9 @@ La page d'un tag favori affiche la liste des sources scraper associees avant les
 source peut etre ouverte dans sa page tag d'origine. Les resultats exposes sur la page courante
 peuvent etre filtres par langue avec les memes controles que la recherche multi-sources.
 
+Par defaut, les cards non vues sont affichees en premier sur une page de tag favori. Ce tri utilise
+le meme etat que le liseret vert des cards. L'option peut etre desactivee dans les parametres.
+
 La pagination reste globale au favori :
 
 - `Page suivante` charge la page suivante de chaque source qui peut continuer

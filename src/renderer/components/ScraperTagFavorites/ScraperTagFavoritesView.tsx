@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type {
-  ScraperReaderProgressRecord,
-  ScraperRecord,
-  ScraperTagFavoriteRecord,
-  ScraperTagFavoriteSource,
-  ScraperViewHistoryCardIdentity,
+import {
+  buildScraperViewHistoryCardId,
+  type ScraperViewHistoryRecord,
+  type ScraperReaderProgressRecord,
+  type ScraperRecord,
+  type ScraperTagFavoriteRecord,
+  type ScraperTagFavoriteSource,
+  type ScraperViewHistoryCardIdentity,
 } from "@/shared/scraper";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import {
@@ -27,6 +29,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import type { Manga } from "@/renderer/types";
 import { useModal } from "@/renderer/hooks/useModal";
+import useParams from "@/renderer/hooks/useParams";
 import { getScraperBookmarkKey, useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import {
   setScraperCardRead,
@@ -41,6 +44,7 @@ import {
   writeScraperRouteState,
   writeScraperTagFavoriteRouteState,
 } from "@/renderer/utils/scraperBrowserNavigation";
+import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import ScraperTagFavoriteResults from "@/renderer/components/ScraperTagFavorites/ScraperTagFavoriteResults";
 import ScraperTagFavoritesList from "@/renderer/components/ScraperTagFavorites/ScraperTagFavoritesList";
 import useTagFavoriteRuns from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
@@ -58,9 +62,13 @@ export default function ScraperTagFavoritesView({
   const location = useLocation();
   const navigate = useNavigate();
   const { openModal } = useModal();
+  const { params } = useParams();
   const { favorites, loading, error } = useScraperTagFavorites();
   const { bookmarks } = useScraperBookmarks();
-  const { recordsById: viewHistoryRecordsById } = useScraperViewHistory();
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory();
   const routeFavoriteId = useMemo(
     () => readScraperTagFavoriteRouteId(location.search),
     [location.search],
@@ -70,6 +78,9 @@ export default function ScraperTagFavoritesView({
   const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [openError, setOpenError] = useState<string | null>(null);
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
+  const [newSourceHistoryIds, setNewSourceHistoryIds] = useState<Set<string>>(() => new Set());
+  const viewHistoryRecordsByIdRef = useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
+  const showUnseenFirst = params?.scraperTagFavoriteShowUnseenFirst !== false;
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
     [scrapers],
@@ -101,6 +112,18 @@ export default function ScraperTagFavoritesView({
     goToNextPage,
   } = useTagFavoriteRuns(selectedFavorite, scrapersById);
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
+  const visibleSourceHistoryIds = useMemo(
+    () => visibleSources
+      .map((source) => buildScraperViewHistoryCardId(
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result),
+      ))
+      .filter((id) => id.length > 0),
+    [visibleSources],
+  );
+  const visibleSourceHistoryKey = useMemo(
+    () => visibleSourceHistoryIds.join("|"),
+    [visibleSourceHistoryIds],
+  );
   const mergedResults = useMemo(() => mergeMultiSearchResults(visibleSources), [visibleSources]);
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
@@ -114,6 +137,43 @@ export default function ScraperTagFavoritesView({
     () => visibleMergedResults.reduce((count, result) => count + result.sources.length, 0),
     [visibleMergedResults],
   );
+
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    setNewSourceHistoryIds(new Set());
+  }, [selectedFavoriteId]);
+
+  useEffect(() => {
+    if (!visibleSourceHistoryIds.length) {
+      setNewSourceHistoryIds(new Set());
+      return;
+    }
+
+    if (!viewHistoryLoaded) {
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    const sourceIds = new Set(visibleSourceHistoryIds);
+
+    setNewSourceHistoryIds((currentIds) => {
+      const nextIds = new Set(Array.from(currentIds).filter((id) => sourceIds.has(id)));
+
+      visibleSourceHistoryIds.forEach((id) => {
+        if (!historySnapshot.has(id)) {
+          nextIds.add(id);
+        }
+      });
+
+      const hasChanged = nextIds.size !== currentIds.size
+        || Array.from(nextIds).some((id) => !currentIds.has(id));
+
+      return hasChanged ? nextIds : currentIds;
+    });
+  }, [viewHistoryLoaded, visibleSourceHistoryIds, visibleSourceHistoryKey]);
 
   useEffect(() => {
     if (routeFavoriteId === selectedFavoriteId) {
@@ -410,6 +470,8 @@ export default function ScraperTagFavoritesView({
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
+        newViewHistoryIds={newSourceHistoryIds}
+        showUnseenFirst={showUnseenFirst}
         onBack={() => handleSelectFavorite(null)}
         onReload={() => void reload()}
         onPreviousPage={() => void goToPreviousPage()}

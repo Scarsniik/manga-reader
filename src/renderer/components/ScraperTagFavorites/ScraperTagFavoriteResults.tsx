@@ -5,6 +5,10 @@ import type {
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
+import {
+  buildSearchResultViewHistoryIdentity,
+  sortByScraperViewHistoryNewState,
+} from "@/renderer/utils/scraperViewHistory";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import type {
@@ -36,6 +40,8 @@ type Props = {
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
+  showUnseenFirst: boolean;
   onBack: () => void;
   onReload: () => void;
   onPreviousPage: () => void;
@@ -112,6 +118,8 @@ export default function ScraperTagFavoriteResults({
   bookmarkedSourceKeys,
   sourceProgressIndex,
   viewHistoryRecordsById,
+  newViewHistoryIds,
+  showUnseenFirst,
   onBack,
   onReload,
   onPreviousPage,
@@ -123,6 +131,17 @@ export default function ScraperTagFavoriteResults({
   onOpenProgressReader,
   onSetSourcesRead,
 }: Props) {
+  const displayedMergedResults = React.useMemo(
+    () => sortByScraperViewHistoryNewState(
+      mergedResults,
+      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+      viewHistoryRecordsById,
+      newViewHistoryIds,
+      showUnseenFirst,
+    ),
+    [mergedResults, newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById],
+  );
+
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
       <div className="scraper-author-favorites-view__header">
@@ -206,9 +225,9 @@ export default function ScraperTagFavoriteResults({
           />
         </div>
 
-        {mergedResults.length ? (
+        {displayedMergedResults.length ? (
           <div className="multi-search__results-grid">
-            {mergedResults.map((result) => (
+            {displayedMergedResults.map((result) => (
               <MultiSearchResultCard
                 key={result.id}
                 result={result}
@@ -216,6 +235,7 @@ export default function ScraperTagFavoriteResults({
                 bookmarkedSourceKeys={bookmarkedSourceKeys}
                 sourceProgressIndex={sourceProgressIndex}
                 viewHistoryRecordsById={viewHistoryRecordsById}
+                newViewHistoryIds={newViewHistoryIds}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
                 onOpenProgressReader={onOpenProgressReader}

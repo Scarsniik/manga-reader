@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type {
-  ScraperAuthorFavoriteRecord,
-  ScraperAuthorFavoriteSource,
-  ScraperReaderProgressRecord,
-  ScraperRecord,
-  ScraperViewHistoryCardIdentity,
+import {
+  buildScraperViewHistoryCardId,
+  type ScraperViewHistoryRecord,
+  type ScraperAuthorFavoriteRecord,
+  type ScraperAuthorFavoriteSource,
+  type ScraperReaderProgressRecord,
+  type ScraperRecord,
+  type ScraperViewHistoryCardIdentity,
 } from "@/shared/scraper";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
@@ -53,6 +55,10 @@ import {
   writeScraperAuthorFavoriteRouteState,
   writeScraperRouteState,
 } from "@/renderer/utils/scraperBrowserNavigation";
+import {
+  buildSearchResultViewHistoryIdentity,
+  sortByScraperViewHistoryNewState,
+} from "@/renderer/utils/scraperViewHistory";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import { formatAuthorMultiSearchQuery } from "@/renderer/utils/authorSearchNames";
 import "@/renderer/components/MultiSearch/style.scss";
@@ -81,7 +87,10 @@ export default function ScraperAuthorFavoritesView({
   const { params } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
   const { bookmarks } = useScraperBookmarks();
-  const { recordsById: viewHistoryRecordsById } = useScraperViewHistory();
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory();
   const routeFavoriteId = useMemo(
     () => readScraperAuthorFavoriteRouteId(location.search),
     [location.search],
@@ -92,6 +101,8 @@ export default function ScraperAuthorFavoritesView({
   const [openError, setOpenError] = useState<string | null>(null);
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
+  const [newSourceHistoryIds, setNewSourceHistoryIds] = useState<Set<string>>(() => new Set());
+  const viewHistoryRecordsByIdRef = useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
     [scrapers],
@@ -105,6 +116,8 @@ export default function ScraperAuthorFavoritesView({
       ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
       : ""
   ), [selectedFavorite]);
+  const canShowUnseenFirst = false;
+  const showUnseenFirst = canShowUnseenFirst && params?.scraperAuthorFavoriteShowUnseenFirst === true;
   const bookmarkedSourceKeys = useMemo(
     () => new Set(bookmarks.map((bookmark) => getScraperBookmarkKey(bookmark.scraperId, bookmark.sourceUrl))),
     [bookmarks],
@@ -132,6 +145,18 @@ export default function ScraperAuthorFavoritesView({
     },
   );
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
+  const loadedSourceHistoryIds = useMemo(
+    () => loadedSources
+      .map((source) => buildScraperViewHistoryCardId(
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result),
+      ))
+      .filter((id) => id.length > 0),
+    [loadedSources],
+  );
+  const loadedSourceHistoryKey = useMemo(
+    () => loadedSourceHistoryIds.join("|"),
+    [loadedSourceHistoryIds],
+  );
   const mergedResults = useMemo(() => mergeMultiSearchResults(loadedSources), [loadedSources]);
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
@@ -158,6 +183,53 @@ export default function ScraperAuthorFavoritesView({
       viewHistoryRecordsById,
     ],
   );
+  const displayedMergedResults = useMemo(
+    () => sortByScraperViewHistoryNewState(
+      visibleMergedResults,
+      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+      viewHistoryRecordsById,
+      newSourceHistoryIds,
+      showUnseenFirst,
+    ),
+    [newSourceHistoryIds, showUnseenFirst, viewHistoryRecordsById, visibleMergedResults],
+  );
+
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    setNewSourceHistoryIds(new Set());
+  }, [selectedFavoriteId]);
+
+  useEffect(() => {
+    if (!loadedSourceHistoryIds.length) {
+      setNewSourceHistoryIds(new Set());
+      return;
+    }
+
+    if (!viewHistoryLoaded) {
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    const sourceIds = new Set(loadedSourceHistoryIds);
+
+    setNewSourceHistoryIds((currentIds) => {
+      const nextIds = new Set(Array.from(currentIds).filter((id) => sourceIds.has(id)));
+
+      loadedSourceHistoryIds.forEach((id) => {
+        if (!historySnapshot.has(id)) {
+          nextIds.add(id);
+        }
+      });
+
+      const hasChanged = nextIds.size !== currentIds.size
+        || Array.from(nextIds).some((id) => !currentIds.has(id));
+
+      return hasChanged ? nextIds : currentIds;
+    });
+  }, [loadedSourceHistoryIds, loadedSourceHistoryKey, viewHistoryLoaded]);
 
   useEffect(() => {
     if (routeFavoriteId === selectedFavoriteId) {
@@ -603,7 +675,7 @@ export default function ScraperAuthorFavoritesView({
             </div>
 
             <div className="multi-search__results-grid">
-              {visibleMergedResults.map((result) => (
+              {displayedMergedResults.map((result) => (
                 <MultiSearchResultCard
                   key={result.id}
                   result={result}
@@ -611,6 +683,7 @@ export default function ScraperAuthorFavoritesView({
                   bookmarkedSourceKeys={bookmarkedSourceKeys}
                   sourceProgressIndex={sourceProgressIndex}
                   viewHistoryRecordsById={viewHistoryRecordsById}
+                  newViewHistoryIds={newSourceHistoryIds}
                   onOpenSource={handleOpenSource}
                   onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
                   onOpenProgressReader={(source, page, totalPages, readerMangaId) => void handleOpenProgressReader(

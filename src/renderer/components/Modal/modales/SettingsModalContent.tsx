@@ -101,6 +101,11 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperTagFavoriteShowUnseenFirst',
+          label: 'Afficher les cards non vues en premier dans les tags favoris',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperAuthorFavoritePageCount',
           label: 'Pages à charger à l\'ouverture d\'un auteur favori',
           type: 'number',
@@ -210,6 +215,7 @@ export default function SettingsModalContent() {
       showSavedScraperSearches,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
+      scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }

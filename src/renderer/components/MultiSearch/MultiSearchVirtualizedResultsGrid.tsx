@@ -36,6 +36,7 @@ type Props = {
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -59,6 +60,7 @@ function MeasuredMultiSearchResultCard({
   bookmarkedSourceKeys,
   sourceProgressIndex,
   viewHistoryRecordsById,
+  newViewHistoryIds,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -148,6 +150,7 @@ function MeasuredMultiSearchResultCard({
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
+        newViewHistoryIds={newViewHistoryIds}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
         onOpenProgressReader={onOpenProgressReader}
@@ -163,6 +166,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   bookmarkedSourceKeys,
   sourceProgressIndex,
   viewHistoryRecordsById,
+  newViewHistoryIds,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -426,6 +430,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               bookmarkedSourceKeys={bookmarkedSourceKeys}
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
+              newViewHistoryIds={newViewHistoryIds}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}

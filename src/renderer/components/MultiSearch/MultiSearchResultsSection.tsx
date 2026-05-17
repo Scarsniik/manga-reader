@@ -3,6 +3,10 @@ import type {
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
+import {
+  buildSearchResultViewHistoryIdentity,
+  sortByScraperViewHistoryNewState,
+} from "@/renderer/utils/scraperViewHistory";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
@@ -39,6 +43,8 @@ type Props = {
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
+  showUnseenFirst: boolean;
   isExportingJson: boolean;
   isExtractingAuthors: boolean;
   canExtractAuthors: boolean;
@@ -133,6 +139,8 @@ export default function MultiSearchResultsSection({
   bookmarkedSourceKeys,
   sourceProgressIndex,
   viewHistoryRecordsById,
+  newViewHistoryIds,
+  showUnseenFirst,
   isExportingJson,
   isExtractingAuthors,
   canExtractAuthors,
@@ -152,15 +160,28 @@ export default function MultiSearchResultsSection({
   onToggleLanguageFilterMode,
   onToggleReadingStatusFilter,
 }: Props) {
+  const sortMergedResultsByUnseen = React.useCallback((results: MultiSearchMergedResult[]) => (
+    sortByScraperViewHistoryNewState(
+      results,
+      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+      viewHistoryRecordsById,
+      newViewHistoryIds,
+      showUnseenFirst,
+    )
+  ), [newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById]);
+  const displayedMergedResults = React.useMemo(
+    () => sortMergedResultsByUnseen(mergedResults),
+    [mergedResults, sortMergedResultsByUnseen],
+  );
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
       ? runs.map((run) => ({
         scraperId: run.scraper.id,
         scraperName: run.scraper.name,
-        results: run.results.map(buildSingleSourceMergedResult),
+        results: sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
       }))
       : []
-  ), [runs, viewMode]);
+  ), [runs, sortMergedResultsByUnseen, viewMode]);
 
   if (viewMode === "merged") {
     return (
@@ -255,11 +276,12 @@ export default function MultiSearchResultsSection({
         </div>
 
         <MultiSearchVirtualizedResultsGrid
-          results={mergedResults}
+          results={displayedMergedResults}
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
           sourceProgressIndex={sourceProgressIndex}
           viewHistoryRecordsById={viewHistoryRecordsById}
+          newViewHistoryIds={newViewHistoryIds}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
@@ -332,6 +354,7 @@ export default function MultiSearchResultsSection({
               bookmarkedSourceKeys={bookmarkedSourceKeys}
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
+              newViewHistoryIds={newViewHistoryIds}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}

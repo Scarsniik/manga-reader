@@ -1,18 +1,21 @@
 import React from 'react';
 import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
+import ScraperViewHistoryCard from '@/renderer/components/ScraperViewHistoryCard/ScraperViewHistoryCard';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
-import { ScraperSearchResultItem } from '@/shared/scraper';
+import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared/scraper';
 import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
-import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
+import { buildSearchResultViewHistoryIdentity } from '@/renderer/utils/scraperViewHistory';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
 
 type Props = {
+  scraperId: string;
   result: ScraperSearchResultItem;
   canOpenResult: boolean;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
   canOpenAuthorResult: boolean;
-  viewState: ScraperCardViewState;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
   readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
@@ -24,16 +27,17 @@ type Props = {
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
   onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
   onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
-  onViewed?: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultCard({
+  scraperId,
   result,
   canOpenResult,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
   canOpenAuthorResult,
-  viewState,
+  viewHistoryRecordsById,
+  newViewHistoryIds,
   readAction,
   bookmarkAction,
   addToLibraryAction,
@@ -45,11 +49,14 @@ export default function ScraperSearchResultCard({
   onOpenResultImage,
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
-  onViewed,
 }: Props) {
   const actions: ScraperCardAction[] = [];
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
   const hasLanguageCodes = Boolean(result.languageCodes?.length);
+  const viewHistoryIdentities = React.useMemo(
+    () => [buildSearchResultViewHistoryIdentity(scraperId, result)],
+    [result, scraperId],
+  );
 
   if (readAction) {
     actions.push(readAction);
@@ -110,35 +117,43 @@ export default function ScraperSearchResultCard({
   }
 
   return (
-    <ScraperCard
-      title={result.title}
-      coverUrl={result.thumbnailUrl}
-      coverAlt={result.title}
-      summary={result.summary}
-      metadata={pageCountLabel || hasLanguageCodes ? (
-        <div className="scraper-card__metadata">
-          {hasLanguageCodes ? (
-            <span>
-              Langue <LanguageFlags languageCodes={result.languageCodes} />
-            </span>
-          ) : null}
-          {pageCountLabel ? <span>{pageCountLabel}</span> : null}
-        </div>
-      ) : undefined}
-      actions={actions}
-      className={viewState === 'read' ? 'is-history-read' : viewState === 'new' ? 'is-history-new' : ''}
-      isActionable={canOpenResult}
-      onClick={canOpenResult ? () => onOpenResult(result) : undefined}
-      onKeyDown={canOpenResult ? (event) => onResultKeyDown(event, result) : undefined}
-      onMiddleClick={
-        canOpenResult && onOpenResultInWorkspace
-          ? () => onOpenResultInWorkspace(result)
-          : canOpenAuthorResult && onOpenAuthorInWorkspace
-            ? () => onOpenAuthorInWorkspace(result)
-            : undefined
-      }
-      onViewed={onViewed ? () => onViewed(result) : undefined}
-      aria-label={canOpenResult ? `Ouvrir la fiche ${result.title}` : undefined}
-    />
+    <ScraperViewHistoryCard
+      identities={viewHistoryIdentities}
+      recordsById={viewHistoryRecordsById}
+      newCardIds={newViewHistoryIds}
+    >
+      {({ historyClassName, onViewed }) => (
+        <ScraperCard
+          title={result.title}
+          coverUrl={result.thumbnailUrl}
+          coverAlt={result.title}
+          summary={result.summary}
+          metadata={pageCountLabel || hasLanguageCodes ? (
+            <div className="scraper-card__metadata">
+              {hasLanguageCodes ? (
+                <span>
+                  Langue <LanguageFlags languageCodes={result.languageCodes} />
+                </span>
+              ) : null}
+              {pageCountLabel ? <span>{pageCountLabel}</span> : null}
+            </div>
+          ) : undefined}
+          actions={actions}
+          className={historyClassName}
+          isActionable={canOpenResult}
+          onClick={canOpenResult ? () => onOpenResult(result) : undefined}
+          onKeyDown={canOpenResult ? (event) => onResultKeyDown(event, result) : undefined}
+          onMiddleClick={
+            canOpenResult && onOpenResultInWorkspace
+              ? () => onOpenResultInWorkspace(result)
+              : canOpenAuthorResult && onOpenAuthorInWorkspace
+                ? () => onOpenAuthorInWorkspace(result)
+                : undefined
+          }
+          onViewed={onViewed}
+          ariaLabel={canOpenResult ? `Ouvrir la fiche ${result.title}` : undefined}
+        />
+      )}
+    </ScraperViewHistoryCard>
   );
 }

@@ -50,7 +50,6 @@ import {
 import { useModal } from '@/renderer/hooks/useModal';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import {
-  recordScraperCardsSeen,
   setScraperCardRead,
   useScraperViewHistory,
 } from '@/renderer/stores/scraperViewHistory';
@@ -80,7 +79,6 @@ import { recordSearchHistorySafe } from '@/renderer/utils/history';
 import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import {
   buildSearchResultViewHistoryIdentity,
-  getScraperCardViewState,
   getScraperViewHistoryRecord,
 } from '@/renderer/utils/scraperViewHistory';
 import {
@@ -1638,23 +1636,6 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     }
   }, [scraper.id, setRuntimeError]);
 
-  const handleSearchResultViewed = useCallback((result: ScraperSearchResultItem) => {
-    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
-
-    void recordScraperCardsSeen([
-      identity,
-    ]).catch((error) => {
-      console.warn('Failed to record scraper card view', error);
-    });
-  }, [scraper.id]);
-
-  const getSearchResultViewState = useCallback((result: ScraperSearchResultItem) => {
-    const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
-    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
-    const id = buildScraperViewHistoryCardId(identity);
-    return getScraperCardViewState(record, Boolean(id && newSearchResultIds.has(id)));
-  }, [newSearchResultIds, scraper.id, viewHistoryRecordsById]);
-
   const renderSearchResultReadAction = useCallback((result: ScraperSearchResultItem): ScraperCardAction => {
     const identity = buildSearchResultViewHistoryIdentity(scraper.id, result);
     const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
@@ -1840,6 +1821,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       />
 
       <ScraperSearchResultsSection
+        scraperId={scraper.id}
         mode={mode === 'author' ? 'author' : mode === 'tag' ? 'tag' : mode === 'homepage' ? 'homepage' : 'search'}
         backLabel={authorResultsBackLabel}
         authorTitle={mode === 'tag' ? tagResultsTitle : authorResultsTitle}
@@ -1856,7 +1838,8 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
         headerAction={listingHeaderAction}
         canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
         canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
-        getViewState={getSearchResultViewState}
+        viewHistoryRecordsById={viewHistoryRecordsById}
+        newViewHistoryIds={newSearchResultIds}
         renderReadAction={renderSearchResultReadAction}
         renderBookmarkAction={renderSearchResultBookmarkAction}
         renderAddToLibraryAction={renderSearchResultAddToLibraryAction}
@@ -1871,7 +1854,6 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
         onOpenResultImage={handleOpenSearchResultImage}
         onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
         onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
-        onResultViewed={handleSearchResultViewed}
       />
 
       <ScraperDetailsPanel

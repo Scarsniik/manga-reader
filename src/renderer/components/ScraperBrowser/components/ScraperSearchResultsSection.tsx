@@ -1,12 +1,12 @@
 import React from 'react';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
-import { ScraperSearchResultItem } from '@/shared/scraper';
+import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared/scraper';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
 import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultCard';
-import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 
 type Props = {
+  scraperId: string;
   mode: 'homepage' | 'search' | 'author' | 'tag';
   backLabel?: string | null;
   authorTitle?: string | null;
@@ -23,7 +23,8 @@ type Props = {
   headerAction?: React.ReactNode;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
-  getViewState?: (result: ScraperSearchResultItem) => ScraperCardViewState;
+  viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
   renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderAddToLibraryAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
@@ -38,10 +39,10 @@ type Props = {
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
   onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
   onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
-  onResultViewed?: (result: ScraperSearchResultItem) => void;
 };
 
 export default function ScraperSearchResultsSection({
+  scraperId,
   mode,
   backLabel = null,
   authorTitle = null,
@@ -58,7 +59,8 @@ export default function ScraperSearchResultsSection({
   headerAction,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
-  getViewState,
+  viewHistoryRecordsById,
+  newViewHistoryIds,
   renderReadAction,
   renderBookmarkAction,
   renderAddToLibraryAction,
@@ -73,7 +75,6 @@ export default function ScraperSearchResultsSection({
   onOpenResultImage,
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
-  onResultViewed,
 }: Props) {
   if (!visibleSearchResults.length && !backLabel) {
     return null;
@@ -173,12 +174,14 @@ export default function ScraperSearchResultsSection({
           return (
             <ScraperSearchResultCard
               key={`${result.detailUrl ?? result.title}-${result.title}`}
+              scraperId={scraperId}
               result={result}
               canOpenResult={canOpenResult}
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
               canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
               canOpenAuthorResult={canOpenAuthorResult}
-              viewState={getViewState ? getViewState(result) : 'seen'}
+              viewHistoryRecordsById={viewHistoryRecordsById}
+              newViewHistoryIds={newViewHistoryIds}
               readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               addToLibraryAction={renderAddToLibraryAction ? renderAddToLibraryAction(result) : null}
@@ -190,7 +193,6 @@ export default function ScraperSearchResultsSection({
               onOpenResultImage={onOpenResultImage}
               onOpenResultInWorkspace={onOpenResultInWorkspace}
               onOpenAuthorInWorkspace={onOpenAuthorInWorkspace}
-              onViewed={onResultViewed}
             />
           );
         })}

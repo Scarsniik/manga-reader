@@ -1,10 +1,12 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  buildScraperViewHistoryCardId,
   hasScraperFieldSelectorValue,
   type ScraperReaderProgressRecord,
   type ScraperRecord,
   type ScraperViewHistoryCardIdentity,
+  type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
 import {
@@ -85,12 +87,14 @@ import {
   writeScraperRouteState,
 } from "@/renderer/utils/scraperBrowserNavigation";
 import { buildMultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import {
   getScraperAuthorFeatureConfig,
   getScraperFeature,
 } from "@/renderer/utils/scraperRuntime";
 import { recordSearchHistorySafe } from "@/renderer/utils/history";
 import { useModal } from "@/renderer/hooks/useModal";
+import useParams from "@/renderer/hooks/useParams";
 import "./style.scss";
 
 type Props = {
@@ -117,6 +121,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const { openModal } = useModal();
+  const { params } = useParams();
   const initializedSelectionRef = useRef(false);
   const restoredStateRef = useRef(false);
   const consumedPrefillLocationKeyRef = useRef<string | null>(null);
@@ -140,6 +145,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
+  const [newSourceHistoryIds, setNewSourceHistoryIds] = useState<Set<string>>(() => new Set());
+  const viewHistoryRecordsByIdRef = useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
     [scrapers],
@@ -159,7 +166,10 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     loadMoreForScraper,
   } = useMultiSearch();
   const { bookmarkMap } = useScraperBookmarks();
-  const { recordsById: viewHistoryRecordsById } = useScraperViewHistory();
+  const {
+    loaded: viewHistoryLoaded,
+    recordsById: viewHistoryRecordsById,
+  } = useScraperViewHistory();
   const bookmarkedSourceKeys = useMemo(
     () => new Set(bookmarkMap.keys()),
     [bookmarkMap],
@@ -168,6 +178,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const multiSearchPrefillQuery = typeof locationState?.multiSearchPrefillQuery === "string"
     ? locationState.multiSearchPrefillQuery.trim()
     : "";
+  const canShowUnseenFirst = false;
+  const showUnseenFirst = canShowUnseenFirst && params?.multiSearchShowUnseenFirst === true;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -246,6 +258,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       setResultReadingStatusFilters([]);
       setResultTextFilter("");
       setDebouncedResultTextFilter("");
+      setNewSourceHistoryIds(new Set());
       setDepthMode("quick");
       setAdvancedPages(3);
       setPaceMode("fast");
@@ -270,6 +283,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         setResultReadingStatusFilters(restoredState.resultReadingStatusFilters);
         setResultTextFilter(restoredState.resultTextFilter);
         setDebouncedResultTextFilter(restoredState.resultTextFilter);
+        setNewSourceHistoryIds(new Set(restoredState.newSourceHistoryIds));
         setDepthMode(restoredState.depthMode);
         setAdvancedPages(restoredState.advancedPages);
         setPaceMode(restoredState.paceMode);
@@ -303,6 +317,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
       resultLanguageFilterModes,
       resultReadingStatusFilters,
       resultTextFilter,
+      newSourceHistoryIds: Array.from(newSourceHistoryIds),
       depthMode,
       advancedPages,
       paceMode,
@@ -311,6 +326,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   }, [
     advancedPages,
     depthMode,
+    newSourceHistoryIds,
     paceMode,
     query,
     resultLanguageFilterModes,
@@ -341,6 +357,18 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   const allSources = useMemo(
     () => flattenMultiSearchSources(runs),
     [runs],
+  );
+  const allSourceHistoryIds = useMemo(
+    () => allSources
+      .map((source) => buildScraperViewHistoryCardId(
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result),
+      ))
+      .filter((id) => id.length > 0),
+    [allSources],
+  );
+  const allSourceHistoryKey = useMemo(
+    () => allSourceHistoryIds.join("|"),
+    [allSourceHistoryIds],
   );
   const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(allSources, mergeRefreshKey);
   const resultLanguageCodes = useMemo(
@@ -449,6 +477,39 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     }))
   ), [searchableScrapers]);
 
+  useEffect(() => {
+    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
+  }, [viewHistoryRecordsById]);
+
+  useEffect(() => {
+    if (!allSourceHistoryIds.length) {
+      setNewSourceHistoryIds(new Set());
+      return;
+    }
+
+    if (!viewHistoryLoaded) {
+      return;
+    }
+
+    const historySnapshot = viewHistoryRecordsByIdRef.current;
+    const sourceIds = new Set(allSourceHistoryIds);
+
+    setNewSourceHistoryIds((currentIds) => {
+      const nextIds = new Set(Array.from(currentIds).filter((id) => sourceIds.has(id)));
+
+      allSourceHistoryIds.forEach((id) => {
+        if (!historySnapshot.has(id)) {
+          nextIds.add(id);
+        }
+      });
+
+      const hasChanged = nextIds.size !== currentIds.size
+        || Array.from(nextIds).some((id) => !currentIds.has(id));
+
+      return hasChanged ? nextIds : currentIds;
+    });
+  }, [allSourceHistoryIds, allSourceHistoryKey, viewHistoryLoaded]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const searchTerms = parseMultiSearchTerms(query);
@@ -458,6 +519,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     setResultReadingStatusFilters([]);
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
+    setNewSourceHistoryIds(new Set());
     setAuthorExtractionProgress(null);
     void runSearch({
       query,
@@ -851,6 +913,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
+        newViewHistoryIds={newSourceHistoryIds}
+        showUnseenFirst={showUnseenFirst}
         isExportingJson={isExportingJson}
         isExtractingAuthors={isExtractingAuthors}
         canExtractAuthors={allSources.length > 0}

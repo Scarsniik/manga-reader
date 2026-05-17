@@ -315,6 +315,15 @@ Langues disponibles :
 [Ouvrir]
 ```
 
+### Historique de vue
+
+Les cartes de resultats multi-source utilisent le meme historique de vue que les cartes de scrapper classiques.
+Pour une carte fusionnee, l'etat est calcule sur toutes les sources de la carte : si au moins une source n'a jamais
+ete vue dans l'historique courant, la carte est marquee comme nouvelle.
+
+Quand une carte fusionnee passe dans la zone de lecture pendant le scroll, toutes ses sources sont enregistrees comme
+vues.
+
 ---
 
 ## Ouverture d'une carte mergée

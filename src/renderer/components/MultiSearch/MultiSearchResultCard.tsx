@@ -5,6 +5,7 @@ import {
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
+import ScraperViewHistoryCard from "@/renderer/components/ScraperViewHistoryCard/ScraperViewHistoryCard";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import { BookmarkRibbonIcon, EyeIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
@@ -31,6 +32,7 @@ type Props = {
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
+  newViewHistoryIds: Set<string>;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -113,6 +115,7 @@ export default function MultiSearchResultCard({
   bookmarkedSourceKeys,
   sourceProgressIndex,
   viewHistoryRecordsById,
+  newViewHistoryIds,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -135,6 +138,10 @@ export default function MultiSearchResultCard({
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : undefined;
   const languageLabels = result.sourceLanguageCodes.map(getLanguageLabel);
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
+  const viewHistoryIdentities = React.useMemo(
+    () => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+    [result.sources],
+  );
   const sourceAvailability = React.useMemo(() => (
     result.sources.map((source) => getMultiSearchSourceAvailability({
       source,
@@ -453,19 +460,31 @@ export default function MultiSearchResultCard({
   }
 
   return (
-    <ScraperCard
-      title={result.title}
-      coverUrl={activeCoverUrl}
-      coverAlt={result.title}
-      summary={result.summary}
-      metadata={metadata}
-      actions={actions}
-      className={result.sources.length > 1 ? "is-merged" : ""}
-      isActionable={result.sources.length === 1 && Boolean(result.sources[0].result.detailUrl)}
-      onClick={result.sources.length === 1 ? () => onOpenSource(result.sources[0]) : undefined}
-      onMiddleClick={result.sources.length === 1 ? () => onOpenSourceInWorkspace(result.sources[0]) : undefined}
-      onCoverError={() => setCoverIndex((currentIndex) => currentIndex + 1)}
-      ariaLabel={result.sources.length === 1 ? `Ouvrir ${result.title}` : undefined}
-    />
+    <ScraperViewHistoryCard
+      identities={viewHistoryIdentities}
+      recordsById={viewHistoryRecordsById}
+      newCardIds={newViewHistoryIds}
+    >
+      {({ historyClassName, onViewed }) => (
+        <ScraperCard
+          title={result.title}
+          coverUrl={activeCoverUrl}
+          coverAlt={result.title}
+          summary={result.summary}
+          metadata={metadata}
+          actions={actions}
+          className={[
+            result.sources.length > 1 ? "is-merged" : "",
+            historyClassName,
+          ].join(" ").trim()}
+          isActionable={result.sources.length === 1 && Boolean(result.sources[0].result.detailUrl)}
+          onClick={result.sources.length === 1 ? () => onOpenSource(result.sources[0]) : undefined}
+          onMiddleClick={result.sources.length === 1 ? () => onOpenSourceInWorkspace(result.sources[0]) : undefined}
+          onCoverError={() => setCoverIndex((currentIndex) => currentIndex + 1)}
+          onViewed={onViewed}
+          ariaLabel={result.sources.length === 1 ? `Ouvrir ${result.title}` : undefined}
+        />
+      )}
+    </ScraperViewHistoryCard>
   );
 }
