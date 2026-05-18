@@ -69,6 +69,11 @@ La vue combinee reutilise aussi :
 - le filtre multi-choix par etat de lecture, applique a la carte fusionnee entiere
 - les cards de resultat multi-source, avec les badges bibliotheque, bookmark et progression de lecture
 
+La page auteur classique peut aussi utiliser cette vue combinee pour une seule source auteur.
+Elle utilise le meme reglage `Pages a charger a l'ouverture d'un auteur favori` pour son nombre de
+pages initiales. Le reglage global `Afficher les pages auteur en vue combinee` active ce rendu par
+defaut, et la page auteur expose un switch immediat entre `Vue combinee` et `Vue par pages`.
+
 Pour le filtre de lecture, un resultat combine garde toujours toutes ses sources quand il est visible. Si une source du merge est terminee, la carte est consideree comme `Lu`. Sinon, si une source est en cours, la carte est consideree comme `En cours`. Sinon elle reste `Non lu`.
 
 Le bouton compact de lecture sur une carte combinee suit la progression affichee : si une source du merge est en cours, le marquage lu cible seulement cette source. Si aucune source n'a commence, le marquage lu cible seulement la premiere source. Le retrait du marquage lu ne retire que les marques explicites deja posees.

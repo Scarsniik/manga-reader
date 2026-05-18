@@ -433,6 +433,12 @@ recherche, sans lancer la recherche automatiquement.
 Quand `authorNameSelector` extrait un nom, ce nom remplace le titre generique `Resultats auteur`
 dans la page auteur, avec une majuscule au debut de chaque mot.
 
+La page auteur peut etre affichee en mode classique pagine ou en vue combinee. La vue combinee
+charge la page auteur comme une source unique, utilise le meme nombre de pages initiales que les
+auteurs favoris, permet `Charger plus` et `Charger tout`, puis reutilise le merge, les filtres de
+langue, les filtres d'etat de lecture et les cartes de la recherche multi-sources. L'option est
+disponible dans les settings et directement dans la page auteur.
+
 ## Module Tag
 
 `Tag` charge une page tag et extrait une liste de cards, avec le meme modele que `Recherche`.

@@ -34,6 +34,7 @@ export type AppParams = {
     showSavedScraperSearches?: boolean;
     savedScraperSearches?: SavedScraperSearch[];
     multiSearchShowUnseenFirst?: boolean;
+    scraperAuthorCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;
     scraperAuthorFavoritePageCount?: number;

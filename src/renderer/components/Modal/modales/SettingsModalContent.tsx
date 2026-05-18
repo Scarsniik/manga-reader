@@ -101,6 +101,11 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperAuthorCombinedView',
+          label: 'Afficher les pages auteur en vue combinée',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperTagFavoriteShowUnseenFirst',
           label: 'Afficher les cards non vues en premier dans les tags favoris',
           type: 'checkbox',
@@ -213,6 +218,7 @@ export default function SettingsModalContent() {
       persistMangaFilters,
       showSavedLibrarySearches,
       showSavedScraperSearches,
+      scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,

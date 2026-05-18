@@ -19,6 +19,7 @@ import ScraperBrowserHero from '@/renderer/components/ScraperBrowser/components/
 import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/components/ScraperBrowserMessages';
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
 import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components/ScraperDetailsPanel';
+import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperAuthorCombinedView';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
@@ -213,6 +214,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
   const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
   const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
+  const scraperAuthorCombinedViewEnabled = params?.scraperAuthorCombinedView === true;
   const homepageFeature = useMemo(() => getScraperFeature(scraper, 'homepage'), [scraper]);
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
@@ -1023,6 +1025,19 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       },
     );
   }, [authorMultiSearchQuery, location.search, navigate, setRuntimeError]);
+  const handleSwitchAuthorCombinedView = useCallback((enabled: boolean) => {
+    setParams({ scraperAuthorCombinedView: enabled }, { remount: false });
+  }, [setParams]);
+  const authorCombinedViewAction = mode === 'author' && !scraperAuthorCombinedViewEnabled ? (
+    <button
+      type="button"
+      className="scraper-browser__back-to-search"
+      onClick={() => handleSwitchAuthorCombinedView(true)}
+      title="Afficher cette page auteur avec la vue combinee"
+    >
+      Vue combinee
+    </button>
+  ) : null;
   const authorMultiSearchAction = mode === 'author' ? (
     <button
       type="button"
@@ -1062,6 +1077,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
   ) : null;
   const authorHeaderAction = mode === 'author' ? (
     <>
+      {authorCombinedViewAction}
       {authorMultiSearchAction}
       {authorFavoriteAction}
     </>
@@ -1074,6 +1090,12 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
   const listingHeaderAction = mode === 'tag' ? tagHeaderAction : authorHeaderAction;
   const shouldShowSearchPagination = Boolean(
     listingPage && (listingPageIndex > 0 || listingPage.nextPageUrl || usesActiveTemplatePaging),
+  );
+  const shouldShowAuthorCombinedView = Boolean(
+    mode === 'author'
+    && scraperAuthorCombinedViewEnabled
+    && hasExecutedListing
+    && query.trim().length > 0,
   );
   const paginationInfoLabel = useMemo(
     () => buildPaginationInfoLabel(
@@ -1820,41 +1842,56 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
         downloadError={downloadError}
       />
 
-      <ScraperSearchResultsSection
-        scraperId={scraper.id}
-        mode={mode === 'author' ? 'author' : mode === 'tag' ? 'tag' : mode === 'homepage' ? 'homepage' : 'search'}
-        backLabel={authorResultsBackLabel}
-        authorTitle={mode === 'tag' ? tagResultsTitle : authorResultsTitle}
-        visibleSearchResults={visibleSearchResults}
-        searchResultsCount={listingResults.length}
-        query={query}
-        searchPage={listingPage}
-        searchPageIndex={listingPageIndex}
-        shouldShowSearchPagination={shouldShowSearchPagination}
-        currentSearchPageLabel={currentSearchPageLabel}
-        paginationInfoLabel={paginationInfoLabel}
-        loading={loading}
-        usesSearchTemplatePaging={usesActiveTemplatePaging}
-        headerAction={listingHeaderAction}
-        canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
-        canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
-        viewHistoryRecordsById={viewHistoryRecordsById}
-        newViewHistoryIds={newSearchResultIds}
-        renderReadAction={renderSearchResultReadAction}
-        renderBookmarkAction={renderSearchResultBookmarkAction}
-        renderAddToLibraryAction={renderSearchResultAddToLibraryAction}
-        renderDownloadAction={renderSearchResultDownloadAction}
-        onPreviousPage={() => void handleListingPreviousPage()}
-        onNextPage={() => void handleListingNextPage()}
-        onBack={handleNavigateBack}
-        onOpenResult={handleOpenListingResult}
-        onOpenAuthorResultAction={handleOpenAuthorResultAction}
-        onResultKeyDown={handleListingResultKeyDown}
-        onOpenResultAction={handleOpenResultAction}
-        onOpenResultImage={handleOpenSearchResultImage}
-        onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
-        onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
-      />
+      {shouldShowAuthorCombinedView ? (
+        <ScraperAuthorCombinedView
+          scraper={scraper}
+          authorUrl={query.trim()}
+          authorTitle={authorResultsTitle}
+          authorMultiSearchQuery={authorMultiSearchQuery}
+          initialPageCount={params?.scraperAuthorFavoritePageCount ?? 1}
+          cover={listingResults[0]?.thumbnailUrl}
+          templateContext={authorTemplateContext}
+          favoriteAction={authorFavoriteAction}
+          onOpenMultiSearch={handleOpenAuthorMultiSearch}
+          onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
+        />
+      ) : (
+        <ScraperSearchResultsSection
+          scraperId={scraper.id}
+          mode={mode === 'author' ? 'author' : mode === 'tag' ? 'tag' : mode === 'homepage' ? 'homepage' : 'search'}
+          backLabel={authorResultsBackLabel}
+          authorTitle={mode === 'tag' ? tagResultsTitle : authorResultsTitle}
+          visibleSearchResults={visibleSearchResults}
+          searchResultsCount={listingResults.length}
+          query={query}
+          searchPage={listingPage}
+          searchPageIndex={listingPageIndex}
+          shouldShowSearchPagination={shouldShowSearchPagination}
+          currentSearchPageLabel={currentSearchPageLabel}
+          paginationInfoLabel={paginationInfoLabel}
+          loading={loading}
+          usesSearchTemplatePaging={usesActiveTemplatePaging}
+          headerAction={listingHeaderAction}
+          canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
+          canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
+          viewHistoryRecordsById={viewHistoryRecordsById}
+          newViewHistoryIds={newSearchResultIds}
+          renderReadAction={renderSearchResultReadAction}
+          renderBookmarkAction={renderSearchResultBookmarkAction}
+          renderAddToLibraryAction={renderSearchResultAddToLibraryAction}
+          renderDownloadAction={renderSearchResultDownloadAction}
+          onPreviousPage={() => void handleListingPreviousPage()}
+          onNextPage={() => void handleListingNextPage()}
+          onBack={handleNavigateBack}
+          onOpenResult={handleOpenListingResult}
+          onOpenAuthorResultAction={handleOpenAuthorResultAction}
+          onResultKeyDown={handleListingResultKeyDown}
+          onOpenResultAction={handleOpenResultAction}
+          onOpenResultImage={handleOpenSearchResultImage}
+          onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
+          onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
+        />
+      )}
 
       <ScraperDetailsPanel
         scraperId={scraper.id}
