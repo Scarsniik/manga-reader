@@ -11,6 +11,7 @@ import {
   type ScraperFeatureValidationCheck,
   type ScraperFeatureValidationResult,
   type ScraperGlobalConfig,
+  type ScraperLatestModule,
   type ScraperRequestConfig,
   type ScraperRequestField,
   type ScraperReaderProgressRecord,
@@ -239,6 +240,10 @@ export const sanitizeBookmarkMetadataFieldList = (
     : []
 );
 
+const sanitizeLatestModule = (value: unknown): ScraperLatestModule => (
+  value === "search" ? "search" : "homepage"
+);
+
 const sanitizeRequestField = (value: unknown): ScraperRequestField | null => {
   if (!value || typeof value !== "object") {
     return null;
@@ -361,6 +366,10 @@ export const sanitizeGlobalConfig = (
     homeSearch: {
       enabled: Boolean(globalConfig?.homeSearch?.enabled),
       query: homeSearchQuery,
+    },
+    latest: {
+      enabled: Boolean(globalConfig?.latest?.enabled),
+      module: sanitizeLatestModule(globalConfig?.latest?.module),
     },
     bookmark: {
       excludedFields: sanitizeBookmarkMetadataFieldList(globalConfig?.bookmark?.excludedFields),

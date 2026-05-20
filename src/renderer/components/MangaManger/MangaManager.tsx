@@ -20,12 +20,14 @@ import ScraperAuthorFavoritesView from '@/renderer/components/ScraperAuthorFavor
 import ScraperTagFavoritesView from '@/renderer/components/ScraperTagFavorites/ScraperTagFavoritesView';
 import HistoryView from '@/renderer/components/History/HistoryView';
 import MultiSearchBrowser from '@/renderer/components/MultiSearch/MultiSearchBrowser';
+import ScraperLatestView from '@/renderer/components/ScraperLatest/ScraperLatestView';
 import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 import {
     clearScraperRouteState,
     parseScraperRouteState,
     SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
     SCRAPER_HISTORY_VIEW_ID,
+    SCRAPER_LATEST_VIEW_ID,
     SCRAPER_MULTI_SEARCH_VIEW_ID,
     SCRAPER_TAG_FAVORITES_VIEW_ID,
     writeScraperRouteState,
@@ -366,6 +368,7 @@ const MangaManager: React.FC = () => {
     const isAuthorFavoritesView = activeViewId === SCRAPER_AUTHOR_FAVORITES_VIEW_ID;
     const isTagFavoritesView = activeViewId === SCRAPER_TAG_FAVORITES_VIEW_ID;
     const isHistoryView = activeViewId === SCRAPER_HISTORY_VIEW_ID;
+    const isLatestView = activeViewId === SCRAPER_LATEST_VIEW_ID;
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -459,6 +462,7 @@ const MangaManager: React.FC = () => {
             || activeViewId === SCRAPER_AUTHOR_FAVORITES_VIEW_ID
             || activeViewId === SCRAPER_TAG_FAVORITES_VIEW_ID
             || activeViewId === SCRAPER_HISTORY_VIEW_ID
+            || activeViewId === SCRAPER_LATEST_VIEW_ID
         ) {
             return;
         }
@@ -628,6 +632,7 @@ const MangaManager: React.FC = () => {
                     >
                         <option value="library">Bibliotheque</option>
                         <option value={SCRAPER_MULTI_SEARCH_VIEW_ID}>Recherche multi-sources</option>
+                        <option value={SCRAPER_LATEST_VIEW_ID}>Nouveautes</option>
                         <option value={SCRAPER_HISTORY_VIEW_ID}>Historique</option>
                         <option value={SCRAPER_AUTHOR_FAVORITES_VIEW_ID}>Auteurs favoris</option>
                         <option value={SCRAPER_TAG_FAVORITES_VIEW_ID}>Tags favoris</option>
@@ -706,9 +711,11 @@ const MangaManager: React.FC = () => {
             ) : (
                 <div className="mangaManager-content mangaManager-content--scraper">
                     {!hasLoadedScrapers ? (
-                        <div className="empty">{isBookmarksView || isHistoryView ? 'Chargement des donnees...' : 'Chargement du scrapper...'}</div>
+                        <div className="empty">{isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees...' : 'Chargement du scrapper...'}</div>
                     ) : isMultiSearchView ? (
                         <MultiSearchBrowser scrapers={sortedScrapers} />
+                    ) : isLatestView ? (
+                        <ScraperLatestView scrapers={sortedScrapers} />
                     ) : isHistoryView ? (
                         <HistoryView scrapers={sortedScrapers} />
                     ) : isAuthorFavoritesView ? (

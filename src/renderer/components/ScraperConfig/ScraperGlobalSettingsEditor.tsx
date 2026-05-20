@@ -6,6 +6,7 @@ import FreeStringListField from '@/renderer/components/ScraperConfig/shared/Free
 import {
   ScraperBookmarkMetadataField,
   ScraperGlobalConfig,
+  ScraperLatestModule,
   ScraperRecord,
 } from '@/shared/scraper';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
@@ -68,28 +69,49 @@ const sanitizeBookmarkExcludedFields = (value: unknown): ScraperBookmarkMetadata
     : []
 );
 
+const sanitizeLatestModule = (
+  value: unknown,
+  latestModules: ScraperLatestModule[],
+): ScraperLatestModule => {
+  const requestedModule = String(value ?? '').trim();
+  if (latestModules.includes(requestedModule as ScraperLatestModule)) {
+    return requestedModule as ScraperLatestModule;
+  }
+
+  return latestModules[0] ?? 'homepage';
+};
+
 const buildGlobalConfig = (
   values: Record<string, unknown>,
   metadata: {
     sourceLanguages: string[];
     contentTypes: string[];
+    latestModules: ScraperLatestModule[];
   },
-): ScraperGlobalConfig => ({
-  defaultTagIds: sanitizeTagIds(values.defaultTagIds),
-  defaultLanguage: String(values.defaultLanguage ?? '').trim().toLowerCase() || undefined,
-  sourceLanguages: sanitizeStringList(metadata.sourceLanguages).map((language) => language.toLowerCase()),
-  contentTypes: sanitizeStringList(metadata.contentTypes),
-  homeSearch: {
-    enabled: Boolean(values.homeSearchEnabled),
-    query: String(values.homeSearchQuery ?? '').trim(),
-  },
-  bookmark: {
-    excludedFields: sanitizeBookmarkExcludedFields(values.bookmarkExcludedFields),
-  },
-  chapterDownloads: {
-    autoAssignSeries: Boolean(values.chapterDownloadsAutoAssignSeries),
-  },
-});
+): ScraperGlobalConfig => {
+  const latestModule = sanitizeLatestModule(values.latestModule, metadata.latestModules);
+
+  return {
+    defaultTagIds: sanitizeTagIds(values.defaultTagIds),
+    defaultLanguage: String(values.defaultLanguage ?? '').trim().toLowerCase() || undefined,
+    sourceLanguages: sanitizeStringList(metadata.sourceLanguages).map((language) => language.toLowerCase()),
+    contentTypes: sanitizeStringList(metadata.contentTypes),
+    homeSearch: {
+      enabled: Boolean(values.homeSearchEnabled),
+      query: String(values.homeSearchQuery ?? '').trim(),
+    },
+    latest: {
+      enabled: Boolean(values.latestEnabled) && metadata.latestModules.length > 0,
+      module: latestModule,
+    },
+    bookmark: {
+      excludedFields: sanitizeBookmarkExcludedFields(values.bookmarkExcludedFields),
+    },
+    chapterDownloads: {
+      autoAssignSeries: Boolean(values.chapterDownloadsAutoAssignSeries),
+    },
+  };
+};
 
 export default function ScraperGlobalSettingsEditor({
   onBack,
@@ -102,6 +124,23 @@ export default function ScraperGlobalSettingsEditor({
     () => scraper.features.some((feature) => feature.kind === 'search' && feature.status !== 'not_configured'),
     [scraper.features],
   );
+  const hasHomepage = useMemo(
+    () => scraper.features.some((feature) => feature.kind === 'homepage' && feature.status !== 'not_configured'),
+    [scraper.features],
+  );
+  const latestModuleOptions = useMemo(() => {
+    const options: Array<{ label: string; value: ScraperLatestModule }> = [];
+
+    if (hasHomepage) {
+      options.push({ label: 'Homepage', value: 'homepage' });
+    }
+
+    if (hasSearch) {
+      options.push({ label: 'Recherche', value: 'search' });
+    }
+
+    return options;
+  }, [hasHomepage, hasSearch]);
   const languageOptions = useMemo(() => (
     languages.map((language) => ({
       label: language.frenchName,
@@ -147,7 +186,24 @@ export default function ScraperGlobalSettingsEditor({
       type: 'text',
       placeholder: 'Optionnel. Laisse vide pour lancer une recherche globale.',
     },
-  ]), []);
+    {
+      name: 'latestEnabled',
+      label: 'Utiliser ce scrapper dans les nouveautes',
+      type: 'checkbox',
+      disabled: latestModuleOptions.length === 0,
+    },
+    {
+      name: 'latestModule',
+      label: 'Module des nouveautes',
+      type: 'select',
+      options: latestModuleOptions,
+      disabled: latestModuleOptions.length === 0,
+      disabledWhen: {
+        field: 'latestEnabled',
+        equals: false,
+      },
+    },
+  ]), [latestModuleOptions]);
 
   const initialValues = useMemo(() => ({
     defaultTagIds: scraper.globalConfig.defaultTagIds,
@@ -156,7 +212,12 @@ export default function ScraperGlobalSettingsEditor({
     chapterDownloadsAutoAssignSeries: scraper.globalConfig.chapterDownloads.autoAssignSeries,
     homeSearchEnabled: scraper.globalConfig.homeSearch.enabled,
     homeSearchQuery: scraper.globalConfig.homeSearch.query,
-  }), [scraper.globalConfig]);
+    latestEnabled: scraper.globalConfig.latest?.enabled ?? false,
+    latestModule: sanitizeLatestModule(
+      scraper.globalConfig.latest?.module,
+      latestModuleOptions.map((option) => option.value),
+    ),
+  }), [latestModuleOptions, scraper.globalConfig]);
 
   useEffect(() => {
     setSourceLanguages(scraper.globalConfig.sourceLanguages ?? []);
@@ -200,6 +261,24 @@ export default function ScraperGlobalSettingsEditor({
       : 'Recherche globale lancee sans terme pre-rempli';
   }, [scraper.globalConfig.homeSearch.enabled, scraper.globalConfig.homeSearch.query]);
 
+  const latestLabel = useMemo(() => {
+    if (!scraper.globalConfig.latest?.enabled) {
+      return 'Ce scrapper n\'est pas utilise dans les nouveautes';
+    }
+
+    if (scraper.globalConfig.latest.module === 'search') {
+      return scraper.globalConfig.homeSearch.query
+        ? `Recherche lancee avec "${scraper.globalConfig.homeSearch.query}"`
+        : 'Recherche lancee sans terme pre-rempli';
+    }
+
+    return 'Homepage utilisee pour les nouveautes';
+  }, [
+    scraper.globalConfig.homeSearch.query,
+    scraper.globalConfig.latest?.enabled,
+    scraper.globalConfig.latest?.module,
+  ]);
+
   const bookmarkLabel = useMemo(() => {
     const excludedFields = scraper.globalConfig.bookmark.excludedFields;
     if (!excludedFields.length) {
@@ -236,6 +315,7 @@ export default function ScraperGlobalSettingsEditor({
         globalConfig: buildGlobalConfig(values, {
           sourceLanguages,
           contentTypes,
+          latestModules: latestModuleOptions.map((option) => option.value),
         }),
       });
 
@@ -243,7 +323,7 @@ export default function ScraperGlobalSettingsEditor({
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Impossible d\'enregistrer les reglages globaux.');
     }
-  }, [contentTypes, scraper.id, sourceLanguages, updateScraper]);
+  }, [contentTypes, latestModuleOptions, scraper.id, sourceLanguages, updateScraper]);
 
   return (
     <section className="scraper-config-step">
@@ -338,6 +418,22 @@ export default function ScraperGlobalSettingsEditor({
         </div>
       ) : null}
 
+      <div className="scraper-config-note">
+        <strong>Nouveautes</strong>
+        <span>
+          Active ce scrapper pour le mode nouveautes, puis choisis si les resultats viennent du
+          module `Homepage` ou du module `Recherche`. En mode recherche, la recherche d&apos;accueil
+          ci-dessus sert de requete par defaut.
+        </span>
+      </div>
+
+      {latestModuleOptions.length === 0 ? (
+        <div className="scraper-validation-result__message is-warning">
+          Configure d&apos;abord le composant `Homepage` ou `Recherche` pour utiliser ce scrapper dans
+          les nouveautes.
+        </div>
+      ) : null}
+
       <Form
         fields={fields}
         initialValues={initialValues}
@@ -378,6 +474,10 @@ export default function ScraperGlobalSettingsEditor({
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Recherche d&apos;accueil</span>
           <strong>{homeSearchLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Nouveautes</span>
+          <strong>{latestLabel}</strong>
         </div>
       </div>
     </section>

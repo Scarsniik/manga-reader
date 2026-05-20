@@ -182,6 +182,7 @@ export default function ScraperSearchResultsSection({
               canOpenAuthorResult={canOpenAuthorResult}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              viewHistoryRecordingDisabled={loading}
               readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               addToLibraryAction={renderAddToLibraryAction ? renderAddToLibraryAction(result) : null}

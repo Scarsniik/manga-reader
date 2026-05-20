@@ -2,15 +2,8 @@ import React from "react";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
   HISTORY_MULTI_SOURCE_FILTER,
-  type HistoryTabDefinition,
   type HistoryTabId,
 } from "@/renderer/components/History/historyUtils";
-
-type TabsProps = {
-  tabs: HistoryTabDefinition[];
-  activeTab: HistoryTabId;
-  onChange: (tab: HistoryTabId) => void;
-};
 
 type FiltersProps = {
   activeTab: HistoryTabId;
@@ -29,9 +22,17 @@ type PaginationProps = {
   onNext: () => void;
 };
 
-export function HistoryTabs({ tabs, activeTab, onChange }: TabsProps) {
+export function HistoryTabs<TabId extends string>({ tabs, activeTab, onChange, ariaLabel = "Sections de l'historique" }: {
+  tabs: Array<{
+    id: TabId;
+    label: string;
+  }>;
+  activeTab: TabId;
+  onChange: (tab: TabId) => void;
+  ariaLabel?: string;
+}) {
   return (
-    <div className="history-view__tabs" role="tablist" aria-label="Sections de l'historique">
+    <div className="history-view__tabs" role="tablist" aria-label={ariaLabel}>
       {tabs.map((tab) => (
         <button
           key={tab.id}

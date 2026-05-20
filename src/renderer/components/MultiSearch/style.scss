@@ -344,6 +344,16 @@
   color: #cfe0ff;
   font-size: 13px;
   line-height: 1.45;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.multi-search__merge-progress.is-visible {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .multi-search__merge-progress progress {
@@ -362,10 +372,6 @@
 
 .multi-search__merge-progress progress::-webkit-progress-value {
   background: #5d9cff;
-}
-
-.multi-search__merge-progress.is-complete {
-  color: #9fb8d8;
 }
 
 .multi-search__text-filter-bar {

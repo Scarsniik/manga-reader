@@ -3,7 +3,9 @@ import {
   hasScraperFieldSelectorValue,
   ScraperAuthorFeatureConfig,
   ScraperCardListConfig,
+  ScraperHomepageFeatureConfig,
   ScraperRecord,
+  ScraperRequestConfig,
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
   ScraperTagFeatureConfig,
@@ -12,11 +14,14 @@ import {
   extractScraperSearchPageFromDocumentWithImageFallbacks,
   getScraperFeature,
   getScraperAuthorFeatureConfig,
+  getScraperHomepageFeatureConfig,
   getScraperSearchFeatureConfig,
   getScraperTagFeatureConfig,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasTagPagePlaceholder,
+  resolveScraperHomepageRequestConfig,
+  resolveScraperHomepageTargetUrl,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
   resolveScraperAuthorTargetUrl,
@@ -121,6 +126,19 @@ export const getSearchConfig = (scraper: ScraperRecord): ScraperSearchFeatureCon
   return searchConfig;
 };
 
+export const getHomepageConfig = (scraper: ScraperRecord): ScraperHomepageFeatureConfig => {
+  const homepageConfig = getScraperHomepageFeatureConfig(getScraperFeature(scraper, "homepage"));
+  if (
+    !homepageConfig?.urlTemplate
+    || !homepageConfig.resultItemSelector
+    || !hasScraperFieldSelectorValue(homepageConfig.titleSelector)
+  ) {
+    throw new Error("Le composant Homepage n'est pas suffisamment configure.");
+  }
+
+  return homepageConfig;
+};
+
 export const getAuthorConfig = (scraper: ScraperRecord): ScraperAuthorFeatureConfig => {
   const authorConfig = getScraperAuthorFeatureConfig(getScraperFeature(scraper, "author"));
   if (
@@ -218,6 +236,11 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
       query: string,
       pageIndex: number,
     ) => string;
+    resolveRequestConfig?: (
+      config: TConfig,
+      query: string,
+      pageIndex: number,
+    ) => ScraperRequestConfig | undefined;
   },
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
@@ -237,6 +260,7 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
   const documentResult = await fetchScraperDocument({
     baseUrl: scraper.baseUrl,
     targetUrl,
+    requestConfig: options.resolveRequestConfig?.(config, query, pageIndex),
   }) as FetchScraperDocumentResult;
 
   if (!documentResult?.ok || !documentResult.html) {
@@ -297,6 +321,45 @@ export const fetchAuthorPageWithRetry = async (
   paceConfig,
   () => fetchAuthorPage(scraper, authorConfig, query, pageIndex, nextPageUrl, templateContext),
   "Impossible de charger la page auteur.",
+);
+
+const fetchHomepagePage = async (
+  scraper: ScraperRecord,
+  homepageConfig: ScraperHomepageFeatureConfig,
+  pageIndex: number,
+  nextPageUrl?: string,
+): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
+  scraper,
+  homepageConfig,
+  "",
+  pageIndex,
+  nextPageUrl,
+  {
+    label: "homepage",
+    hasPagePlaceholder: hasSearchPagePlaceholder,
+    resolveTargetUrl: (baseUrl, config, _value, targetPageIndex) => resolveScraperHomepageTargetUrl(
+      baseUrl,
+      config,
+      { pageIndex: targetPageIndex },
+    ),
+    resolveRequestConfig: (config, _value, targetPageIndex) => resolveScraperHomepageRequestConfig(
+      config,
+      { pageIndex: targetPageIndex },
+    ),
+  },
+);
+
+export const fetchHomepagePageWithRetry = async (
+  scraper: ScraperRecord,
+  homepageConfig: ScraperHomepageFeatureConfig,
+  pageIndex: number,
+  nextPageUrl: string | undefined,
+  paceConfig: PaceConfig,
+): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
+  pageIndex,
+  paceConfig,
+  () => fetchHomepagePage(scraper, homepageConfig, pageIndex, nextPageUrl),
+  "Impossible de charger la page homepage.",
 );
 
 const fetchTagPage = async (
@@ -410,6 +473,15 @@ export const resolveHasNextAuthorPage = (
 ): boolean => resolveHasNextListingPage(
   hasAuthorPagePlaceholder(authorConfig),
   authorConfig.nextPageSelector,
+  page,
+);
+
+export const resolveHasNextHomepagePage = (
+  homepageConfig: ScraperHomepageFeatureConfig,
+  page: ScraperRuntimeSearchPageResult,
+): boolean => resolveHasNextListingPage(
+  hasSearchPagePlaceholder(homepageConfig),
+  homepageConfig.nextPageSelector,
   page,
 );
 

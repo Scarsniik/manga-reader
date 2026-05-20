@@ -123,6 +123,13 @@ export default function SettingsModalContent() {
           },
         },
         {
+          name: 'scraperLatestResultLimit',
+          label: 'Résultats nouveautés par scrapper',
+          type: 'number',
+          min: 1,
+          step: 1,
+        },
+        {
           name: 'stackMangaInSeries',
           label: 'Empiler les mangas dans une série dans la bibliothèque',
           type: 'checkbox',
@@ -202,6 +209,7 @@ export default function SettingsModalContent() {
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
+    const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
 
     // convert types
     const toSave: Record<string, any> = {
@@ -222,6 +230,7 @@ export default function SettingsModalContent() {
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
+      scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }

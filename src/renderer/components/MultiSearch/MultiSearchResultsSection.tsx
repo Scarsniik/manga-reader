@@ -44,6 +44,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  viewHistoryRecordingDisabled?: boolean;
   showUnseenFirst: boolean;
   isExportingJson: boolean;
   isExtractingAuthors: boolean;
@@ -84,14 +85,6 @@ const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSe
   tentativeAuthorNames: source.tentativeAuthorNames,
   contentTypes: source.contentTypes,
 });
-
-const formatMergeDuration = (durationMs: number): string => {
-  if (durationMs < 1000) {
-    return `${durationMs} ms`;
-  }
-
-  return `${(durationMs / 1000).toFixed(1)} s`;
-};
 
 const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
   if (progress.phase === "queued") {
@@ -140,6 +133,7 @@ export default function MultiSearchResultsSection({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  viewHistoryRecordingDisabled = false,
   showUnseenFirst,
   isExportingJson,
   isExtractingAuthors,
@@ -173,6 +167,11 @@ export default function MultiSearchResultsSection({
     () => sortMergedResultsByUnseen(mergedResults),
     [mergedResults, sortMergedResultsByUnseen],
   );
+  const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
+  const mergeProgressClassName = [
+    "multi-search__merge-progress",
+    mergeProgress.isActive ? "is-visible" : "",
+  ].filter(Boolean).join(" ");
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
       ? runs.map((run) => ({
@@ -190,21 +189,18 @@ export default function MultiSearchResultsSection({
           <div>
             <h3>Resultats fusionnes</h3>
             <p>{mergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s).</p>
-            {mergeProgress.isActive ? (
-              <div className="multi-search__merge-progress" role="status" aria-live="polite">
-                <span>{getMergeProgressLabel(mergeProgress)}</span>
-                {mergeProgress.totalSourceCount > 0 ? (
-                  <progress
-                    max={mergeProgress.totalSourceCount}
-                    value={Math.min(mergeProgress.processedSourceCount, mergeProgress.totalSourceCount)}
-                  />
-                ) : null}
-              </div>
-            ) : mergeProgress.durationMs !== undefined && loadedSourceCount > 0 ? (
-              <p className="multi-search__merge-progress is-complete">
-                Fusion prete en {formatMergeDuration(mergeProgress.durationMs)}.
-              </p>
-            ) : null}
+            <div
+              className={mergeProgressClassName}
+              role={mergeProgress.isActive ? "status" : undefined}
+              aria-live={mergeProgress.isActive ? "polite" : undefined}
+              aria-hidden={!mergeProgress.isActive}
+            >
+              <span>{getMergeProgressLabel(mergeProgress)}</span>
+              <progress
+                max={mergeProgressMax}
+                value={Math.min(mergeProgress.processedSourceCount, mergeProgressMax)}
+              />
+            </div>
             <div className="multi-search__result-filter-stack">
               <MultiSearchTextFilterBar
                 value={textFilter}
@@ -282,6 +278,7 @@ export default function MultiSearchResultsSection({
           sourceProgressIndex={sourceProgressIndex}
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newViewHistoryIds}
+          viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
@@ -355,6 +352,7 @@ export default function MultiSearchResultsSection({
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}

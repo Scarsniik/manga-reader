@@ -37,6 +37,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -61,6 +62,7 @@ function MeasuredMultiSearchResultCard({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  viewHistoryRecordingDisabled,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -151,6 +153,7 @@ function MeasuredMultiSearchResultCard({
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newViewHistoryIds}
+        viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
         onOpenProgressReader={onOpenProgressReader}
@@ -167,6 +170,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -431,6 +435,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}

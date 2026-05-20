@@ -51,7 +51,8 @@ Les modules utilisent `fetchScraperDocument` :
 - `Accept` oriente HTML
 - pour une image directe, le body n'est pas lu comme HTML ; seul le `content-type` sert a valider
 
-Le module `Recherche` peut aussi envoyer un `POST`. Les autres modules chargent une URL par `GET`.
+Les modules `Recherche` et `Homepage` peuvent aussi envoyer un `POST`. Les autres modules chargent
+une URL par `GET`.
 
 ## Regles communes des selecteurs
 
@@ -214,9 +215,15 @@ scraper.
 | `chapterDownloads.autoAssignSeries` | rattache les telechargements de chapitre a une serie creee depuis le titre de la fiche |
 | `homeSearch.enabled` | lance une recherche automatiquement a l'ouverture du scraper, si le module `Homepage` n'est pas utilise comme accueil |
 | `homeSearch.query` | requete utilisee pour cette recherche d'accueil, vide pour une recherche globale |
+| `latest.enabled` | active le scraper dans l'onglet `Scrappers` du mode `Nouveautes` |
+| `latest.module` | module utilise pour les nouveautes du scraper : `homepage` ou `search` |
 
 Les champs de bookmark excluables sont : `cover`, `summary`, `description`, `authors`, `tags`,
 `mangaStatus`, `pageCount`.
+
+Le mode `Nouveautes` possede aussi un parametre applicatif global :
+`scraperLatestResultLimit`. Il indique combien de resultats non vus chercher par scraper active. Le
+minimum est 1 et aucune limite haute n'est appliquee.
 
 ## Module Homepage
 

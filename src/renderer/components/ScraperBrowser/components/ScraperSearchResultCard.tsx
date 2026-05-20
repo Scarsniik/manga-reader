@@ -16,6 +16,7 @@ type Props = {
   canOpenAuthorResult: boolean;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  viewHistoryRecordingDisabled?: boolean;
   readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
@@ -38,6 +39,7 @@ export default function ScraperSearchResultCard({
   canOpenAuthorResult,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  viewHistoryRecordingDisabled = false,
   readAction,
   bookmarkAction,
   addToLibraryAction,
@@ -121,6 +123,7 @@ export default function ScraperSearchResultCard({
       identities={viewHistoryIdentities}
       recordsById={viewHistoryRecordsById}
       newCardIds={newViewHistoryIds}
+      recordingDisabled={viewHistoryRecordingDisabled}
     >
       {({ historyClassName, onViewed }) => (
         <ScraperCard

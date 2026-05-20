@@ -33,6 +33,8 @@ const MAX_READER_SCROLL_START_BOOST = 250;
 const DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
 const MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
 const MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 20;
+const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT = 20;
+const MIN_SCRAPER_LATEST_RESULT_LIMIT = 1;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -84,6 +86,20 @@ const normalizeIntegerSetting = (
     }
 
     return Math.max(min, Math.min(max, Math.floor(parsed)));
+};
+
+const normalizeIntegerSettingWithoutMax = (
+    value: unknown,
+    fallback: number,
+    min: number,
+): number => {
+    const parsed = parseNumericSetting(value);
+
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return Math.max(min, Math.floor(parsed));
 };
 
 const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
@@ -187,6 +203,14 @@ const normalizeScraperAuthorFavoritePageCount = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestResultLimit = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+        MIN_SCRAPER_LATEST_RESULT_LIMIT,
+    )
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -265,6 +289,7 @@ const defaultSettings = {
     scraperTagFavoriteShowUnseenFirst: true,
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
+    scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     stackMangaInSeries: true,
     mangaListFilters: null,
     appUpdateAutoCheck: true,
@@ -318,6 +343,7 @@ const normalizeSettings = (value: unknown) => {
         ? merged.readerRecommendBookmarks
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
+    merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
         : defaultSettings.multiSearchShowUnseenFirst;
@@ -541,6 +567,7 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(
             nextSettings.scraperAuthorFavoritePageCount,
         );
+        nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;

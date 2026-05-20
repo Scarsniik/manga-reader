@@ -39,6 +39,7 @@ export type AppParams = {
     scraperTagFavoriteShowUnseenFirst?: boolean;
     scraperAuthorFavoritePageCount?: number;
     scraperAuthorFavoriteCacheResults?: boolean;
+    scraperLatestResultLimit?: number;
     mangaListFilters?: LibrarySearchFilterState | null;
     [key: string]: any;
 };

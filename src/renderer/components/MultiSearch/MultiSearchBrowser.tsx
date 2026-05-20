@@ -914,6 +914,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
+        viewHistoryRecordingDisabled={isSearching}
         showUnseenFirst={showUnseenFirst}
         isExportingJson={isExportingJson}
         isExtractingAuthors={isExtractingAuthors}

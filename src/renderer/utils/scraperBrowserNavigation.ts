@@ -4,6 +4,7 @@ export const SCRAPER_MULTI_SEARCH_VIEW_ID = 'multi-search';
 export const SCRAPER_AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
 export const SCRAPER_TAG_FAVORITES_VIEW_ID = 'tag-favorites';
 export const SCRAPER_HISTORY_VIEW_ID = 'history';
+export const SCRAPER_LATEST_VIEW_ID = 'latest';
 
 export type MultiSearchPrefillLocationState = {
   multiSearchPrefillQuery?: string;

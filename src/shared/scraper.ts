@@ -172,6 +172,13 @@ export interface ScraperHomeSearchConfig {
   query: string;
 }
 
+export type ScraperLatestModule = 'homepage' | 'search';
+
+export interface ScraperLatestConfig {
+  enabled: boolean;
+  module: ScraperLatestModule;
+}
+
 export type ScraperBookmarkMetadataField =
   | 'cover'
   | 'summary'
@@ -196,6 +203,7 @@ export interface ScraperGlobalConfig {
   sourceLanguages: string[];
   contentTypes: string[];
   homeSearch: ScraperHomeSearchConfig;
+  latest: ScraperLatestConfig;
   bookmark: ScraperBookmarkConfig;
   chapterDownloads: ScraperChapterDownloadConfig;
 }
@@ -819,6 +827,10 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
     homeSearch: {
       enabled: false,
       query: '',
+    },
+    latest: {
+      enabled: false,
+      module: 'homepage',
     },
     bookmark: {
       excludedFields: [],

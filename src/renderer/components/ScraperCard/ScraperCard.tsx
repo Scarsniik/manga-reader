@@ -65,38 +65,8 @@ const isInteractiveMiddleClickTarget = (
   return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
 };
 
-const getScrollViewBand = (): { top: number; bottom: number } => {
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-  return {
-    top: viewportHeight * 0.25,
-    bottom: viewportHeight * 0.75,
-  };
-};
-
-const isInsideScrollViewBand = (element: HTMLElement): boolean => {
-  const rect = element.getBoundingClientRect();
-  const band = getScrollViewBand();
-
-  return rect.top <= band.bottom && rect.bottom >= band.top;
-};
-
-const getScrollableParent = (element: HTMLElement): HTMLElement | Window => {
-  let parent = element.parentElement;
-
-  while (parent) {
-    const style = window.getComputedStyle(parent);
-    const overflowY = style.overflowY;
-    const canScroll = overflowY === 'auto' || overflowY === 'scroll';
-
-    if (canScroll && parent.scrollHeight > parent.clientHeight) {
-      return parent;
-    }
-
-    parent = parent.parentElement;
-  }
-
-  return window;
-};
+const VIEWED_INTERSECTION_RATIO = 0.8;
+const VIEWED_DWELL_MS = 1000;
 
 export default function ScraperCard({
   title,
@@ -130,51 +100,75 @@ export default function ScraperCard({
   }, [onViewed]);
 
   React.useEffect(() => {
-    if (!canReportView || typeof window === 'undefined') {
+    if (
+      !canReportView
+      || hasReportedViewRef.current
+      || typeof window === 'undefined'
+      || typeof IntersectionObserver === 'undefined'
+    ) {
       return undefined;
     }
 
-    let frameId: number | null = null;
     const article = articleRef.current;
-    const scrollTarget = article ? getScrollableParent(article) : window;
+    if (!article) {
+      return undefined;
+    }
 
-    const reportIfCardIsPassed = () => {
+    let viewedTimeoutId: number | null = null;
+    let currentIntersectionRatio = 0;
+    let observer: IntersectionObserver | null = null;
+
+    const clearViewedTimeout = () => {
+      if (viewedTimeoutId === null) {
+        return;
+      }
+
+      window.clearTimeout(viewedTimeoutId);
+      viewedTimeoutId = null;
+    };
+
+    const reportIfCardStayedVisible = () => {
+      viewedTimeoutId = null;
       if (hasReportedViewRef.current) {
         return;
       }
 
-      const currentArticle = articleRef.current;
-      if (!currentArticle || !isInsideScrollViewBand(currentArticle)) {
+      if (currentIntersectionRatio < VIEWED_INTERSECTION_RATIO) {
         return;
       }
 
       hasReportedViewRef.current = true;
       onViewedRef.current?.();
-      scrollTarget.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
+      observer?.disconnect();
     };
 
-    const handleScroll = () => {
-      if (frameId !== null) {
+    const scheduleViewedTimeout = () => {
+      if (viewedTimeoutId !== null) {
         return;
       }
 
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        reportIfCardIsPassed();
-      });
+      viewedTimeoutId = window.setTimeout(reportIfCardStayedVisible, VIEWED_DWELL_MS);
     };
 
-    scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleScroll, { passive: true });
+    observer = new IntersectionObserver((entries) => {
+      const entry = entries.find((item) => item.target === article);
+      currentIntersectionRatio = entry?.intersectionRatio ?? 0;
 
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
+      if (currentIntersectionRatio >= VIEWED_INTERSECTION_RATIO) {
+        scheduleViewedTimeout();
+        return;
       }
 
-      scrollTarget.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
+      clearViewedTimeout();
+    }, {
+      threshold: [0, VIEWED_INTERSECTION_RATIO],
+    });
+
+    observer.observe(article);
+
+    return () => {
+      clearViewedTimeout();
+      observer?.disconnect();
     };
   }, [canReportView]);
 

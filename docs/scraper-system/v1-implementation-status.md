@@ -164,6 +164,7 @@ Les reglages globaux du scraper couvrent maintenant :
 - les tags appliques automatiquement au telechargement
 - la langue par defaut des mangas importes
 - la recherche d'accueil eventuelle, distincte du module executable `Homepage`
+- l'activation du scraper dans le mode `Nouveautes`, avec choix du module `Homepage` ou `Recherche`
 - les metadonnees de bookmark a exclure du stockage local
 
 Pour les bookmarks, une section dediee permet de choisir plusieurs informations a ne pas conserver, par exemple :
@@ -419,6 +420,7 @@ Dans la V1 actuelle, le runtime reel branche est surtout :
 - `Recherche`
 - `Manga` via `Fiche`
 - `Auteur`
+- `Nouveautes` via les auteurs favoris et les scrapers actives
 
 Le mode `Homepage` permet deja :
 

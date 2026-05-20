@@ -246,6 +246,7 @@ export default function ScraperAuthorCombinedResults({
                 sourceProgressIndex={sourceProgressIndex}
                 viewHistoryRecordsById={viewHistoryRecordsById}
                 newViewHistoryIds={newViewHistoryIds}
+                viewHistoryRecordingDisabled={loading}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
                 onOpenProgressReader={onOpenProgressReader}

@@ -21,6 +21,7 @@ type Props = {
   identities: ScraperViewHistoryCardIdentity[];
   recordsById: Map<string, ScraperViewHistoryRecord>;
   newCardIds: Set<string>;
+  recordingDisabled?: boolean;
   children: (props: RenderProps) => React.ReactElement;
 };
 
@@ -28,6 +29,7 @@ export default function ScraperViewHistoryCard({
   identities,
   recordsById,
   newCardIds,
+  recordingDisabled = false,
   children,
 }: Props) {
   const uniqueIdentities = React.useMemo(
@@ -52,6 +54,6 @@ export default function ScraperViewHistoryCard({
   return children({
     viewState,
     historyClassName,
-    onViewed: uniqueIdentities.length ? handleViewed : undefined,
+    onViewed: uniqueIdentities.length && !recordingDisabled ? handleViewed : undefined,
   });
 }

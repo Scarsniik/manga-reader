@@ -33,6 +33,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -116,6 +117,7 @@ export default function MultiSearchResultCard({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -464,6 +466,7 @@ export default function MultiSearchResultCard({
       identities={viewHistoryIdentities}
       recordsById={viewHistoryRecordsById}
       newCardIds={newViewHistoryIds}
+      recordingDisabled={viewHistoryRecordingDisabled}
     >
       {({ historyClassName, onViewed }) => (
         <ScraperCard

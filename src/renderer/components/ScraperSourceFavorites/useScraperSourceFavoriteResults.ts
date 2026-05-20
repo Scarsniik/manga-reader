@@ -37,6 +37,7 @@ type SourceFavoriteResultsState = {
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
+  viewHistoryLoaded: boolean;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newSourceHistoryIds: Set<string>;
   openError: string | null;
@@ -326,6 +327,7 @@ export default function useScraperSourceFavoriteResults({
     libraryMangas,
     bookmarkedSourceKeys,
     sourceProgressIndex,
+    viewHistoryLoaded,
     viewHistoryRecordsById,
     newSourceHistoryIds,
     openError,

@@ -321,7 +321,7 @@ Les cartes de resultats multi-source utilisent le meme historique de vue que les
 Pour une carte fusionnee, l'etat est calcule sur toutes les sources de la carte : si au moins une source n'a jamais
 ete vue dans l'historique courant, la carte est marquee comme nouvelle.
 
-Quand une carte fusionnee passe dans la zone de lecture pendant le scroll, toutes ses sources sont enregistrees comme
+Quand au moins 80% d'une carte fusionnee reste visible dans le viewport pendant 1 seconde, toutes ses sources sont enregistrees comme
 vues.
 
 ---
