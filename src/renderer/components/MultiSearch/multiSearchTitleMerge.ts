@@ -2,11 +2,13 @@ import {
   isTitleLanguageMarker,
   stripTitleLanguageMarkers,
 } from "@/renderer/utils/languageDetection";
+import { getJapaneseRomajiVariants } from "@/renderer/utils/japaneseRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 
 const TENTATIVE_AUTHOR_PREFIX_PATTERN = /^\s*(?:\([^)]*\)\s*)*(?:\[\s*([^\]]+?)\s*]\s*)+/;
 const TENTATIVE_AUTHOR_NAME_PATTERN = /\[\s*([^\]]+?)\s*]/g;
 const SEQUENCE_MARKER_PATTERN = /^(?:\d+|i|ii|iii|iv|v|vi|vii|viii|ix|x)$/;
+const COMPACT_TITLE_MIN_CHARACTERS = 8;
 const FUZZY_TITLE_MAX_EDIT_DISTANCE = 1;
 const FUZZY_TITLE_MIN_CHARACTERS = 25;
 const FUZZY_TITLE_MIN_TOKENS = 5;
@@ -109,6 +111,7 @@ const normalizeTitleText = (value: string, removeParentheses = false): string =>
   stripTitleLanguageMarkers(value)
     .replace(/(?:\[[^\]]*]|\{[^}]*})/g, " ")
     .replace(removeParentheses ? /\([^)]*\)/g : /$^/g, " ")
+    .normalize("NFKC")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/['’`]/g, "")
@@ -118,11 +121,30 @@ const normalizeTitleText = (value: string, removeParentheses = false): string =>
     .replace(/\s+/g, " ")
 );
 
+const getCompactTitleVariant = (value: string): string => {
+  const compactValue = value.replace(/\s+/g, "");
+
+  return compactValue !== value && Array.from(compactValue).length >= COMPACT_TITLE_MIN_CHARACTERS
+    ? compactValue
+    : "";
+};
+
+const addCompactTitleVariants = (values: string[]): string[] => (
+  uniqueValues([
+    ...values,
+    ...values.map(getCompactTitleVariant),
+  ])
+);
+
 const getMergeTitleVariants = (value: string): string[] => (
-  Array.from(new Set([
+  addCompactTitleVariants([
     normalizeTitleText(value),
     normalizeTitleText(value, true),
-  ])).filter(Boolean)
+    ...getJapaneseRomajiVariants(value).flatMap((variant) => [
+      normalizeTitleText(variant),
+      normalizeTitleText(variant, true),
+    ]),
+  ]).filter(Boolean)
 );
 
 const getTitleAlternatives = (value: string): string[] => {
@@ -146,12 +168,12 @@ const hasDifferentSequenceMarkerSets = (
   || [...rightMarkers].some((marker) => !leftMarkers.has(marker))
 );
 
-const normalizeTentativeAuthorName = (value: string): string => (
-  normalizeTitleText(value)
+const getNormalizedTentativeAuthorNameVariants = (value: string): string[] => (
+  getMergeTitleVariants(value)
 );
 
 const normalizeTentativeAuthorNames = (values: string[]): string[] => (
-  values.map(normalizeTentativeAuthorName).filter(Boolean)
+  uniqueValues(values.flatMap(getNormalizedTentativeAuthorNameVariants))
 );
 
 const haveConflictingNormalizedTentativeAuthors = (
