@@ -20,6 +20,7 @@ import {
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasTagPagePlaceholder,
+  isScraperListingPaginationEndError,
   resolveScraperHomepageRequestConfig,
   resolveScraperHomepageTargetUrl,
   resolveScraperSearchRequestConfig,
@@ -27,6 +28,7 @@ import {
   resolveScraperAuthorTargetUrl,
   resolveScraperTagTargetUrl,
   ScraperRuntimeSearchPageResult,
+  throwIfScraperListingPaginationEnded,
 } from "@/renderer/utils/scraperRuntime";
 import {
   canOpenScraperDetails,
@@ -83,6 +85,10 @@ const fetchPageWithRetry = async (
 
       return await loadPage();
     } catch (error) {
+      if (isScraperListingPaginationEndError(error)) {
+        throw error;
+      }
+
       lastError = error;
       if (attempt < paceConfig.retryCount) {
         await wait(paceConfig.pageDelayMs);
@@ -191,6 +197,12 @@ const fetchSearchPage = async (
   }) as FetchScraperDocumentResult;
 
   if (!documentResult?.ok || !documentResult.html) {
+    throwIfScraperListingPaginationEnded(documentResult, {
+      pageIndex,
+      targetUrl,
+      usesTemplatePaging,
+    });
+
     throw new Error(
       documentResult?.error
       || (typeof documentResult?.status === "number"
@@ -264,6 +276,12 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
   }) as FetchScraperDocumentResult;
 
   if (!documentResult?.ok || !documentResult.html) {
+    throwIfScraperListingPaginationEnded(documentResult, {
+      pageIndex,
+      targetUrl,
+      usesTemplatePaging,
+    });
+
     throw new Error(
       documentResult?.error
       || (typeof documentResult?.status === "number"

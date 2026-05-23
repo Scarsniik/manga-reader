@@ -27,6 +27,7 @@ import {
   upsertTermRun,
 } from "@/renderer/components/MultiSearch/multiSearchRunState";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
+import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 
 type RunSearchOptions = {
   query: string;
@@ -154,7 +155,8 @@ export default function useMultiSearch() {
         return null;
       }
 
-      const hasPartialResults = run.loadedPages > 0 || run.results.length > 0;
+      const hasPartialResults =
+        isScraperListingPaginationEndError(loadError) || run.loadedPages > 0 || run.results.length > 0;
       const failedTermRun: MultiSearchTermRun = {
         ...termRun,
         hasNextPage: false,

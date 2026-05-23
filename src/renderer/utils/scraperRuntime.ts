@@ -4,6 +4,7 @@ export * from "@/renderer/utils/scraperRuntime/featureConfig";
 export * from "@/renderer/utils/scraperRuntime/urlResolution";
 export * from "@/renderer/utils/scraperRuntime/selectorExtraction";
 export * from "@/renderer/utils/scraperRuntime/searchExtraction";
+export * from "@/renderer/utils/scraperRuntime/listingPagination";
 export * from "@/renderer/utils/scraperRuntime/identity";
 export * from "@/renderer/utils/scraperRuntime/pageTemplates";
 export * from "@/renderer/utils/scraperRuntime/detailsExtraction";

@@ -21,6 +21,7 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
+import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = "homepage" | "search";
@@ -199,11 +200,14 @@ export default function useScraperLatestRuns() {
 
         patchRun(token, run.key, () => run);
       } catch (loadError) {
+        const isPaginationEnd = isScraperListingPaginationEndError(loadError);
         run = {
           ...run,
-          status: run.results.length ? "done" : "error",
+          status: run.results.length || isPaginationEnd ? "done" : "error",
           hasNextPage: false,
-          error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
+          error: isPaginationEnd
+            ? undefined
+            : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
         };
 
         patchRun(token, run.key, () => run);

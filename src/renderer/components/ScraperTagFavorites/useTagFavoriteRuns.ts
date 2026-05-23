@@ -15,6 +15,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
+import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 
 export type TagFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -171,11 +172,14 @@ export default function useTagFavoriteRuns(
       }
       return nextRun;
     } catch (loadError) {
+      const isPaginationEnd = isScraperListingPaginationEndError(loadError);
       const failedRun: TagFavoriteSourceRun = {
         ...run,
-        status: run.results.length ? "done" : "error",
+        status: run.results.length || isPaginationEnd ? "done" : "error",
         hasNextPage: false,
-        error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
+        error: isPaginationEnd
+          ? undefined
+          : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
       };
 
       if (updateState) {

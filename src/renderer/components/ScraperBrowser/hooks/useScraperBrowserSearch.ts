@@ -20,11 +20,13 @@ import {
   buildSearchPageLoadedMessage,
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
+  buildScraperListingPaginationEndPage,
   extractScraperSearchPageFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasTagPagePlaceholder,
+  isScraperListingPaginationEndError,
   resolveScraperAuthorTargetUrl,
   resolveScraperHomepageRequestConfig,
   resolveScraperHomepageTargetUrl,
@@ -33,6 +35,7 @@ import {
   resolveScraperTagTargetUrl,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
+  throwIfScraperListingPaginationEnded,
 } from '@/renderer/utils/scraperRuntime';
 import {
   parseScraperRouteState,
@@ -49,6 +52,12 @@ export type ListingLookupOptions = {
 
 type OpenResultOptions = {
   listingReturnState?: ScraperListingReturnState | null;
+};
+
+type FetchListingPageOptions = {
+  pageIndex?: number;
+  query?: string;
+  usesTemplatePaging?: boolean;
 };
 
 type UseScraperBrowserSearchOptions = {
@@ -272,9 +281,7 @@ export function useScraperBrowserSearch({
 }: UseScraperBrowserSearchOptions) {
   const fetchHomepagePage = useCallback(async (
     targetUrl: string,
-    options?: {
-      pageIndex?: number;
-    },
+    options?: FetchListingPageOptions,
   ): Promise<ScraperRuntimeSearchPageResult> => {
     if (
       !homepageConfig?.urlTemplate
@@ -298,6 +305,12 @@ export function useScraperBrowserSearch({
     });
 
     if (!documentResult?.ok || !documentResult.html) {
+      throwIfScraperListingPaginationEnded(documentResult, {
+        pageIndex: options?.pageIndex ?? 0,
+        targetUrl,
+        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
+      });
+
       throw new Error(
         documentResult?.error
           || (typeof documentResult?.status === 'number'
@@ -316,10 +329,7 @@ export function useScraperBrowserSearch({
 
   const fetchSearchPage = useCallback(async (
     targetUrl: string,
-    options?: {
-      query?: string;
-      pageIndex?: number;
-    },
+    options?: FetchListingPageOptions,
   ): Promise<ScraperRuntimeSearchPageResult> => {
     if (
       !searchConfig?.urlTemplate
@@ -343,6 +353,12 @@ export function useScraperBrowserSearch({
     });
 
     if (!documentResult?.ok || !documentResult.html) {
+      throwIfScraperListingPaginationEnded(documentResult, {
+        pageIndex: options?.pageIndex ?? 0,
+        targetUrl,
+        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
+      });
+
       throw new Error(
         documentResult?.error
           || (typeof documentResult?.status === 'number'
@@ -361,6 +377,7 @@ export function useScraperBrowserSearch({
 
   const fetchAuthorPage = useCallback(async (
     targetUrl: string,
+    options?: FetchListingPageOptions,
   ): Promise<ScraperRuntimeSearchPageResult> => {
     if (!authorConfig?.resultItemSelector || !hasScraperFieldSelectorValue(authorConfig.titleSelector)) {
       throw new Error('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
@@ -377,6 +394,12 @@ export function useScraperBrowserSearch({
     });
 
     if (!documentResult?.ok || !documentResult.html) {
+      throwIfScraperListingPaginationEnded(documentResult, {
+        pageIndex: options?.pageIndex ?? 0,
+        targetUrl,
+        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
+      });
+
       throw new Error(
         documentResult?.error
           || (typeof documentResult?.status === 'number'
@@ -395,6 +418,7 @@ export function useScraperBrowserSearch({
 
   const fetchTagPage = useCallback(async (
     targetUrl: string,
+    options?: FetchListingPageOptions,
   ): Promise<ScraperRuntimeSearchPageResult> => {
     if (!tagConfig?.resultItemSelector || !hasScraperFieldSelectorValue(tagConfig.titleSelector)) {
       throw new Error('Le composant Tag n\'est pas encore suffisamment configure pour etre execute.');
@@ -411,6 +435,12 @@ export function useScraperBrowserSearch({
     });
 
     if (!documentResult?.ok || !documentResult.html) {
+      throwIfScraperListingPaginationEnded(documentResult, {
+        pageIndex: options?.pageIndex ?? 0,
+        targetUrl,
+        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
+      });
+
       throw new Error(
         documentResult?.error
           || (typeof documentResult?.status === 'number'
@@ -454,16 +484,18 @@ export function useScraperBrowserSearch({
     const fetchPage = async (
       targetUrl: string,
       pageIndex: number,
+      pageUsesTemplatePaging: boolean,
     ): Promise<ScraperRuntimeSearchPageResult> => (
       listingMode === 'author'
-        ? fetchAuthorPage(targetUrl)
+        ? fetchAuthorPage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
         : listingMode === 'tag'
-          ? fetchTagPage(targetUrl)
+          ? fetchTagPage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
         : listingMode === 'homepage'
-          ? fetchHomepagePage(targetUrl, { pageIndex })
+          ? fetchHomepagePage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
         : fetchSearchPage(targetUrl, {
           query: nextQuery,
           pageIndex,
+          usesTemplatePaging: pageUsesTemplatePaging,
         })
     );
 
@@ -482,10 +514,20 @@ export function useScraperBrowserSearch({
 
     if (usesTemplatePaging) {
       const targetUrl = resolveTargetUrl(normalizedTargetPageIndex);
-      const page = await fetchPage(targetUrl, normalizedTargetPageIndex);
       const visitedPageUrls = Array.from({ length: normalizedTargetPageIndex + 1 }, (_, index) => (
         resolveTargetUrl(index)
       ));
+      let page: ScraperRuntimeSearchPageResult;
+
+      try {
+        page = await fetchPage(targetUrl, normalizedTargetPageIndex, true);
+      } catch (error) {
+        if (!isScraperListingPaginationEndError(error)) {
+          throw error;
+        }
+
+        page = buildScraperListingPaginationEndPage(error);
+      }
 
       return {
         page,
@@ -495,13 +537,13 @@ export function useScraperBrowserSearch({
       };
     }
 
-    const firstPage = await fetchPage(resolveTargetUrl(0), 0);
+    const firstPage = await fetchPage(resolveTargetUrl(0), 0, false);
     const visitedPageUrls = [firstPage.currentPageUrl];
     let currentPage = firstPage;
     let currentPageIndex = 0;
 
     while (currentPageIndex < normalizedTargetPageIndex && currentPage.nextPageUrl) {
-      const nextPage = await fetchPage(currentPage.nextPageUrl, currentPageIndex + 1);
+      const nextPage = await fetchPage(currentPage.nextPageUrl, currentPageIndex + 1, false);
       if (!nextPage.items.length) {
         break;
       }
@@ -717,17 +759,20 @@ export function useScraperBrowserSearch({
     setRuntimeError(null);
 
     try {
+      const nextPageOptions = {
+        pageIndex: nextPageIndex,
+        usesTemplatePaging,
+      };
       const nextPage = mode === 'author'
-        ? await fetchAuthorPage(nextPageTargetUrl)
+        ? await fetchAuthorPage(nextPageTargetUrl, nextPageOptions)
         : mode === 'tag'
-          ? await fetchTagPage(nextPageTargetUrl)
+          ? await fetchTagPage(nextPageTargetUrl, nextPageOptions)
         : mode === 'homepage'
-          ? await fetchHomepagePage(nextPageTargetUrl, {
-            pageIndex: nextPageIndex,
-          })
+          ? await fetchHomepagePage(nextPageTargetUrl, nextPageOptions)
         : await fetchSearchPage(nextPageTargetUrl, {
           query,
           pageIndex: nextPageIndex,
+          usesTemplatePaging,
         });
       if (!nextPage.items.length) {
         setRuntimeMessage(
@@ -758,6 +803,11 @@ export function useScraperBrowserSearch({
       ));
       scrollToBrowserTop();
     } catch (error) {
+      if (isScraperListingPaginationEndError(error)) {
+        setRuntimeMessage('Aucune page suivante disponible.');
+        return;
+      }
+
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de charger la page suivante.');
     } finally {
       setLoading(false);

@@ -19,6 +19,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
+import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 
 export type AuthorFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -242,11 +243,14 @@ export default function useAuthorFavoriteRuns(
       }
       return nextRun;
     } catch (loadError) {
+      const isPaginationEnd = isScraperListingPaginationEndError(loadError);
       const failedRun: AuthorFavoriteSourceRun = {
         ...run,
-        status: run.results.length ? "done" : "error",
+        status: run.results.length || isPaginationEnd ? "done" : "error",
         hasNextPage: false,
-        error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
+        error: isPaginationEnd
+          ? undefined
+          : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
       };
 
       if (updateState) {
