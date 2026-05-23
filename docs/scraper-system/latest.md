@@ -21,6 +21,10 @@ Chaque scraper choisit son module de collecte :
 Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Si une
 valeur tres grande est configuree, le runtime suit ce choix et peut donc charger beaucoup de pages.
 
+La vue affiche un avertissement si l'historique de vue des cards n'est pas configure en illimite
+sur la limite globale, la conservation des cards vues et la conservation des cards lues. Dans ce
+cas, des cards deja vues peuvent redevenir des nouveautes apres nettoyage automatique.
+
 ## Onglet Auteurs
 
 L'onglet `Auteurs` regroupe toutes les sources des auteurs favoris. Il charge les pages auteur avec

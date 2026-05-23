@@ -2,12 +2,15 @@ import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import {
   createDefaultScraperFeatures,
+  normalizeScraperViewHistorySettings,
   type ScraperBookmarkRecord,
   type ScraperFeatureDefinition,
   type ScraperReaderProgressRecord,
   type ScraperRecord,
+  type ScraperViewHistorySettings,
   type ScraperViewHistoryRecord,
 } from "../../scraper";
+import { getSettings } from "../params";
 import {
   ensureDataDir,
   scraperBookmarksFilePath,
@@ -250,10 +253,11 @@ export async function writeScraperReaderProgressFile(
   await fs.writeFile(scraperReaderProgressFilePath, JSON.stringify(records, null, 2));
 }
 
-const SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
-const SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS = 45;
-const SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const getScraperViewHistorySettings = async (): Promise<ScraperViewHistorySettings> => (
+  normalizeScraperViewHistorySettings(await getSettings())
+);
 
 const getScraperViewHistoryActivityTime = (record: ScraperViewHistoryRecord): number => {
   const candidates = [
@@ -284,22 +288,30 @@ const sortScraperViewHistory = (records: ScraperViewHistoryRecord[]): ScraperVie
 
 const pruneScraperViewHistory = (
   records: ScraperViewHistoryRecord[],
+  settings: ScraperViewHistorySettings,
   now = new Date(),
 ): ScraperViewHistoryRecord[] => {
   const nowTime = now.getTime();
-  const seenCutoff = nowTime - (SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS * DAY_MS);
-  const readCutoff = nowTime - (SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS * DAY_MS);
+  const seenRetentionDays = settings.scraperViewHistorySeenRetentionDays;
+  const readRetentionDays = settings.scraperViewHistoryReadRetentionDays;
+  const maxRecords = settings.scraperViewHistoryMaxRecords;
+  const seenCutoff = nowTime - (seenRetentionDays * DAY_MS);
+  const readCutoff = nowTime - (readRetentionDays * DAY_MS);
   const freshRecords = records.filter((record) => {
     const activityTime = getScraperViewHistoryActivityTime(record);
     if (!activityTime) {
       return false;
     }
 
-    return activityTime >= (record.readAt ? readCutoff : seenCutoff);
+    if (record.readAt) {
+      return readRetentionDays === 0 || activityTime >= readCutoff;
+    }
+
+    return seenRetentionDays === 0 || activityTime >= seenCutoff;
   });
 
   const sorted = sortScraperViewHistory(freshRecords);
-  if (sorted.length <= SCRAPER_VIEW_HISTORY_MAX_RECORDS) {
+  if (maxRecords === 0 || sorted.length <= maxRecords) {
     return sorted;
   }
 
@@ -309,7 +321,7 @@ const pruneScraperViewHistory = (
   return sortScraperViewHistory([
     ...readRecords,
     ...seenRecords,
-  ].slice(0, SCRAPER_VIEW_HISTORY_MAX_RECORDS));
+  ].slice(0, maxRecords));
 };
 
 const parseScraperViewHistoryFileData = (
@@ -353,7 +365,7 @@ export async function readScraperViewHistoryFile(): Promise<ScraperViewHistoryRe
         .map((record) => sanitizeScraperViewHistoryRecord(record))
         .filter((record): record is ScraperViewHistoryRecord => Boolean(record))
       : [];
-    const pruned = pruneScraperViewHistory(sanitized);
+    const pruned = pruneScraperViewHistory(sanitized, await getScraperViewHistorySettings());
 
     const normalizedRaw = JSON.stringify(parsed, null, 2);
     const normalizedSanitized = JSON.stringify(pruned, null, 2);
@@ -379,5 +391,6 @@ export async function writeScraperViewHistoryFile(
   records: ScraperViewHistoryRecord[],
 ): Promise<void> {
   await ensureDataDir();
-  await fs.writeFile(scraperViewHistoryFilePath, JSON.stringify(pruneScraperViewHistory(records), null, 2));
+  const settings = await getScraperViewHistorySettings();
+  await fs.writeFile(scraperViewHistoryFilePath, JSON.stringify(pruneScraperViewHistory(records, settings), null, 2));
 }

@@ -2,6 +2,12 @@ import { app } from "electron";
 import { promises as fs } from "fs";
 import path from "path";
 import { LEGACY_ROAMING_CONFIG_DIR_NAMES, LEGACY_USER_DATA_DIR_NAMES } from "../appIdentity";
+import {
+    DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
+    DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
+    DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
+    normalizeScraperViewHistorySettings,
+} from "../scraper";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
@@ -291,6 +297,9 @@ const defaultSettings = {
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
+    scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
+    scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
     stackMangaInSeries: true,
     mangaListFilters: null,
     appUpdateAutoCheck: true,
@@ -345,6 +354,7 @@ const normalizeSettings = (value: unknown) => {
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
+    Object.assign(merged, normalizeScraperViewHistorySettings(merged));
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
         : defaultSettings.multiSearchShowUnseenFirst;
@@ -572,6 +582,7 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        Object.assign(nextSettings, normalizeScraperViewHistorySettings(nextSettings));
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
             ? nextSettings.multiSearchEnableRomajiPhoneticMerge
             : defaultSettings.multiSearchEnableRomajiPhoneticMerge;

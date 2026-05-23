@@ -1,4 +1,5 @@
 import React from "react";
+import { isScraperViewHistoryUnlimited } from "@/shared/scraper";
 import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
@@ -110,6 +111,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
   const scraperResultLimit = getScraperResultLimit(params?.scraperLatestResultLimit);
+  const shouldWarnAboutLimitedViewHistory = params ? !isScraperViewHistoryUnlimited(params) : false;
   const authorRuns = useAuthorFavoriteRuns(combinedAuthorFavorite, scrapersById, {
     initialPageCount: authorPageCount,
     cacheResults: false,
@@ -227,6 +229,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
           ariaLabel="Sections des nouveautes"
         />
       </div>
+
+      {shouldWarnAboutLimitedViewHistory ? (
+        <div className="multi-search__message is-warning">
+          L'historique des cards vues n'est pas illimite. Les nouveautes peuvent reafficher des cards deja vues
+          apres nettoyage ; mets la limite et les deux conservations a 0 pour un suivi complet.
+        </div>
+      ) : null}
 
       <ScraperLatestResults
         title={activeTab === "authors" ? "Auteurs favoris" : "Scrappers"}

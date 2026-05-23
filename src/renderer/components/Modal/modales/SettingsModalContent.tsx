@@ -8,6 +8,12 @@ import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 import ReaderSettingsPanel from '@/renderer/components/ReaderSettings/ReaderSettingsPanel'
 import ShortcutSettingsPanel from '@/renderer/components/ShortcutSettings/ShortcutSettingsPanel'
+import {
+  DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
+  DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
+  DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
+  normalizeScraperViewHistorySettings,
+} from '@/shared/scraper'
 
 import '@/renderer/components/Modal/style.scss'
 import '@/renderer/components/Modal/modales/settings-style.scss'
@@ -130,6 +136,30 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperViewHistoryMaxRecords',
+          label: 'Limite de l\'historique des cards vues (0 = infini)',
+          type: 'number',
+          min: 0,
+          step: 1,
+          placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS),
+        },
+        {
+          name: 'scraperViewHistorySeenRetentionDays',
+          label: 'Conservation des cards vues en jours (0 = infini)',
+          type: 'number',
+          min: 0,
+          step: 1,
+          placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS),
+        },
+        {
+          name: 'scraperViewHistoryReadRetentionDays',
+          label: 'Conservation des cards lues en jours (0 = infini)',
+          type: 'number',
+          min: 0,
+          step: 1,
+          placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS),
+        },
+        {
           name: 'stackMangaInSeries',
           label: 'Empiler les mangas dans une série dans la bibliothèque',
           type: 'checkbox',
@@ -222,6 +252,7 @@ export default function SettingsModalContent() {
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
     const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
+    const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
 
     // convert types
     const toSave: Record<string, any> = {
@@ -244,6 +275,7 @@ export default function SettingsModalContent() {
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
+      ...scraperViewHistorySettings,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }

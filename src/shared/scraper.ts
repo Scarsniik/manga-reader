@@ -706,6 +706,75 @@ export interface SetScraperCardReadRequest extends ScraperViewHistoryCardIdentit
   read: boolean;
 }
 
+export const DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
+export const DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS = 45;
+export const DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS = 365;
+
+export interface ScraperViewHistorySettings {
+  scraperViewHistoryMaxRecords: number;
+  scraperViewHistorySeenRetentionDays: number;
+  scraperViewHistoryReadRetentionDays: number;
+}
+
+const parseScraperViewHistoryNumericSetting = (value: unknown): number => {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return Number(value);
+  }
+
+  return Number.NaN;
+};
+
+const normalizeScraperViewHistoryUnlimitedInteger = (
+  value: unknown,
+  fallback: number,
+): number => {
+  const parsed = parseScraperViewHistoryNumericSetting(value);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.floor(parsed));
+};
+
+export const normalizeScraperViewHistoryMaxRecords = (value: unknown): number => (
+  normalizeScraperViewHistoryUnlimitedInteger(value, DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS)
+);
+
+export const normalizeScraperViewHistorySeenRetentionDays = (value: unknown): number => (
+  normalizeScraperViewHistoryUnlimitedInteger(value, DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS)
+);
+
+export const normalizeScraperViewHistoryReadRetentionDays = (value: unknown): number => (
+  normalizeScraperViewHistoryUnlimitedInteger(value, DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS)
+);
+
+export const normalizeScraperViewHistorySettings = (
+  settings: Record<string, unknown> | null | undefined,
+): ScraperViewHistorySettings => ({
+  scraperViewHistoryMaxRecords: normalizeScraperViewHistoryMaxRecords(settings?.scraperViewHistoryMaxRecords),
+  scraperViewHistorySeenRetentionDays: normalizeScraperViewHistorySeenRetentionDays(
+    settings?.scraperViewHistorySeenRetentionDays,
+  ),
+  scraperViewHistoryReadRetentionDays: normalizeScraperViewHistoryReadRetentionDays(
+    settings?.scraperViewHistoryReadRetentionDays,
+  ),
+});
+
+export const isScraperViewHistoryUnlimited = (
+  settings: Record<string, unknown> | null | undefined,
+): boolean => {
+  const normalizedSettings = normalizeScraperViewHistorySettings(settings);
+
+  return normalizedSettings.scraperViewHistoryMaxRecords === 0
+    && normalizedSettings.scraperViewHistorySeenRetentionDays === 0
+    && normalizedSettings.scraperViewHistoryReadRetentionDays === 0;
+};
+
 export interface ScraperReaderProgressRecord {
   id: string;
   scraperId: string;
