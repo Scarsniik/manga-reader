@@ -37,6 +37,8 @@ type StoredSourceResult = {
   sourceLanguageCodes: string[];
   detectedLanguageCodes: string[];
   tentativeAuthorNames?: string[];
+  advancedRomanizedTitleVariants?: string[];
+  advancedRomanizedTentativeAuthorNameVariants?: string[];
   contentTypes: string[];
   canOpenDetails: boolean;
 };
@@ -134,6 +136,8 @@ const serializeSource = (source: MultiSearchSourceResult): StoredSourceResult =>
   sourceLanguageCodes: source.sourceLanguageCodes,
   detectedLanguageCodes: source.detectedLanguageCodes,
   tentativeAuthorNames: source.tentativeAuthorNames,
+  advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
+  advancedRomanizedTentativeAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   contentTypes: source.contentTypes,
   canOpenDetails: source.canOpenDetails,
 });
@@ -175,6 +179,12 @@ const restoreSource = (
     sourceLanguageCodes: isStringArray(source.sourceLanguageCodes) ? source.sourceLanguageCodes : [],
     detectedLanguageCodes: isStringArray(source.detectedLanguageCodes) ? source.detectedLanguageCodes : [],
     tentativeAuthorNames: isStringArray(source.tentativeAuthorNames) ? source.tentativeAuthorNames : [],
+    advancedRomanizedTitleVariants: isStringArray(source.advancedRomanizedTitleVariants)
+      ? source.advancedRomanizedTitleVariants
+      : [],
+    advancedRomanizedTentativeAuthorNameVariants: isStringArray(source.advancedRomanizedTentativeAuthorNameVariants)
+      ? source.advancedRomanizedTentativeAuthorNameVariants
+      : [],
     contentTypes: isStringArray(source.contentTypes) ? source.contentTypes : [],
     canOpenDetails: Boolean(source.canOpenDetails),
   };

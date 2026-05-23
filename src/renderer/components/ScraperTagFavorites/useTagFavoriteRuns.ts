@@ -13,6 +13,7 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 
 export type TagFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
@@ -149,7 +150,9 @@ export default function useTagFavoriteRuns(
         run.nextPageUrl,
         paceConfigRef.current,
       );
-      const pageResults = buildSourceResults(run.scraper, page, nextPageIndex, run.favoriteSource.name);
+      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
+        buildSourceResults(run.scraper, page, nextPageIndex, run.favoriteSource.name),
+      );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextRun: TagFavoriteSourceRun = {

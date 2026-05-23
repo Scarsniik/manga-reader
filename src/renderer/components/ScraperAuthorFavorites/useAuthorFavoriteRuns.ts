@@ -17,6 +17,7 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 
 export type AuthorFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
@@ -141,18 +142,18 @@ const findCachedSource = (
   ?? null
 );
 
-const buildRunFromCacheSource = (
+const buildRunFromCacheSource = async (
   run: AuthorFavoriteSourceRun,
   cachedSource: ScraperAuthorFavoriteCacheSource,
-): AuthorFavoriteSourceRun => ({
+): Promise<AuthorFavoriteSourceRun> => ({
   ...run,
   status: "done",
-  results: buildSourceResultsFromItems(
+  results: await enrichSourceResultsWithJapaneseRomanization(buildSourceResultsFromItems(
     run.scraper,
     cachedSource.results.map((cachedResult) => cachedResult.result),
     (_result, index) => cachedSource.results[index]?.pageIndex ?? 0,
     (_result, index) => cachedSource.results[index]?.searchTerm || run.favoriteSource.name,
-  ),
+  )),
   loadedPages: cachedSource.loadedPages,
   hasNextPage: cachedSource.hasNextPage,
   currentPageUrl: cachedSource.currentPageUrl,
@@ -220,7 +221,9 @@ export default function useAuthorFavoriteRuns(
         paceConfigRef.current,
         run.favoriteSource.templateContext ?? null,
       );
-      const pageResults = buildSourceResults(run.scraper, page, pageIndex, run.favoriteSource.name);
+      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
+        buildSourceResults(run.scraper, page, pageIndex, run.favoriteSource.name),
+      );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextRun: AuthorFavoriteSourceRun = {
@@ -340,10 +343,10 @@ export default function useAuthorFavoriteRuns(
       return null;
     }
 
-    return initialRuns.map((run) => {
+    return Promise.all(initialRuns.map(async (run) => {
       const cachedSource = findCachedSource(cache, run);
       return cachedSource ? buildRunFromCacheSource(run, cachedSource) : run;
-    });
+    }));
   }, [cacheResults, favorite]);
 
   const saveRunsCache = useCallback(async (

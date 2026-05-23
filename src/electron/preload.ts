@@ -25,6 +25,7 @@ import type {
     RecordReadingHistoryRequest,
     RecordSearchHistoryRequest,
 } from './history';
+import type { JapaneseRomanizationRequest } from "../shared/japaneseRomanization";
 
 type WindowState = {
     isFocused: boolean;
@@ -252,6 +253,7 @@ contextBridge.exposeInMainWorld('api', {
     appUpdateInstall: () => ipcRenderer.invoke("app-update-install"),
     appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
     appUpdateGetPatchNotes: (query?: Record<string, unknown>) => ipcRenderer.invoke("app-update-get-patch-notes", query),
+    romanizeJapaneseTexts: (request: JapaneseRomanizationRequest) => ipcRenderer.invoke("romanize-japanese-texts", request),
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),

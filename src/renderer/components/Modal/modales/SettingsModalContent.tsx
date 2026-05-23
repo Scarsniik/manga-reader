@@ -168,6 +168,18 @@ export default function SettingsModalContent() {
     },
     {
       type: 'section',
+      id: 'multi-search',
+      title: 'Recherche multi-sources',
+      fields: [
+        {
+          name: 'multiSearchEnableRomajiPhoneticMerge',
+          label: 'Activer le merge phonétique romaji / katakana',
+          type: 'checkbox',
+        },
+      ],
+    },
+    {
+      type: 'section',
       id: 'ocr',
       title: 'OCR',
       fields: [
@@ -226,6 +238,7 @@ export default function SettingsModalContent() {
       persistMangaFilters,
       showSavedLibrarySearches,
       showSavedScraperSearches,
+      multiSearchEnableRomajiPhoneticMerge: !!values.multiSearchEnableRomajiPhoneticMerge,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,

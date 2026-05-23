@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  MultiSearchMergeOptions,
   MultiSearchMergeProgress,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
@@ -10,7 +11,9 @@ import type {
 } from "@/renderer/components/MultiSearch/multiSearchMergeWorkerProtocol";
 import {
   createMultiSearchMergeState,
+  areMultiSearchMergeOptionsEqual,
   mergeMultiSearchSourceIntoState,
+  normalizeMultiSearchMergeOptions,
   sortMultiSearchMergedResults,
   type MultiSearchMergeState,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
@@ -21,6 +24,7 @@ type MergeCache = {
   sourceCount: number;
   sourceRefs: WeakSet<MultiSearchSourceResult>;
   refreshKey: number;
+  options: MultiSearchMergeOptions;
 };
 
 type IncrementalMultiSearchMergeResult = {
@@ -42,18 +46,23 @@ const buildIdleMergeProgress = (
   durationMs,
 });
 
-const buildEmptyMergeCache = (refreshKey: number): MergeCache => ({
-  mergeState: createMultiSearchMergeState(),
+const buildEmptyMergeCache = (
+  refreshKey: number,
+  options: MultiSearchMergeOptions,
+): MergeCache => ({
+  mergeState: createMultiSearchMergeState([], options),
   sourceCount: 0,
   sourceRefs: new WeakSet<MultiSearchSourceResult>(),
   refreshKey,
+  options,
 });
 
 const buildMergeCache = (
   sources: MultiSearchSourceResult[],
   refreshKey: number,
+  options: MultiSearchMergeOptions,
 ): MergeCache => {
-  const cache = buildEmptyMergeCache(refreshKey);
+  const cache = buildEmptyMergeCache(refreshKey, options);
 
   sources.forEach((source) => {
     mergeMultiSearchSourceIntoState(cache.mergeState, source);
@@ -68,8 +77,10 @@ const shouldRebuildMergeCache = (
   cache: MergeCache,
   sources: MultiSearchSourceResult[],
   refreshKey: number,
+  options: MultiSearchMergeOptions,
 ): boolean => (
   cache.refreshKey !== refreshKey
+  || !areMultiSearchMergeOptionsEqual(cache.options, options)
   || sources.length < cache.sourceCount
   || (
     sources.length > 0
@@ -93,8 +104,10 @@ const createMergeWorker = (): Worker | null => {
 export default function useIncrementalMultiSearchMerge(
   sources: MultiSearchSourceResult[],
   refreshKey: number,
+  optionsInput?: Partial<MultiSearchMergeOptions> | null,
 ): IncrementalMultiSearchMergeResult {
-  const cacheRef = useRef<MergeCache>(buildEmptyMergeCache(refreshKey));
+  const options = normalizeMultiSearchMergeOptions(optionsInput);
+  const cacheRef = useRef<MergeCache>(buildEmptyMergeCache(refreshKey, options));
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const [mergedResults, setMergedResults] = useState<MultiSearchMergedResult[]>([]);
@@ -151,7 +164,7 @@ export default function useIncrementalMultiSearchMerge(
     const cache = cacheRef.current;
     const worker = workerRef.current;
     const shouldClear = sources.length === 0;
-    const shouldReset = shouldClear || shouldRebuildMergeCache(cache, sources, refreshKey);
+    const shouldReset = shouldClear || shouldRebuildMergeCache(cache, sources, refreshKey, options);
     const newSources = shouldReset
       ? sources
       : sources.filter((source) => !cache.sourceRefs.has(source));
@@ -167,7 +180,7 @@ export default function useIncrementalMultiSearchMerge(
     if (!worker) {
       const startedAt = Date.now();
       const nextCache = shouldReset
-        ? buildMergeCache(sources, refreshKey)
+        ? buildMergeCache(sources, refreshKey, options)
         : cache;
 
       if (!shouldReset) {
@@ -180,11 +193,12 @@ export default function useIncrementalMultiSearchMerge(
 
       cacheRef.current = nextCache;
       const nextMergedResults = sortMultiSearchMergedResults(nextCache.mergeState.groups);
+      const durationMs = Date.now() - startedAt;
       setMergedResults(nextMergedResults);
       setMergeProgress(buildIdleMergeProgress(
         nextCache.sourceCount,
         nextMergedResults.length,
-        Date.now() - startedAt,
+        durationMs,
       ));
       return;
     }
@@ -195,12 +209,13 @@ export default function useIncrementalMultiSearchMerge(
 
     const previousSourceCount = shouldReset ? 0 : cache.sourceCount;
     const nextCache = shouldReset
-      ? buildEmptyMergeCache(refreshKey)
+      ? buildEmptyMergeCache(refreshKey, options)
       : cache;
 
     newSources.forEach((source) => nextCache.sourceRefs.add(source));
     nextCache.sourceCount = sources.length;
     nextCache.refreshKey = refreshKey;
+    nextCache.options = options;
     cacheRef.current = nextCache;
 
     const requestId = requestIdRef.current + 1;
@@ -223,16 +238,18 @@ export default function useIncrementalMultiSearchMerge(
         type: "clear",
         requestId,
         refreshKey,
+        options,
       }
       : {
         type: shouldReset ? "reset" : "append",
         sources: newSources,
         requestId,
         refreshKey,
+        options,
       };
 
     worker.postMessage(request);
-  }, [refreshKey, sources]);
+  }, [options.enableRomajiPhoneticMerge, refreshKey, sources]);
 
   return {
     mergedResults: sources.length ? mergedResults : [],

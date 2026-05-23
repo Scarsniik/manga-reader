@@ -16,6 +16,7 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
@@ -169,7 +170,9 @@ export default function useScraperLatestRuns() {
 
       try {
         const latestPage = await fetchLatestPage(run, pageIndex, paceConfigRef.current);
-        const pageResults = buildSourceResults(run.scraper, latestPage.page, pageIndex, latestPage.searchTerm);
+        const pageResults = await enrichSourceResultsWithJapaneseRomanization(
+          buildSourceResults(run.scraper, latestPage.page, pageIndex, latestPage.searchTerm),
+        );
         const newPageResults = pageResults.filter((source) => {
           const key = getSourceDeduplicationKey(source);
           if (!key || loadedSourceKeys.has(key)) {

@@ -10,6 +10,10 @@ export type MultiSearchLanguageFilterModes = Record<string, MultiSearchLanguageF
 export type MultiSearchReadingStatusFilter = "unread" | "inProgress" | "read";
 export type MultiSearchMergePhase = "idle" | "queued" | "merging" | "sorting";
 
+export type MultiSearchMergeOptions = {
+  enableRomajiPhoneticMerge: boolean;
+};
+
 export type MultiSearchMergeProgress = {
   isActive: boolean;
   phase: MultiSearchMergePhase;
@@ -37,6 +41,8 @@ export type MultiSearchSourceResult = {
   sourceLanguageCodes: string[];
   detectedLanguageCodes: string[];
   tentativeAuthorNames: string[];
+  advancedRomanizedTitleVariants: string[];
+  advancedRomanizedTentativeAuthorNameVariants: string[];
   contentTypes: string[];
   canOpenDetails: boolean;
 };

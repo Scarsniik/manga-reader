@@ -26,6 +26,7 @@ import {
   summarizeTermRuns,
   upsertTermRun,
 } from "@/renderer/components/MultiSearch/multiSearchRunState";
+import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 
 type RunSearchOptions = {
   query: string;
@@ -123,7 +124,9 @@ export default function useMultiSearch() {
         return null;
       }
 
-      const pageResults = buildSourceResults(run.scraper, page, pageIndex, searchTerm);
+      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
+        buildSourceResults(run.scraper, page, pageIndex, searchTerm),
+      );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextTermRun: MultiSearchTermRun = {

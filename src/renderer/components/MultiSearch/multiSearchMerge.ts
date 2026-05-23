@@ -1,28 +1,57 @@
 import type {
+  MultiSearchMergeOptions,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import {
-  canMergeMultiSearchSourceTitles,
+  getMultiSearchSourceTitleMergeMatchKind,
   getMultiSearchTitleMergeExactKeys,
   getMultiSearchTitleMergeFuzzyLengths,
+  type MultiSearchTitleMatchKind,
 } from "@/renderer/components/MultiSearch/multiSearchTitleMerge";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 
 export type MultiSearchMergeState = {
   groups: MultiSearchMergedResult[];
+  options: MultiSearchMergeOptions;
   detailUrlGroups: Map<string, MultiSearchMergedResult>;
   titleKeyGroups: Map<string, Set<MultiSearchMergedResult>>;
   fuzzyLengthGroups: Map<number, Set<MultiSearchMergedResult>>;
   groupIndexes: WeakMap<MultiSearchMergedResult, number>;
 };
 
+type MultiSearchGroupMatchKind = "url" | MultiSearchTitleMatchKind;
+
+type MultiSearchGroupMatch = {
+  group: MultiSearchMergedResult;
+};
+
+export const DEFAULT_MULTI_SEARCH_MERGE_OPTIONS: MultiSearchMergeOptions = {
+  enableRomajiPhoneticMerge: false,
+};
+
+export const normalizeMultiSearchMergeOptions = (
+  options: Partial<MultiSearchMergeOptions> | null | undefined,
+): MultiSearchMergeOptions => ({
+  ...DEFAULT_MULTI_SEARCH_MERGE_OPTIONS,
+  ...(options ?? {}),
+});
+
+export const areMultiSearchMergeOptionsEqual = (
+  left: MultiSearchMergeOptions,
+  right: MultiSearchMergeOptions,
+): boolean => (
+  left.enableRomajiPhoneticMerge === right.enableRomajiPhoneticMerge
+);
+
 export const createMultiSearchMergeState = (
   groups: MultiSearchMergedResult[] = [],
+  options: Partial<MultiSearchMergeOptions> | null | undefined = undefined,
 ): MultiSearchMergeState => {
   const state: MultiSearchMergeState = {
     groups,
+    options: normalizeMultiSearchMergeOptions(options),
     detailUrlGroups: new Map<string, MultiSearchMergedResult>(),
     titleKeyGroups: new Map<string, Set<MultiSearchMergedResult>>(),
     fuzzyLengthGroups: new Map<number, Set<MultiSearchMergedResult>>(),
@@ -38,18 +67,24 @@ export const createMultiSearchMergeState = (
 };
 
 const shouldMergeSourceIntoGroup = (
+  state: MultiSearchMergeState,
   source: MultiSearchSourceResult,
   group: MultiSearchMergedResult,
-): boolean => {
+): MultiSearchGroupMatchKind | null => {
   const sourceDetailUrl = getSourceDetailUrlKey(source);
 
-  return group.sources.some((groupSource) => {
+  for (const groupSource of group.sources) {
     if (sourceDetailUrl && getSourceDetailUrlKey(groupSource) === sourceDetailUrl) {
-      return true;
+      return "url";
     }
 
-    return canMergeMultiSearchSourceTitles(source, groupSource);
-  });
+    const titleMatchKind = getMultiSearchSourceTitleMergeMatchKind(source, groupSource, state.options);
+    if (titleMatchKind) {
+      return titleMatchKind;
+    }
+  }
+
+  return null;
 };
 
 const uniqueValues = (values: string[]): string[] => {
@@ -131,11 +166,11 @@ const indexGroupSource = (
     state.detailUrlGroups.set(detailUrl, group);
   }
 
-  getMultiSearchTitleMergeExactKeys(source).forEach((titleKey) => {
+  getMultiSearchTitleMergeExactKeys(source, state.options).forEach((titleKey) => {
     addGroupToIndex(state.titleKeyGroups, titleKey, group);
   });
 
-  getMultiSearchTitleMergeFuzzyLengths(source).forEach((titleLength) => {
+  getMultiSearchTitleMergeFuzzyLengths(source, state.options).forEach((titleLength) => {
     addGroupToIndex(state.fuzzyLengthGroups, titleLength, group);
   });
 };
@@ -177,11 +212,11 @@ const collectCandidateGroups = (
 
   addCandidateGroup(candidates, seenGroups, state.detailUrlGroups.get(getSourceDetailUrlKey(source)));
 
-  getMultiSearchTitleMergeExactKeys(source).forEach((titleKey) => {
+  getMultiSearchTitleMergeExactKeys(source, state.options).forEach((titleKey) => {
     addCandidateGroupSet(candidates, seenGroups, state.titleKeyGroups.get(titleKey));
   });
 
-  getMultiSearchTitleMergeFuzzyLengths(source).forEach((titleLength) => {
+  getMultiSearchTitleMergeFuzzyLengths(source, state.options).forEach((titleLength) => {
     addCandidateGroupSet(candidates, seenGroups, state.fuzzyLengthGroups.get(titleLength - 1));
     addCandidateGroupSet(candidates, seenGroups, state.fuzzyLengthGroups.get(titleLength));
     addCandidateGroupSet(candidates, seenGroups, state.fuzzyLengthGroups.get(titleLength + 1));
@@ -225,16 +260,31 @@ const appendSourceToGroup = (
   return true;
 };
 
+const findSourceGroupMatch = (
+  state: MultiSearchMergeState,
+  source: MultiSearchSourceResult,
+): MultiSearchGroupMatch | null => {
+  for (const candidate of collectCandidateGroups(state, source)) {
+    const matchKind = shouldMergeSourceIntoGroup(state, source, candidate);
+    if (matchKind) {
+      return {
+        group: candidate,
+      };
+    }
+  }
+
+  return null;
+};
+
 export const mergeMultiSearchSourceIntoState = (
   state: MultiSearchMergeState,
   source: MultiSearchSourceResult,
 ): void => {
-  const group = collectCandidateGroups(state, source)
-    .find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
+  const match = findSourceGroupMatch(state, source);
 
-  if (group) {
-    if (appendSourceToGroup(group, source)) {
-      indexGroupSource(state, group, source);
+  if (match) {
+    if (appendSourceToGroup(match.group, source)) {
+      indexGroupSource(state, match.group, source);
     }
     return;
   }
@@ -248,11 +298,13 @@ export const mergeMultiSearchSourceIntoState = (
 export const mergeMultiSearchSourceIntoGroups = (
   groups: MultiSearchMergedResult[],
   source: MultiSearchSourceResult,
+  options: Partial<MultiSearchMergeOptions> | null | undefined = undefined,
 ): void => {
-  const group = groups.find((candidate) => shouldMergeSourceIntoGroup(source, candidate));
+  const state = createMultiSearchMergeState(groups, options);
+  const match = findSourceGroupMatch(state, source);
 
-  if (group) {
-    appendSourceToGroup(group, source);
+  if (match) {
+    appendSourceToGroup(match.group, source);
     return;
   }
 
@@ -274,8 +326,9 @@ export const sortMultiSearchMergedResults = (
 
 export const mergeMultiSearchResults = (
   sources: MultiSearchSourceResult[],
+  options: Partial<MultiSearchMergeOptions> | null | undefined = undefined,
 ): MultiSearchMergedResult[] => {
-  const state = createMultiSearchMergeState();
+  const state = createMultiSearchMergeState([], options);
 
   sources.forEach((source) => mergeMultiSearchSourceIntoState(state, source));
   return sortMultiSearchMergedResults(state.groups);

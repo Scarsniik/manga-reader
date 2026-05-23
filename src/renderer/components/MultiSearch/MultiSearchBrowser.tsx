@@ -180,6 +180,9 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     : "";
   const canShowUnseenFirst = false;
   const showUnseenFirst = canShowUnseenFirst && params?.multiSearchShowUnseenFirst === true;
+  const mergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+  }), [params?.multiSearchEnableRomajiPhoneticMerge]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -370,7 +373,11 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     () => allSourceHistoryIds.join("|"),
     [allSourceHistoryIds],
   );
-  const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(allSources, mergeRefreshKey);
+  const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
+    allSources,
+    mergeRefreshKey,
+    mergeOptions,
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(allSources),
     [allSources],

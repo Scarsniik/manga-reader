@@ -1,5 +1,6 @@
 import type {
   MultiSearchMergePhase,
+  MultiSearchMergeOptions,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
@@ -19,6 +20,7 @@ export type MultiSearchMergeWorkerRequest = (
 ) & {
   requestId: number;
   refreshKey: number;
+  options: MultiSearchMergeOptions;
 };
 
 export type MultiSearchMergeWorkerProgressResponse = {

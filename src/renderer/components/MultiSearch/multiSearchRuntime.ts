@@ -428,6 +428,8 @@ export const buildSourceResults = (
         : fallbackLanguageCodes,
       detectedLanguageCodes,
       tentativeAuthorNames,
+      advancedRomanizedTitleVariants: [],
+      advancedRomanizedTentativeAuthorNameVariants: [],
       contentTypes,
       canOpenDetails,
     };

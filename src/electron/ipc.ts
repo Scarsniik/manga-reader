@@ -19,6 +19,7 @@ import * as workspaceWindow from "./handlers/workspaceWindow";
 import * as appUpdate from "./handlers/appUpdate";
 import * as jsonDocuments from "./handlers/jsonDocuments";
 import * as history from "./handlers/history";
+import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -209,6 +210,11 @@ ipcMain.handle("app-update-install", async () => appUpdate.installAppUpdate());
 ipcMain.handle("app-update-open-release-page", async () => appUpdate.openAppUpdateReleasePage());
 ipcMain.handle("app-update-get-patch-notes", async (_event: IpcMainInvokeEvent, query?: unknown) => (
     appUpdate.getAppUpdatePatchNotes(query as Parameters<typeof appUpdate.getAppUpdatePatchNotes>[0])
+));
+
+// Japanese romanization
+ipcMain.handle("romanize-japanese-texts", async (_event: IpcMainInvokeEvent, request: unknown) => (
+    japaneseRomanization.romanizeJapaneseTexts(request as any)
 ));
 
 // Scrapers

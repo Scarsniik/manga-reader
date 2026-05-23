@@ -34,6 +34,7 @@ export type AppParams = {
     showSavedScraperSearches?: boolean;
     savedScraperSearches?: SavedScraperSearch[];
     multiSearchShowUnseenFirst?: boolean;
+    multiSearchEnableRomajiPhoneticMerge?: boolean;
     scraperAuthorCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;

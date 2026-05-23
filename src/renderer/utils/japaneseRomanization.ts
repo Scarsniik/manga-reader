@@ -270,7 +270,7 @@ const foldLongVowels = (value: string): string => (
 );
 
 export const getJapaneseRomajiVariants = (value: string): string[] => {
-  if (!hasJapaneseKana(value)) {
+  if (!hasJapaneseKana(value) || hasJapaneseKanji(value)) {
     return [];
   }
 

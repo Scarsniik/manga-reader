@@ -284,6 +284,7 @@ const defaultSettings = {
     showSavedScraperSearches: true,
     savedScraperSearches: [],
     multiSearchShowUnseenFirst: false,
+    multiSearchEnableRomajiPhoneticMerge: false,
     scraperAuthorCombinedView: false,
     scraperAuthorFavoriteShowUnseenFirst: false,
     scraperTagFavoriteShowUnseenFirst: true,
@@ -347,6 +348,9 @@ const normalizeSettings = (value: unknown) => {
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
         : defaultSettings.multiSearchShowUnseenFirst;
+    merged.multiSearchEnableRomajiPhoneticMerge = typeof merged.multiSearchEnableRomajiPhoneticMerge === "boolean"
+        ? merged.multiSearchEnableRomajiPhoneticMerge
+        : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
     merged.scraperAuthorCombinedView = typeof merged.scraperAuthorCombinedView === "boolean"
         ? merged.scraperAuthorCombinedView
         : defaultSettings.scraperAuthorCombinedView;
@@ -568,6 +572,9 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
+            ? nextSettings.multiSearchEnableRomajiPhoneticMerge
+            : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;

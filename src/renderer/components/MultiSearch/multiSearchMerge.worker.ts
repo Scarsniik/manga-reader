@@ -5,6 +5,7 @@ import type {
 import {
   createMultiSearchMergeState,
   mergeMultiSearchSourceIntoState,
+  normalizeMultiSearchMergeOptions,
   sortMultiSearchMergedResults,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
 
@@ -27,8 +28,8 @@ const getTimestamp = (): number => (
   typeof performance === "undefined" ? Date.now() : performance.now()
 );
 
-const resetMergeState = (): void => {
-  mergeState = createMultiSearchMergeState();
+const resetMergeState = (request: MultiSearchMergeWorkerRequest): void => {
+  mergeState = createMultiSearchMergeState([], normalizeMultiSearchMergeOptions(request.options));
   sourceCount = 0;
 };
 
@@ -69,14 +70,14 @@ workerScope.addEventListener("message", (event) => {
   const startedAt = getTimestamp();
 
   if (request.type === "clear") {
-    resetMergeState();
+    resetMergeState(request);
     currentRefreshKey = request.refreshKey;
     postMergedResults(request, startedAt);
     return;
   }
 
   if (request.type === "reset" || request.refreshKey !== currentRefreshKey) {
-    resetMergeState();
+    resetMergeState(request);
     currentRefreshKey = request.refreshKey;
   }
 

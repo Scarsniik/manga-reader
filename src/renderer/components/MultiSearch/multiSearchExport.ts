@@ -30,6 +30,8 @@ const buildSourceSnapshot = (source: MultiSearchSourceResult) => ({
   sourceLanguageCodes: source.sourceLanguageCodes,
   detectedLanguageCodes: source.detectedLanguageCodes,
   tentativeAuthorNames: source.tentativeAuthorNames,
+  advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
+  advancedRomanizedTentativeAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   contentTypes: source.contentTypes,
   canOpenDetails: source.canOpenDetails,
   result: {
