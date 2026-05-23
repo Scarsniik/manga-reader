@@ -16,6 +16,7 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type {
   MultiSearchSourceResult,
@@ -32,6 +33,7 @@ export type ScraperLatestRun = {
   module: ScraperLatestRunModule;
   status: ScraperLatestRunStatus;
   results: MultiSearchSourceResult[];
+  excludedByLanguageCount: number;
   loadedPages: number;
   hasNextPage: boolean;
   currentPageUrl?: string;
@@ -49,6 +51,7 @@ const buildRun = (scraper: ScraperRecord): ScraperLatestRun => ({
   module: scraper.globalConfig.latest?.module === "search" ? "search" : "homepage",
   status: "waiting",
   results: [],
+  excludedByLanguageCount: 0,
   loadedPages: 0,
   hasNextPage: true,
 });
@@ -84,6 +87,41 @@ const normalizeResultLimit = (value: number): number => {
   }
 
   return Math.max(1, Math.floor(value));
+};
+
+const normalizeLanguageCodes = (value: readonly string[] | undefined): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  return value.reduce<string[]>((result, entry) => {
+    const normalized = String(entry ?? "").trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      return result;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+    return result;
+  }, []);
+};
+
+const sourceMatchesIncludedLanguages = (
+  source: MultiSearchSourceResult,
+  includedLanguageCodes: string[],
+): boolean => {
+  if (!includedLanguageCodes.length) {
+    return true;
+  }
+
+  const sourceLanguageCodes = source.sourceLanguageCodes.length
+    ? source.sourceLanguageCodes
+    : [UNKNOWN_MULTI_SEARCH_VALUE];
+
+  return sourceLanguageCodes
+    .map((languageCode) => languageCode.trim().toLowerCase())
+    .some((languageCode) => includedLanguageCodes.includes(languageCode));
 };
 
 const fetchLatestPage = async (
@@ -156,6 +194,7 @@ export default function useScraperLatestRuns() {
     initialRun: ScraperLatestRun,
     resultLimit: number,
     recordsById: Map<string, ScraperViewHistoryRecord>,
+    includedLanguageCodes: string[],
     token: number,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
@@ -183,7 +222,10 @@ export default function useScraperLatestRuns() {
           loadedSourceKeys.add(key);
           return true;
         });
-        const unseenResults = newPageResults.filter((source) => isUnseenSource(source, recordsById));
+        const includedPageResults = newPageResults.filter((source) => (
+          sourceMatchesIncludedLanguages(source, includedLanguageCodes)
+        ));
+        const unseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
         const nextResults = [...run.results, ...unseenResults].slice(0, resultLimit);
         const hasOnlyDuplicateResults = pageResults.length > 0 && newPageResults.length === 0;
 
@@ -191,6 +233,7 @@ export default function useScraperLatestRuns() {
           ...run,
           status: "done",
           results: nextResults,
+          excludedByLanguageCount: run.excludedByLanguageCount + newPageResults.length - includedPageResults.length,
           loadedPages: pageIndex + 1,
           hasNextPage: !hasOnlyDuplicateResults && latestPage.hasNextPage && nextResults.length < resultLimit,
           currentPageUrl: latestPage.page.currentPageUrl,
@@ -222,10 +265,12 @@ export default function useScraperLatestRuns() {
     scrapers: ScraperRecord[],
     resultLimitValue: number,
     recordsById: Map<string, ScraperViewHistoryRecord>,
+    includedLanguageCodeValues: string[] = [],
   ) => {
     const enabledScrapers = getEnabledLatestScrapers(scrapers);
     const initialRuns = enabledScrapers.map(buildRun);
     const resultLimit = normalizeResultLimit(resultLimitValue);
+    const includedLanguageCodes = normalizeLanguageCodes(includedLanguageCodeValues);
     const token = tokenRef.current + 1;
     tokenRef.current = token;
 
@@ -241,13 +286,17 @@ export default function useScraperLatestRuns() {
     try {
       await runWithConcurrency(
         initialRuns.map((run) => async () => {
-          await loadRun(run, resultLimit, recordsById, token);
+          await loadRun(run, resultLimit, recordsById, includedLanguageCodes, token);
         }),
         paceConfigRef.current.concurrency,
       );
 
       if (token === tokenRef.current) {
-        setMessage(`${resultLimit} resultat(s) non vu(s) recherches par scrapper.`);
+        setMessage(
+          includedLanguageCodes.length
+            ? `${resultLimit} resultat(s) non vu(s) recherches par scrapper dans les langues incluses.`
+            : `${resultLimit} resultat(s) non vu(s) recherches par scrapper.`,
+        );
       }
     } catch (loadError) {
       if (token === tokenRef.current) {
@@ -260,6 +309,14 @@ export default function useScraperLatestRuns() {
     }
   }, [loadRun]);
 
+  const reset = useCallback(() => {
+    tokenRef.current += 1;
+    setRuns([]);
+    setLoading(false);
+    setMessage(null);
+    setError(null);
+  }, []);
+
   return {
     runs,
     loading,
@@ -267,5 +324,6 @@ export default function useScraperLatestRuns() {
     error,
     enabledRunCount,
     start,
+    reset,
   };
 }

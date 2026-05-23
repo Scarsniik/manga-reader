@@ -225,6 +225,12 @@ Le mode `Nouveautes` possede aussi un parametre applicatif global :
 `scraperLatestResultLimit`. Il indique combien de resultats non vus chercher par scraper active. Le
 minimum est 1 et aucune limite haute n'est appliquee.
 
+Le parametre applicatif `scraperLatestIncludedLanguageCodes` limite l'onglet `Scrappers` du mode
+`Nouveautes` aux langues selectionnees. La liste est exclusive et s'applique pendant la collecte :
+les resultats hors liste ne comptent pas dans `scraperLatestResultLimit`. Si la liste est vide,
+toutes les langues sont acceptees. La valeur `__multi_search_unknown__` correspond a l'option
+`Inconnue` et conserve les cards sans langue detectee quand une restriction est activee.
+
 ## Module Homepage
 
 `Homepage` charge une page fixe du scraper, puis extrait une liste de cards avec le meme modele

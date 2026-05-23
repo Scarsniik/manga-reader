@@ -121,6 +121,24 @@ const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => 
     typeof value === "boolean" ? value : fallback
 );
 
+const normalizeLowercaseStringListSetting = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+    return value.reduce<string[]>((result, entry) => {
+        const normalized = String(entry ?? "").trim().toLowerCase();
+        if (!normalized || seen.has(normalized)) {
+            return result;
+        }
+
+        seen.add(normalized);
+        result.push(normalized);
+        return result;
+    }, []);
+};
+
 const normalizeReaderOcrAutoAnalyzeBubbles = (value: unknown): boolean => (
     normalizeBooleanSetting(value, DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES)
 );
@@ -297,6 +315,7 @@ const defaultSettings = {
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestIncludedLanguageCodes: [] as string[],
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
@@ -354,6 +373,9 @@ const normalizeSettings = (value: unknown) => {
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
+    merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+        merged.scraperLatestIncludedLanguageCodes,
+    );
     Object.assign(merged, normalizeScraperViewHistorySettings(merged));
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
@@ -582,6 +604,9 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+            nextSettings.scraperLatestIncludedLanguageCodes,
+        );
         Object.assign(nextSettings, normalizeScraperViewHistorySettings(nextSettings));
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
             ? nextSettings.multiSearchEnableRomajiPhoneticMerge

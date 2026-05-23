@@ -37,6 +37,7 @@ type Props = {
   error: string | null;
   openError: string | null;
   statusItems?: StatusItem[];
+  actionLabel?: string;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -93,6 +94,7 @@ export default function ScraperLatestResults({
   error,
   openError,
   statusItems = [],
+  actionLabel = "Recharger",
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -186,7 +188,7 @@ export default function ScraperLatestResults({
             }}
             disabled={loading}
           >
-            {loading ? "Chargement..." : "Recharger"}
+            {loading ? "Chargement..." : actionLabel}
           </button>
         </div>
       </div>
