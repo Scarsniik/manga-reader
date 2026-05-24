@@ -7,18 +7,24 @@ import type {
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import { HistoryTabs } from "@/renderer/components/History/HistoryControls";
-import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import useParams from "@/renderer/hooks/useParams";
-import { languages } from "@/renderer/consts/languages";
 import { useScraperAuthorFavorites } from "@/renderer/stores/scraperAuthorFavorites";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
-import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import { loadScraperViewHistory } from "@/renderer/stores/scraperViewHistory";
 import useScraperLatestRuns, {
   type ScraperLatestSearchMode,
 } from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
+import {
+  getEnabledLatestScrapers,
+  getLatestLanguageLabel,
+  getLatestScraperLabels,
+  normalizeLatestIncludedLanguageCodes,
+  normalizeLatestIncludedScraperIds,
+  ScraperLatestLanguageIncludeBar,
+  ScraperLatestScraperIncludeBar,
+} from "@/renderer/components/ScraperLatest/ScraperLatestIncludeFilters";
 import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLatestResults";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import "@/renderer/components/History/style.scss";
@@ -37,17 +43,6 @@ const LATEST_TABS: Array<{
 }> = [
   { id: "scrapers", label: "Scrappers" },
   { id: "authors", label: "Auteurs" },
-];
-
-const LATEST_LANGUAGE_OPTIONS = [
-  ...languages.map((language) => ({
-    code: language.code,
-    label: language.frenchName,
-  })),
-  {
-    code: UNKNOWN_MULTI_SEARCH_VALUE,
-    label: "Inconnue",
-  },
 ];
 
 const buildScrapersById = (scrapers: ScraperRecord[]): Map<string, ScraperRecord> => (
@@ -104,91 +99,15 @@ const getScraperResultLimit = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 20;
 };
 
+const getScraperDeepPageLimit = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+};
+
 const getAuthorPageCount = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
 };
-
-const normalizeLatestIncludedLanguageCodes = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  return value.reduce<string[]>((result, entry) => {
-    const normalized = String(entry ?? "").trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) {
-      return result;
-    }
-
-    seen.add(normalized);
-    result.push(normalized);
-    return result;
-  }, []);
-};
-
-const getLatestLanguageLabel = (languageCode: string): string => (
-  LATEST_LANGUAGE_OPTIONS.find((language) => language.code === languageCode)?.label ?? languageCode
-);
-
-type ScraperLatestLanguageIncludeBarProps = {
-  value: string[];
-  onChange: (value: string[]) => void;
-};
-
-function ScraperLatestLanguageIncludeBar({
-  value,
-  onChange,
-}: ScraperLatestLanguageIncludeBarProps) {
-  const selectedLanguageCodes = React.useMemo(() => new Set(value), [value]);
-  const selectedLabel = value.length
-    ? value.map(getLatestLanguageLabel).join(", ")
-    : "Toutes les langues";
-
-  const toggleLanguage = React.useCallback((languageCode: string) => {
-    if (selectedLanguageCodes.has(languageCode)) {
-      onChange(value.filter((currentCode) => currentCode !== languageCode));
-      return;
-    }
-
-    onChange([...value, languageCode]);
-  }, [onChange, selectedLanguageCodes, value]);
-
-  return (
-    <div className="scraper-latest__language-panel">
-      <div>
-        <strong>Langues incluses</strong>
-        <span>{selectedLabel}</span>
-      </div>
-      <div className="scraper-latest__language-actions" aria-label="Langues incluses dans les nouveautes scrappers">
-        <button
-          type="button"
-          className={!value.length ? "is-active" : ""}
-          onClick={() => onChange([])}
-        >
-          Toutes
-        </button>
-        {LATEST_LANGUAGE_OPTIONS.map((language) => {
-          const isActive = selectedLanguageCodes.has(language.code);
-
-          return (
-            <button
-              key={language.code}
-              type="button"
-              className={isActive ? "is-active" : ""}
-              onClick={() => toggleLanguage(language.code)}
-              aria-pressed={isActive}
-              title={language.label}
-            >
-              <LanguageFlags languageCodes={[language.code]} />
-              <span>{language.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 export default function ScraperLatestView({ scrapers }: Props) {
   const { params, setParams } = useParams();
@@ -214,11 +133,25 @@ export default function ScraperLatestView({ scrapers }: Props) {
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
   const scraperResultLimit = getScraperResultLimit(params?.scraperLatestResultLimit);
+  const scraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
   const scraperIncludedLanguageCodes = React.useMemo(
     () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
     [params?.scraperLatestIncludedLanguageCodes],
   );
   const scraperIncludedLanguagesKey = scraperIncludedLanguageCodes.join("|");
+  const enabledLatestScrapers = React.useMemo(
+    () => getEnabledLatestScrapers(scrapers),
+    [scrapers],
+  );
+  const enabledLatestScraperIds = React.useMemo(
+    () => enabledLatestScrapers.map((scraper) => scraper.id),
+    [enabledLatestScrapers],
+  );
+  const scraperIncludedScraperIds = React.useMemo(
+    () => normalizeLatestIncludedScraperIds(params?.scraperLatestIncludedScraperIds),
+    [params?.scraperLatestIncludedScraperIds],
+  );
+  const scraperIncludedScrapersKey = scraperIncludedScraperIds.join("|");
   const shouldWarnAboutLimitedViewHistory = params ? !isScraperViewHistoryUnlimited(params) : false;
   const authorRuns = useAuthorFavoriteRuns(combinedAuthorFavorite, scrapersById, {
     initialPageCount: authorPageCount,
@@ -236,7 +169,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const activeSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
   const selectedFavoriteId = activeTab === "authors"
     ? combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`
-    : `latest-scrapers-${scraperRefreshKey}-${scraperIncludedLanguagesKey || "all"}`;
+    : [
+      "latest-scrapers",
+      scraperRefreshKey,
+      scraperIncludedLanguagesKey || "all-languages",
+      scraperIncludedScrapersKey || "all-scrapers",
+    ].join("-");
   const sourceResults = useScraperSourceFavoriteResults({
     selectedFavoriteId,
     trackedSources: activeSources,
@@ -286,6 +224,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
       {
         searchMode: scraperSearchMode,
         continueFromQuickScan,
+        deepPageLimit: scraperDeepPageLimit,
+        includedScraperIds: scraperIncludedScraperIds,
       },
     );
   }, [
@@ -293,7 +233,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
     latestScrapersKey,
     scraperIncludedLanguageCodes,
     scraperIncludedLanguagesKey,
+    scraperIncludedScraperIds,
+    scraperIncludedScrapersKey,
     scraperRefreshKey,
+    scraperDeepPageLimit,
     scraperResultLimit,
     scraperSearchMode,
     scraperRuns.start,
@@ -340,14 +283,46 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperRuns.reset();
   }, [scraperRuns, setParams]);
 
+  const handleScraperIncludedScraperIdsChange = React.useCallback((nextScraperIds: string[]) => {
+    setParams({
+      scraperLatestIncludedScraperIds: normalizeLatestIncludedScraperIds(nextScraperIds, enabledLatestScraperIds),
+    }, {
+      remount: false,
+    });
+    lastStartedScraperRefreshKeyRef.current = 0;
+    scraperContinueFromQuickScanRef.current = false;
+    setScraperRefreshKey(0);
+    setScraperSearchMode("quick");
+    scraperRuns.reset();
+  }, [enabledLatestScraperIds, scraperRuns, setParams]);
+
   const scraperSummary = React.useMemo(() => {
-    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper active.`;
+    const includedScraperLabels = getLatestScraperLabels(scraperIncludedScraperIds, enabledLatestScrapers);
+    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper ${
+      scraperIncludedScraperIds.length ? "inclus" : "active"
+    }.`;
+    const scraperFilterSummary = !enabledLatestScrapers.length
+      ? " Aucun scrapper actif dans les nouveautes."
+      : !scraperIncludedScraperIds.length
+        ? " Scrappers inclus : tous."
+        : includedScraperLabels.length
+          ? ` Scrappers inclus : ${includedScraperLabels.join(", ")}.`
+          : " Aucun scrapper inclus parmi les scrappers actifs.";
+    const deepPageLimitSummary = scraperDeepPageLimit > 0
+      ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
+      : " Scan profond sans limite de pages.";
     if (!scraperIncludedLanguageCodes.length) {
-      return baseSummary;
+      return `${baseSummary}${scraperFilterSummary}${deepPageLimitSummary}`;
     }
 
-    return `${baseSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.`;
-  }, [scraperIncludedLanguageCodes, scraperResultLimit]);
+    return `${baseSummary}${scraperFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}`;
+  }, [
+    enabledLatestScrapers,
+    scraperDeepPageLimit,
+    scraperIncludedLanguageCodes,
+    scraperIncludedScraperIds,
+    scraperResultLimit,
+  ]);
 
   const refreshViewHistorySnapshot = React.useCallback(async () => {
     try {
@@ -439,10 +414,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
       ) : null}
 
       {activeTab === "scrapers" ? (
-        <ScraperLatestLanguageIncludeBar
-          value={scraperIncludedLanguageCodes}
-          onChange={handleScraperIncludedLanguageCodesChange}
-        />
+        <div className="scraper-latest__filters">
+          <ScraperLatestScraperIncludeBar
+            scrapers={enabledLatestScrapers}
+            value={scraperIncludedScraperIds}
+            onChange={handleScraperIncludedScraperIdsChange}
+          />
+          <ScraperLatestLanguageIncludeBar
+            value={scraperIncludedLanguageCodes}
+            onChange={handleScraperIncludedLanguageCodesChange}
+          />
+        </div>
       ) : null}
 
       <ScraperLatestResults

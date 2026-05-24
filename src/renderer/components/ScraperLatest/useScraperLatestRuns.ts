@@ -62,6 +62,8 @@ export type ScraperLatestRun = {
 type StartOptions = {
   searchMode?: ScraperLatestSearchMode;
   continueFromQuickScan?: boolean;
+  deepPageLimit?: number;
+  includedScraperIds?: string[];
 };
 
 type ProcessedLatestPage = {
@@ -92,6 +94,18 @@ type ScraperLatestQuickContinuation = {
 const getEnabledLatestScrapers = (scrapers: ScraperRecord[]): ScraperRecord[] => (
   scrapers.filter((scraper) => scraper.globalConfig.latest?.enabled)
 );
+
+const filterIncludedLatestScrapers = (
+  scrapers: ScraperRecord[],
+  includedScraperIds: string[],
+): ScraperRecord[] => {
+  if (!includedScraperIds.length) {
+    return scrapers;
+  }
+
+  const includedScraperIdSet = new Set(includedScraperIds);
+  return scrapers.filter((scraper) => includedScraperIdSet.has(scraper.id));
+};
 
 const buildRun = (
   scraper: ScraperRecord,
@@ -157,6 +171,23 @@ const normalizeResultLimit = (value: number): number => {
   return Math.max(1, Math.floor(value));
 };
 
+const normalizeDeepPageLimit = (value: number | undefined): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(value ?? 0));
+};
+
+const isDeepPageLimitReached = (
+  run: ScraperLatestRun,
+  deepPageLimit: number,
+): boolean => (
+  run.deepSearch
+  && deepPageLimit > 0
+  && run.checkedPages >= deepPageLimit
+);
+
 const normalizeLanguageCodes = (value: readonly string[] | undefined): string[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -165,6 +196,24 @@ const normalizeLanguageCodes = (value: readonly string[] | undefined): string[] 
   const seen = new Set<string>();
   return value.reduce<string[]>((result, entry) => {
     const normalized = String(entry ?? "").trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      return result;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+    return result;
+  }, []);
+};
+
+const normalizeScraperIds = (value: readonly string[] | undefined): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  return value.reduce<string[]>((result, entry) => {
+    const normalized = String(entry ?? "").trim();
     if (!normalized || seen.has(normalized)) {
       return result;
     }
@@ -514,6 +563,7 @@ export default function useScraperLatestRuns() {
     includedLanguageCodes: string[],
     loadedSourceKeys: Set<string>,
     token: number,
+    deepPageLimit: number,
   ): Promise<ScraperLatestRun> => {
     const checkpoint = currentRun.checkpoint;
     if (!checkpoint || token !== tokenRef.current) {
@@ -568,8 +618,14 @@ export default function useScraperLatestRuns() {
     };
 
     if (usesTemplatePaging) {
+      let templatePaginationEnded = false;
+
       for (const pageIndex of getCheckpointCandidatePageIndexes(checkpoint)) {
-        if (token !== tokenRef.current || run.results.length >= resultLimit) {
+        if (
+          token !== tokenRef.current
+          || run.results.length >= resultLimit
+          || isDeepPageLimitReached(run, deepPageLimit)
+        ) {
           return run;
         }
 
@@ -594,8 +650,17 @@ export default function useScraperLatestRuns() {
         nextPageIndex = checkpoint.pageIndex + 1;
       }
 
-      while (run.hasNextPage && run.results.length < resultLimit && token === tokenRef.current) {
+      while (
+        !templatePaginationEnded
+        && run.results.length < resultLimit
+        && token === tokenRef.current
+        && !isDeepPageLimitReached(run, deepPageLimit)
+      ) {
         if (!run.deepSearch && checkedCheckpointPages >= QUICK_CHECKPOINT_PAGE_BUDGET) {
+          break;
+        }
+
+        if (!run.deepSearch && !run.hasNextPage) {
           break;
         }
 
@@ -605,7 +670,11 @@ export default function useScraperLatestRuns() {
         }
 
         loadedCheckpointPageIndexes.add(nextPageIndex);
-        await applyCheckpointPage(nextPageIndex);
+        const processedPage = await applyCheckpointPage(nextPageIndex);
+        if (processedPage.pageResults.length === 0) {
+          templatePaginationEnded = true;
+        }
+
         nextPageIndex += 1;
       }
 
@@ -626,6 +695,7 @@ export default function useScraperLatestRuns() {
       && run.results.length < resultLimit
       && token === tokenRef.current
       && (run.deepSearch || checkedCheckpointPages < QUICK_CHECKPOINT_PAGE_BUDGET)
+      && !isDeepPageLimitReached(run, deepPageLimit)
     ) {
       const processedPage = await applyCheckpointPage(nextPageIndex, nextPageUrl);
       nextPageIndex += 1;
@@ -646,6 +716,7 @@ export default function useScraperLatestRuns() {
     includedLanguageCodes: string[],
     token: number,
     continueFromQuickScan = false,
+    deepPageLimit = 0,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
     const loadedSourceKeys = new Set(
@@ -654,7 +725,12 @@ export default function useScraperLatestRuns() {
         .filter(Boolean),
     );
 
-    while (run.hasNextPage && run.results.length < resultLimit && token === tokenRef.current) {
+    while (
+      run.hasNextPage
+      && run.results.length < resultLimit
+      && token === tokenRef.current
+      && !isDeepPageLimitReached(run, deepPageLimit)
+    ) {
       const pageIndex = run.loadedPages;
 
       try {
@@ -666,32 +742,35 @@ export default function useScraperLatestRuns() {
           includedLanguageCodes,
           loadedSourceKeys,
           token,
-          !run.deepSearch && !run.checkpointUsed && !continueFromQuickScan,
+          !run.deepSearch && !run.checkpointUsed,
         );
         run = processedPage.run;
 
+        const pageHasOnlyExcludedLanguageResults = processedPage.newPageResults.length > 0
+          && processedPage.includedPageResults.length === 0;
         const pageHasNoNewIncludedResult = processedPage.hasOnlyDuplicateResults
           || (processedPage.includedPageResults.length > 0 && processedPage.unseenResults.length === 0);
+        const deepCheckpointBoundaryReached = pageHasNoNewIncludedResult || pageHasOnlyExcludedLanguageResults;
         const quickBoundaryReached = !run.deepSearch
           && !run.checkpointUsed
-          && !continueFromQuickScan
           && (
             processedPage.hasOnlyDuplicateResults
             || processedPage.firstIncludedPageResultIsSeen
           );
 
         if (quickBoundaryReached) {
+          const nextContinuationPageIndex = processedPage.run.hasNextPage ? pageIndex + 1 : null;
           saveQuickContinuation(buildQuickContinuation(
             {
               ...run,
-              hasNextPage: true,
-              loadedPages: pageIndex,
-              currentPageUrl: processedPage.run.currentPageUrl,
-              nextPageUrl: processedPage.run.currentPageUrl,
+              hasNextPage: processedPage.run.hasNextPage,
+              loadedPages: nextContinuationPageIndex ?? processedPage.run.loadedPages,
+              currentPageUrl: processedPage.run.nextPageUrl,
+              nextPageUrl: processedPage.run.nextPageUrl,
             },
             includedLanguageCodes,
-            pageIndex,
-            processedPage.run.currentPageUrl,
+            nextContinuationPageIndex,
+            processedPage.run.nextPageUrl,
           ));
 
           run = {
@@ -703,22 +782,45 @@ export default function useScraperLatestRuns() {
         }
 
         if (
-          pageHasNoNewIncludedResult
+          deepCheckpointBoundaryReached
           && run.results.length < resultLimit
           && !run.checkpointUsed
-          && !continueFromQuickScan
         ) {
-          if (run.deepSearch && run.checkpoint) {
-            run = await loadRunFromCheckpoint(
-              run,
-              resultLimit,
-              recordsById,
-              includedLanguageCodes,
-              loadedSourceKeys,
-              token,
-            );
-            return run;
+          if (run.deepSearch) {
+            if (run.checkpoint) {
+              run = await loadRunFromCheckpoint(
+                run,
+                resultLimit,
+                recordsById,
+                includedLanguageCodes,
+                loadedSourceKeys,
+                token,
+                deepPageLimit,
+              );
+              return run;
+            }
+
+            if (processedPage.hasOnlyDuplicateResults && getRunUsesTemplatePaging(run)) {
+              run = {
+                ...run,
+                hasNextPage: true,
+              };
+              patchRun(token, run.key, () => run);
+            }
+
+            continue;
           }
+
+          if (pageHasOnlyExcludedLanguageResults) {
+            continue;
+          }
+
+          saveQuickContinuation(buildQuickContinuation(
+            run,
+            includedLanguageCodes,
+            processedPage.run.hasNextPage ? pageIndex + 1 : null,
+            processedPage.run.hasNextPage ? processedPage.run.nextPageUrl : undefined,
+          ));
 
           run = {
             ...run,
@@ -743,6 +845,15 @@ export default function useScraperLatestRuns() {
       }
     }
 
+    if (!run.deepSearch && token === tokenRef.current) {
+      saveQuickContinuation(buildQuickContinuation(
+        run,
+        includedLanguageCodes,
+        run.hasNextPage ? run.loadedPages : null,
+        run.hasNextPage ? run.nextPageUrl : undefined,
+      ));
+    }
+
     return run;
   }, [applyLatestPage, loadRunFromCheckpoint, patchRun, saveQuickContinuation]);
 
@@ -753,20 +864,29 @@ export default function useScraperLatestRuns() {
     includedLanguageCodeValues: string[] = [],
     options: StartOptions = {},
   ) => {
-    const enabledScrapers = getEnabledLatestScrapers(scrapers);
     const resultLimit = normalizeResultLimit(resultLimitValue);
     const includedLanguageCodes = normalizeLanguageCodes(includedLanguageCodeValues);
+    const includedScraperIds = normalizeScraperIds(options.includedScraperIds);
+    const enabledScrapers = getEnabledLatestScrapers(scrapers);
+    const includedScrapers = filterIncludedLatestScrapers(enabledScrapers, includedScraperIds);
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
+    const deepPageLimit = normalizeDeepPageLimit(options.deepPageLimit);
     const token = tokenRef.current + 1;
     tokenRef.current = token;
 
     setRuns([]);
     setMessage(null);
-    setError(enabledScrapers.length ? null : "Aucun scrapper n'est configure pour les nouveautes.");
-    setLoading(Boolean(enabledScrapers.length));
+    setError(
+      includedScrapers.length
+        ? null
+        : enabledScrapers.length
+          ? "Aucun scrapper n'est inclus dans le filtre des nouveautes."
+          : "Aucun scrapper n'est configure pour les nouveautes.",
+    );
+    setLoading(Boolean(includedScrapers.length));
 
-    if (!enabledScrapers.length) {
+    if (!includedScrapers.length) {
       return;
     }
 
@@ -784,7 +904,7 @@ export default function useScraperLatestRuns() {
         return;
       }
 
-      const continuationIdsToRefresh = new Set(enabledScrapers.map((scraper) => {
+      const continuationIdsToRefresh = new Set(includedScrapers.map((scraper) => {
         const module: ScraperLatestRunModule = scraper.globalConfig.latest?.module === "search" ? "search" : "homepage";
         return buildQuickContinuationId({
           scraperId: scraper.id,
@@ -801,7 +921,7 @@ export default function useScraperLatestRuns() {
         ));
       }
 
-      const initialRuns = enabledScrapers.map((scraper) => {
+      const initialRuns = includedScrapers.map((scraper) => {
         const module: ScraperLatestRunModule = scraper.globalConfig.latest?.module === "search" ? "search" : "homepage";
         const continuationKey = {
           scraperId: scraper.id,
@@ -840,30 +960,15 @@ export default function useScraperLatestRuns() {
           const runResultLimit = continueFromQuickScan
             ? run.results.length + resultLimit
             : resultLimit;
-          const completedRun = await loadRun(
+          await loadRun(
             run,
             runResultLimit,
             recordsById,
             includedLanguageCodes,
             token,
             continueFromQuickScan,
+            deepPageLimit,
           );
-
-          if (searchMode === "quick") {
-            const existingContinuation = getQuickContinuationForKey(
-              quickContinuationsRef.current,
-              buildContinuationKeyForRun(completedRun, includedLanguageCodes),
-            );
-
-            if (continueFromQuickScan || !existingContinuation) {
-              saveQuickContinuation(buildQuickContinuation(
-                completedRun,
-                includedLanguageCodes,
-                completedRun.hasNextPage ? completedRun.loadedPages : null,
-                completedRun.hasNextPage ? completedRun.nextPageUrl : undefined,
-              ));
-            }
-          }
         }),
         paceConfigRef.current.concurrency,
       );

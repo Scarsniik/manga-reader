@@ -18,8 +18,9 @@ connue. Il ne saute pas vers un ancien checkpoint : il sert a recuperer les sort
 crawler loin.
 
 Le bouton `Continuer` reprend uniquement depuis le curseur garde en memoire par le dernier scan
-rapide. Ce curseur contient la page et l'URL ou le scan rapide s'est arrete, mais il n'est pas ecrit
-sur disque et ne reutilise pas le checkpoint persistant.
+rapide. Ce curseur pointe la page suivante apres l'arret rapide, mais il n'est pas ecrit sur disque
+et ne reutilise pas le checkpoint persistant. La reprise garde la meme regle d'arret que le scan
+rapide.
 
 Quand un checkpoint existe pour le scraper, il est reserve au scan profond. Le checkpoint contient
 le scraper, le module (`homepage` ou `search`), la requete, les langues incluses, la page, les URLs
@@ -31,10 +32,13 @@ ont donc chacun un point de reprise different.
 
 L'onglet propose `Scan rapide` et `Scan profond` dans l'en-tete des resultats. Le scan profond
 utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
-d'anciennes cards jamais vues.
+d'anciennes cards jamais vues. Si aucun checkpoint exact n'existe pour la requete et les langues
+incluses, il continue la pagination normale au lieu de s'arreter a la premiere page deja connue ou
+ignoree par langue. Le parametre `scraperLatestDeepPageLimit` limite le nombre de pages consultees
+en scan profond quand il est superieur a 0 ; la valeur 0 signifie aucune limite de pages.
 
 Quand des cards apparaissent, un bouton `Continuer` devient disponible sous les resultats. Apres un
-scan rapide, il ajoute une passe depuis le curseur dynamique du scan precedent.
+scan rapide, il ajoute une nouvelle passe rapide depuis le curseur dynamique du scan precedent.
 
 Les checkpoints sont aussi mis a jour depuis le navigateur scraper classique quand l'utilisateur
 avance dans les pages `Homepage` ou `Recherche`. Un long scroll manuel peut donc servir de nouveau
@@ -47,6 +51,10 @@ nouveautes. Le runtime continue donc a charger des pages jusqu'a atteindre la li
 resultats dans les langues incluses, ou jusqu'a la fin de pagination. Si la liste est vide, toutes
 les langues sont acceptees.
 
+Le filtre `Scrappers inclus` utilise le parametre `scraperLatestIncludedScraperIds`. Il ne propose
+que les scrapers actives par `latest.enabled`. Si la liste est vide, tous les scrapers actifs sont
+inclus. Si elle contient des IDs, seuls ces scrapers sont lances par l'onglet `Scrappers`.
+
 Chaque scraper choisit son module de collecte :
 
 - `Homepage` charge le module `Homepage`
@@ -54,6 +62,8 @@ Chaque scraper choisit son module de collecte :
 
 Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Si une
 valeur tres grande est configuree, le runtime suit ce choix et peut donc charger beaucoup de pages.
+Le parametre global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
+jusqu'a trouver assez de nouveautes ou jusqu'a la fin de pagination.
 
 La selection propose aussi `Inconnue`. Elle garde les cards sans langue detectee quand une
 restriction de langue est activee. Sans cette option, les cards sans langue detectee sont ignorees

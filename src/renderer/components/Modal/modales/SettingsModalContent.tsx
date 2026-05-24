@@ -136,6 +136,13 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperLatestDeepPageLimit',
+          label: 'Pages max du scan profond nouveautés (0 = infini)',
+          type: 'number',
+          min: 0,
+          step: 1,
+        },
+        {
           name: 'scraperViewHistoryMaxRecords',
           label: 'Limite de l\'historique des cards vues (0 = infini)',
           type: 'number',
@@ -252,6 +259,7 @@ export default function SettingsModalContent() {
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
     const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
+    const scraperLatestDeepPageLimit = Number(values.scraperLatestDeepPageLimit)
     const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
 
     // convert types
@@ -275,6 +283,7 @@ export default function SettingsModalContent() {
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
+      scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit) ? scraperLatestDeepPageLimit : 0,
       ...scraperViewHistorySettings,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),

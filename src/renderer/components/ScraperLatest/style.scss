@@ -25,7 +25,13 @@
   line-height: 1.5;
 }
 
-.scraper-latest__language-panel {
+.scraper-latest__filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scraper-latest__include-panel {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -37,25 +43,25 @@
   background: #161616;
 }
 
-.scraper-latest__language-panel > div:first-child {
+.scraper-latest__include-panel > div:first-child {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: min(100%, 220px);
 }
 
-.scraper-latest__language-panel strong {
+.scraper-latest__include-panel strong {
   color: #f3f7fb;
   font-size: 14px;
 }
 
-.scraper-latest__language-panel span {
+.scraper-latest__include-panel span {
   color: #b7b7b7;
   font-size: 13px;
   line-height: 1.4;
 }
 
-.scraper-latest__language-actions {
+.scraper-latest__include-actions {
   display: flex;
   flex: 1 1 420px;
   flex-wrap: wrap;
@@ -63,7 +69,7 @@
   gap: 8px;
 }
 
-.scraper-latest__language-actions button {
+.scraper-latest__include-actions button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -78,27 +84,39 @@
   cursor: pointer;
 }
 
-.scraper-latest__language-actions button.is-active {
+.scraper-latest__include-actions button.is-active {
   border-color: rgba(93, 156, 255, 0.68);
   background: rgba(93, 156, 255, 0.16);
   color: #eef4ff;
 }
 
-.scraper-latest__language-actions button:focus-visible {
+.scraper-latest__include-actions button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.16);
 }
 
-.scraper-latest__language-actions .language-flags {
+.scraper-latest__include-actions button span {
+  color: inherit;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.scraper-latest__include-actions .language-flags {
   gap: 0;
   margin-left: 0;
 }
 
-.scraper-latest__language-actions .language-flags__flag,
-.scraper-latest__language-actions .language-flags__unknown {
+.scraper-latest__include-actions .language-flags__flag,
+.scraper-latest__include-actions .language-flags__unknown {
   width: 24px;
   height: 18px;
   box-shadow: none;
+}
+
+.scraper-latest__include-empty {
+  align-self: center;
+  color: #8f8f8f;
 }
 
 .scraper-latest-results__status-panel {
@@ -167,7 +185,7 @@
     flex-direction: column;
   }
 
-  .scraper-latest__language-actions {
+  .scraper-latest__include-actions {
     justify-content: flex-start;
   }
 }

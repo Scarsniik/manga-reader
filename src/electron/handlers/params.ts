@@ -41,6 +41,8 @@ const MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
 const MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 20;
 const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT = 20;
 const MIN_SCRAPER_LATEST_RESULT_LIMIT = 1;
+const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
+const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -129,6 +131,24 @@ const normalizeLowercaseStringListSetting = (value: unknown): string[] => {
     const seen = new Set<string>();
     return value.reduce<string[]>((result, entry) => {
         const normalized = String(entry ?? "").trim().toLowerCase();
+        if (!normalized || seen.has(normalized)) {
+            return result;
+        }
+
+        seen.add(normalized);
+        result.push(normalized);
+        return result;
+    }, []);
+};
+
+const normalizeStringListSetting = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+    return value.reduce<string[]>((result, entry) => {
+        const normalized = String(entry ?? "").trim();
         if (!normalized || seen.has(normalized)) {
             return result;
         }
@@ -235,6 +255,14 @@ const normalizeScraperLatestResultLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestDeepPageLimit = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
+        MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
+    )
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -315,7 +343,9 @@ const defaultSettings = {
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     scraperLatestIncludedLanguageCodes: [] as string[],
+    scraperLatestIncludedScraperIds: [] as string[],
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
@@ -373,8 +403,12 @@ const normalizeSettings = (value: unknown) => {
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
+    merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
     merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.scraperLatestIncludedLanguageCodes,
+    );
+    merged.scraperLatestIncludedScraperIds = normalizeStringListSetting(
+        merged.scraperLatestIncludedScraperIds,
     );
     Object.assign(merged, normalizeScraperViewHistorySettings(merged));
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
@@ -604,8 +638,14 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        nextSettings.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(
+            nextSettings.scraperLatestDeepPageLimit,
+        );
         nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.scraperLatestIncludedLanguageCodes,
+        );
+        nextSettings.scraperLatestIncludedScraperIds = normalizeStringListSetting(
+            nextSettings.scraperLatestIncludedScraperIds,
         );
         Object.assign(nextSettings, normalizeScraperViewHistorySettings(nextSettings));
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
