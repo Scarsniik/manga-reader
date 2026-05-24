@@ -1,6 +1,6 @@
 # Progressif passé affirmatif poli
 
-Le progressif passé affirmatif poli indique qu'une action était en cours ou qu'un état existait dans le passé, avec une forme polie.
+Le [progressif passé affirmatif](grammar:form:progressive-past-affirmative) poli indique qu'une action était en cours ou qu'un état existait dans le passé, avec une forme polie.
 
 ## Comment le former
 

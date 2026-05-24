@@ -1,6 +1,6 @@
 # Verbe ichidan
 
-Les verbes ichidan gardent un radical stable. On les appelle aussi verbes du groupe 2.
+Les [verbes](grammar:type:verb) ichidan gardent un radical stable. On les appelle aussi [verbes](grammar:type:verb) du groupe 2.
 
 ## Formation
 

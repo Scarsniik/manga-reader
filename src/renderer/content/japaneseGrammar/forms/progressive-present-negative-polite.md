@@ -1,6 +1,6 @@
 # Progressif présent négatif poli
 
-Le progressif présent négatif poli indique qu'une action n'est pas en cours, avec une forme polie.
+Le [progressif présent négatif](grammar:form:progressive-present-negative) poli indique qu'une action n'est pas en cours, avec une forme polie.
 
 ## Comment le former
 

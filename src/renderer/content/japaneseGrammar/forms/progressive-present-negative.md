@@ -1,6 +1,6 @@
 # Progressif présent négatif
 
-Le progressif présent négatif indique qu'une action n'est pas en cours, ou qu'un état résultant n'est pas vrai.
+Le progressif [présent négatif](grammar:form:present-negative) indique qu'une action n'est pas en cours, ou qu'un état résultant n'est pas vrai.
 
 ## Comment le former
 

@@ -1,6 +1,6 @@
 # Progressif présent affirmatif poli
 
-Le progressif présent affirmatif poli indique une action en cours ou un état résultant avec politesse.
+Le [progressif présent affirmatif](grammar:form:progressive-present-affirmative) poli indique une action en cours ou un état résultant avec politesse.
 
 ## Comment le former
 

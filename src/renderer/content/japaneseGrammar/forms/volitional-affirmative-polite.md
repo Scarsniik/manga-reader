@@ -1,6 +1,6 @@
 # Volitionnel affirmatif poli
 
-Le volitionnel affirmatif poli sert surtout à proposer une action ou à inviter quelqu'un à faire quelque chose.
+Le [volitionnel affirmatif](grammar:form:volitional-affirmative) poli sert surtout à proposer une action ou à inviter quelqu'un à faire quelque chose.
 
 ## Comment le former
 

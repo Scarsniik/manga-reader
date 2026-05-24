@@ -1,6 +1,6 @@
 # Progressif passé négatif
 
-Le progressif passé négatif indique qu'une action n'était pas en cours ou qu'un état résultant n'était pas vrai dans le passé.
+Le progressif [passé négatif](grammar:form:past-negative) indique qu'une action n'était pas en cours ou qu'un état résultant n'était pas vrai dans le passé.
 
 ## Comment le former
 

@@ -1,6 +1,6 @@
 # Progressif passé affirmatif
 
-Le progressif passé affirmatif indique qu'une action était en cours ou qu'un état résultant existait dans le passé.
+Le progressif [passé affirmatif](grammar:form:past-affirmative) indique qu'une action était en cours ou qu'un état résultant existait dans le passé.
 
 ## Comment le former
 

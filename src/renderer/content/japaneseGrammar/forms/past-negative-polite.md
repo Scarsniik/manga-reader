@@ -1,14 +1,14 @@
 # Passé négatif poli
 
-Le passé négatif poli indique qu'une action n'a pas eu lieu ou qu'un état n'était pas vrai, avec une forme polie.
+Le [passé négatif](grammar:form:past-negative) poli indique qu'une action n'a pas eu lieu ou qu'un état n'était pas vrai, avec une forme polie.
 
 ## Comment le former
 
-- Verbe : radical en `ます` + `ませんでした` : `食べる` -> `食べませんでした`.
+- [Verbe](grammar:type:verb) : radical en `ます` + `ませんでした` : `食べる` -> `食べませんでした`.
 - `する` : `しませんでした`.
 - `来る` : `来ませんでした`.
-- Adjectif en い : `高くありませんでした` ou `高くなかったです`.
-- Adjectif en な : `静かじゃありませんでした` ou `静かじゃなかったです`.
+- [Adjectif en い](grammar:type:i-adjective) : `高くありませんでした` ou `高くなかったです`.
+- [Adjectif en な](grammar:type:na-adjective) : `静かじゃありませんでした` ou `静かじゃなかったです`.
 
 ## À reconnaître
 

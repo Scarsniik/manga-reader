@@ -1,14 +1,14 @@
 # Présent négatif poli
 
-Le présent négatif poli dit qu'une action ou un état n'est pas vrai, avec un niveau de politesse plus élevé.
+Le [présent négatif](grammar:form:present-negative) poli dit qu'une action ou un état n'est pas vrai, avec un niveau de politesse plus élevé.
 
 ## Comment le former
 
-- Verbe : radical en `ます` + `ません` : `食べる` -> `食べません`, `読む` -> `読みません`.
+- [Verbe](grammar:type:verb) : radical en `ます` + `ません` : `食べる` -> `食べません`, `読む` -> `読みません`.
 - `する` : `しません`.
 - `来る` : `来ません`.
-- Adjectif en い : `高くありません` ou `高くないです`.
-- Adjectif en な : `静かじゃありません`, `静かではありません` ou `静かじゃないです`.
+- [Adjectif en い](grammar:type:i-adjective) : `高くありません` ou `高くないです`.
+- [Adjectif en な](grammar:type:na-adjective) : `静かじゃありません`, `静かではありません` ou `静かじゃないです`.
 
 ## À reconnaître
 

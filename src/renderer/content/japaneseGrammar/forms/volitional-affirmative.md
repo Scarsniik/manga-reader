@@ -4,8 +4,8 @@ Le volitionnel affirmatif exprime une intention, une proposition ou une décisio
 
 ## Comment le former
 
-- Verbe ichidan : retirer `る`, puis ajouter `よう` : `食べる` -> `食べよう`.
-- Verbe godan : passer la finale en son `o`, puis ajouter `う` : `読む` -> `読もう`.
+- [Verbe ichidan](grammar:type:verb-ichidan) : retirer `る`, puis ajouter `よう` : `食べる` -> `食べよう`.
+- [Verbe godan](grammar:type:verb-godan) : passer la finale en son `o`, puis ajouter `う` : `読む` -> `読もう`.
 - `する` : `しよう`.
 - `来る` : `来よう`.
 

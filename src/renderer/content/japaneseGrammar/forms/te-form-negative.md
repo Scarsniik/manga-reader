@@ -1,16 +1,16 @@
 # Forme en て négative
 
-La forme en て négative relie une action ou un état nié à la suite de la phrase.
+La [forme en て](grammar:form:te-form-affirmative) négative relie une action ou un état nié à la suite de la phrase.
 
 ## Comment le former
 
 On part souvent de la forme négative, puis on transforme `ない` en `なくて`.
 
-- Verbe : `食べない` -> `食べなくて`, `読まない` -> `読まなくて`.
+- [Verbe](grammar:type:verb) : `食べない` -> `食べなくて`, `読まない` -> `読まなくて`.
 - `する` : `しない` -> `しなくて`.
 - `来る` : `来ない` -> `来なくて`.
-- Adjectif en い : `高くない` -> `高くなくて`.
-- Adjectif en な : `静かじゃない` -> `静かじゃなくて`.
+- [Adjectif en い](grammar:type:i-adjective) : `高くない` -> `高くなくて`.
+- [Adjectif en な](grammar:type:na-adjective) : `静かじゃない` -> `静かじゃなくて`.
 
 ## À retenir
 

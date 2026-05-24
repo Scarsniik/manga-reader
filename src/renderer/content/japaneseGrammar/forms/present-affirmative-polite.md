@@ -1,14 +1,14 @@
 # Présent affirmatif poli
 
-Le présent affirmatif poli garde le sens positif, mais rend la phrase plus polie.
+Le [présent affirmatif](grammar:form:present-affirmative) poli garde le sens positif, mais rend la phrase plus polie.
 
 ## Comment le former
 
-- Verbe : radical en `ます` + `ます` : `食べる` -> `食べます`, `読む` -> `読みます`.
+- [Verbe](grammar:type:verb) : radical en `ます` + `ます` : `食べる` -> `食べます`, `読む` -> `読みます`.
 - `する` : `します`.
 - `来る` : `来ます`.
-- Adjectif en い : forme de base + `です` : `高いです`.
-- Adjectif en な : base + `です` : `静かです`.
+- [Adjectif en い](grammar:type:i-adjective) : forme de base + `です` : `高いです`.
+- [Adjectif en な](grammar:type:na-adjective) : base + `です` : `静かです`.
 
 ## À reconnaître
 

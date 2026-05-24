@@ -1,6 +1,6 @@
 # Progressif passé négatif poli
 
-Le progressif passé négatif poli indique qu'une action n'était pas en cours, avec une forme polie.
+Le [progressif passé négatif](grammar:form:progressive-past-negative) poli indique qu'une action n'était pas en cours, avec une forme polie.
 
 ## Comment le former
 

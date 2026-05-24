@@ -4,9 +4,9 @@ Le présent affirmatif est la forme de base positive. En japonais, il couvre sou
 
 ## Comment le former
 
-- Verbe neutre : forme dictionnaire, comme `食べる`, `読む`, `する`, `来る`.
-- Adjectif en い : forme de base, comme `高い`.
-- Adjectif en な : base + `だ`, comme `静かだ`.
+- [Verbe](grammar:type:verb) neutre : forme dictionnaire, comme `食べる`, `読む`, `する`, `来る`.
+- [Adjectif en い](grammar:type:i-adjective) : forme de base, comme `高い`.
+- [Adjectif en な](grammar:type:na-adjective) : base + `だ`, comme `静かだ`.
 
 ## À reconnaître
 

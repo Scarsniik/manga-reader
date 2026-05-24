@@ -4,12 +4,12 @@ Le passé affirmatif indique qu'une action a eu lieu ou qu'un état était vrai.
 
 ## Comment le former
 
-- Verbe ichidan : retirer `る`, puis ajouter `た` : `食べる` -> `食べた`.
-- Verbe godan : la finale change selon le verbe : `読む` -> `読んだ`, `書く` -> `書いた`.
+- [Verbe ichidan](grammar:type:verb-ichidan) : retirer `る`, puis ajouter `た` : `食べる` -> `食べた`.
+- [Verbe godan](grammar:type:verb-godan) : la finale change selon le [verbe](grammar:type:verb) : `読む` -> `読んだ`, `書く` -> `書いた`.
 - `する` : `した`.
 - `来る` : `来た`.
-- Adjectif en い : remplacer `い` par `かった` : `高い` -> `高かった`.
-- Adjectif en な : ajouter `だった` : `静か` -> `静かだった`.
+- [Adjectif en い](grammar:type:i-adjective) : remplacer `い` par `かった` : `高い` -> `高かった`.
+- [Adjectif en な](grammar:type:na-adjective) : ajouter `だった` : `静か` -> `静かだった`.
 
 ## À reconnaître
 

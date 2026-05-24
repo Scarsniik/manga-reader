@@ -6,8 +6,8 @@ Le volitionnel négatif exprime souvent l'idée de ne pas faire, ou de ne probab
 
 La forme fréquente utilise `まい`.
 
-- Verbe ichidan : radical + `まい` : `食べる` -> `食べまい`.
-- Verbe godan : forme dictionnaire + `まい` : `行く` -> `行くまい`.
+- [Verbe ichidan](grammar:type:verb-ichidan) : radical + `まい` : `食べる` -> `食べまい`.
+- [Verbe godan](grammar:type:verb-godan) : forme dictionnaire + `まい` : `行く` -> `行くまい`.
 - `する` : `するまい` ou `しまい`.
 - `来る` : `来るまい`.
 
