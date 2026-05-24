@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type ScraperRecord,
   type ScraperTagFavoriteRecord,
@@ -8,7 +8,9 @@ import buildConfirmActionModal from "@/renderer/components/Modal/modales/Confirm
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
+  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import {
   flattenMultiSearchSources,
   mergeMultiSearchResults,
@@ -37,6 +39,8 @@ type Props = {
   scrapers: ScraperRecord[];
 };
 
+const RESULT_TEXT_FILTER_DELAY_MS = 350;
+
 export default function ScraperTagFavoritesView({
   scrapers,
 }: Props) {
@@ -57,6 +61,8 @@ export default function ScraperTagFavoritesView({
     readFavoriteRouteId: readScraperTagFavoriteRouteId,
     writeFavoriteRouteState: writeScraperTagFavoriteRouteState,
   });
+  const [resultTextFilter, setResultTextFilter] = useState("");
+  const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const showUnseenFirst = params?.scraperTagFavoriteShowUnseenFirst !== false;
   const {
     runs,
@@ -97,9 +103,17 @@ export default function ScraperTagFavoritesView({
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],
   );
-  const visibleMergedResults = useMemo(
+  const languageFilteredMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
     [languageFilterModes, mergedResults],
+  );
+  const visibleMergedResults = useMemo(
+    () => filterMultiSearchMergedResultsByText(
+      languageFilteredMergedResults,
+      debouncedResultTextFilter,
+      getMultiSearchSourceLanguageValues,
+    ),
+    [debouncedResultTextFilter, languageFilteredMergedResults],
   );
   const visibleMergedResultSourceCount = useMemo(
     () => visibleMergedResults.reduce((count, result) => count + result.sources.length, 0),
@@ -107,11 +121,21 @@ export default function ScraperTagFavoritesView({
   );
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedResultTextFilter(resultTextFilter);
+    }, RESULT_TEXT_FILTER_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resultTextFilter]);
+
+  useEffect(() => {
     if (!selectedFavorite) {
       return;
     }
 
     setLanguageFilterModes({});
+    setResultTextFilter("");
+    setDebouncedResultTextFilter("");
     void start();
   }, [selectedFavorite, start]);
 
@@ -168,6 +192,7 @@ export default function ScraperTagFavoritesView({
         loadedSourceCount={loadedSources.length}
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={languageFilterModes}
+        textFilter={resultTextFilter}
         loading={loadingRuns}
         message={runMessage}
         error={runError || openError}
@@ -184,6 +209,9 @@ export default function ScraperTagFavoritesView({
         onPreviousPage={() => void goToPreviousPage()}
         onNextPage={() => void goToNextPage()}
         onToggleLanguageFilterMode={handleToggleLanguageFilterMode}
+        onTextFilterChange={setResultTextFilter}
+        onFillTextFilterFromBaseQuery={() => setResultTextFilter(selectedFavorite.name)}
+        onClearTextFilter={() => setResultTextFilter("")}
         onOpenFavoriteSource={handleOpenFavoriteSource}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}

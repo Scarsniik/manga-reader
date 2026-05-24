@@ -11,6 +11,7 @@ import {
 } from "@/renderer/utils/scraperViewHistory";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -31,6 +32,7 @@ type Props = {
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
+  textFilter: string;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -50,6 +52,9 @@ type Props = {
     languageCode: string,
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
   ) => void;
+  onTextFilterChange: (value: string) => void;
+  onFillTextFilterFromBaseQuery: () => void;
+  onClearTextFilter: () => void;
   onOpenFavoriteSource: (source: ScraperTagFavoriteSource) => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -109,6 +114,7 @@ export default function ScraperTagFavoriteResults({
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
+  textFilter,
   loading,
   message,
   error,
@@ -125,6 +131,9 @@ export default function ScraperTagFavoriteResults({
   onPreviousPage,
   onNextPage,
   onToggleLanguageFilterMode,
+  onTextFilterChange,
+  onFillTextFilterFromBaseQuery,
+  onClearTextFilter,
   onOpenFavoriteSource,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -208,12 +217,21 @@ export default function ScraperTagFavoriteResults({
               Page {pageIndex + 1}, {mergedResults.length} carte(s), {visibleSourceCount} resultat(s)
               source visible(s).
             </p>
-            <div className="multi-search__facet-filter-row">
-              <MultiSearchLanguageFilterBar
-                languageCodes={resultLanguageCodes}
-                filterModes={languageFilterModes}
-                onToggleFilterMode={onToggleLanguageFilterMode}
+            <div className="multi-search__result-filter-stack">
+              <MultiSearchTextFilterBar
+                value={textFilter}
+                baseQuery={favorite.name}
+                onChange={onTextFilterChange}
+                onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
+                onClear={onClearTextFilter}
               />
+              <div className="multi-search__facet-filter-row">
+                <MultiSearchLanguageFilterBar
+                  languageCodes={resultLanguageCodes}
+                  filterModes={languageFilterModes}
+                  onToggleFilterMode={onToggleLanguageFilterMode}
+                />
+              </div>
             </div>
           </div>
           <TagFavoritePaginationActions

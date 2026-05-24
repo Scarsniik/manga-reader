@@ -8,6 +8,7 @@ import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type {
   MultiSearchLanguageFilterMode,
@@ -29,6 +30,7 @@ type Props = {
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
   readingStatusFilters: MultiSearchReadingStatusFilter[];
+  textFilter: string;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -57,6 +59,9 @@ type Props = {
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
   ) => void;
   onToggleReadingStatus: (status: MultiSearchReadingStatusFilter) => void;
+  onTextFilterChange: (value: string) => void;
+  onFillTextFilterFromBaseQuery: () => void;
+  onClearTextFilter: () => void;
   onOpenAuthorSource: (source: ScraperAuthorFavoriteSource) => void;
   getSourceButtonTitle?: (run: AuthorFavoriteSourceRun) => string;
   getSourceButtonAriaLabel?: (run: AuthorFavoriteSourceRun) => string;
@@ -81,6 +86,7 @@ export default function ScraperAuthorCombinedResults({
   resultLanguageCodes,
   languageFilterModes,
   readingStatusFilters,
+  textFilter,
   loading,
   message,
   error,
@@ -106,6 +112,9 @@ export default function ScraperAuthorCombinedResults({
   onLoadMoreForRun,
   onToggleLanguageFilterMode,
   onToggleReadingStatus,
+  onTextFilterChange,
+  onFillTextFilterFromBaseQuery,
+  onClearTextFilter,
   onOpenAuthorSource,
   getSourceButtonTitle,
   getSourceButtonAriaLabel,
@@ -222,16 +231,25 @@ export default function ScraperAuthorCombinedResults({
             <div>
               <h3>{resultsSectionTitle}</h3>
               <p>{visibleResultCount} carte(s), {loadedSourceCount} source(s) chargee(s).</p>
-              <div className="multi-search__facet-filter-row">
-                <MultiSearchLanguageFilterBar
-                  languageCodes={resultLanguageCodes}
-                  filterModes={languageFilterModes}
-                  onToggleFilterMode={onToggleLanguageFilterMode}
+              <div className="multi-search__result-filter-stack">
+                <MultiSearchTextFilterBar
+                  value={textFilter}
+                  baseQuery={multiSearchQuery}
+                  onChange={onTextFilterChange}
+                  onFillFromBaseQuery={onFillTextFilterFromBaseQuery}
+                  onClear={onClearTextFilter}
                 />
-                <MultiSearchReadingStatusFilterBar
-                  selectedStatuses={readingStatusFilters}
-                  onToggleStatus={onToggleReadingStatus}
-                />
+                <div className="multi-search__facet-filter-row">
+                  <MultiSearchLanguageFilterBar
+                    languageCodes={resultLanguageCodes}
+                    filterModes={languageFilterModes}
+                    onToggleFilterMode={onToggleLanguageFilterMode}
+                  />
+                  <MultiSearchReadingStatusFilterBar
+                    selectedStatuses={readingStatusFilters}
+                    onToggleStatus={onToggleReadingStatus}
+                  />
+                </div>
               </div>
             </div>
           </div>

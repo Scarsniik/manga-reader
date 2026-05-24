@@ -44,7 +44,9 @@ chaque source associee, puis fusionne les cards dans une seule liste de resultat
 
 La page d'un tag favori affiche la liste des sources scraper associees avant les resultats. Chaque
 source peut etre ouverte dans sa page tag d'origine. Les resultats exposes sur la page courante
-peuvent etre filtres par langue avec les memes controles que la recherche multi-sources.
+peuvent etre filtres par texte et par langue avec les memes controles que la recherche
+multi-sources. Le filtre texte ne relance pas les scrapers et agit seulement sur les resultats
+charges de la page courante.
 
 Par defaut, les cards non vues sont affichees en premier sur une page de tag favori. Ce tri utilise
 le meme etat que le liseret vert des cards. L'option peut etre desactivee dans les parametres.

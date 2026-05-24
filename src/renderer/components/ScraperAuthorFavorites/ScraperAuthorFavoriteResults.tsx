@@ -26,6 +26,7 @@ type Props = {
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
   readingStatusFilters: MultiSearchReadingStatusFilter[];
+  textFilter: string;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -47,6 +48,9 @@ type Props = {
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
   ) => void;
   onToggleReadingStatus: (status: MultiSearchReadingStatusFilter) => void;
+  onTextFilterChange: (value: string) => void;
+  onFillTextFilterFromBaseQuery: () => void;
+  onClearTextFilter: () => void;
   onOpenFavoriteSource: (source: ScraperAuthorFavoriteSource) => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -68,6 +72,7 @@ export default function ScraperAuthorFavoriteResults({
   resultLanguageCodes,
   languageFilterModes,
   readingStatusFilters,
+  textFilter,
   loading,
   message,
   error,
@@ -86,6 +91,9 @@ export default function ScraperAuthorFavoriteResults({
   onLoadMoreForRun,
   onToggleLanguageFilterMode,
   onToggleReadingStatus,
+  onTextFilterChange,
+  onFillTextFilterFromBaseQuery,
+  onClearTextFilter,
   onOpenFavoriteSource,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -103,6 +111,7 @@ export default function ScraperAuthorFavoriteResults({
       resultLanguageCodes={resultLanguageCodes}
       languageFilterModes={languageFilterModes}
       readingStatusFilters={readingStatusFilters}
+      textFilter={textFilter}
       loading={loading}
       message={message}
       error={error}
@@ -122,6 +131,9 @@ export default function ScraperAuthorFavoriteResults({
       onLoadMoreForRun={onLoadMoreForRun}
       onToggleLanguageFilterMode={onToggleLanguageFilterMode}
       onToggleReadingStatus={onToggleReadingStatus}
+      onTextFilterChange={onTextFilterChange}
+      onFillTextFilterFromBaseQuery={onFillTextFilterFromBaseQuery}
+      onClearTextFilter={onClearTextFilter}
       onOpenAuthorSource={onOpenFavoriteSource}
       onOpenSource={onOpenSource}
       onOpenSourceInWorkspace={onOpenSourceInWorkspace}

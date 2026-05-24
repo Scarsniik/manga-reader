@@ -66,6 +66,7 @@ La vue combinee reutilise aussi :
 - la conversion des cards en `MultiSearchSourceResult`
 - la fusion des resultats par titre
 - le filtre de langue du multi-search
+- le filtre texte du multi-search, applique uniquement a l'affichage des resultats charges
 - le filtre multi-choix par etat de lecture, applique a la carte fusionnee entiere
 - les cards de resultat multi-source, avec les badges bibliotheque, bookmark et progression de lecture
 

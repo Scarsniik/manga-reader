@@ -8,7 +8,9 @@ import buildConfirmActionModal from "@/renderer/components/Modal/modales/Confirm
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
+  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import {
   flattenMultiSearchSources,
   mergeMultiSearchResults,
@@ -48,6 +50,8 @@ type Props = {
   scrapers: ScraperRecord[];
 };
 
+const RESULT_TEXT_FILTER_DELAY_MS = 350;
+
 export default function ScraperAuthorFavoritesView({
   scrapers,
 }: Props) {
@@ -69,6 +73,8 @@ export default function ScraperAuthorFavoritesView({
     writeFavoriteRouteState: writeScraperAuthorFavoriteRouteState,
   });
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
+  const [resultTextFilter, setResultTextFilter] = useState("");
+  const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const selectedFavoriteMultiSearchQuery = useMemo(() => (
     selectedFavorite
       ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
@@ -121,18 +127,23 @@ export default function ScraperAuthorFavoritesView({
     [loadedSources],
   );
   const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByReadingStatus(
-      filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-      readingStatusFilters,
-      {
-        libraryMangas,
-        bookmarkedSourceKeys,
-        sourceProgressIndex,
-        viewHistoryRecordsById,
-      },
+    () => filterMultiSearchMergedResultsByText(
+      filterMultiSearchMergedResultsByReadingStatus(
+        filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
+        readingStatusFilters,
+        {
+          libraryMangas,
+          bookmarkedSourceKeys,
+          sourceProgressIndex,
+          viewHistoryRecordsById,
+        },
+      ),
+      debouncedResultTextFilter,
+      getMultiSearchSourceLanguageValues,
     ),
     [
       bookmarkedSourceKeys,
+      debouncedResultTextFilter,
       languageFilterModes,
       libraryMangas,
       mergedResults,
@@ -151,6 +162,14 @@ export default function ScraperAuthorFavoritesView({
     ),
     [newSourceHistoryIds, showUnseenFirst, viewHistoryRecordsById, visibleMergedResults],
   );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedResultTextFilter(resultTextFilter);
+    }, RESULT_TEXT_FILTER_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resultTextFilter]);
 
   const handleOpenFavoriteSource = useCallback((source: ScraperAuthorFavoriteSource) => {
     const locationState = location.state && typeof location.state === "object"
@@ -227,6 +246,8 @@ export default function ScraperAuthorFavoritesView({
 
     setLanguageFilterModes({});
     setReadingStatusFilters([]);
+    setResultTextFilter("");
+    setDebouncedResultTextFilter("");
     void start();
   }, [selectedFavorite, start]);
 
@@ -266,6 +287,7 @@ export default function ScraperAuthorFavoritesView({
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={languageFilterModes}
         readingStatusFilters={readingStatusFilters}
+        textFilter={resultTextFilter}
         loading={loadingRuns}
         message={runMessage}
         error={runError || openError}
@@ -284,6 +306,9 @@ export default function ScraperAuthorFavoritesView({
         onLoadMoreForRun={(runKey) => void loadMoreForRun(runKey)}
         onToggleLanguageFilterMode={handleToggleLanguageFilterMode}
         onToggleReadingStatus={handleToggleReadingStatusFilter}
+        onTextFilterChange={setResultTextFilter}
+        onFillTextFilterFromBaseQuery={() => setResultTextFilter(selectedFavoriteMultiSearchQuery)}
+        onClearTextFilter={() => setResultTextFilter("")}
         onOpenFavoriteSource={handleOpenFavoriteSource}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}

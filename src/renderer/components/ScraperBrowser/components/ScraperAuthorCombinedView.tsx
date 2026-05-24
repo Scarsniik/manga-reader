@@ -9,7 +9,9 @@ import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
+  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
 import {
   flattenMultiSearchSources,
   mergeMultiSearchResults,
@@ -43,6 +45,7 @@ type Props = {
 };
 
 const STATIC_AUTHOR_SOURCE_DATE = "1970-01-01T00:00:00.000Z";
+const RESULT_TEXT_FILTER_DELAY_MS = 350;
 
 const buildDirectAuthorFavorite = (
   scraper: ScraperRecord,
@@ -84,6 +87,8 @@ export default function ScraperAuthorCombinedView({
   onSwitchToPagedView,
 }: Props) {
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
+  const [resultTextFilter, setResultTextFilter] = useState("");
+  const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const favorite = useMemo(
     () => buildDirectAuthorFavorite(scraper, authorUrl, authorTitle, cover, templateContext),
     [authorTitle, authorUrl, cover, scraper, templateContext],
@@ -137,18 +142,23 @@ export default function ScraperAuthorCombinedView({
     [loadedSources],
   );
   const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByReadingStatus(
-      filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-      readingStatusFilters,
-      {
-        libraryMangas,
-        bookmarkedSourceKeys,
-        sourceProgressIndex,
-        viewHistoryRecordsById,
-      },
+    () => filterMultiSearchMergedResultsByText(
+      filterMultiSearchMergedResultsByReadingStatus(
+        filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
+        readingStatusFilters,
+        {
+          libraryMangas,
+          bookmarkedSourceKeys,
+          sourceProgressIndex,
+          viewHistoryRecordsById,
+        },
+      ),
+      debouncedResultTextFilter,
+      getMultiSearchSourceLanguageValues,
     ),
     [
       bookmarkedSourceKeys,
+      debouncedResultTextFilter,
       languageFilterModes,
       libraryMangas,
       mergedResults,
@@ -169,9 +179,19 @@ export default function ScraperAuthorCombinedView({
   );
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedResultTextFilter(resultTextFilter);
+    }, RESULT_TEXT_FILTER_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resultTextFilter]);
+
+  useEffect(() => {
     setOpenError(null);
     setLanguageFilterModes({});
     setReadingStatusFilters([]);
+    setResultTextFilter("");
+    setDebouncedResultTextFilter("");
     void start();
   }, [setLanguageFilterModes, setOpenError, start]);
 
@@ -192,6 +212,7 @@ export default function ScraperAuthorCombinedView({
       resultLanguageCodes={resultLanguageCodes}
       languageFilterModes={languageFilterModes}
       readingStatusFilters={readingStatusFilters}
+      textFilter={resultTextFilter}
       loading={loading}
       message={message}
       error={error || openError}
@@ -221,6 +242,9 @@ export default function ScraperAuthorCombinedView({
       onLoadMoreForRun={(runKey) => void loadMoreForRun(runKey)}
       onToggleLanguageFilterMode={handleToggleLanguageFilterMode}
       onToggleReadingStatus={handleToggleReadingStatusFilter}
+      onTextFilterChange={setResultTextFilter}
+      onFillTextFilterFromBaseQuery={() => setResultTextFilter(authorMultiSearchQuery)}
+      onClearTextFilter={() => setResultTextFilter("")}
       onOpenAuthorSource={onSwitchToPagedView}
       getSourceButtonTitle={() => "Revenir a la vue par pages"}
       getSourceButtonAriaLabel={() => `Revenir a la vue par pages de ${authorTitle || "cet auteur"}`}
