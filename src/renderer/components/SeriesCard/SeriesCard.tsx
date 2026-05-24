@@ -13,6 +13,7 @@ import {
 
 interface Props {
     seriesId: string;
+    allMangas: Manga[];
     onRemove?: (id: string) => void;
     onCardUpdated?: (id: string) => void;
     selected?: boolean;
@@ -23,9 +24,6 @@ interface Props {
 }
 
 type PageCountMap = Record<string, number | null | undefined>;
-
-let allMangasCache: Manga[] | null = null;
-let allMangasPromise: Promise<Manga[]> | null = null;
 
 const toPositiveNumber = (value: unknown): number | null => {
     const numericValue = Number(value);
@@ -70,43 +68,9 @@ const readResolvedPageCount = (manga: Manga, pageCounts: PageCountMap): number |
     return toPositiveNumber(sourceValue);
 };
 
-const loadAllMangas = async (forceRefresh = false): Promise<Manga[]> => {
-    if (forceRefresh) {
-        allMangasCache = null;
-    }
-
-    if (allMangasCache) {
-        return allMangasCache;
-    }
-
-    if (allMangasPromise) {
-        return allMangasPromise;
-    }
-
-    const pendingRequest = (async () => {
-        if (!window.api || typeof window.api.getMangas !== "function") {
-            return [];
-        }
-
-        const data = await window.api.getMangas();
-        const normalizedData = Array.isArray(data) ? data : [];
-        allMangasCache = normalizedData;
-        return normalizedData;
-    })();
-
-    allMangasPromise = pendingRequest;
-
-    try {
-        return await pendingRequest;
-    } finally {
-        if (allMangasPromise === pendingRequest) {
-            allMangasPromise = null;
-        }
-    }
-};
-
 const SeriesCard: React.FC<Props> = ({
     seriesId,
+    allMangas,
     onRemove: _onRemove,
     onCardUpdated: _onCardUpdated,
     selected = false,
@@ -121,33 +85,16 @@ const SeriesCard: React.FC<Props> = ({
     const location = useLocation();
     const { series } = useSeries();
 
-    const refreshSeriesMangas = useCallback(async (forceRefresh = false) => {
-        try {
-            const allMangas = await loadAllMangas(forceRefresh);
-            const nextSeriesMangas = allMangas
-                .filter((manga) => manga.seriesId === seriesId)
-                .sort(compareSeriesMangasByChapter);
+    const refreshSeriesMangas = useCallback(() => {
+        const nextSeriesMangas = allMangas
+            .filter((manga) => manga.seriesId === seriesId)
+            .sort(compareSeriesMangasByChapter);
 
-            setSeriesMangas(nextSeriesMangas);
-        } catch (error) {
-            console.error("Failed to load series mangas", error);
-            setSeriesMangas([]);
-        }
-    }, [seriesId]);
+        setSeriesMangas(nextSeriesMangas);
+    }, [allMangas, seriesId]);
 
     useEffect(() => {
-        void refreshSeriesMangas();
-    }, [refreshSeriesMangas]);
-
-    useEffect(() => {
-        const handleMangasUpdated = () => {
-            void refreshSeriesMangas(true);
-        };
-
-        window.addEventListener("mangas-updated", handleMangasUpdated);
-        return () => {
-            window.removeEventListener("mangas-updated", handleMangasUpdated);
-        };
+        refreshSeriesMangas();
     }, [refreshSeriesMangas]);
 
     useEffect(() => {

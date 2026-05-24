@@ -167,6 +167,7 @@ const CardList: React.FC<CardListProps> = ({
                     ) : (
                         <SeriesCard
                             seriesId={entry.seriesId}
+                            allMangas={allMangas}
                             onRemove={onRemove}
                             onCardUpdated={onCardUpdated}
                             selected={entry.memberIds.length > 0 && entry.memberIds.every((id) => selectedIdSet.has(id))}
