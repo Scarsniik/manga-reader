@@ -15,18 +15,73 @@
 }
 
 .mangaManager-header__view {
+  position: relative;
   min-width: 240px;
 }
 
-.mangaManager-header__view select {
+.mangaManager-view-menu {
+  position: relative;
+}
+
+.mangaManager-view-menu__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   min-height: 44px;
   padding: 0 14px;
-  padding-right: var(--app-select-padding-right);
   border: 1px solid #2f2f2f;
   border-radius: 10px;
   background: #141414;
   color: #f1f1f1;
+  cursor: pointer;
+}
+
+.mangaManager-view-menu__trigger svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.mangaManager-view-menu__popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 280px);
+  max-height: min(420px, calc(100vh - 140px));
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  background: #151515;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+}
+
+.mangaManager-view-menu__item {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f1f1f1;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mangaManager-view-menu__item:hover,
+.mangaManager-view-menu__item:focus-visible {
+  background: #252525;
+}
+
+.mangaManager-view-menu__item.is-active {
+  background: #243850;
+  color: #ffffff;
 }
 
 .mangaManager-header__actions {
@@ -43,6 +98,31 @@
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
+}
+
+.mangaManager-header .mangaManager-view-menu__trigger {
+  padding: 0 14px;
+  border: 1px solid #2f2f2f;
+  border-radius: 10px;
+  background: #141414;
+  color: #f1f1f1;
+}
+
+.mangaManager-header .mangaManager-view-menu__item {
+  padding: 0 10px;
+  border-radius: 6px;
+  background: transparent;
+  color: #f1f1f1;
+}
+
+.mangaManager-header .mangaManager-view-menu__item:hover,
+.mangaManager-header .mangaManager-view-menu__item:focus-visible {
+  background: #252525;
+}
+
+.mangaManager-header .mangaManager-view-menu__item.is-active {
+  background: #243850;
+  color: #ffffff;
 }
 
 .mangaManager-content {

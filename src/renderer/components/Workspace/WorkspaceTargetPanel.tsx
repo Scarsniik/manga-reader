@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import MangaManager from "@/renderer/components/MangaManger/MangaManager";
+import Reader from "@/renderer/components/Reader/Reader";
 import ScraperConfigWizard from "@/renderer/components/ScraperConfig/ScraperConfigWizard";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
@@ -20,6 +22,7 @@ import {
 } from "@/renderer/utils/scraperRuntime";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import { recordDetailsHistorySafe } from "@/renderer/utils/history";
+import { buildReaderSearch } from "@/renderer/utils/workspaceTargets";
 
 type Props = {
   tabId: string;
@@ -345,6 +348,25 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
   const handleTitleChange = useCallback((title: string) => {
     onTitleChange(tabId, title);
   }, [onTitleChange, tabId]);
+
+  if (target.kind === "manga-manager.view") {
+    return (
+      <MangaManager
+        forcedViewId={target.viewId}
+        showHeader={false}
+      />
+    );
+  }
+
+  if (target.kind === "reader") {
+    return (
+      <Reader
+        initialLocationSearch={buildReaderSearch(target.mangaId, target.page ?? 1)}
+        initialLocationState={target.locationState ?? null}
+        syncWindowPageParam={false}
+      />
+    );
+  }
 
   if (target.kind === "scraper.config") {
     return (

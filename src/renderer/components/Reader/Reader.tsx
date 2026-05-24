@@ -1,5 +1,11 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import {
+    type NavigateFunction,
+    type NavigateOptions,
+    type To,
+    useLocation,
+    useNavigate,
+} from 'react-router-dom';
 import './style.scss';
 import OcrPanel from './OcrPanel';
 import ReaderControls from './ReaderControls';
@@ -50,19 +56,87 @@ import useReaderOcrPanelLayout from './hooks/useReaderOcrPanelLayout';
 import useReaderShortcuts from './hooks/useReaderShortcuts';
 import { buildBookmarkRecommendationMangas } from '@/renderer/components/Reader/readerBookmarkRecommendations';
 
-const Reader: React.FC = () => {
+type ReaderProps = {
+    initialLocationSearch?: string;
+    initialLocationState?: ReaderLocationState;
+    syncWindowPageParam?: boolean;
+};
+
+type LocalReaderLocation = {
+    pathname: string;
+    search: string;
+    state: ReaderLocationState;
+};
+
+const normalizeReaderSearch = (search: string | undefined): string => {
+    if (!search) {
+        return '';
+    }
+
+    return search.startsWith('?') ? search : `?${search}`;
+};
+
+const Reader: React.FC<ReaderProps> = ({
+    initialLocationSearch,
+    initialLocationState = null,
+    syncWindowPageParam = true,
+}) => {
     const [ocrEnabled, setOcrEnabled] = React.useState<boolean>(false);
     const readerHeaderRef = React.useRef<HTMLDivElement | null>(null);
     const ocrPanelRef = React.useRef<HTMLElement | null>(null);
-    const location = useLocation();
-    const navigate = useNavigate();
+    const routerLocation = useLocation();
+    const routerNavigate = useNavigate();
+    const usesLocalLocation = typeof initialLocationSearch === 'string';
+    const [localLocation, setLocalLocation] = React.useState<LocalReaderLocation>(() => ({
+        pathname: '/reader',
+        search: normalizeReaderSearch(initialLocationSearch),
+        state: initialLocationState,
+    }));
+    const locationSearch = usesLocalLocation ? localLocation.search : routerLocation.search;
+    const locationState = usesLocalLocation
+        ? localLocation.state
+        : routerLocation.state as ReaderLocationState;
+    const navigate = React.useMemo<NavigateFunction>(() => {
+        if (!usesLocalLocation) {
+            return routerNavigate;
+        }
+
+        return ((to: To | number, options?: NavigateOptions) => {
+            if (typeof to === 'number') {
+                return;
+            }
+
+            setLocalLocation((currentLocation) => {
+                if (typeof to === 'string') {
+                    const separatorIndex = to.indexOf('?');
+                    const pathname = separatorIndex >= 0
+                        ? to.slice(0, separatorIndex) || currentLocation.pathname
+                        : to || currentLocation.pathname;
+                    const search = separatorIndex >= 0
+                        ? normalizeReaderSearch(to.slice(separatorIndex + 1))
+                        : '';
+
+                    return {
+                        pathname,
+                        search,
+                        state: (options?.state as ReaderLocationState) ?? null,
+                    };
+                }
+
+                return {
+                    pathname: to.pathname ?? currentLocation.pathname,
+                    search: normalizeReaderSearch(to.search),
+                    state: (options?.state as ReaderLocationState) ?? null,
+                };
+            });
+        }) as NavigateFunction;
+    }, [routerNavigate, usesLocalLocation]);
     const { params, loading: settingsLoading, setParams } = useParams();
     const { tags } = useTags();
     const { bookmarks: scraperBookmarks } = useScraperBookmarks();
     const { recordsById: scraperViewHistoryRecordsById } = useScraperViewHistory();
     const [scrapers, setScrapers] = React.useState<ScraperRecord[]>([]);
     const [scraperReaderProgressRecords, setScraperReaderProgressRecords] = React.useState<ScraperReaderProgressRecord[]>([]);
-    const locationState = location.state as ReaderLocationState;
     const ocrPreloadPageCount = settingsLoading
         ? null
         : normalizeReaderOcrPreloadPageCount(params?.readerOcrPreloadPageCount ?? params?.readerPreloadPageCount);
@@ -157,7 +231,7 @@ const Reader: React.FC = () => {
 
     React.useEffect(() => {
         void loadScraperReaderProgressRecords();
-    }, [loadScraperReaderProgressRecords, location.search]);
+    }, [loadScraperReaderProgressRecords, locationSearch]);
 
     const {
         images,
@@ -173,9 +247,10 @@ const Reader: React.FC = () => {
         coverData,
         runDebugListPages,
     } = useReaderData({
-        locationSearch: location.search,
+        locationSearch,
         locationState,
         preloadPageCount: imagePreloadPageCount,
+        syncWindowPageParam,
     });
     const ocrPanelLayoutStyle = useReaderOcrPanelLayout(readerHeaderRef, ocrPanelRef);
     const scrapersById = React.useMemo(
@@ -207,7 +282,7 @@ const Reader: React.FC = () => {
     );
 
     const navigation = useReaderNavigation({
-        locationSearch: location.search,
+        locationSearch,
         locationState,
         manga,
         libraryMangas,

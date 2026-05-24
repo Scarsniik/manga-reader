@@ -37,6 +37,20 @@ type WindowState = {
 
 type WindowStateChangeListener = (state: WindowState) => void;
 
+type MangaManagerViewWorkspaceTarget = {
+    kind: "manga-manager.view";
+    viewId: string;
+    title?: string;
+};
+
+type ReaderWorkspaceTarget = {
+    kind: "reader";
+    mangaId: string;
+    page?: number;
+    title?: string;
+    locationState?: unknown;
+};
+
 type ScraperConfigWorkspaceTarget = {
     kind: "scraper.config";
     scraperId: string;
@@ -59,6 +73,8 @@ type ScraperAuthorWorkspaceTarget = {
 };
 
 type WorkspaceTarget =
+    | MangaManagerViewWorkspaceTarget
+    | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget;

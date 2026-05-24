@@ -26,6 +26,14 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
     return "Configuration scraper";
   }
 
+  if (target.kind === "manga-manager.view") {
+    return "Vue";
+  }
+
+  if (target.kind === "reader") {
+    return "Lecteur";
+  }
+
   if (target.kind === "scraper.details") {
     return "Fiche scraper";
   }

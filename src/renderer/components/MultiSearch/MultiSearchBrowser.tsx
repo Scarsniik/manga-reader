@@ -670,6 +670,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     page: number,
     knownTotalPages: number | null,
     readerMangaId?: string,
+    openInWorkspace = false,
   ) => {
     setOpenError(null);
 
@@ -684,6 +685,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
           pathname: location.pathname,
           search: location.search,
         },
+        openInWorkspace,
       });
     } catch (openReaderError) {
       setOpenError(
@@ -930,11 +932,12 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
         showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
-        onOpenProgressReader={(source, page, totalPages, readerMangaId) => void handleOpenProgressReader(
+        onOpenProgressReader={(source, page, totalPages, readerMangaId, openInWorkspace) => void handleOpenProgressReader(
           source,
           page,
           totalPages,
           readerMangaId,
+          openInWorkspace,
         )}
         onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
         onExportJson={() => void handleExportJson()}

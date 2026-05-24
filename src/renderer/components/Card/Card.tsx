@@ -16,6 +16,7 @@ interface CardOverlayTitle extends BaseCardOverlayItem {
 interface BaseCardOverlayButton extends BaseCardOverlayItem {
     type?: "button";
     onClick: (e: React.MouseEvent) => void;
+    onAuxClick?: (e: React.MouseEvent) => void;
     disabled?: boolean;
     icon?: React.ReactNode;
     compact?: boolean;
@@ -50,6 +51,7 @@ interface Props {
     overlayContent?: CardOverlayItem[];
     /** Action on card click */
     onClick?: (e: React.MouseEvent) => void;
+    onAuxClick?: (e: React.MouseEvent) => void;
     onKeyDown?: (e: React.KeyboardEvent) => void;
     selected?: boolean;
     titleLineCount?: number;
@@ -94,6 +96,7 @@ function Card(props: Props): JSX.Element {
         title,
         metaLabel,
         onClick,
+        onAuxClick,
         onKeyDown,
         countLabel,
         overlayContent,
@@ -120,6 +123,17 @@ function Card(props: Props): JSX.Element {
     const handleOverlayItemClick = useCallback((item: CardOverlayButton) => (e: React.MouseEvent) => {
         item.onClick(e);
         if (!item.disabled) {
+            setIsOverlayVisible(false);
+        }
+    }, []);
+
+    const handleOverlayItemAuxClick = useCallback((item: CardOverlayButton) => (e: React.MouseEvent) => {
+        if (item.disabled || !item.onAuxClick) {
+            return;
+        }
+
+        item.onAuxClick(e);
+        if (!item.disabled && e.button === 1) {
             setIsOverlayVisible(false);
         }
     }, []);
@@ -152,6 +166,13 @@ function Card(props: Props): JSX.Element {
             tabIndex={0}
             onKeyDown={onKeyDown}
             aria-pressed={selected}
+            onAuxClick={onAuxClick}
+            onMouseDown={onAuxClick ? (e) => {
+                if (e.button === 1) {
+                    e.preventDefault();
+                }
+            } : undefined}
+            data-prevent-middle-click-autoscroll={onAuxClick ? 'true' : undefined}
         >
             <div className="manga-card-cover">
                 {coverPath ? (
@@ -165,7 +186,11 @@ function Card(props: Props): JSX.Element {
                 )}
 
                 {isOverlayVisible ? (
-                    <div className="manga-card-overlay" onClick={(e) => e.stopPropagation()}>
+                    <div
+                        className="manga-card-overlay"
+                        onClick={(e) => e.stopPropagation()}
+                        onAuxClick={(e) => e.stopPropagation()}
+                    >
                         {overlayContent?.map((item, idx) => {
                             const itemsPerRow = resolveOverlayItemItemsPerRow(item);
                             if (isCardOverlayTitle(item)) {
@@ -196,6 +221,13 @@ function Card(props: Props): JSX.Element {
                                 <button
                                     key={idx}
                                     onClick={handleOverlayItemClick(item)}
+                                    onAuxClick={handleOverlayItemAuxClick(item)}
+                                    onMouseDown={item.onAuxClick ? (e) => {
+                                        if (e.button === 1) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }
+                                    } : undefined}
                                     type="button"
                                     className={[
                                         "manga-card-overlay-button",
@@ -206,6 +238,7 @@ function Card(props: Props): JSX.Element {
                                     disabled={item.disabled}
                                     aria-label={accessibleLabel}
                                     title={accessibleLabel}
+                                    data-prevent-middle-click-autoscroll={item.onAuxClick ? 'true' : undefined}
                                 >
                                     {item.icon ? (
                                         <span className="manga-card-overlay-button-icon" aria-hidden="true">

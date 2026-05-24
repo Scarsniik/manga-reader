@@ -14,6 +14,9 @@ import buildScraperConfigModal from '@/renderer/components/Modal/modales/Scraper
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
+import MangaManagerViewMenu, {
+    MangaManagerViewOption,
+} from '@/renderer/components/MangaManger/MangaManagerViewMenu';
 import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
 import ScraperBookmarksView from '@/renderer/components/ScraperBookmarks/ScraperBookmarksView';
 import ScraperAuthorFavoritesView from '@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView';
@@ -36,6 +39,7 @@ import {
     readMangaManagerViewState,
     writeMangaManagerViewState,
 } from '@/renderer/utils/readerNavigation';
+import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 
 declare global {
     interface Window {
@@ -49,7 +53,15 @@ const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 
         : 'search'
 );
 
-const MangaManager: React.FC = () => {
+type MangaManagerProps = {
+    forcedViewId?: string;
+    showHeader?: boolean;
+};
+
+const MangaManager: React.FC<MangaManagerProps> = ({
+    forcedViewId,
+    showHeader = true,
+}) => {
     const location = useLocation();
     const navigate = useNavigate();
     const [hasLoadedMangas, setHasLoadedMangas] = useState<boolean>(false);
@@ -356,7 +368,7 @@ const MangaManager: React.FC = () => {
         () => parseScraperRouteState(location.search),
         [location.search],
     );
-    const activeViewId = routeScraperState.scraperId ?? 'library';
+    const activeViewId = forcedViewId ?? routeScraperState.scraperId ?? 'library';
     const activeScraper = useMemo(
         () => sortedScrapers.find((scraper) => scraper.id === activeViewId) ?? null,
         [activeViewId, sortedScrapers],
@@ -372,8 +384,25 @@ const MangaManager: React.FC = () => {
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
+    const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
+        { id: 'library', label: 'Bibliotheque' },
+        { id: SCRAPER_MULTI_SEARCH_VIEW_ID, label: 'Recherche multi-sources' },
+        { id: SCRAPER_LATEST_VIEW_ID, label: 'Nouveautes' },
+        { id: SCRAPER_HISTORY_VIEW_ID, label: 'Historique' },
+        { id: SCRAPER_AUTHOR_FAVORITES_VIEW_ID, label: 'Auteurs favoris' },
+        { id: SCRAPER_TAG_FAVORITES_VIEW_ID, label: 'Tags favoris' },
+        { id: 'bookmarks', label: 'Tous les bookmarks' },
+        ...sortedScrapers.map((scraper) => ({
+            id: scraper.id,
+            label: scraper.name,
+        })),
+    ], [sortedScrapers]);
 
     useEffect(() => {
+        if (forcedViewId) {
+            return;
+        }
+
         if (paramsLoading) {
             return;
         }
@@ -407,9 +436,13 @@ const MangaManager: React.FC = () => {
             },
             { replace: true }
         );
-    }, [location.pathname, location.search, navigate, params?.lastHomeSearch, paramsLoading]);
+    }, [forcedViewId, location.pathname, location.search, navigate, params?.lastHomeSearch, paramsLoading]);
 
     useEffect(() => {
+        if (forcedViewId) {
+            return;
+        }
+
         if (paramsLoading || location.pathname !== '/') {
             return;
         }
@@ -434,7 +467,7 @@ const MangaManager: React.FC = () => {
                 persistHomeSearchTimeoutRef.current = null;
             }
         };
-    }, [location.pathname, location.search, params?.lastHomeSearch, paramsLoading, setParams]);
+    }, [forcedViewId, location.pathname, location.search, params?.lastHomeSearch, paramsLoading, setParams]);
 
     useEffect(() => {
         const nextState = location.state as {
@@ -455,6 +488,10 @@ const MangaManager: React.FC = () => {
     }, [location.key, location.state]);
 
     useEffect(() => {
+        if (forcedViewId) {
+            return;
+        }
+
         if (
             activeViewId === 'library'
             || activeViewId === 'bookmarks'
@@ -480,7 +517,7 @@ const MangaManager: React.FC = () => {
                 { replace: true }
             );
         }
-    }, [activeViewId, hasLoadedScrapers, location.pathname, location.search, navigate, scrapers]);
+    }, [activeViewId, forcedViewId, hasLoadedScrapers, location.pathname, location.search, navigate, scrapers]);
 
     const handleSearchResults = useCallback((result: Manga[]) => {
         setFiltered(result);
@@ -565,6 +602,16 @@ const MangaManager: React.FC = () => {
         );
     }, [activeViewId, location.pathname, location.search, navigate, sortedScrapers]);
 
+    const handleOpenViewInWorkspace = useCallback((viewId: string) => {
+        const option = viewOptions.find((candidate) => candidate.id === viewId);
+
+        void openWorkspaceTarget({
+            kind: 'manga-manager.view',
+            viewId,
+            title: option?.label ?? 'Vue',
+        });
+    }, [viewOptions]);
+
     useEffect(() => {
         if (!hasLoadedMangas) return;
         if (hasRestoredViewRef.current) return;
@@ -623,64 +670,54 @@ const MangaManager: React.FC = () => {
 
     return (
         <div className="mangaManager">
-            <div className="mangaManager-header">
-                <div className="mangaManager-header__view">
-                    <select
-                        value={activeViewId}
-                        onChange={(event) => handleActiveViewChange(event.target.value)}
-                        aria-label="Choisir la vue active"
-                    >
-                        <option value="library">Bibliotheque</option>
-                        <option value={SCRAPER_MULTI_SEARCH_VIEW_ID}>Recherche multi-sources</option>
-                        <option value={SCRAPER_LATEST_VIEW_ID}>Nouveautes</option>
-                        <option value={SCRAPER_HISTORY_VIEW_ID}>Historique</option>
-                        <option value={SCRAPER_AUTHOR_FAVORITES_VIEW_ID}>Auteurs favoris</option>
-                        <option value={SCRAPER_TAG_FAVORITES_VIEW_ID}>Tags favoris</option>
-                        <option value="bookmarks">Tous les bookmarks</option>
-                        {sortedScrapers.map((scraper) => (
-                            <option key={scraper.id} value={scraper.id}>
-                                {scraper.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+            {showHeader ? (
+                <div className="mangaManager-header">
+                    <div className="mangaManager-header__view">
+                        <MangaManagerViewMenu
+                            activeViewId={activeViewId}
+                            options={viewOptions}
+                            onSelect={handleActiveViewChange}
+                            onOpenInWorkspace={handleOpenViewInWorkspace}
+                        />
+                    </div>
 
-                <div className="mangaManager-header__actions">
-                    {isLibraryView ? (
-                        <>
-                            <button onClick={() => openModal(buildTagsModal())}>Tags</button>
-                            <button
-                                onClick={() => openModal(buildOcrQueueModal({
-                                    selectedMangaIds: selectedIds,
-                                    filteredMangaIds: displayedMangas.map((m) => m.id),
-                                }))}
-                            >
-                                Avancement OCR
-                            </button>
-                        </>
-                    ) : null}
-                    <button onClick={() => openModal(buildScraperDownloadQueueModal())}>
-                        {downloadQueueButtonLabel}
-                    </button>
-                    <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
-                    <button onClick={() => openModal(buildScraperConfigModal())}>Scrappers</button>
-                    {isLibraryView ? (
-                        <>
-                            <button onClick={onAddClick}>Ajouter</button>
-                            <button
-                                onClick={() => setSelectionMode(s => !s)}
-                                title="Mode sélection"
-                                aria-pressed={selectionMode}
-                            >
-                                {selectionMode ? 'Quitter sélection' : 'Sélection'}
-                            </button>
-                            {selectedIds.length > 0 ? (
-                                <button onClick={() => openModal(buildBatchEditModal(selectedIds, () => { loadMangas(); setSelectedIds([]); }))}>Modification multiple ({selectedIds.length})</button>
-                            ) : null}
-                        </>
-                    ) : null}
+                    <div className="mangaManager-header__actions">
+                        {isLibraryView ? (
+                            <>
+                                <button onClick={() => openModal(buildTagsModal())}>Tags</button>
+                                <button
+                                    onClick={() => openModal(buildOcrQueueModal({
+                                        selectedMangaIds: selectedIds,
+                                        filteredMangaIds: displayedMangas.map((m) => m.id),
+                                    }))}
+                                >
+                                    Avancement OCR
+                                </button>
+                            </>
+                        ) : null}
+                        <button onClick={() => openModal(buildScraperDownloadQueueModal())}>
+                            {downloadQueueButtonLabel}
+                        </button>
+                        <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
+                        <button onClick={() => openModal(buildScraperConfigModal())}>Scrappers</button>
+                        {isLibraryView ? (
+                            <>
+                                <button onClick={onAddClick}>Ajouter</button>
+                                <button
+                                    onClick={() => setSelectionMode(s => !s)}
+                                    title="Mode sélection"
+                                    aria-pressed={selectionMode}
+                                >
+                                    {selectionMode ? 'Quitter sélection' : 'Sélection'}
+                                </button>
+                                {selectedIds.length > 0 ? (
+                                    <button onClick={() => openModal(buildBatchEditModal(selectedIds, () => { loadMangas(); setSelectedIds([]); }))}>Modification multiple ({selectedIds.length})</button>
+                                ) : null}
+                            </>
+                        ) : null}
+                    </div>
                 </div>
-            </div>
+            ) : null}
 
             {isLibraryView ? (
                 <>
@@ -733,6 +770,7 @@ const MangaManager: React.FC = () => {
                             initialState={scraperBrowserSeed && scraperBrowserSeed.scraperId === activeScraper.id
                                 ? scraperBrowserSeed
                                 : null}
+                            routeSyncEnabled={!forcedViewId}
                         />
                     ) : (
                         <div className="empty">Le scrapper selectionne est introuvable.</div>

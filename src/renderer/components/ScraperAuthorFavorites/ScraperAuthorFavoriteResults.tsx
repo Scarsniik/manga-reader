@@ -59,6 +59,7 @@ type Props = {
     page: number,
     totalPages: number | null,
     readerMangaId?: string,
+    openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
 };

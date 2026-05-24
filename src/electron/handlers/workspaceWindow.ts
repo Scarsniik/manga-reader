@@ -9,6 +9,20 @@ import {
     WORKSPACE_WINDOW_MIN_WIDTH,
 } from "./workspaceWindowState";
 
+type MangaManagerViewWorkspaceTarget = {
+    kind: "manga-manager.view";
+    viewId: string;
+    title?: string;
+};
+
+type ReaderWorkspaceTarget = {
+    kind: "reader";
+    mangaId: string;
+    page?: number;
+    title?: string;
+    locationState?: unknown;
+};
+
 type ScraperConfigWorkspaceTarget = {
     kind: "scraper.config";
     scraperId: string;
@@ -31,6 +45,8 @@ type ScraperAuthorWorkspaceTarget = {
 };
 
 export type WorkspaceTarget =
+    | MangaManagerViewWorkspaceTarget
+    | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget;
@@ -76,12 +92,40 @@ const isTemplateContext = (value: unknown): value is Record<string, string | und
     return Object.values(value).every((entry) => entry === undefined || typeof entry === "string");
 };
 
+const isOptionalObject = (value: unknown): boolean => (
+    value === undefined
+    || value === null
+    || (typeof value === "object" && !Array.isArray(value))
+);
+
+const isOptionalPositivePage = (value: unknown): boolean => (
+    value === undefined
+    || (
+        typeof value === "number"
+        && Number.isFinite(value)
+        && value > 0
+    )
+);
+
 const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
     if (!value || typeof value !== "object") {
         return false;
     }
 
     const candidate = value as Partial<WorkspaceTarget>;
+
+    if (candidate.kind === "manga-manager.view") {
+        return typeof candidate.viewId === "string" && candidate.viewId.trim().length > 0;
+    }
+
+    if (candidate.kind === "reader") {
+        return (
+            typeof candidate.mangaId === "string"
+            && candidate.mangaId.trim().length > 0
+            && isOptionalPositivePage(candidate.page)
+            && isOptionalObject(candidate.locationState)
+        );
+    }
 
     if (candidate.kind === "scraper.config") {
         return typeof candidate.scraperId === "string" && candidate.scraperId.trim().length > 0;

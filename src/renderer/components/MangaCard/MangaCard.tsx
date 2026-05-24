@@ -11,6 +11,10 @@ import { writeMangaManagerViewState } from '@/renderer/utils/readerNavigation';
 import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
 import { getMangaSourceUrl } from '@/renderer/utils/mangaSource';
 import { extractChapterSortValue } from '@/renderer/utils/seriesChapters';
+import {
+    buildReaderPath,
+    openReaderWorkspaceTarget,
+} from '@/renderer/utils/workspaceTargets';
 import { OpenBookIcon, EditPencilIcon, TrashCanIcon } from '@/renderer/components/icons';
 
 interface Props {
@@ -102,27 +106,50 @@ const MangaCard: React.FC<Props> = ({
         return null;
     }, [manga.pages, manga.path, pages]);
 
-    const openReader = useCallback(async () => {
-        rememberReaderReturnPoint();
-
+    const resolveReaderTargetPage = useCallback(async () => {
         const savedPage = (typeof manga.currentPage === 'number' && manga.currentPage > 0) ? manga.currentPage : 1;
         const totalPages = await resolveTotalPages();
         const shouldRestartFromBeginning = totalPages !== null && savedPage >= totalPages;
-        const targetPage = shouldRestartFromBeginning ? 1 : savedPage;
+
+        return shouldRestartFromBeginning ? 1 : savedPage;
+    }, [manga.currentPage, resolveTotalPages]);
+
+    const getReaderLocationState = useCallback(() => ({
+        from: {
+            pathname: location.pathname,
+            search: location.search,
+        },
+        mangaId: manga.id,
+    }), [location.pathname, location.search, manga.id]);
+
+    const openReader = useCallback(async () => {
+        rememberReaderReturnPoint();
+
+        const targetPage = await resolveReaderTargetPage();
 
         navigate(
-            `/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(targetPage))}`,
+            buildReaderPath(manga.id, targetPage),
             {
-                state: {
-                    from: {
-                        pathname: location.pathname,
-                        search: location.search,
-                    },
-                    mangaId: manga.id,
-                },
+                state: getReaderLocationState(),
             }
         );
-    }, [location.pathname, location.search, manga.currentPage, manga.id, navigate, rememberReaderReturnPoint, resolveTotalPages]);
+    }, [getReaderLocationState, manga.id, navigate, rememberReaderReturnPoint, resolveReaderTargetPage]);
+
+    const openReaderInWorkspace = useCallback(async () => {
+        rememberReaderReturnPoint();
+
+        const targetPage = await resolveReaderTargetPage();
+        const opened = await openReaderWorkspaceTarget({
+            mangaId: manga.id,
+            page: targetPage,
+            title: manga.title,
+            locationState: getReaderLocationState(),
+        });
+
+        if (!opened) {
+            alert('L\'ouverture du lecteur dans un onglet workspace n\'est pas disponible dans cette version.');
+        }
+    }, [getReaderLocationState, manga.id, manga.title, rememberReaderReturnPoint, resolveReaderTargetPage]);
 
     useEffect(() => {
         const fetchPages = async () => {
@@ -201,6 +228,16 @@ const MangaCard: React.FC<Props> = ({
         openReader();
     }, [manga.id, onToggleSelect, openReader, selectionMode]);
 
+    const onCardAuxClick = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 1) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        void openReaderInWorkspace();
+    }, [openReaderInWorkspace]);
+
     const onEditClick = useCallback(() => {
         try {
             openModal(buildEditMangaModal(manga));
@@ -268,6 +305,16 @@ const MangaCard: React.FC<Props> = ({
             openReader();
         }
     }, [openReader]);
+
+    const onReadAuxClick = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 1) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        void openReaderInWorkspace();
+    }, [openReaderInWorkspace]);
 
     const onFilterByAuthor = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -366,6 +413,7 @@ const MangaCard: React.FC<Props> = ({
             icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
             ariaLabel: 'Lire',
             onClick: onCardClick,
+            onAuxClick: onReadAuxClick,
             itemsPerRow: 3,
         },
         {
@@ -410,7 +458,7 @@ const MangaCard: React.FC<Props> = ({
             disabled: !seriesId,
             itemsPerRow: 2,
         },
-    ]), [currentPage, onCardClick, onDeleteClick, onEditClick, onFilterByAuthor, onFilterBySeries, onOcrClick, onSourceClick, onToggleRead, pages, primaryAuthorId, seriesId, sourceUrl]);
+    ]), [currentPage, onCardClick, onDeleteClick, onEditClick, onFilterByAuthor, onFilterBySeries, onOcrClick, onReadAuxClick, onSourceClick, onToggleRead, pages, primaryAuthorId, seriesId, sourceUrl]);
 
     return (
         <Card
@@ -427,6 +475,7 @@ const MangaCard: React.FC<Props> = ({
             titleLineCount={titleLineCount}
             showPageNumbers={showPageNumbers}
             onClick={onCardClick}
+            onAuxClick={onCardAuxClick}
             onKeyDown={onCardKeyDown}
         />
     );

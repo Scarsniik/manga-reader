@@ -32,6 +32,10 @@ import { resolveScraperReader } from "@/renderer/components/History/historyReade
 import { createScraperMangaId } from "@/renderer/utils/scraperRuntime";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import { recordReadingHistorySafe, toLocalImageUrl } from "@/renderer/utils/history";
+import {
+  buildReaderPath,
+  openReaderWorkspaceTarget,
+} from "@/renderer/utils/workspaceTargets";
 import "./style.scss";
 
 type Props = {
@@ -138,7 +142,10 @@ export default function HistoryView({ scrapers }: Props) {
     });
   }, [location.pathname, location.search, navigate]);
 
-  const openScraperReader = useCallback(async (record: ReadingHistoryRecord | DetailsHistoryRecord) => {
+  const openScraperReader = useCallback(async (
+    record: ReadingHistoryRecord | DetailsHistoryRecord,
+    openInWorkspace = false,
+  ) => {
     if (!record.scraperId) {
       return;
     }
@@ -154,27 +161,43 @@ export default function HistoryView({ scrapers }: Props) {
     setMessage(null);
     try {
       const resolution = await resolveScraperReader(record, scraper);
+      const readerLocationState = {
+        from: {
+          pathname: location.pathname,
+          search: location.search,
+        },
+        mangaId: resolution.readerMangaId,
+        scraperReader: {
+          id: resolution.readerMangaId,
+          scraperId: scraper.id,
+          title: resolution.title,
+          sourceUrl: resolution.sourceUrl,
+          cover: resolution.cover,
+          language: resolution.detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
+          pageUrls: resolution.pageUrls,
+          chapter: resolution.chapter,
+          bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+        },
+      };
+
+      if (openInWorkspace) {
+        const opened = await openReaderWorkspaceTarget({
+          mangaId: resolution.readerMangaId,
+          page: resolution.initialPage,
+          title: resolution.title,
+          locationState: readerLocationState,
+        });
+
+        if (!opened) {
+          throw new Error("L'ouverture du lecteur dans un onglet workspace n'est pas disponible dans cette version.");
+        }
+        return;
+      }
+
       navigate(
-        `/reader?id=${encodeURIComponent(resolution.readerMangaId)}&page=${encodeURIComponent(String(resolution.initialPage))}`,
+        buildReaderPath(resolution.readerMangaId, resolution.initialPage),
         {
-          state: {
-            from: {
-              pathname: location.pathname,
-              search: location.search,
-            },
-            mangaId: resolution.readerMangaId,
-            scraperReader: {
-              id: resolution.readerMangaId,
-              scraperId: scraper.id,
-              title: resolution.title,
-              sourceUrl: resolution.sourceUrl,
-              cover: resolution.cover,
-              language: resolution.detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
-              pageUrls: resolution.pageUrls,
-              chapter: resolution.chapter,
-              bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
-            },
-          },
+          state: readerLocationState,
         },
       );
     } catch (openError) {
@@ -184,7 +207,10 @@ export default function HistoryView({ scrapers }: Props) {
     }
   }, [location.pathname, location.search, navigate, scrapersById]);
 
-  const openLibraryReader = useCallback(async (record: ReadingHistoryRecord) => {
+  const openLibraryReader = useCallback(async (
+    record: ReadingHistoryRecord,
+    openInWorkspace = false,
+  ) => {
     if (!record.mangaId) {
       return;
     }
@@ -202,17 +228,32 @@ export default function HistoryView({ scrapers }: Props) {
 
     const savedPage = toPositiveInteger(manga.currentPage) ?? 1;
     const targetPage = totalPageCount !== null && savedPage >= totalPageCount ? 1 : savedPage;
+    const readerLocationState = {
+      from: {
+        pathname: location.pathname,
+        search: location.search,
+      },
+      mangaId: manga.id,
+    };
+
+    if (openInWorkspace) {
+      const opened = await openReaderWorkspaceTarget({
+        mangaId: manga.id,
+        page: targetPage,
+        title: manga.title,
+        locationState: readerLocationState,
+      });
+
+      if (!opened) {
+        setError("L'ouverture du lecteur dans un onglet workspace n'est pas disponible dans cette version.");
+      }
+      return;
+    }
 
     navigate(
-      `/reader?id=${encodeURIComponent(manga.id)}&page=${encodeURIComponent(String(targetPage))}`,
+      buildReaderPath(manga.id, targetPage),
       {
-        state: {
-          from: {
-            pathname: location.pathname,
-            search: location.search,
-          },
-          mangaId: manga.id,
-        },
+        state: readerLocationState,
       },
     );
   }, [location.pathname, location.search, mangaById, navigate]);
@@ -300,8 +341,8 @@ export default function HistoryView({ scrapers }: Props) {
           mangaById={mangaById}
           progressIndexes={progressIndexes}
           scrapersById={scrapersById}
-          onOpenLibraryReader={(nextRecord) => void openLibraryReader(nextRecord)}
-          onOpenScraperReader={(nextRecord) => void openScraperReader(nextRecord)}
+          onOpenLibraryReader={(nextRecord, openInWorkspace) => void openLibraryReader(nextRecord, openInWorkspace)}
+          onOpenScraperReader={(nextRecord, openInWorkspace) => void openScraperReader(nextRecord, openInWorkspace)}
           onRemove={(nextRecord) => void removeReadingRecord(nextRecord)}
           onMarkRead={(nextRecord) => void markReadingRecordRead(nextRecord)}
         />
@@ -316,7 +357,7 @@ export default function HistoryView({ scrapers }: Props) {
           busyRecordId={busyRecordId}
           scrapersById={scrapersById}
           onOpenDetails={openDetailsRecord}
-          onOpenScraperReader={(nextRecord) => void openScraperReader(nextRecord)}
+          onOpenScraperReader={(nextRecord, openInWorkspace) => void openScraperReader(nextRecord, openInWorkspace)}
           onRemove={(nextRecord) => void removeDetailsRecord(nextRecord)}
         />
       ));

@@ -250,11 +250,12 @@ export default function ScraperAuthorCombinedView({
       getSourceButtonAriaLabel={() => `Revenir a la vue par pages de ${authorTitle || "cet auteur"}`}
       onOpenSource={handleOpenSource}
       onOpenSourceInWorkspace={handleOpenSourceInWorkspace}
-      onOpenProgressReader={(source, page, totalPages, readerMangaId) => void handleOpenProgressReader(
+      onOpenProgressReader={(source, page, totalPages, readerMangaId, openInWorkspace) => void handleOpenProgressReader(
         source,
         page,
         totalPages,
         readerMangaId,
+        openInWorkspace,
       )}
       onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
     />

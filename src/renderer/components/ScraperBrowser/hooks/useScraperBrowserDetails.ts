@@ -16,6 +16,10 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
+  buildReaderPath,
+  openReaderWorkspaceTarget,
+} from '@/renderer/utils/workspaceTargets';
+import {
   createScraperMangaId,
   extractScraperDetailsFromDocumentWithImageFallbacks,
   extractScraperDetailsThumbnailsPageFromDocument,
@@ -525,35 +529,51 @@ export function useScraperBrowserDetails({
           ? savedProgress.currentPage
           : 1);
 
+      const readerLocationState = {
+        from: {
+          pathname: locationPathname,
+          search: locationSearch,
+        },
+        mangaId: readerMangaId,
+        scraperBrowserReturn: {
+          scraperId: scraper.id,
+          query,
+          detailsResult,
+          chaptersResult,
+          listingReturnState,
+        },
+        scraperReader: {
+          id: readerMangaId,
+          scraperId: scraper.id,
+          title: detailsResult.title || query.trim() || 'manga',
+          sourceUrl,
+          cover: detailsResult.cover,
+          language: detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
+          pageUrls,
+          chapter: normalizedChapter,
+          bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
+          ignoreSavedProgress: requestedPage !== null,
+        },
+      };
+
+      if (options?.openInWorkspace) {
+        const opened = await openReaderWorkspaceTarget({
+          mangaId: readerMangaId,
+          page: initialPage,
+          title: readerLocationState.scraperReader.title,
+          locationState: readerLocationState,
+        });
+
+        if (!opened) {
+          throw new Error('L\'ouverture du lecteur dans un onglet workspace n\'est pas disponible dans cette version.');
+        }
+        return;
+      }
+
       navigate(
-        `/reader?id=${encodeURIComponent(readerMangaId)}&page=${encodeURIComponent(String(initialPage))}`,
+        buildReaderPath(readerMangaId, initialPage),
         {
-          state: {
-            from: {
-              pathname: locationPathname,
-              search: locationSearch,
-            },
-            mangaId: readerMangaId,
-            scraperBrowserReturn: {
-              scraperId: scraper.id,
-              query,
-              detailsResult,
-              chaptersResult,
-              listingReturnState,
-            },
-            scraperReader: {
-              id: readerMangaId,
-              scraperId: scraper.id,
-              title: detailsResult.title || query.trim() || 'manga',
-              sourceUrl,
-              cover: detailsResult.cover,
-              language: detailsResult.languageCodes?.[0] || scraper.globalConfig.defaultLanguage || null,
-              pageUrls,
-              chapter: normalizedChapter,
-              bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
-              ignoreSavedProgress: requestedPage !== null,
-            },
-          },
+          state: readerLocationState,
         },
       );
     } catch (error) {

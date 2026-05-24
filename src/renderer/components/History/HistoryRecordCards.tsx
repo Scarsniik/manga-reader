@@ -25,8 +25,8 @@ type ReadingCardProps = {
   mangaById: Map<string, Manga>;
   progressIndexes: ProgressIndexes;
   scrapersById: Map<string, ScraperRecord>;
-  onOpenLibraryReader: (record: ReadingHistoryRecord) => void;
-  onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord) => void;
+  onOpenLibraryReader: (record: ReadingHistoryRecord, openInWorkspace?: boolean) => void;
+  onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord, openInWorkspace?: boolean) => void;
   onRemove: (record: ReadingHistoryRecord) => void;
   onMarkRead: (record: ReadingHistoryRecord) => void;
 };
@@ -36,7 +36,7 @@ type DetailsCardProps = {
   busyRecordId: string | null;
   scrapersById: Map<string, ScraperRecord>;
   onOpenDetails: (record: DetailsHistoryRecord) => void;
-  onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord) => void;
+  onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord, openInWorkspace?: boolean) => void;
   onRemove: (record: DetailsHistoryRecord) => void;
 };
 
@@ -96,6 +96,14 @@ export function HistoryReadingCard({
           }
 
           onOpenScraperReader(record);
+        },
+        onMiddleClick: () => {
+          if (record.sourceKind === "library") {
+            onOpenLibraryReader(record, true);
+            return;
+          }
+
+          onOpenScraperReader(record, true);
         },
         disabled: isBusy || !canRead,
       },
@@ -200,6 +208,7 @@ export function HistoryDetailsCard({
       ariaLabel: `Ouvrir la lecture ${record.title}`,
       icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
       onClick: () => onOpenScraperReader(record),
+      onMiddleClick: () => onOpenScraperReader(record, true),
       disabled: isBusy || !canOpenScraperReader(scraper),
     },
     {

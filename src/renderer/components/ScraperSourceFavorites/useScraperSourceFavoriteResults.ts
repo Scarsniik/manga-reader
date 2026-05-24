@@ -55,6 +55,7 @@ type SourceFavoriteResultsState = {
     page: number,
     knownTotalPages: number | null,
     readerMangaId?: string,
+    openInWorkspace?: boolean,
   ) => Promise<void>;
   handleSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => Promise<void>;
 };
@@ -279,6 +280,7 @@ export default function useScraperSourceFavoriteResults({
     page: number,
     knownTotalPages: number | null,
     readerMangaId?: string,
+    openInWorkspace = false,
   ) => {
     setOpenError(null);
 
@@ -293,6 +295,7 @@ export default function useScraperSourceFavoriteResults({
           pathname: location.pathname,
           search: location.search,
         },
+        openInWorkspace,
       });
     } catch (openReaderError) {
       setOpenError(

@@ -413,11 +413,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
         onReload={handleReload}
         onOpenSource={sourceResults.handleOpenSource}
         onOpenSourceInWorkspace={sourceResults.handleOpenSourceInWorkspace}
-        onOpenProgressReader={(source, page, totalPages, readerMangaId) => void sourceResults.handleOpenProgressReader(
+        onOpenProgressReader={(source, page, totalPages, readerMangaId, openInWorkspace) => void sourceResults.handleOpenProgressReader(
           source,
           page,
           totalPages,
           readerMangaId,
+          openInWorkspace,
         )}
         onSetSourcesRead={(identities, read) => void sourceResults.handleSetSourcesRead(identities, read)}
         onToggleLanguageFilterMode={sourceResults.handleToggleLanguageFilterMode}

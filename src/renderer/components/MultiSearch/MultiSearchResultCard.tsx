@@ -41,6 +41,7 @@ type Props = {
     page: number,
     totalPages: number | null,
     readerMangaId?: string,
+    openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
 };
@@ -275,6 +276,28 @@ export default function MultiSearchResultCard({
                   primaryProgress.readerMangaId,
                 );
               }}
+              onMouseDown={(event) => {
+                if (event.button === 1) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenProgressReader(
+                  primaryProgressSource,
+                  primaryProgress.currentPage,
+                  primaryProgress.totalPages,
+                  primaryProgress.readerMangaId,
+                  true,
+                );
+              }}
+              data-prevent-middle-click-autoscroll="true"
             >
               {progressContent}
             </button>

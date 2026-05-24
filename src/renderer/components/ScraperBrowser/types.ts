@@ -62,6 +62,7 @@ export type ScraperCapability = {
 
 export type ScraperOpenReaderOptions = {
   chapter?: ScraperRuntimeChapterResult;
+  openInWorkspace?: boolean;
   page?: number;
 };
 

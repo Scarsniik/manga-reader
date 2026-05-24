@@ -26,12 +26,14 @@ type Args = {
     locationSearch: string;
     locationState: ReaderLocationState;
     preloadPageCount: number | null;
+    syncWindowPageParam?: boolean;
 };
 
 const useReaderData = ({
     locationSearch,
     locationState,
     preloadPageCount,
+    syncWindowPageParam = true,
 }: Args) => {
     const [images, setImages] = React.useState<string[]>([]);
     const [currentIndex, setCurrentIndex] = React.useState<number>(0);
@@ -296,6 +298,10 @@ const useReaderData = ({
     }, [currentIndex]);
 
     React.useEffect(() => {
+        if (!syncWindowPageParam) {
+            return;
+        }
+
         if (!manga) {
             return;
         }
@@ -317,7 +323,7 @@ const useReaderData = ({
         } catch (error) {
             // ignore
         }
-    }, [currentIndex, images, manga]);
+    }, [currentIndex, images, manga, syncWindowPageParam]);
 
     React.useEffect(() => {
         if (!window.api || typeof window.api.fetchScraperDocument !== 'function') {

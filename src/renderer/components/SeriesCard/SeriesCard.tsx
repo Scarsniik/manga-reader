@@ -6,6 +6,10 @@ import useSeries from "@/renderer/hooks/useSeries";
 import { Manga } from "@/renderer/types";
 import { writeMangaManagerViewState } from "@/renderer/utils/readerNavigation";
 import { compareSeriesMangasByChapter } from "@/renderer/utils/seriesChapters";
+import {
+    buildReaderPath,
+    openReaderWorkspaceTarget,
+} from "@/renderer/utils/workspaceTargets";
 
 interface Props {
     seriesId: string;
@@ -269,12 +273,10 @@ const SeriesCard: React.FC<Props> = ({
         return savedPage;
     }, []);
 
-    const openReader = useCallback(async () => {
+    const resolveReaderTarget = useCallback(async (): Promise<{ manga: Manga; page: number } | null> => {
         if (seriesMangas.length === 0) {
-            return;
+            return null;
         }
-
-        rememberReaderReturnPoint();
 
         const startedMangas = seriesMangas.filter((manga) => toPositiveNumber(manga.currentPage) !== null);
         const fallbackManga = seriesMangas[0];
@@ -291,19 +293,55 @@ const SeriesCard: React.FC<Props> = ({
         const totalPages = await resolveTotalPagesForManga(targetManga);
         const targetPage = resolveReaderTargetPage(targetManga, totalPages);
 
+        return {
+            manga: targetManga,
+            page: targetPage,
+        };
+    }, [resolveReaderTargetPage, resolveTotalPagesForManga, seriesMangas]);
+
+    const getReaderLocationState = useCallback((targetManga: Manga) => ({
+        from: {
+            pathname: location.pathname,
+            search: location.search,
+        },
+        mangaId: targetManga.id,
+    }), [location.pathname, location.search]);
+
+    const openReader = useCallback(async () => {
+        const target = await resolveReaderTarget();
+        if (!target) {
+            return;
+        }
+
+        rememberReaderReturnPoint();
+
         navigate(
-            `/reader?id=${encodeURIComponent(targetManga.id)}&page=${encodeURIComponent(String(targetPage))}`,
+            buildReaderPath(target.manga.id, target.page),
             {
-                state: {
-                    from: {
-                        pathname: location.pathname,
-                        search: location.search,
-                    },
-                    mangaId: targetManga.id,
-                },
+                state: getReaderLocationState(target.manga),
             },
         );
-    }, [location.pathname, location.search, navigate, rememberReaderReturnPoint, resolveReaderTargetPage, resolveTotalPagesForManga, seriesMangas]);
+    }, [getReaderLocationState, navigate, rememberReaderReturnPoint, resolveReaderTarget]);
+
+    const openReaderInWorkspace = useCallback(async () => {
+        const target = await resolveReaderTarget();
+        if (!target) {
+            return;
+        }
+
+        rememberReaderReturnPoint();
+
+        const opened = await openReaderWorkspaceTarget({
+            mangaId: target.manga.id,
+            page: target.page,
+            title: target.manga.title,
+            locationState: getReaderLocationState(target.manga),
+        });
+
+        if (!opened) {
+            alert("L'ouverture du lecteur dans un onglet workspace n'est pas disponible dans cette version.");
+        }
+    }, [getReaderLocationState, rememberReaderReturnPoint, resolveReaderTarget]);
 
     const seriesTitle = useMemo(() => {
         const matchingSeries = series.find((seriesItem) => seriesItem.id === seriesId);
@@ -364,10 +402,30 @@ const SeriesCard: React.FC<Props> = ({
         void openReader();
     }, [onToggleSelect, openReader, selectionMode, seriesId]);
 
+    const onCardAuxClick = useCallback((event: React.MouseEvent) => {
+        if (event.button !== 1) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        void openReaderInWorkspace();
+    }, [openReaderInWorkspace]);
+
     const onReadClick = useCallback((event: React.MouseEvent) => {
         event.stopPropagation();
         void openReader();
     }, [openReader]);
+
+    const onReadAuxClick = useCallback((event: React.MouseEvent) => {
+        if (event.button !== 1) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        void openReaderInWorkspace();
+    }, [openReaderInWorkspace]);
 
     const onCardKeyDown = useCallback((event: React.KeyboardEvent) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -402,6 +460,7 @@ const SeriesCard: React.FC<Props> = ({
             icon: <OpenBookIcon aria-hidden="true" focusable="false" />,
             ariaLabel: "Lire",
             onClick: onReadClick,
+            onAuxClick: onReadAuxClick,
             itemsPerRow: 3,
         },
         {
@@ -419,7 +478,7 @@ const SeriesCard: React.FC<Props> = ({
             onClick: onFilterByAuthor,
             disabled: !primaryAuthorId,
         },
-    ]), [onFilterByAuthor, onFilterBySeries, onReadClick, primaryAuthorId]);
+    ]), [onFilterByAuthor, onFilterBySeries, onReadAuxClick, onReadClick, primaryAuthorId]);
 
     return (
         <Card
@@ -437,6 +496,7 @@ const SeriesCard: React.FC<Props> = ({
             showPageNumbers={showPageNumbers}
             overlayTriggerSize="compact"
             onClick={onCardClick}
+            onAuxClick={onCardAuxClick}
             onKeyDown={onCardKeyDown}
         />
     );

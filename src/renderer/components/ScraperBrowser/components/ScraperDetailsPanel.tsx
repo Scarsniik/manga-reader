@@ -11,6 +11,8 @@ import {
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 
+const MIDDLE_BUTTON = 1;
+
 type Props = {
   scraperId: string;
   bookmarkExcludedFields: ScraperBookmarkMetadataField[];
@@ -99,6 +101,21 @@ export default function ScraperDetailsPanel({
   const addToLibraryLabel = linkedStandaloneManga
     ? 'Mettre a jour la bibliotheque'
     : 'Ajouter a la bibliotheque';
+  const handleOpenReaderAuxClick = (
+    event: React.MouseEvent,
+    options?: ScraperOpenReaderOptions,
+  ) => {
+    if (event.button !== MIDDLE_BUTTON) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenReader({
+      ...options,
+      openInWorkspace: true,
+    });
+  };
 
   return (
     <>
@@ -161,7 +178,14 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className="scraper-browser__read"
                     onClick={() => onOpenReader()}
+                    onMouseDown={(event) => {
+                      if (event.button === MIDDLE_BUTTON) {
+                        event.preventDefault();
+                      }
+                    }}
+                    onAuxClick={(event) => handleOpenReaderAuxClick(event)}
                     disabled={openingReader}
+                    data-prevent-middle-click-autoscroll="true"
                   >
                     {openingReader ? 'Ouverture...' : 'Lecteur'}
                   </button>
@@ -362,7 +386,14 @@ export default function ScraperDetailsPanel({
                             type="button"
                             className="scraper-browser__read"
                             onClick={() => onOpenReader({ chapter })}
+                            onMouseDown={(event) => {
+                              if (event.button === MIDDLE_BUTTON) {
+                                event.preventDefault();
+                              }
+                            }}
+                            onAuxClick={(event) => handleOpenReaderAuxClick(event, { chapter })}
                             disabled={openingReader}
+                            data-prevent-middle-click-autoscroll="true"
                           >
                             {openingReader ? 'Ouverture...' : 'Lecteur'}
                           </button>
@@ -443,7 +474,14 @@ export default function ScraperDetailsPanel({
                         type="button"
                         className="scraper-browser__thumbnail-button"
                         onClick={() => onOpenReader({ page })}
+                        onMouseDown={(event) => {
+                          if (event.button === MIDDLE_BUTTON) {
+                            event.preventDefault();
+                          }
+                        }}
+                        onAuxClick={(event) => handleOpenReaderAuxClick(event, { page })}
                         disabled={openingReader}
+                        data-prevent-middle-click-autoscroll="true"
                         aria-label={`Ouvrir le lecteur a la page ${page}`}
                         title={`Ouvrir le lecteur a la page ${page}`}
                       >
