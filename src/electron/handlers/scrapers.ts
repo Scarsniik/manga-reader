@@ -41,6 +41,10 @@ export {
   setScraperCardRead,
 } from "./scrapers/viewHistory";
 export {
+  getScraperLatestCheckpoints,
+  saveScraperLatestCheckpoint,
+} from "./scrapers/latestCheckpoints";
+export {
   deleteScraper,
   getScrapers,
   saveScraperDraft,

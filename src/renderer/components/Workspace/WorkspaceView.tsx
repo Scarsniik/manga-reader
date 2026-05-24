@@ -6,7 +6,13 @@ import "@/renderer/components/Workspace/style.scss";
 
 type WorkspaceApi = {
   closeWindow?: () => Promise<void>;
-  onWorkspaceOpenTarget?: (callback: (target: WorkspaceTarget) => void) => () => void;
+  onWorkspaceOpenTarget?: (
+    callback: (target: WorkspaceTarget, options?: WorkspaceOpenTargetOptions) => void,
+  ) => () => void;
+};
+
+type WorkspaceOpenTargetOptions = {
+  activate?: boolean;
 };
 
 let storedTabs: WorkspaceTab[] = [];
@@ -45,10 +51,11 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
   return "Onglet";
 };
 
-const createWorkspaceTab = (target: WorkspaceTarget): WorkspaceTab => {
+const createWorkspaceTab = (target: WorkspaceTarget, isNew: boolean): WorkspaceTab => {
   tabSequence += 1;
   return {
     id: `workspace-tab-${Date.now()}-${tabSequence}`,
+    isNew,
     target,
     title: getTargetTitle(target),
   };
@@ -76,10 +83,20 @@ export default function WorkspaceView() {
     setActiveTabIdState(nextTabId);
   }, []);
 
-  const openTarget = useCallback((target: WorkspaceTarget) => {
-    const nextTab = createWorkspaceTab(target);
+  const activateTab = useCallback((tabId: string) => {
+    updateTabs(storedTabs.map((tab) => (
+      tab.id === tabId ? { ...tab, isNew: false } : tab
+    )));
+    updateActiveTabId(tabId);
+  }, [updateActiveTabId, updateTabs]);
+
+  const openTarget = useCallback((target: WorkspaceTarget, options?: WorkspaceOpenTargetOptions) => {
+    const shouldActivate = options?.activate !== false || storedActiveTabId === null;
+    const nextTab = createWorkspaceTab(target, !shouldActivate);
     updateTabs([...storedTabs, nextTab]);
-    updateActiveTabId(nextTab.id);
+    if (shouldActivate) {
+      updateActiveTabId(nextTab.id);
+    }
   }, [updateActiveTabId, updateTabs]);
 
   useEffect(() => {
@@ -94,20 +111,27 @@ export default function WorkspaceView() {
     }
 
     clearWorkspaceBrowserTabCache(tabId);
-    const nextTabs = storedTabs.filter((tab) => tab.id !== tabId);
-    updateTabs(nextTabs);
+    let nextTabs = storedTabs.filter((tab) => tab.id !== tabId);
 
     if (nextTabs.length === 0) {
+      updateTabs(nextTabs);
       updateActiveTabId(null);
       void getWorkspaceApi().closeWindow?.().catch(() => undefined);
       return;
     }
 
     if (storedActiveTabId !== tabId) {
+      updateTabs(nextTabs);
       return;
     }
 
     const nextActiveTab = nextTabs[Math.min(closingIndex, nextTabs.length - 1)] || null;
+    if (nextActiveTab) {
+      nextTabs = nextTabs.map((tab) => (
+        tab.id === nextActiveTab.id ? { ...tab, isNew: false } : tab
+      ));
+    }
+    updateTabs(nextTabs);
     updateActiveTabId(nextActiveTab?.id ?? null);
   }, [updateActiveTabId, updateTabs]);
 
@@ -147,10 +171,14 @@ export default function WorkspaceView() {
             return (
               <div
                 key={tab.id}
-                className={["workspace-tab", isActive ? "is-active" : ""].filter(Boolean).join(" ")}
+                className={[
+                  "workspace-tab",
+                  isActive ? "is-active" : "",
+                  tab.isNew && !isActive ? "is-new" : "",
+                ].filter(Boolean).join(" ")}
                 role="tab"
                 aria-selected={isActive}
-                title={tab.title}
+                title={tab.isNew && !isActive ? `${tab.title} - Nouvel onglet` : tab.title}
                 data-prevent-middle-click-autoscroll="true"
                 onMouseDown={preventMiddleClickDefault}
                 onAuxClick={(event) => handleTabAuxClick(event, tab.id)}
@@ -158,12 +186,15 @@ export default function WorkspaceView() {
                 <button
                   type="button"
                   className="workspace-tab__button"
-                  onClick={() => updateActiveTabId(tab.id)}
+                  onClick={() => activateTab(tab.id)}
                   disabled={isActive}
                   aria-disabled={isActive}
-                  title={tab.title}
+                  title={tab.isNew && !isActive ? `${tab.title} - Nouvel onglet` : tab.title}
                 >
-                  {tab.title}
+                  <span className="workspace-tab__title">{tab.title}</span>
+                  {tab.isNew && !isActive ? (
+                    <span className="workspace-tab__new-badge">Nouveau</span>
+                  ) : null}
                 </button>
                 <button
                   type="button"

@@ -84,6 +84,25 @@
 	background: rgba(100, 150, 255, 0.18);
 }
 
+.reader-action-button.reader-fullscreen-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	padding: 0;
+}
+
+.reader-action-button.reader-fullscreen-toggle svg {
+	width: 19px;
+	height: 19px;
+}
+
+.reader-action-button.reader-fullscreen-toggle.active {
+	border-color: rgba(100, 150, 255, 0.8);
+	background: rgba(100, 150, 255, 0.18);
+}
+
 .reader-body {
 	width: 100%;
 	display: flex;
@@ -93,6 +112,56 @@
 	gap: 16px;
 	/* allow children to shrink/expand correctly inside this flex container */
 	min-width: 0;
+}
+
+.reader-body:fullscreen {
+	--reader-ocr-panel-top: 16px;
+	--reader-ocr-panel-height: calc(100vh - 32px);
+	width: 100vw;
+	height: 100vh;
+	min-height: 100vh;
+	padding: 20px 28px 20px 72px;
+	overflow: auto;
+	box-sizing: border-box;
+	background: #111111;
+}
+
+.reader-body:fullscreen .reader-ocr-panel {
+	top: var(--reader-ocr-panel-top);
+	height: var(--reader-ocr-panel-height);
+	max-height: var(--reader-ocr-panel-height);
+}
+
+.reader-fullscreen-floating-button {
+	position: fixed;
+	left: 18px;
+	top: 50%;
+	z-index: 80;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid rgba(255,255,255,0.16);
+	background: rgba(18,18,18,0.86);
+	color: #ffffff;
+	box-shadow: 0 10px 26px rgba(0,0,0,0.36);
+	cursor: pointer;
+	transform: translateY(-50%);
+	transition: background 150ms ease, border-color 150ms ease, transform 120ms ease;
+}
+
+.reader-fullscreen-floating-button:hover {
+	background: rgba(35,35,35,0.94);
+	border-color: rgba(255,255,255,0.26);
+	transform: translateY(-50%) translateX(2px);
+}
+
+.reader-fullscreen-floating-button svg {
+	width: 22px;
+	height: 22px;
 }
 
 .reader-body img.reader-image {

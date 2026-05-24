@@ -31,6 +31,7 @@ type Options = {
   selectedFavoriteId: string | null;
   trackedSources: MultiSearchSourceResult[];
   logLabel: string;
+  onOpenSourceDetails?: (source: MultiSearchSourceResult) => void;
 };
 
 type SourceFavoriteResultsState = {
@@ -64,6 +65,7 @@ export default function useScraperSourceFavoriteResults({
   selectedFavoriteId,
   trackedSources,
   logLabel,
+  onOpenSourceDetails,
 }: Options): SourceFavoriteResultsState {
   const location = useLocation();
   const navigate = useNavigate();
@@ -202,6 +204,11 @@ export default function useScraperSourceFavoriteResults({
     setOpenError(null);
 
     if (source.canOpenDetails) {
+      if (onOpenSourceDetails) {
+        onOpenSourceDetails(source);
+        return;
+      }
+
       navigate({
         pathname: location.pathname,
         search: writeScraperRouteState(location.search, {
@@ -232,7 +239,7 @@ export default function useScraperSourceFavoriteResults({
     }
 
     setOpenError("L'ouverture de liens externes n'est pas disponible dans cette version.");
-  }, [location.pathname, location.search, navigate]);
+  }, [location.pathname, location.search, navigate, onOpenSourceDetails]);
 
   const handleOpenSourceInWorkspace = useCallback((source: MultiSearchSourceResult) => {
     const detailUrl = source.result.detailUrl;

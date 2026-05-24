@@ -5,6 +5,7 @@ export type ShortcutActionId =
   | "readerScrollDown"
   | "readerPageNext"
   | "readerPagePrevious"
+  | "readerFullscreenToggle"
   | "readerOcrNavigateUp"
   | "readerOcrNavigateDown"
   | "readerOcrNavigateLeft"
@@ -49,6 +50,10 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
       {
         id: "readerPagePrevious",
         label: "Page précédente",
+      },
+      {
+        id: "readerFullscreenToggle",
+        label: "Plein écran",
       },
     ],
   },
@@ -105,6 +110,7 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   readerScrollDown: ["S", "ArrowDown", "J"],
   readerPageNext: ["D", "ArrowRight", "P"],
   readerPagePrevious: ["Q", "ArrowLeft", "I"],
+  readerFullscreenToggle: ["F", "", ""],
   readerOcrNavigateUp: ["O", "", ""],
   readerOcrNavigateDown: ["L", "", ""],
   readerOcrNavigateLeft: ["K", "", ""],

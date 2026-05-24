@@ -20,7 +20,10 @@ import {
   filterMultiSearchMergedResultsByReadingStatus,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
-import type { MultiSearchReadingStatusFilter } from "@/renderer/components/MultiSearch/types";
+import type {
+  MultiSearchReadingStatusFilter,
+  MultiSearchSourceResult,
+} from "@/renderer/components/MultiSearch/types";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 import {
@@ -42,6 +45,7 @@ type Props = {
   favoriteAction?: React.ReactNode;
   onOpenMultiSearch: () => void;
   onSwitchToPagedView: () => void;
+  onOpenSourceDetails?: (source: MultiSearchSourceResult) => void;
 };
 
 const STATIC_AUTHOR_SOURCE_DATE = "1970-01-01T00:00:00.000Z";
@@ -85,6 +89,7 @@ export default function ScraperAuthorCombinedView({
   favoriteAction = null,
   onOpenMultiSearch,
   onSwitchToPagedView,
+  onOpenSourceDetails,
 }: Props) {
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
@@ -135,6 +140,7 @@ export default function ScraperAuthorCombinedView({
     selectedFavoriteId: favorite.id,
     trackedSources: loadedSources,
     logLabel: "direct author combined view",
+    onOpenSourceDetails,
   });
   const mergedResults = useMemo(() => mergeMultiSearchResults(loadedSources), [loadedSources]);
   const resultLanguageCodes = useMemo(

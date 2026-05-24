@@ -4,6 +4,7 @@ import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import useModal from '@/renderer/hooks/useModal';
 import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModal';
+import { ImageExpandIcon } from '@/renderer/components/icons';
 import { ReaderCopyFeedback } from './types';
 
 type Props = {
@@ -12,10 +13,13 @@ type Props = {
     pageCounterLabel: string;
     ocrEnabled: boolean;
     ocrAvailable?: boolean;
+    fullscreenAvailable: boolean;
+    isFullscreen: boolean;
     canCopyImage: boolean;
     copyFeedback: ReaderCopyFeedback | null;
     onBack: () => void;
     onCopyImage: () => void;
+    onToggleFullscreen: () => void;
     onToggleOcr: () => void;
 };
 
@@ -25,10 +29,13 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
     pageCounterLabel,
     ocrEnabled,
     ocrAvailable = true,
+    fullscreenAvailable,
+    isFullscreen,
     canCopyImage,
     copyFeedback,
     onBack,
     onCopyImage,
+    onToggleFullscreen,
     onToggleOcr,
 }, ref) => {
     const { openModal } = useModal();
@@ -62,6 +69,17 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
                     title="Ouvrir les paramètres"
                 >
                     Paramètres
+                </button>
+                <button
+                    type="button"
+                    className={"reader-action-button reader-fullscreen-toggle" + (isFullscreen ? ' active' : '')}
+                    onClick={onToggleFullscreen}
+                    disabled={!fullscreenAvailable}
+                    title={fullscreenAvailable ? 'Plein écran lecteur + OCR (F)' : 'Plein écran indisponible'}
+                    aria-label="Plein écran lecteur et OCR"
+                    aria-pressed={isFullscreen}
+                >
+                    <ImageExpandIcon aria-hidden="true" focusable="false" />
                 </button>
                 <button
                     type="button"

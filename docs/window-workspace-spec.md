@@ -74,6 +74,8 @@ Si le workspace secondaire est deja ouvert :
 - aucune nouvelle fenetre n'est creee ;
 - l'application envoie une demande d'ouverture d'onglet a cette fenetre ;
 - la fenetre secondaire passe au premier plan.
+- le nouvel onglet est ouvert en arriere-plan et marque comme nouveau ; l'onglet actif ne change pas tant que
+  l'utilisateur ne selectionne pas le nouvel onglet.
 
 ### Onglets du workspace
 
@@ -252,6 +254,7 @@ la logique metier.
 - Le clic molette sur une card de recherche ou bookmark scraper ouvre la fiche dans une fenetre workspace.
 - Le clic molette sur une action ou chip auteur ouvre la page auteur dans une fenetre workspace.
 - Un second clic molette ouvre un nouvel onglet dans la fenetre workspace existante.
+- Un nouvel onglet ouvert dans un workspace existant ne devient pas l'onglet actif automatiquement.
 - Les onglets peuvent etre actives et fermes.
 - Le clic molette sur un onglet ferme cet onglet.
 - Fermer le dernier onglet ferme la fenetre workspace.

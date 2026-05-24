@@ -706,6 +706,37 @@ export interface SetScraperCardReadRequest extends ScraperViewHistoryCardIdentit
   read: boolean;
 }
 
+export type ScraperLatestCheckpointModule = "homepage" | "search";
+
+export interface ScraperLatestCheckpointKey {
+  scraperId: string;
+  module: ScraperLatestCheckpointModule;
+  query?: string | null;
+  includedLanguageCodes?: string[] | null;
+}
+
+export interface ScraperLatestCheckpointRecord extends ScraperLatestCheckpointKey {
+  id: string;
+  query: string;
+  includedLanguageCodes: string[];
+  scraperUpdatedAt?: string;
+  pageIndex: number;
+  currentPageUrl?: string;
+  nextPageUrl?: string;
+  anchorCardId: string;
+  anchorIdentity: ScraperViewHistoryCardIdentity;
+  updatedAt: string;
+}
+
+export interface SaveScraperLatestCheckpointRequest extends ScraperLatestCheckpointKey {
+  scraperUpdatedAt?: string;
+  pageIndex: number;
+  currentPageUrl?: string | null;
+  nextPageUrl?: string | null;
+  anchorCardId?: string | null;
+  anchorIdentity: ScraperViewHistoryCardIdentity;
+}
+
 export const DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
 export const DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS = 45;
 export const DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS = 365;
@@ -843,6 +874,40 @@ export function buildScraperViewHistoryCardId(identity: ScraperViewHistoryCardId
   ].join("::");
 
   return `svh_${hashScraperViewHistoryIdentity(identityKey)}`;
+}
+
+export function normalizeScraperLatestCheckpointQuery(value: unknown): string {
+  return normalizeScraperViewHistoryText(value).toLowerCase();
+}
+
+export function normalizeScraperLatestCheckpointLanguageCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(new Set(
+    value
+      .map((entry) => normalizeScraperViewHistoryText(entry).toLowerCase())
+      .filter((entry) => entry.length > 0),
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+export function buildScraperLatestCheckpointId(key: ScraperLatestCheckpointKey): string {
+  const scraperId = normalizeScraperViewHistoryText(key.scraperId);
+  const module = key.module === "search" ? "search" : key.module === "homepage" ? "homepage" : "";
+  const query = normalizeScraperLatestCheckpointQuery(key.query);
+  const includedLanguageKey = normalizeScraperLatestCheckpointLanguageCodes(key.includedLanguageCodes).join("|");
+
+  if (!scraperId || !module) {
+    return "";
+  }
+
+  return `slc_${hashScraperViewHistoryIdentity([
+    scraperId,
+    module,
+    query,
+    includedLanguageKey,
+  ].join("::"))}`;
 }
 
 export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{

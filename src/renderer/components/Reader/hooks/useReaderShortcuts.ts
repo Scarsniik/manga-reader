@@ -25,10 +25,13 @@ type Args = {
     toggleOrderSelection: () => void;
     openOcrPanel: () => void;
     toggleOcrPanel: () => void;
+    toggleFullscreen: () => void;
+    readerBodyRef: React.RefObject<HTMLDivElement | null>;
     next: () => void;
     prev: () => void;
     activeOcrEnabled: boolean;
     ocrPanelAvailable: boolean;
+    fullscreenAvailable: boolean;
     requireFreshNavigationInput: boolean;
     scrollStrength: number;
     scrollHoldSpeed: number;
@@ -84,10 +87,13 @@ const useReaderShortcuts = ({
     toggleOrderSelection,
     openOcrPanel,
     toggleOcrPanel,
+    toggleFullscreen,
+    readerBodyRef,
     next,
     prev,
     activeOcrEnabled,
     ocrPanelAvailable,
+    fullscreenAvailable,
     requireFreshNavigationInput,
     scrollStrength,
     scrollHoldSpeed,
@@ -120,10 +126,16 @@ const useReaderShortcuts = ({
         };
 
         const getScrollContainer = () => {
-            const readerElement = document.querySelector(".reader");
-            return readerElement instanceof HTMLElement
-                ? findVerticalScrollContainer(readerElement)
-                : null;
+            const readerBodyElement = readerBodyRef.current;
+            if (!readerBodyElement) {
+                return null;
+            }
+
+            if (document.fullscreenElement === readerBodyElement) {
+                return readerBodyElement;
+            }
+
+            return findVerticalScrollContainer(readerBodyElement);
         };
 
         const getScrollSpeed = () => {
@@ -282,6 +294,18 @@ const useReaderShortcuts = ({
                 return;
             }
 
+            if (matchesShortcut(event, "readerFullscreenToggle")) {
+                if (!fullscreenAvailable) {
+                    return;
+                }
+
+                preventShortcutDefault(event);
+                if (!event.repeat) {
+                    toggleFullscreen();
+                }
+                return;
+            }
+
             if (matchesShortcut(event, "readerOcrManualSelection")) {
                 if (!ocrPanelAvailable) {
                     return;
@@ -382,6 +406,7 @@ const useReaderShortcuts = ({
     }, [
         activeOcrEnabled,
         copyCurrentImage,
+        fullscreenAvailable,
         navigateOrderedOcrBox,
         navigateOcrBox,
         next,
@@ -390,6 +415,7 @@ const useReaderShortcuts = ({
         prev,
         requestTokenCycle,
         requireFreshNavigationInput,
+        readerBodyRef,
         selectedBoxes,
         scrollHoldSpeed,
         scrollStartBoost,
@@ -398,6 +424,7 @@ const useReaderShortcuts = ({
         toggleManualSelection,
         toggleOrderSelection,
         toggleOcrPanel,
+        toggleFullscreen,
     ]);
 };
 

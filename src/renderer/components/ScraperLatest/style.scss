@@ -146,6 +146,22 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.scraper-latest-results__continue {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.scraper-latest-results__continue button.secondary {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: rgba(93, 156, 255, 0.34);
+  background: rgba(93, 156, 255, 0.08);
+  color: #cfe0ff;
+  font-size: 13px;
+}
+
 @media (max-width: 760px) {
   .scraper-latest__header {
     flex-direction: column;

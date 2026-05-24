@@ -29,6 +29,7 @@ import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/S
 import ScraperAuthorFavoriteButton from '@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton';
 import ScraperTagFavoriteButton from '@/renderer/components/ScraperTagFavoriteButton/ScraperTagFavoriteButton';
 import { DownloadArrowIcon, MagnifyingGlassIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
+import type { MultiSearchSourceResult } from '@/renderer/components/MultiSearch/types';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -82,6 +83,7 @@ import {
   buildSearchResultViewHistoryIdentity,
   getScraperViewHistoryRecord,
 } from '@/renderer/utils/scraperViewHistory';
+import { saveScraperLatestCheckpointFromResult } from '@/renderer/utils/scraperLatestCheckpoints';
 import {
   buildScraperDownloadQueuedMessage,
   canQueueStandaloneScraperDownload,
@@ -623,6 +625,33 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     runDetailsLookup,
     loadDetailsFromTargetUrl,
   });
+
+  useEffect(() => {
+    if (
+      !hasExecutedListing
+      || !listingPage
+      || !listingResults.length
+      || (mode !== 'homepage' && mode !== 'search')
+    ) {
+      return;
+    }
+
+    const anchorResult = listingResults[listingResults.length - 1];
+    if (!anchorResult) {
+      return;
+    }
+
+    void saveScraperLatestCheckpointFromResult({
+      scraper,
+      module: mode,
+      query: mode === 'search' ? query : '',
+      pageIndex: listingPageIndex,
+      page: listingPage,
+      result: anchorResult,
+    }).catch((checkpointError) => {
+      console.warn('Failed to save scraper latest checkpoint from browser page', checkpointError);
+    });
+  }, [hasExecutedListing, listingPage, listingPageIndex, listingResults, mode, query, scraper]);
 
   const recordScraperSearchHistory = useCallback((searchQuery: string) => {
     const trimmedSearchQuery = searchQuery.trim();
@@ -1390,6 +1419,10 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     });
   }, [cacheCurrentListingReturnState, handleOpenResult]);
 
+  const handleOpenAuthorCombinedSource = useCallback((source: MultiSearchSourceResult) => {
+    handleOpenListingResult(source.result);
+  }, [handleOpenListingResult]);
+
   const handleOpenListingResultInWorkspace = useCallback((result: ScraperSearchResultItem) => {
     if (!result.detailUrl) {
       setRuntimeError('Cette card ne fournit pas d\'URL de fiche.');
@@ -1854,6 +1887,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
           favoriteAction={authorFavoriteAction}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
+          onOpenSourceDetails={routeSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
         />
       ) : (
         <ScraperSearchResultsSection

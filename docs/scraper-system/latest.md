@@ -1,6 +1,6 @@
 # Mode Nouveautes
 
-Date : 2026-05-23
+Date : 2026-05-24
 
 Le mode `Nouveautes` affiche des resultats fusionnes qui sont encore consideres comme nouveaux par
 l'historique de vue des cards. La vue ouvre d'abord l'onglet `Scrappers`, puis propose l'onglet
@@ -8,13 +8,37 @@ l'historique de vue des cards. La vue ouvre d'abord l'onglet `Scrappers`, puis p
 Au rechargement, les cards deja vues disparaissent.
 
 La collecte ne se lance pas automatiquement a l'ouverture de la vue ni au changement d'onglet.
-L'utilisateur doit cliquer sur `Charger`, puis sur `Recharger` pour relancer une collecte.
+L'utilisateur doit lancer explicitement une collecte depuis l'action de l'onglet courant.
 
 ## Onglet Scrappers
 
-L'onglet `Scrappers` parcourt chaque scraper active pour les nouveautes. Pour chaque scraper, il
-charge des pages jusqu'a trouver `scraperLatestResultLimit` resultats non vus, ou jusqu'a ne plus
-avoir de page suivante.
+L'onglet `Scrappers` parcourt chaque scraper active pour les nouveautes. Pour chaque scraper, le
+mode rapide part de la premiere page et s'arrete des que la premiere card incluse de la page est deja
+connue. Il ne saute pas vers un ancien checkpoint : il sert a recuperer les sorties recentes sans
+crawler loin.
+
+Le bouton `Continuer` reprend uniquement depuis le curseur garde en memoire par le dernier scan
+rapide. Ce curseur contient la page et l'URL ou le scan rapide s'est arrete, mais il n'est pas ecrit
+sur disque et ne reutilise pas le checkpoint persistant.
+
+Quand un checkpoint existe pour le scraper, il est reserve au scan profond. Le checkpoint contient
+le scraper, le module (`homepage` ou `search`), la requete, les langues incluses, la page, les URLs
+de pagination et l'identite d'une card d'ancrage. Le runtime verifie cette card d'ancrage avant de
+continuer autour du checkpoint.
+
+Les checkpoints sont separes par selection de langues. `Toutes les langues`, `ja`, `en` et `ja+en`
+ont donc chacun un point de reprise different.
+
+L'onglet propose `Scan rapide` et `Scan profond` dans l'en-tete des resultats. Le scan profond
+utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
+d'anciennes cards jamais vues.
+
+Quand des cards apparaissent, un bouton `Continuer` devient disponible sous les resultats. Apres un
+scan rapide, il ajoute une passe depuis le curseur dynamique du scan precedent.
+
+Les checkpoints sont aussi mis a jour depuis le navigateur scraper classique quand l'utilisateur
+avance dans les pages `Homepage` ou `Recherche`. Un long scroll manuel peut donc servir de nouveau
+point de reprise pour `Nouveautes`, sans calcul fragile base uniquement sur un numero de page.
 
 L'onglet peut aussi recevoir une liste de langues incluses via le parametre
 `scraperLatestIncludedLanguageCodes`. Cette liste est exclusive : quand elle contient au moins une

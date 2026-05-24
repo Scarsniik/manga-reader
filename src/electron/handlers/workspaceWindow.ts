@@ -52,7 +52,14 @@ export type WorkspaceTarget =
     | ScraperAuthorWorkspaceTarget;
 
 let workspaceWindow: BrowserWindow | null = null;
-const pendingTargets: WorkspaceTarget[] = [];
+type WorkspaceTargetRequest = {
+    options: {
+        activate: boolean;
+    };
+    target: WorkspaceTarget;
+};
+
+const pendingTargets: WorkspaceTargetRequest[] = [];
 
 const isHttpUrl = (url: string): boolean => {
     try {
@@ -153,13 +160,23 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
     return false;
 };
 
-const sendWorkspaceTarget = (target: WorkspaceTarget): void => {
+const createWorkspaceTargetRequest = (
+    target: WorkspaceTarget,
+    options?: { activate?: boolean },
+): WorkspaceTargetRequest => ({
+    target,
+    options: {
+        activate: options?.activate === true,
+    },
+});
+
+const sendWorkspaceTarget = (request: WorkspaceTargetRequest): void => {
     if (!workspaceWindow || workspaceWindow.isDestroyed()) {
-        pendingTargets.push(target);
+        pendingTargets.push(request);
         return;
     }
 
-    workspaceWindow.webContents.send("workspace-open-target", target);
+    workspaceWindow.webContents.send("workspace-open-target", request);
 };
 
 const flushPendingTargets = (): void => {
@@ -245,16 +262,18 @@ export const openWorkspaceTarget = async (
         return false;
     }
 
+    const request = createWorkspaceTargetRequest(target, { activate: false });
+
     if (!workspaceWindow || workspaceWindow.isDestroyed()) {
-        pendingTargets.push(target);
+        pendingTargets.push(request);
         createWorkspaceWindow();
         return true;
     }
 
     if (workspaceWindow.webContents.isLoading()) {
-        pendingTargets.push(target);
+        pendingTargets.push(request);
     } else {
-        sendWorkspaceTarget(target);
+        sendWorkspaceTarget(request);
     }
 
     if (workspaceWindow.isMinimized()) {

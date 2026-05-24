@@ -295,6 +295,12 @@ ipcMain.handle("set-scraper-card-read", async (event: IpcMainInvokeEvent, reques
     notifyScraperViewHistoryUpdated();
     return updated;
 });
+ipcMain.handle("get-scraper-latest-checkpoints", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
+    scrapers.getScraperLatestCheckpoints(event, scraperId)
+));
+ipcMain.handle("save-scraper-latest-checkpoint", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.saveScraperLatestCheckpoint(event, request)
+));
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
     const updated = await scrapers.deleteScraper(event, scraperId);
     notifyScrapersUpdated();

@@ -15,7 +15,10 @@ import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
-import useScraperLatestRuns from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
+import { loadScraperViewHistory } from "@/renderer/stores/scraperViewHistory";
+import useScraperLatestRuns, {
+  type ScraperLatestSearchMode,
+} from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
 import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLatestResults";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import "@/renderer/components/History/style.scss";
@@ -192,9 +195,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const [activeTab, setActiveTab] = React.useState<LatestTabId>("scrapers");
   const [authorRefreshKey, setAuthorRefreshKey] = React.useState(0);
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
+  const [scraperSearchMode, setScraperSearchMode] = React.useState<ScraperLatestSearchMode>("quick");
+  const rootRef = React.useRef<HTMLElement | null>(null);
   const viewHistoryRecordsByIdRef = React.useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const lastStartedAuthorRefreshKeyRef = React.useRef(0);
   const lastStartedScraperRefreshKeyRef = React.useRef(0);
+  const scraperContinueFromQuickScanRef = React.useRef(false);
   const {
     favorites: authorFavorites,
     loaded: authorFavoritesLoaded,
@@ -270,11 +276,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
     }
 
     lastStartedScraperRefreshKeyRef.current = scraperRefreshKey;
+    const continueFromQuickScan = scraperContinueFromQuickScanRef.current;
+    scraperContinueFromQuickScanRef.current = false;
     void scraperRuns.start(
       scrapers,
       scraperResultLimit,
       new Map(viewHistoryRecordsByIdRef.current),
       scraperIncludedLanguageCodes,
+      {
+        searchMode: scraperSearchMode,
+        continueFromQuickScan,
+      },
     );
   }, [
     activeTab,
@@ -283,6 +295,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedLanguagesKey,
     scraperRefreshKey,
     scraperResultLimit,
+    scraperSearchMode,
     scraperRuns.start,
     scrapers,
     sourceResults.viewHistoryLoaded,
@@ -305,7 +318,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
           run.module === "search" ? "Recherche" : "Homepage",
           `${run.results.length}/${scraperResultLimit} non vue(s)`,
           run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
-          `${run.loadedPages} page(s) chargee(s)`,
+          run.checkpointUsed ? "checkpoint utilise" : "",
+          run.deepSearch ? "recherche profonde" : "mode rapide",
+          `${run.checkedPages} page(s) consultee(s)`,
+          run.loadedPages > run.checkedPages ? `jusqu'a la page ${run.loadedPages}` : "",
         ].filter(Boolean).join(" - "),
         error: run.error,
       }))
@@ -318,7 +334,9 @@ export default function ScraperLatestView({ scrapers }: Props) {
       remount: false,
     });
     lastStartedScraperRefreshKeyRef.current = 0;
+    scraperContinueFromQuickScanRef.current = false;
     setScraperRefreshKey(0);
+    setScraperSearchMode("quick");
     scraperRuns.reset();
   }, [scraperRuns, setParams]);
 
@@ -331,7 +349,16 @@ export default function ScraperLatestView({ scrapers }: Props) {
     return `${baseSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.`;
   }, [scraperIncludedLanguageCodes, scraperResultLimit]);
 
-  const handleReload = React.useCallback(() => {
+  const refreshViewHistorySnapshot = React.useCallback(async () => {
+    try {
+      const records = await loadScraperViewHistory(true);
+      viewHistoryRecordsByIdRef.current = new Map(records.map((record) => [record.id, record]));
+    } catch (viewHistoryError) {
+      console.warn("Failed to refresh scraper view history before latest scan", viewHistoryError);
+    }
+  }, []);
+
+  const handleReload = React.useCallback(async () => {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
 
@@ -340,8 +367,41 @@ export default function ScraperLatestView({ scrapers }: Props) {
       return;
     }
 
+    await refreshViewHistorySnapshot();
+    scraperContinueFromQuickScanRef.current = false;
+    setScraperSearchMode("quick");
     setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, sourceResults]);
+  }, [activeTab, refreshViewHistorySnapshot, sourceResults]);
+
+  const handleSearchDeeper = React.useCallback(async () => {
+    if (activeTab !== "scrapers") {
+      return;
+    }
+
+    sourceResults.setLanguageFilterModes({});
+    sourceResults.setOpenError(null);
+    await refreshViewHistorySnapshot();
+    scraperContinueFromQuickScanRef.current = false;
+    setScraperSearchMode("deep");
+    setScraperRefreshKey((currentKey) => currentKey + 1);
+  }, [activeTab, refreshViewHistorySnapshot, sourceResults]);
+
+  const handleContinueScan = React.useCallback(async () => {
+    if (activeTab !== "scrapers") {
+      return;
+    }
+
+    rootRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    sourceResults.setLanguageFilterModes({});
+    sourceResults.setOpenError(null);
+    await refreshViewHistorySnapshot();
+    scraperContinueFromQuickScanRef.current = scraperSearchMode === "quick";
+    setScraperSearchMode(scraperSearchMode);
+    setScraperRefreshKey((currentKey) => currentKey + 1);
+  }, [activeTab, refreshViewHistorySnapshot, scraperSearchMode, sourceResults]);
 
   const loading = activeTab === "authors"
     ? authorFavoritesLoading || authorRuns.loading
@@ -357,7 +417,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     : scraperRefreshKey > 0;
 
   return (
-    <section className="scraper-latest">
+    <section ref={rootRef} className="scraper-latest">
       <div className="scraper-latest__header">
         <div>
           <h2>Nouveautes</h2>
@@ -396,14 +456,16 @@ export default function ScraperLatestView({ scrapers }: Props) {
             : "Lance le chargement pour chercher les nouveautes des auteurs favoris."
           : activeTabHasStarted
             ? "Aucune nouveaute trouvee sur les scrappers actives."
-            : "Lance le chargement pour chercher les nouveautes des scrappers actifs."}
+            : "Lance un scan rapide ou profond pour chercher les nouveautes des scrappers actifs."}
         sources={activeSources}
         loading={loading}
         message={message}
         error={error}
         openError={sourceResults.openError}
         statusItems={statusItems}
-        actionLabel={activeTabHasStarted ? "Recharger" : "Charger"}
+        actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
+        secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
+        continueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
         libraryMangas={sourceResults.libraryMangas}
         bookmarkedSourceKeys={sourceResults.bookmarkedSourceKeys}
         sourceProgressIndex={sourceResults.sourceProgressIndex}
@@ -411,6 +473,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
         languageFilterModes={sourceResults.languageFilterModes}
         onReload={handleReload}
+        onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
+        onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
         onOpenSource={sourceResults.handleOpenSource}
         onOpenSourceInWorkspace={sourceResults.handleOpenSourceInWorkspace}
         onOpenProgressReader={(source, page, totalPages, readerMangaId, openInWorkspace) => void sourceResults.handleOpenProgressReader(

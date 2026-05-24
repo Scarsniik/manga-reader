@@ -48,6 +48,12 @@
   box-shadow: inset 0 3px 0 #4f9ddf;
 }
 
+.workspace-tab.is-new {
+  border-color: #8a6a26;
+  background: #272318;
+  box-shadow: inset 0 3px 0 #f2c46c;
+}
+
 .workspace-tab__button,
 .workspace-tab__close {
   border: 0;
@@ -58,6 +64,9 @@
 }
 
 .workspace-tab__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
   padding: 0 10px;
@@ -65,6 +74,24 @@
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-tab__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-tab__new-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #4d3510;
+  color: #f2c46c;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .workspace-tab.is-active .workspace-tab__button {

@@ -14,6 +14,7 @@ import type {
     SaveScraperTagFavoriteRequest,
     SaveScraperBookmarkRequest,
     SaveScraperGlobalConfigRequest,
+    SaveScraperLatestCheckpointRequest,
     SaveScraperReaderProgressRequest,
     SaveScraperDraftRequest,
     SaveScraperFeatureRequest,
@@ -79,10 +80,19 @@ type WorkspaceTarget =
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget;
 
-type WorkspaceTargetListener = (target: WorkspaceTarget) => void;
+type WorkspaceOpenTargetOptions = {
+    activate?: boolean;
+};
+
+type WorkspaceOpenTargetPayload = {
+    options?: WorkspaceOpenTargetOptions;
+    target: WorkspaceTarget;
+};
+
+type WorkspaceTargetListener = (target: WorkspaceTarget, options?: WorkspaceOpenTargetOptions) => void;
 
 const workspaceTargetListeners = new Set<WorkspaceTargetListener>();
-const queuedWorkspaceTargets: WorkspaceTarget[] = [];
+const queuedWorkspaceTargets: WorkspaceOpenTargetPayload[] = [];
 
 const onWindowStateChanged = (callback: WindowStateChangeListener) => {
     const handler = (_event: IpcRendererEvent, state: WindowState) => {
@@ -100,20 +110,35 @@ const onWorkspaceOpenTarget = (callback: WorkspaceTargetListener) => {
     workspaceTargetListeners.add(callback);
 
     const queuedTargets = queuedWorkspaceTargets.splice(0, queuedWorkspaceTargets.length);
-    queuedTargets.forEach(callback);
+    queuedTargets.forEach((payload) => callback(payload.target, payload.options));
 
     return () => {
         workspaceTargetListeners.delete(callback);
     };
 };
 
-ipcRenderer.on("workspace-open-target", (_event: IpcRendererEvent, target: WorkspaceTarget) => {
+const normalizeWorkspaceOpenTargetPayload = (payload: WorkspaceTarget | WorkspaceOpenTargetPayload): WorkspaceOpenTargetPayload => {
+    if (payload && typeof payload === "object" && "target" in payload) {
+        return payload as WorkspaceOpenTargetPayload;
+    }
+
+    return {
+        target: payload as WorkspaceTarget,
+        options: {
+            activate: false,
+        },
+    };
+};
+
+ipcRenderer.on("workspace-open-target", (_event: IpcRendererEvent, payload: WorkspaceTarget | WorkspaceOpenTargetPayload) => {
+    const normalizedPayload = normalizeWorkspaceOpenTargetPayload(payload);
+
     if (workspaceTargetListeners.size === 0) {
-        queuedWorkspaceTargets.push(target);
+        queuedWorkspaceTargets.push(normalizedPayload);
         return;
     }
 
-    workspaceTargetListeners.forEach((listener) => listener(target));
+    workspaceTargetListeners.forEach((listener) => listener(normalizedPayload.target, normalizedPayload.options));
 });
 
 ipcRenderer.on('mangas-updated', () => {
@@ -291,6 +316,8 @@ contextBridge.exposeInMainWorld('api', {
     getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),
     recordScraperCardsSeen: (request: RecordScraperCardsSeenRequest) => ipcRenderer.invoke('record-scraper-cards-seen', request),
     setScraperCardRead: (request: SetScraperCardReadRequest) => ipcRenderer.invoke('set-scraper-card-read', request),
+    getScraperLatestCheckpoints: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-latest-checkpoints', scraperId),
+    saveScraperLatestCheckpoint: (request: SaveScraperLatestCheckpointRequest) => ipcRenderer.invoke('save-scraper-latest-checkpoint', request),
     deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),

@@ -44,6 +44,7 @@ export type WorkspaceTarget =
 
 export type WorkspaceTab = {
   id: string;
+  isNew?: boolean;
   target: WorkspaceTarget;
   title: string;
 };

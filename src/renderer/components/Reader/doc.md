@@ -29,6 +29,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - gère la sélection/focalisation des bulles avec une navigation clavier configurable via `readerOcrNavigationOffset`, `readerOcrNavigationDeadZone`, `readerOcrNavigationStrictDirection` et `readerOcrNavigationLooseFallback`
 - `hooks/useReaderShortcuts.ts`
   - centralise les raccourcis clavier et applique `readerScrollStrength` aux actions de scroll
+- `hooks/useReaderFullscreen.ts`
+  - cible le bloc image + panneau OCR avec le Fullscreen API, sans inclure l'en-tête du lecteur ni les onglets workspace
 - `ReaderStage.tsx`
   - affiche la progression, l'image, la transition de chapitre, la fin de lecture ou l'état vide
   - respecte `readerShowProgressIndicator` pour afficher ou masquer la barre de progression
@@ -48,6 +50,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Le reader lit les paramètres d'URL `id` et `page`.
 - Il supporte la lecture locale et la lecture issue d'un scraper.
 - Il gère la navigation clavier/souris, la progression et le passage au chapitre précédent/suivant.
+- Le bouton plein écran et le raccourci configurable `F` affichent seulement l'image et le panneau OCR en plein écran. `Échap`, `F` ou le bouton flottant à gauche permettent d'en sortir.
 - Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.
 - En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché, et la langue doit correspondre à la lecture en cours.
 - Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.

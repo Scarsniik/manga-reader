@@ -11,6 +11,7 @@ import OcrPanel from './OcrPanel';
 import ReaderControls from './ReaderControls';
 import ReaderHeader from './ReaderHeader';
 import ReaderStage from './ReaderStage';
+import { CloseXIcon } from '@/renderer/components/icons';
 import useParams from '@/renderer/hooks/useParams';
 import useTags from '@/renderer/hooks/useTags';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
@@ -50,6 +51,7 @@ import {
     normalizeBooleanSetting,
 } from './utils';
 import useReaderData from './hooks/useReaderData';
+import useReaderFullscreen from './hooks/useReaderFullscreen';
 import useReaderNavigation from './hooks/useReaderNavigation';
 import useReaderOcr from './hooks/useReaderOcr';
 import useReaderOcrPanelLayout from './hooks/useReaderOcrPanelLayout';
@@ -252,6 +254,7 @@ const Reader: React.FC<ReaderProps> = ({
         preloadPageCount: imagePreloadPageCount,
         syncWindowPageParam,
     });
+    const fullscreen = useReaderFullscreen(containerRef);
     const ocrPanelLayoutStyle = useReaderOcrPanelLayout(readerHeaderRef, ocrPanelRef);
     const scrapersById = React.useMemo(
         () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
@@ -332,10 +335,13 @@ const Reader: React.FC<ReaderProps> = ({
         toggleOrderSelection: ocr.toggleOrderSelection,
         openOcrPanel: () => setOcrEnabled(true),
         toggleOcrPanel: () => setOcrEnabled((value) => !value),
+        toggleFullscreen: fullscreen.toggleFullscreen,
+        readerBodyRef: containerRef,
         next: navigation.next,
         prev: navigation.prev,
         activeOcrEnabled,
         ocrPanelAvailable: navigation.ocrAvailable,
+        fullscreenAvailable: fullscreen.fullscreenAvailable,
         requireFreshNavigationInput: navigation.isTransitionPage || navigation.isCompletionPage,
         scrollStrength: readerScrollStrength,
         scrollHoldSpeed: readerScrollHoldSpeed,
@@ -384,16 +390,37 @@ const Reader: React.FC<ReaderProps> = ({
                 pageCounterLabel={navigation.pageCounterLabel}
                 ocrEnabled={ocrEnabled}
                 ocrAvailable={navigation.ocrAvailable}
+                fullscreenAvailable={fullscreen.fullscreenAvailable}
+                isFullscreen={fullscreen.isFullscreen}
                 canCopyImage={images.length > 0 && !navigation.isTransitionPage && !navigation.isCompletionPage}
                 copyFeedback={navigation.copyFeedback}
                 onBack={navigation.handleBack}
                 onCopyImage={() => {
                     void navigation.copyCurrentImage();
                 }}
+                onToggleFullscreen={fullscreen.toggleFullscreen}
                 onToggleOcr={() => setOcrEnabled((value) => !value)}
             />
 
-            <div className={`reader-body${activeOcrEnabled ? ' ocr-on' : ''}`} ref={containerRef}>
+            <div
+                className={[
+                    'reader-body',
+                    activeOcrEnabled ? 'ocr-on' : '',
+                    fullscreen.isFullscreen ? 'is-reader-fullscreen' : '',
+                ].filter(Boolean).join(' ')}
+                ref={containerRef}
+            >
+                {fullscreen.isFullscreen ? (
+                    <button
+                        type="button"
+                        className="reader-fullscreen-floating-button"
+                        onClick={fullscreen.exitFullscreen}
+                        title="Quitter le plein écran (F ou Échap)"
+                        aria-label="Quitter le plein écran"
+                    >
+                        <CloseXIcon aria-hidden="true" focusable="false" />
+                    </button>
+                ) : null}
                 <ReaderStage
                     totalPages={navigation.totalPages}
                     currentPage={navigation.currentPage}

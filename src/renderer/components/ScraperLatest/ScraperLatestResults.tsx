@@ -38,6 +38,8 @@ type Props = {
   openError: string | null;
   statusItems?: StatusItem[];
   actionLabel?: string;
+  secondaryActionLabel?: string;
+  continueActionLabel?: string;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -45,6 +47,8 @@ type Props = {
   newViewHistoryIds: Set<string>;
   languageFilterModes: MultiSearchLanguageFilterModes;
   onReload: () => void;
+  onSecondaryAction?: () => void;
+  onContinue?: () => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -96,6 +100,8 @@ export default function ScraperLatestResults({
   openError,
   statusItems = [],
   actionLabel = "Recharger",
+  secondaryActionLabel,
+  continueActionLabel,
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -103,6 +109,8 @@ export default function ScraperLatestResults({
   newViewHistoryIds,
   languageFilterModes,
   onReload,
+  onSecondaryAction,
+  onContinue,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -191,6 +199,19 @@ export default function ScraperLatestResults({
           >
             {loading ? "Chargement..." : actionLabel}
           </button>
+          {secondaryActionLabel && onSecondaryAction ? (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setMergeRefreshKey((currentKey) => currentKey + 1);
+                onSecondaryAction();
+              }}
+              disabled={loading}
+            >
+              {secondaryActionLabel}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -248,6 +269,22 @@ export default function ScraperLatestResults({
         />
       ) : !loading ? (
         <div className="multi-search__message is-info">{emptyLabel}</div>
+      ) : null}
+
+      {visibleResults.length > 0 && continueActionLabel && onContinue ? (
+        <div className="scraper-latest-results__continue">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
+              onContinue();
+            }}
+            disabled={loading}
+          >
+            {loading ? "Chargement..." : continueActionLabel}
+          </button>
+        </div>
       ) : null}
     </section>
   );
