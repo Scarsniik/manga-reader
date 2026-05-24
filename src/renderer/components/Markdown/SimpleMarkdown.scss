@@ -1,0 +1,75 @@
+.simple-markdown {
+  color: #e6e6e6;
+  line-height: 1.65;
+}
+
+.simple-markdown h1,
+.simple-markdown h2,
+.simple-markdown h3 {
+  color: #ffffff;
+  margin: 0 0 12px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.simple-markdown h1 {
+  font-size: 1.35rem;
+}
+
+.simple-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.simple-markdown h3 {
+  font-size: 1rem;
+}
+
+.simple-markdown p {
+  margin: 0 0 12px;
+}
+
+.simple-markdown ul {
+  margin: 0 0 14px;
+  padding-left: 1.25rem;
+}
+
+.simple-markdown li {
+  margin: 0 0 6px;
+}
+
+.simple-markdown code {
+  color: #f3d58d;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 0.92em;
+}
+
+.simple-markdown__link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #e6e6e6;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(230, 230, 230, 0.45);
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+.simple-markdown__link:hover {
+  color: #8fbfe8;
+  text-decoration-color: rgba(143, 191, 232, 0.85);
+}
+
+.simple-markdown__link:focus-visible {
+  color: #8fbfe8;
+  outline: 2px solid rgba(111, 163, 200, 0.5);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

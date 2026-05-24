@@ -5,6 +5,13 @@ import {
   JpdbVocabularyEntry,
   isKanjiText,
 } from '@/renderer/services/jpdb';
+import type { JapaneseInflectionAnalysis } from '@/shared/japaneseInflection';
+import buildJapaneseGrammarReferenceModal from '@/renderer/components/Modal/modales/JapaneseGrammarReferenceModal';
+import {
+  getJapaneseFormReference,
+  getJapaneseWordTypeReference,
+} from '@/renderer/content/japaneseGrammar';
+import { useModal } from '@/renderer/hooks/useModal';
 import RubyText from './RubyText';
 import './DetailsPanel.scss';
 
@@ -20,6 +27,7 @@ type Props = {
   selectedSurface: string | null;
   selectedRubyParts: JpdbRubyPart[];
   selectedVocabulary: JpdbVocabularyEntry[];
+  selectedInflection: JapaneseInflectionAnalysis | null;
   kanjiDetails: DisplayKanjiDetail[];
   loading?: boolean;
   kanjiMeaningsLoading?: boolean;
@@ -91,6 +99,7 @@ export default function DetailsPanel({
   selectedSurface,
   selectedRubyParts,
   selectedVocabulary,
+  selectedInflection,
   kanjiDetails,
   loading = false,
   kanjiMeaningsLoading = false,
@@ -107,6 +116,7 @@ export default function DetailsPanel({
   onAddVocabulary = null,
   onRemoveVocabulary = null,
 }: Props) {
+  const { openModal } = useModal();
   const hasVocabulary = selectedVocabulary.length > 0;
   const hasSingleVocabulary = selectedVocabulary.length === 1;
   const hasKanji = kanjiDetails.length > 0;
@@ -114,6 +124,12 @@ export default function DetailsPanel({
   const primaryMeanings = (primaryVocabulary?.meanings || []).slice(0, 4);
   const primaryCardStatus = formatCardStatus(primaryVocabulary);
   const primaryCardStatusIsFailed = hasFailedState(primaryVocabulary);
+  const selectedWordTypeReference = selectedInflection?.wordTypeKey
+    ? getJapaneseWordTypeReference(selectedInflection.wordTypeKey)
+    : null;
+  const selectedFormReference = selectedInflection?.formKey
+    ? getJapaneseFormReference(selectedInflection.formKey)
+    : null;
 
   return (
     <div className="details">
@@ -202,9 +218,31 @@ export default function DetailsPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="details-token-hero__meta">
+              <div className="details-token-hero__meta" lang="fr">
                 {primaryVocabulary?.reading ? (
                   <span>Lecture principale : {primaryVocabulary.reading}</span>
+                ) : null}
+                {selectedInflection?.wordTypeLabel && selectedWordTypeReference ? (
+                  <button
+                    type="button"
+                    className="details-meta-pill details-meta-button"
+                    aria-label={`Ouvrir la fiche : ${selectedWordTypeReference.title}`}
+                    title={`Ouvrir la fiche : ${selectedWordTypeReference.title}`}
+                    onClick={() => openModal(buildJapaneseGrammarReferenceModal(selectedWordTypeReference))}
+                  >
+                    {selectedInflection.wordTypeLabel}
+                  </button>
+                ) : null}
+                {selectedInflection?.formLabel && selectedFormReference ? (
+                  <button
+                    type="button"
+                    className="details-meta-pill details-meta-button"
+                    aria-label={`Ouvrir la fiche : ${selectedFormReference.title}`}
+                    title={`Ouvrir la fiche : ${selectedFormReference.title}`}
+                    onClick={() => openModal(buildJapaneseGrammarReferenceModal(selectedFormReference))}
+                  >
+                    {selectedInflection.formLabel}
+                  </button>
                 ) : null}
                 {primaryVocabulary ? (
                   <span className="details-meta-pill">{formatFrequencyRank(primaryVocabulary.frequencyRank)}</span>

@@ -26,6 +26,7 @@ import type {
     RecordSearchHistoryRequest,
 } from './history';
 import type { JapaneseRomanizationRequest } from "../shared/japaneseRomanization";
+import type { JapaneseInflectionRequest } from "../shared/japaneseInflection";
 
 type WindowState = {
     isFocused: boolean;
@@ -254,6 +255,7 @@ contextBridge.exposeInMainWorld('api', {
     appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
     appUpdateGetPatchNotes: (query?: Record<string, unknown>) => ipcRenderer.invoke("app-update-get-patch-notes", query),
     romanizeJapaneseTexts: (request: JapaneseRomanizationRequest) => ipcRenderer.invoke("romanize-japanese-texts", request),
+    analyzeJapaneseInflections: (request: JapaneseInflectionRequest) => ipcRenderer.invoke("analyze-japanese-inflections", request),
     // Scrapers API
     validateScraperAccess: (request: ScraperAccessValidationRequest) => ipcRenderer.invoke('validate-scraper-access', request),
     getScrapers: () => ipcRenderer.invoke('get-scrapers'),

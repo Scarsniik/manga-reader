@@ -20,6 +20,7 @@ import * as appUpdate from "./handlers/appUpdate";
 import * as jsonDocuments from "./handlers/jsonDocuments";
 import * as history from "./handlers/history";
 import * as japaneseRomanization from "./handlers/japaneseRomanization";
+import * as japaneseInflection from "./handlers/japaneseInflection";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -215,6 +216,9 @@ ipcMain.handle("app-update-get-patch-notes", async (_event: IpcMainInvokeEvent, 
 // Japanese romanization
 ipcMain.handle("romanize-japanese-texts", async (_event: IpcMainInvokeEvent, request: unknown) => (
     japaneseRomanization.romanizeJapaneseTexts(request as any)
+));
+ipcMain.handle("analyze-japanese-inflections", async (_event: IpcMainInvokeEvent, request: unknown) => (
+    japaneseInflection.analyzeJapaneseInflections(request as any)
 ));
 
 // Scrapers

@@ -1,0 +1,60 @@
+.japanese-grammar-reference-modal {
+  max-width: 620px;
+}
+
+.japanese-grammar-reference-modal__body {
+  padding-top: 8px;
+}
+
+.japanese-grammar-reference-modal__layout {
+  display: grid;
+  gap: 12px;
+}
+
+.japanese-grammar-reference-modal__breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: rgba(230, 230, 230, 0.68);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.japanese-grammar-reference-modal__breadcrumb-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(230, 230, 230, 0.82);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(230, 230, 230, 0.38);
+  text-underline-offset: 3px;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+.japanese-grammar-reference-modal__breadcrumb-link:hover {
+  color: #8fbfe8;
+  text-decoration-color: rgba(143, 191, 232, 0.85);
+}
+
+.japanese-grammar-reference-modal__breadcrumb-link:focus-visible {
+  color: #8fbfe8;
+  outline: 2px solid rgba(111, 163, 200, 0.5);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.japanese-grammar-reference-modal__breadcrumb-separator {
+  color: rgba(230, 230, 230, 0.38);
+}
+
+.japanese-grammar-reference-modal__breadcrumb-current {
+  color: rgba(230, 230, 230, 0.7);
+}
+
+.japanese-grammar-reference-modal__content {
+  max-width: 64ch;
+}

@@ -73,6 +73,26 @@
   border: 1px solid rgba(255,255,255,0.06);
 }
 
+.details-meta-button {
+  appearance: none;
+  color: $jp-text-soft;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.details-meta-button:hover {
+  color: $jp-text;
+  background: rgba(111,163,200,0.12);
+  border-color: rgba(111,163,200,0.26);
+}
+
+.details-meta-button:focus-visible {
+  outline: none;
+  box-shadow: $jp-focus-shadow;
+}
+
 .details-meta-pill--status {
   color: $jp-text-soft;
 }

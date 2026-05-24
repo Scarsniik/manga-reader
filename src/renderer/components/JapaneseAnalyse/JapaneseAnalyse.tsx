@@ -19,6 +19,8 @@ import {
   submitVocabularyReviewToJpdb,
 } from '@/renderer/services/jpdb';
 import { loadJpdbTextAnalysis } from '@/renderer/services/jpdbAnalysis';
+import { loadJapaneseInflection } from '@/renderer/services/japaneseInflection';
+import type { JapaneseInflectionAnalysis } from '@/shared/japaneseInflection';
 import Header from './Header';
 import DetectedText from './DetectedText';
 import TokensList from './TokensList';
@@ -103,6 +105,7 @@ export default function JapaneseAnalyse({
   const [selectedTokenIndex, setSelectedTokenIndex] = useState<number | null>(null);
   const [analysisNonce, setAnalysisNonce] = useState<number>(0);
   const [kanjiEntriesByChar, setKanjiEntriesByChar] = useState<Record<string, KanjiApiEntry | null>>({});
+  const [selectedInflection, setSelectedInflection] = useState<JapaneseInflectionAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
   const [kanjiFetchLoading, setKanjiFetchLoading] = useState<boolean>(false);
   const [analysisCompletedKey, setAnalysisCompletedKey] = useState<string | null>(null);
@@ -148,6 +151,7 @@ export default function JapaneseAnalyse({
     setTranslation(null);
     setTranslationTruncated(false);
     setKanjiEntriesByChar({});
+    setSelectedInflection(null);
     setAnalysisLoading(false);
     setKanjiFetchLoading(false);
     setAnalysisCompletedKey(null);
@@ -168,6 +172,7 @@ export default function JapaneseAnalyse({
       setActiveTokenIndex(null);
       setSelectedTokenIndex(null);
       setKanjiEntriesByChar({});
+      setSelectedInflection(null);
       setAnalysisLoading(false);
       setKanjiFetchLoading(false);
       setAnalysisCompletedKey(null);
@@ -190,6 +195,7 @@ export default function JapaneseAnalyse({
     setActiveTokenIndex(null);
     setSelectedTokenIndex(null);
     setKanjiEntriesByChar({});
+    setSelectedInflection(null);
     setAnalysisLoading(true);
     setKanjiFetchLoading(false);
     setAnalysisCompletedKey(null);
@@ -301,6 +307,35 @@ export default function JapaneseAnalyse({
   const isPrimaryAddDisabled = isPrimaryActionSubmitting || primaryVocabularyHasDeckState || primaryVocabularyWasJustAdded;
   const isPrimaryRemoveSubmitting = isPrimaryActionSubmitting && actionSubmittingType === 'remove';
   const isPrimaryRemoveDisabled = isPrimaryActionSubmitting || !primaryVocabularyWasJustAdded;
+  const selectedInflectionBaseForm = primaryVocabulary?.spelling ?? null;
+
+  useEffect(() => {
+    if (!selectedSurface) {
+      setSelectedInflection(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedInflection(null);
+
+    (async () => {
+      try {
+        const inflection = await loadJapaneseInflection(selectedSurface, selectedInflectionBaseForm);
+        if (!cancelled) {
+          setSelectedInflection(inflection);
+        }
+      } catch (error) {
+        console.debug('loadJapaneseInflection failed:', error);
+        if (!cancelled) {
+          setSelectedInflection(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedInflectionBaseForm, selectedSurface]);
 
   const kanjiDetails = useMemo(
     () => selectedSurface ? getJpdbKanjiDetails(selectedSurface, selectedRubyParts) : [],
@@ -550,6 +585,7 @@ export default function JapaneseAnalyse({
               selectedSurface={selectedSurface}
               selectedRubyParts={selectedRubyParts}
               selectedVocabulary={selectedVocabulary}
+              selectedInflection={selectedInflection}
               kanjiDetails={enrichedKanjiDetails}
               loading={kanjiFetchLoading}
               kanjiMeaningsLoading={kanjiMeaningsLoading}
