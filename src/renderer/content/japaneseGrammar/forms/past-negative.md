@@ -21,3 +21,4 @@ Le morceau important est `なかった`. Il vient de `ない` devenu passé. Si 
 
 - Version positive : [passé affirmatif](grammar:form:past-affirmative).
 - Version polie : [passé négatif poli](grammar:form:past-negative-polite).
+- Formes liées : [forme en たり négative](grammar:form:tari-form-negative), [conditionnel en たら négatif](grammar:form:tara-conditional-negative).

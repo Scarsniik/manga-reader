@@ -20,4 +20,5 @@ Le marqueur à reconnaître est souvent `なくて`.
 
 - Version positive : [forme en て affirmative](grammar:form:te-form-affirmative).
 - Base négative : [présent négatif](grammar:form:present-negative).
+- Passif lié : [passif en て négatif](grammar:form:passive-te-form-negative).
 - Types liés : [verbe](grammar:type:verb), [adjectif en い](grammar:type:i-adjective), [adjectif en な](grammar:type:na-adjective).

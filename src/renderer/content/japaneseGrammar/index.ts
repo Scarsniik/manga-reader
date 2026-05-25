@@ -11,14 +11,29 @@ import iAdjectiveMarkdown from "@/renderer/content/japaneseGrammar/types/i-adjec
 import naAdjectiveMarkdown from "@/renderer/content/japaneseGrammar/types/na-adjective.md?raw";
 import presentAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/present-affirmative.md?raw";
 import presentNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/present-negative.md?raw";
+import presentNegativeContractedMarkdown from "@/renderer/content/japaneseGrammar/forms/present-negative-contracted.md?raw";
 import presentAffirmativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/present-affirmative-polite.md?raw";
 import presentNegativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/present-negative-polite.md?raw";
 import pastAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/past-affirmative.md?raw";
 import pastNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/past-negative.md?raw";
 import pastAffirmativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/past-affirmative-polite.md?raw";
 import pastNegativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/past-negative-polite.md?raw";
+import passiveAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-affirmative.md?raw";
+import passiveNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-negative.md?raw";
+import passivePastAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-past-affirmative.md?raw";
+import passivePastNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-past-negative.md?raw";
+import passiveTeFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-te-form-affirmative.md?raw";
+import passiveTeFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/passive-te-form-negative.md?raw";
 import teFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/te-form-affirmative.md?raw";
 import teFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/te-form-negative.md?raw";
+import tariFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tari-form-affirmative.md?raw";
+import tariFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tari-form-negative.md?raw";
+import taraConditionalAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tara-conditional-affirmative.md?raw";
+import taraConditionalNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tara-conditional-negative.md?raw";
+import taiFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tai-form-affirmative.md?raw";
+import taiFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tai-form-negative.md?raw";
+import taiFormPastAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tai-form-past-affirmative.md?raw";
+import taiFormPastNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/tai-form-past-negative.md?raw";
 import volitionalAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/volitional-affirmative.md?raw";
 import volitionalNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/volitional-negative.md?raw";
 import volitionalAffirmativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/volitional-affirmative-polite.md?raw";
@@ -76,6 +91,10 @@ export const japaneseFormReferences: Record<JapaneseInflectionFormKey, JapaneseG
     title: "Présent négatif",
     markdown: presentNegativeMarkdown,
   },
+  "present-negative-contracted": {
+    title: "Présent négatif contracté",
+    markdown: presentNegativeContractedMarkdown,
+  },
   "present-affirmative-polite": {
     title: "Présent affirmatif poli",
     markdown: presentAffirmativePoliteMarkdown,
@@ -100,6 +119,30 @@ export const japaneseFormReferences: Record<JapaneseInflectionFormKey, JapaneseG
     title: "Passé négatif poli",
     markdown: pastNegativePoliteMarkdown,
   },
+  "passive-affirmative": {
+    title: "Passif affirmatif",
+    markdown: passiveAffirmativeMarkdown,
+  },
+  "passive-negative": {
+    title: "Passif négatif",
+    markdown: passiveNegativeMarkdown,
+  },
+  "passive-past-affirmative": {
+    title: "Passif passé affirmatif",
+    markdown: passivePastAffirmativeMarkdown,
+  },
+  "passive-past-negative": {
+    title: "Passif passé négatif",
+    markdown: passivePastNegativeMarkdown,
+  },
+  "passive-te-form-affirmative": {
+    title: "Passif en て affirmatif",
+    markdown: passiveTeFormAffirmativeMarkdown,
+  },
+  "passive-te-form-negative": {
+    title: "Passif en て négatif",
+    markdown: passiveTeFormNegativeMarkdown,
+  },
   "te-form-affirmative": {
     title: "Forme en て affirmative",
     markdown: teFormAffirmativeMarkdown,
@@ -107,6 +150,38 @@ export const japaneseFormReferences: Record<JapaneseInflectionFormKey, JapaneseG
   "te-form-negative": {
     title: "Forme en て négative",
     markdown: teFormNegativeMarkdown,
+  },
+  "tari-form-affirmative": {
+    title: "Forme en たり affirmative",
+    markdown: tariFormAffirmativeMarkdown,
+  },
+  "tari-form-negative": {
+    title: "Forme en たり négative",
+    markdown: tariFormNegativeMarkdown,
+  },
+  "tara-conditional-affirmative": {
+    title: "Conditionnel en たら affirmatif",
+    markdown: taraConditionalAffirmativeMarkdown,
+  },
+  "tara-conditional-negative": {
+    title: "Conditionnel en たら négatif",
+    markdown: taraConditionalNegativeMarkdown,
+  },
+  "tai-form-affirmative": {
+    title: "Forme en たい affirmative",
+    markdown: taiFormAffirmativeMarkdown,
+  },
+  "tai-form-negative": {
+    title: "Forme en たい négative",
+    markdown: taiFormNegativeMarkdown,
+  },
+  "tai-form-past-affirmative": {
+    title: "Forme en たい passée affirmative",
+    markdown: taiFormPastAffirmativeMarkdown,
+  },
+  "tai-form-past-negative": {
+    title: "Forme en たい passée négative",
+    markdown: taiFormPastNegativeMarkdown,
   },
   "volitional-affirmative": {
     title: "Volitionnel affirmatif",

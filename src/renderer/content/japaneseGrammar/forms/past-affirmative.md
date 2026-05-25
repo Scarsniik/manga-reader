@@ -20,3 +20,4 @@ Cherche `た`, `だ`, `かった` ou `だった` à la fin de la forme.
 - Version négative : [passé négatif](grammar:form:past-negative).
 - Version polie : [passé affirmatif poli](grammar:form:past-affirmative-polite).
 - Présent correspondant : [présent affirmatif](grammar:form:present-affirmative).
+- Formes liées : [forme en たり affirmative](grammar:form:tari-form-affirmative), [conditionnel en たら affirmatif](grammar:form:tara-conditional-affirmative).

@@ -18,4 +18,4 @@ Repère d'abord la base du verbe, puis regarde ce qui vient après.
 - `読みました` : base `読む` + radical `読み` + `ました`.
 - `知ってる` : base `知る` + forme en `て` + auxiliaire contracté `る`.
 
-Voir aussi : [présent négatif](grammar:form:present-negative), [passé affirmatif](grammar:form:past-affirmative), [forme en て affirmative](grammar:form:te-form-affirmative).
+Voir aussi : [présent négatif](grammar:form:present-negative), [passé affirmatif](grammar:form:past-affirmative), [forme en て affirmative](grammar:form:te-form-affirmative), [forme en たい affirmative](grammar:form:tai-form-affirmative), [passif affirmatif](grammar:form:passive-affirmative).

@@ -1,6 +1,5 @@
 import type {
   JapaneseInflectionAnalysis,
-  JapaneseInflectionFormKey,
   JapaneseInflectionInput,
   JapaneseInflectionRequest,
   JapaneseInflectionResult,
@@ -8,6 +7,7 @@ import type {
 } from "@/shared/japaneseInflection";
 import type { JapaneseAnalyzerToken } from "./japaneseRomanizationTextVariants";
 import { parseJapaneseText } from "./japaneseAnalyzer";
+import { getFormInfo, getFormLabel } from "./japaneseInflectionForms";
 
 const MAX_BATCH_ITEMS = 100;
 const MAX_SURFACE_LENGTH = 80;
@@ -27,21 +27,6 @@ type WordCandidate = {
   mainIndex: number;
   matchesBaseForm: boolean;
 };
-
-type FormInfo = {
-  formKey: JapaneseInflectionFormKey;
-  formName: string;
-  polarity: "affirmative" | "negative";
-  isPolite: boolean;
-};
-
-type BaseFormKey =
-  | "present"
-  | "past"
-  | "te-form"
-  | "volitional"
-  | "progressive-present"
-  | "progressive-past";
 
 const EMPTY_ANALYSIS: JapaneseInflectionAnalysis = {
   surface: "",
@@ -201,144 +186,6 @@ const getWordInfo = (tokens: JapaneseAnalyzerToken[], baseForm: string | null): 
     wordTypeKey: "na-adjective",
     wordTypeLabel: "Adjectif en な",
   };
-};
-
-const hasBasicForm = (tokens: JapaneseAnalyzerToken[], basicForms: string[]): boolean => (
-  tokens.some((token) => basicForms.includes(getTokenBaseForm(token)))
-);
-
-const hasNegativeAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
-  hasBasicForm(tokens, ["ない", "まい"])
-  || tokens.some((token, index) => (
-    getTokenSurface(token) === "ん" && getTokenBaseForm(tokens[index - 1] ?? {}) === "ます"
-  ))
-);
-
-const hasPastAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
-  tokens.some((token) => token.conjugated_type === "特殊・タ")
-);
-
-const hasPoliteAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
-  hasBasicForm(tokens, ["ます", "です"])
-);
-
-const hasVolitionalAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
-  hasBasicForm(tokens, ["う", "まい"])
-);
-
-const hasProgressiveAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
-  hasBasicForm(tokens, ["いる", "てる"])
-);
-
-const hasTeEnding = (tokens: JapaneseAnalyzerToken[]): boolean => {
-  const lastToken = tokens[tokens.length - 1];
-  if (!lastToken) {
-    return false;
-  }
-
-  const surface = getTokenSurface(lastToken);
-  return (
-    (lastToken.pos === "助詞" && lastToken.pos_detail_1 === "接続助詞" && ["て", "で"].includes(surface))
-    || (getTokenBaseForm(lastToken) === "だ" && lastToken.conjugated_form === "連用形" && surface === "で")
-  );
-};
-
-const getPreciseFormKey = (
-  baseFormKey: BaseFormKey,
-  polarity: FormInfo["polarity"],
-  isPolite: boolean,
-): JapaneseInflectionFormKey => {
-  const polaritySuffix = polarity === "negative" ? "negative" : "affirmative";
-
-  if (baseFormKey === "te-form") {
-    return `te-form-${polaritySuffix}` as JapaneseInflectionFormKey;
-  }
-
-  if (baseFormKey === "volitional" && polarity === "negative") {
-    return "volitional-negative";
-  }
-
-  return `${baseFormKey}-${polaritySuffix}${isPolite ? "-polite" : ""}` as JapaneseInflectionFormKey;
-};
-
-const getFormInfo = (
-  tokens: JapaneseAnalyzerToken[],
-  wordInfo: WordInfo,
-): FormInfo => {
-  const scopedTokens = tokens.slice(wordInfo.mainIndex);
-  const mainToken = tokens[wordInfo.mainIndex];
-  const isNegative = hasNegativeAuxiliary(scopedTokens);
-  const isPast = hasPastAuxiliary(scopedTokens);
-  const isPolite = hasPoliteAuxiliary(scopedTokens);
-  const isVolitional = hasVolitionalAuxiliary(scopedTokens) || mainToken.conjugated_form === "未然ウ接続";
-  const isProgressive = wordInfo.kind === "verb" && hasProgressiveAuxiliary(scopedTokens);
-  const isTeForm = !isProgressive && hasTeEnding(scopedTokens);
-
-  if (hasBasicForm(scopedTokens, ["まい"])) {
-    return {
-      formKey: getPreciseFormKey("volitional", "negative", isPolite),
-      formName: "Volitionnel",
-      polarity: "negative",
-      isPolite,
-    };
-  }
-
-  if (isVolitional) {
-    const polarity = isNegative ? "negative" : "affirmative";
-
-    return {
-      formKey: getPreciseFormKey("volitional", polarity, isPolite),
-      formName: "Volitionnel",
-      polarity,
-      isPolite,
-    };
-  }
-
-  if (isProgressive) {
-    const baseFormKey = isPast ? "progressive-past" : "progressive-present";
-    const polarity = isNegative ? "negative" : "affirmative";
-
-    return {
-      formKey: getPreciseFormKey(baseFormKey, polarity, isPolite),
-      formName: isPast ? "Progressif passé" : "Progressif présent",
-      polarity,
-      isPolite,
-    };
-  }
-
-  if (isTeForm) {
-    const polarity = isNegative ? "negative" : "affirmative";
-
-    return {
-      formKey: getPreciseFormKey("te-form", polarity, isPolite),
-      formName: "Forme en て",
-      polarity,
-      isPolite,
-    };
-  }
-
-  const baseFormKey = isPast ? "past" : "present";
-  const polarity = isNegative ? "negative" : "affirmative";
-
-  return {
-    formKey: getPreciseFormKey(baseFormKey, polarity, isPolite),
-    formName: isPast ? "Passé" : "Présent",
-    polarity,
-    isPolite,
-  };
-};
-
-const getFormLabel = (formInfo: FormInfo): string => {
-  const isFeminineForm = formInfo.formName.startsWith("Forme ");
-  const polarityLabel = formInfo.polarity === "negative"
-    ? (isFeminineForm ? "négative" : "négatif")
-    : (isFeminineForm ? "affirmative" : "affirmatif");
-
-  return [
-    formInfo.formName,
-    polarityLabel,
-    formInfo.isPolite ? "poli" : null,
-  ].filter((value): value is string => Boolean(value)).join(" ");
 };
 
 const analyzeInput = async (input: JapaneseInflectionInput): Promise<JapaneseInflectionAnalysis> => {

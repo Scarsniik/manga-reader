@@ -21,4 +21,5 @@ La forme en て affirmative relie une action ou un état à la suite de la phras
 
 - Version négative : [forme en て négative](grammar:form:te-form-negative).
 - Progressif lié : [progressif présent affirmatif](grammar:form:progressive-present-affirmative).
+- Passif lié : [passif en て affirmatif](grammar:form:passive-te-form-affirmative).
 - Types liés : [verbe](grammar:type:verb), [adjectif en い](grammar:type:i-adjective), [adjectif en な](grammar:type:na-adjective).

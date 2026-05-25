@@ -20,4 +20,5 @@ Le présent négatif indique que l'action ou l'état n'est pas vrai maintenant, 
 - Version positive : [présent affirmatif](grammar:form:present-affirmative).
 - Version passée : [passé négatif](grammar:form:past-negative).
 - Version polie : [présent négatif poli](grammar:form:present-negative-polite).
+- Variante orale : [présent négatif contracté](grammar:form:present-negative-contracted).
 - Types liés : [verbe](grammar:type:verb), [adjectif en い](grammar:type:i-adjective), [adjectif en な](grammar:type:na-adjective).
