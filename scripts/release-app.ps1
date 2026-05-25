@@ -554,7 +554,7 @@ function New-ReleaseNotesFile {
     }
 
     $releaseNotesFile = (Resolve-Path -LiteralPath $candidatePath).Path
-    $releaseNotesContent = [string](Get-Content -Raw -LiteralPath $releaseNotesFile)
+    $releaseNotesContent = [string](Get-Content -Raw -Encoding UTF8 -LiteralPath $releaseNotesFile)
     if ([string]::IsNullOrWhiteSpace($releaseNotesContent)) {
         throw "Release notes file is empty: $releaseNotesFile"
     }
@@ -611,7 +611,7 @@ function Publish-GitHubReleaseWithApi {
     Write-Step "Creating GitHub release via GitHub API"
 
     $headers = Get-GitHubApiHeaders -RequireAuthorization
-    $releaseBody = [string](Get-Content -Raw -LiteralPath $ReleaseNotesFile)
+    $releaseBody = [string](Get-Content -Raw -Encoding UTF8 -LiteralPath $ReleaseNotesFile)
     $release = Get-ExistingRelease -Owner $Owner -Repo $Repo -TagName $TagName -Headers $headers
 
     if ($null -eq $release) {
