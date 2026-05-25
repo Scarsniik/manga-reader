@@ -104,6 +104,11 @@ const getScraperDeepPageLimit = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 };
 
+const getScraperQuickConsecutiveSeenStopThreshold = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 2;
+};
+
 const getAuthorPageCount = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
@@ -134,6 +139,9 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
   const scraperResultLimit = getScraperResultLimit(params?.scraperLatestResultLimit);
   const scraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
+  const scraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
+    params?.scraperLatestQuickConsecutiveSeenStopThreshold,
+  );
   const scraperIncludedLanguageCodes = React.useMemo(
     () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
     [params?.scraperLatestIncludedLanguageCodes],
@@ -224,6 +232,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
       {
         searchMode: scraperSearchMode,
         continueFromQuickScan,
+        quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
         includedScraperIds: scraperIncludedScraperIds,
       },
@@ -237,6 +246,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedScrapersKey,
     scraperRefreshKey,
     scraperDeepPageLimit,
+    scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperSearchMode,
     scraperRuns.start,
@@ -311,16 +321,18 @@ export default function ScraperLatestView({ scrapers }: Props) {
     const deepPageLimitSummary = scraperDeepPageLimit > 0
       ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
       : " Scan profond sans limite de pages.";
+    const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${scraperFilterSummary}${deepPageLimitSummary}`;
+      return `${baseSummary}${scraperFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
     }
 
-    return `${baseSummary}${scraperFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}`;
+    return `${baseSummary}${scraperFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}${quickSeenStopSummary}`;
   }, [
     enabledLatestScrapers,
     scraperDeepPageLimit,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
+    scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
   ]);
 

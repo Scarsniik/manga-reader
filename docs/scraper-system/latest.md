@@ -13,9 +13,11 @@ L'utilisateur doit lancer explicitement une collecte depuis l'action de l'onglet
 ## Onglet Scrappers
 
 L'onglet `Scrappers` parcourt chaque scraper active pour les nouveautes. Pour chaque scraper, le
-mode rapide part de la premiere page et s'arrete des que la premiere card incluse de la page est deja
-connue. Il ne saute pas vers un ancien checkpoint : il sert a recuperer les sorties recentes sans
-crawler loin.
+mode rapide part de la premiere page. Sur cette premiere page, tant qu'au moins une card incluse est
+encore non vue, les nouveautes de la page sont affichees et le scan peut continuer. A partir des
+pages suivantes, le scan rapide affiche les nouveautes trouvees sur la page puis s'arrete quand la
+liste atteint plus de cards deja vues d'affilee que le seuil configure. Il ne saute pas vers un
+ancien checkpoint : il sert a recuperer les sorties recentes sans crawler loin.
 
 Le bouton `Continuer` reprend uniquement depuis le curseur garde en memoire par le dernier scan
 rapide. Ce curseur pointe la page suivante apres l'arret rapide, mais il n'est pas ecrit sur disque
@@ -62,7 +64,9 @@ Chaque scraper choisit son module de collecte :
 
 Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Si une
 valeur tres grande est configuree, le runtime suit ce choix et peut donc charger beaucoup de pages.
-Le parametre global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
+Le parametre global `scraperLatestQuickConsecutiveSeenStopThreshold` a un minimum de 0. Il indique
+combien de cards deja vues d'affilee sont tolerees avant que le scan rapide s'arrete. Le parametre
+global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
 jusqu'a trouver assez de nouveautes ou jusqu'a la fin de pagination.
 
 La selection propose aussi `Inconnue`. Elle garde les cards sans langue detectee quand une

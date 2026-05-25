@@ -43,6 +43,8 @@ const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT = 20;
 const MIN_SCRAPER_LATEST_RESULT_LIMIT = 1;
 const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
+const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
+const MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 0;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -263,6 +265,14 @@ const normalizeScraperLatestDeepPageLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestQuickConsecutiveSeenStopThreshold = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
+        MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
+    )
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -344,6 +354,7 @@ const defaultSettings = {
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
+    scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestIncludedLanguageCodes: [] as string[],
     scraperLatestIncludedScraperIds: [] as string[],
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
@@ -404,6 +415,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
     merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
+    merged.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
+        merged.scraperLatestQuickConsecutiveSeenStopThreshold,
+    );
     merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.scraperLatestIncludedLanguageCodes,
     );
@@ -640,6 +654,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
         nextSettings.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(
             nextSettings.scraperLatestDeepPageLimit,
+        );
+        nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
+            nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold,
         );
         nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.scraperLatestIncludedLanguageCodes,

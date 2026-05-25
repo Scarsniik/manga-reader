@@ -143,6 +143,13 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperLatestQuickConsecutiveSeenStopThreshold',
+          label: 'Cards vues d\'affilée tolérées avant arrêt du scan rapide nouveautés',
+          type: 'number',
+          min: 0,
+          step: 1,
+        },
+        {
           name: 'scraperViewHistoryMaxRecords',
           label: 'Limite de l\'historique des cards vues (0 = infini)',
           type: 'number',
@@ -260,6 +267,9 @@ export default function SettingsModalContent() {
     const stackMangaInSeries = values.stackMangaInSeries !== false
     const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
     const scraperLatestDeepPageLimit = Number(values.scraperLatestDeepPageLimit)
+    const scraperLatestQuickConsecutiveSeenStopThreshold = Number(
+      values.scraperLatestQuickConsecutiveSeenStopThreshold,
+    )
     const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
 
     // convert types
@@ -284,6 +294,9 @@ export default function SettingsModalContent() {
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
       scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit) ? scraperLatestDeepPageLimit : 0,
+      scraperLatestQuickConsecutiveSeenStopThreshold: Number.isFinite(scraperLatestQuickConsecutiveSeenStopThreshold)
+        ? scraperLatestQuickConsecutiveSeenStopThreshold
+        : 2,
       ...scraperViewHistorySettings,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),

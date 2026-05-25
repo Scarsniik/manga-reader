@@ -62,6 +62,7 @@ export type ScraperLatestRun = {
 type StartOptions = {
   searchMode?: ScraperLatestSearchMode;
   continueFromQuickScan?: boolean;
+  quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
   includedScraperIds?: string[];
 };
@@ -73,7 +74,6 @@ type ProcessedLatestPage = {
   includedPageResults: MultiSearchSourceResult[];
   unseenResults: MultiSearchSourceResult[];
   hasOnlyDuplicateResults: boolean;
-  firstIncludedPageResultIsSeen: boolean;
 };
 
 type ScraperLatestContinuationKey = {
@@ -177,6 +177,16 @@ const normalizeDeepPageLimit = (value: number | undefined): number => {
   }
 
   return Math.max(0, Math.floor(value ?? 0));
+};
+
+const DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
+
+const normalizeQuickConsecutiveSeenStopThreshold = (value: number | undefined): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD;
+  }
+
+  return Math.max(0, Math.floor(value ?? DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD));
 };
 
 const isDeepPageLimitReached = (
@@ -463,7 +473,6 @@ export default function useScraperLatestRuns() {
     includedLanguageCodes: string[],
     loadedSourceKeys: Set<string>,
     token: number,
-    stopAtSeenFirstResult: boolean,
     nextPageUrlOverride?: string,
   ): Promise<ProcessedLatestPage> => {
     patchRun(token, currentRun.key, (run) => ({
@@ -493,14 +502,7 @@ export default function useScraperLatestRuns() {
     const includedPageResults = newPageResults.filter((source) => (
       sourceMatchesIncludedLanguages(source, includedLanguageCodes)
     ));
-    const firstIncludedPageResult = pageResults.find((source) => (
-      sourceMatchesIncludedLanguages(source, includedLanguageCodes)
-    ));
-    const firstIncludedPageResultIsSeen = isSeenSource(firstIncludedPageResult, recordsById);
-    const shouldIgnorePageResults = stopAtSeenFirstResult && firstIncludedPageResultIsSeen;
-    const unseenResults = shouldIgnorePageResults
-      ? []
-      : includedPageResults.filter((source) => isUnseenSource(source, recordsById));
+    const unseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
     const nextResults = [...currentRun.results, ...unseenResults].slice(0, resultLimit);
     const hasOnlyDuplicateResults = pageResults.length > 0 && newPageResults.length === 0;
     const checkpointSource = unseenResults[unseenResults.length - 1];
@@ -552,7 +554,6 @@ export default function useScraperLatestRuns() {
       includedPageResults,
       unseenResults,
       hasOnlyDuplicateResults,
-      firstIncludedPageResultIsSeen,
     };
   }, [patchRun]);
 
@@ -597,7 +598,6 @@ export default function useScraperLatestRuns() {
         includedLanguageCodes,
         loadedSourceKeys,
         token,
-        false,
         pageUrl,
       );
 
@@ -716,9 +716,11 @@ export default function useScraperLatestRuns() {
     includedLanguageCodes: string[],
     token: number,
     continueFromQuickScan = false,
+    quickConsecutiveSeenStopThreshold = DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     deepPageLimit = 0,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
+    let quickConsecutiveSeenResultCount = 0;
     const loadedSourceKeys = new Set(
       initialRun.results
         .map(getSourceDeduplicationKey)
@@ -742,7 +744,6 @@ export default function useScraperLatestRuns() {
           includedLanguageCodes,
           loadedSourceKeys,
           token,
-          !run.deepSearch && !run.checkpointUsed,
         );
         run = processedPage.run;
 
@@ -751,11 +752,28 @@ export default function useScraperLatestRuns() {
         const pageHasNoNewIncludedResult = processedPage.hasOnlyDuplicateResults
           || (processedPage.includedPageResults.length > 0 && processedPage.unseenResults.length === 0);
         const deepCheckpointBoundaryReached = pageHasNoNewIncludedResult || pageHasOnlyExcludedLanguageResults;
+        const firstQuickPageHasUnseenResults = pageIndex === 0 && processedPage.unseenResults.length > 0;
+        let quickConsecutiveSeenBoundaryReached = false;
+
+        if (!run.deepSearch && !run.checkpointUsed) {
+          for (const source of processedPage.includedPageResults) {
+            if (!isSeenSource(source, recordsById)) {
+              quickConsecutiveSeenResultCount = 0;
+              continue;
+            }
+
+            quickConsecutiveSeenResultCount += 1;
+            if (quickConsecutiveSeenResultCount > quickConsecutiveSeenStopThreshold) {
+              quickConsecutiveSeenBoundaryReached = true;
+            }
+          }
+        }
+
         const quickBoundaryReached = !run.deepSearch
           && !run.checkpointUsed
           && (
             processedPage.hasOnlyDuplicateResults
-            || processedPage.firstIncludedPageResultIsSeen
+            || (quickConsecutiveSeenBoundaryReached && !firstQuickPageHasUnseenResults)
           );
 
         if (quickBoundaryReached) {
@@ -782,7 +800,7 @@ export default function useScraperLatestRuns() {
         }
 
         if (
-          deepCheckpointBoundaryReached
+          (run.deepSearch ? deepCheckpointBoundaryReached : pageHasOnlyExcludedLanguageResults)
           && run.results.length < resultLimit
           && !run.checkpointUsed
         ) {
@@ -871,6 +889,9 @@ export default function useScraperLatestRuns() {
     const includedScrapers = filterIncludedLatestScrapers(enabledScrapers, includedScraperIds);
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
+    const quickConsecutiveSeenStopThreshold = normalizeQuickConsecutiveSeenStopThreshold(
+      options.quickConsecutiveSeenStopThreshold,
+    );
     const deepPageLimit = normalizeDeepPageLimit(options.deepPageLimit);
     const token = tokenRef.current + 1;
     tokenRef.current = token;
@@ -967,6 +988,7 @@ export default function useScraperLatestRuns() {
             includedLanguageCodes,
             token,
             continueFromQuickScan,
+            quickConsecutiveSeenStopThreshold,
             deepPageLimit,
           );
         }),
