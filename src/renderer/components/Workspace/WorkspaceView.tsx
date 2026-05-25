@@ -15,6 +15,10 @@ type WorkspaceOpenTargetOptions = {
   activate?: boolean;
 };
 
+type ReplaceTabTargetOptions = {
+  returnTarget?: WorkspaceTarget;
+};
+
 let storedTabs: WorkspaceTab[] = [];
 let storedActiveTabId: string | null = null;
 let tabSequence = 0;
@@ -46,6 +50,10 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
 
   if (target.kind === "scraper.author") {
     return "Page auteur";
+  }
+
+  if (target.kind === "scraper.tag") {
+    return "Page tag";
   }
 
   return "Onglet";
@@ -97,6 +105,30 @@ export default function WorkspaceView() {
     if (shouldActivate) {
       updateActiveTabId(nextTab.id);
     }
+  }, [updateActiveTabId, updateTabs]);
+
+  const replaceTabTarget = useCallback((
+    tabId: string,
+    target: WorkspaceTarget,
+    options?: ReplaceTabTargetOptions,
+  ) => {
+    const currentTab = storedTabs.find((tab) => tab.id === tabId);
+    if (!currentTab) {
+      return;
+    }
+
+    updateTabs(storedTabs.map((tab) => (
+      tab.id === tabId
+        ? {
+          ...tab,
+          isNew: false,
+          returnTarget: options?.returnTarget,
+          target,
+          title: getTargetTitle(target),
+        }
+        : tab
+    )));
+    updateActiveTabId(tabId);
   }, [updateActiveTabId, updateTabs]);
 
   useEffect(() => {
@@ -225,9 +257,11 @@ export default function WorkspaceView() {
                 hidden={!isActive}
               >
                 <WorkspaceTargetPanel
+                  returnTarget={tab.returnTarget}
                   tabId={tab.id}
                   target={tab.target}
                   onTitleChange={handleTitleChange}
+                  onReplaceTarget={replaceTabTarget}
                 />
               </div>
             );

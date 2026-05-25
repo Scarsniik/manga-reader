@@ -44,12 +44,20 @@ type ScraperAuthorWorkspaceTarget = {
     templateContext?: Record<string, string | undefined>;
 };
 
+type ScraperTagWorkspaceTarget = {
+    kind: "scraper.tag";
+    scraperId: string;
+    query: string;
+    title?: string;
+};
+
 export type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
-    | ScraperAuthorWorkspaceTarget;
+    | ScraperAuthorWorkspaceTarget
+    | ScraperTagWorkspaceTarget;
 
 let workspaceWindow: BrowserWindow | null = null;
 type WorkspaceTargetRequest = {
@@ -154,6 +162,15 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
             && typeof candidate.query === "string"
             && candidate.query.trim().length > 0
             && isTemplateContext(candidate.templateContext)
+        );
+    }
+
+    if (candidate.kind === "scraper.tag") {
+        return (
+            typeof candidate.scraperId === "string"
+            && candidate.scraperId.trim().length > 0
+            && typeof candidate.query === "string"
+            && candidate.query.trim().length > 0
         );
     }
 

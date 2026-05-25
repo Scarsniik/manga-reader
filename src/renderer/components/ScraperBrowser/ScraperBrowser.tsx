@@ -116,12 +116,13 @@ import {
 } from '@/renderer/utils/authorSearchNames';
 import generateId from '@/utils/id';
 import useParams from '@/renderer/hooks/useParams';
-import type { WorkspaceTarget } from '@/renderer/types/workspace';
+import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
 import './style.scss';
 
 type Props = {
   scraper: ScraperRecord;
   initialState?: ScraperBrowserInitialState | null;
+  onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   routeSyncEnabled?: boolean;
 };
 
@@ -209,7 +210,12 @@ const normalizeSavedScraperSearches = (value: unknown): SavedScraperSearch[] => 
   }, []);
 };
 
-export default function ScraperBrowser({ scraper, initialState = null, routeSyncEnabled = true }: Props) {
+export default function ScraperBrowser({
+  scraper,
+  initialState = null,
+  onOpenReaderTarget,
+  routeSyncEnabled = true,
+}: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as ScraperBrowserLocationState | null;
@@ -495,6 +501,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
     locationPathname: location.pathname,
     locationSearch: location.search,
     navigate,
+    onOpenReaderTarget,
     listingReturnState,
     detailsResult,
     chaptersResult,
@@ -1387,6 +1394,35 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
       });
   }, [authorConfig, detailsResult, scraper.id, setRuntimeError]);
 
+  const handleOpenTagFromDetailsInWorkspace = useCallback((value: string, tagTitle: string) => {
+    if (!hasScraperFieldSelectorValue(tagConfig?.titleSelector) || !tagConfig?.resultItemSelector) {
+      setRuntimeError('Le composant Tag doit etre configure pour ouvrir cette page dans le workspace.');
+      return;
+    }
+
+    if (!window.api || typeof window.api.openWorkspaceTarget !== 'function') {
+      setRuntimeError('L\'ouverture dans une fenetre workspace n\'est pas disponible dans cette version.');
+      return;
+    }
+
+    const target: WorkspaceTarget = {
+      kind: 'scraper.tag',
+      scraperId: scraper.id,
+      query: value,
+      title: tagTitle || formatScraperValueForDisplay(value),
+    };
+
+    void window.api.openWorkspaceTarget(target)
+      .then((opened: boolean) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette page tag dans le workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette page tag dans le workspace.');
+      });
+  }, [scraper.id, setRuntimeError, tagConfig]);
+
   const handleOpenScraperBookmarks = useCallback(() => {
     navigate({
       pathname: location.pathname,
@@ -1953,6 +1989,7 @@ export default function ScraperBrowser({ scraper, initialState = null, routeSync
         onOpenTag={(value, title) => {
           handleOpenTagFromDetails(value, title);
         }}
+        onOpenTagInWorkspace={handleOpenTagFromDetailsInWorkspace}
         onOpenReader={(options) => void handleOpenReader(options)}
         onAddToLibrary={(chapter) => {
           void handleAddToLibrary(chapter);

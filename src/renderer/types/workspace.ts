@@ -35,16 +35,25 @@ export type ScraperAuthorWorkspaceTarget = {
   templateContext?: Record<string, string | undefined>;
 };
 
+export type ScraperTagWorkspaceTarget = {
+  kind: "scraper.tag";
+  scraperId: string;
+  query: string;
+  title?: string;
+};
+
 export type WorkspaceTarget =
   | MangaManagerViewWorkspaceTarget
   | ReaderWorkspaceTarget
   | ScraperConfigWorkspaceTarget
   | ScraperDetailsWorkspaceTarget
-  | ScraperAuthorWorkspaceTarget;
+  | ScraperAuthorWorkspaceTarget
+  | ScraperTagWorkspaceTarget;
 
 export type WorkspaceTab = {
   id: string;
   isNew?: boolean;
+  returnTarget?: WorkspaceTarget;
   target: WorkspaceTarget;
   title: string;
 };

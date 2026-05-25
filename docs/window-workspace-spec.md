@@ -55,6 +55,7 @@ Pour le premier cas supporte :
 - clic gauche : comportement actuel conserve, ouverture de la fiche dans la vue courante ;
 - clic molette : ouverture de la fiche dans le workspace secondaire.
 - clic molette sur une action ou chip auteur compatible : ouverture de la page auteur dans le workspace secondaire.
+- clic molette sur une chip tag compatible : ouverture de la page tag dans le workspace secondaire.
 
 La card de scraper dans la liste de configuration peut aussi utiliser le meme mecanisme, mais elle ouvre alors la
 configuration du scraper et non une fiche manga.
@@ -121,6 +122,12 @@ type WorkspaceTarget =
       query: string;
       title?: string;
       templateContext?: Record<string, string | undefined>;
+    }
+  | {
+      kind: "scraper.tag";
+      scraperId: string;
+      query: string;
+      title?: string;
     };
 ```
 
@@ -205,6 +212,10 @@ Les navigations internes au contenu restent autorisees si elles font partie du f
 Par exemple, dans la configuration d'un scraper, les boutons `Retour aux composants` ou `Retour` entre etapes
 peuvent rester visibles s'ils naviguent seulement dans le wizard de configuration de l'onglet.
 
+Quand un lecteur remplace la fiche affichee dans le meme onglet, le bouton de retour du lecteur restaure cette fiche
+dans l'onglet courant. Quand un lecteur est ouvert dans un nouvel onglet workspace depuis un autre onglet, le bouton de
+retour du lecteur n'est pas affiche, car le contexte d'origine reste disponible dans son onglet.
+
 Chaque composant reutilise dans le workspace doit donc accepter un contexte d'affichage explicite, par exemple :
 
 ```ts
@@ -253,12 +264,15 @@ la logique metier.
 - Le clic gauche sur une card scraper garde le comportement actuel.
 - Le clic molette sur une card de recherche ou bookmark scraper ouvre la fiche dans une fenetre workspace.
 - Le clic molette sur une action ou chip auteur ouvre la page auteur dans une fenetre workspace.
+- Le clic molette sur une chip tag ouvre la page tag dans une fenetre workspace.
 - Un second clic molette ouvre un nouvel onglet dans la fenetre workspace existante.
 - Un nouvel onglet ouvert dans un workspace existant ne devient pas l'onglet actif automatiquement.
 - Les onglets peuvent etre actives et fermes.
 - Le clic molette sur un onglet ferme cet onglet.
 - Fermer le dernier onglet ferme la fenetre workspace.
 - Les contenus ouverts dans un onglet ne montrent pas les boutons de navigation propres a leur contexte d'origine.
+- Le lecteur ouvert depuis la fiche du meme onglet peut revenir a cette fiche sans masquer la barre d'onglets.
+- Le lecteur ouvert dans un nouvel onglet workspace n'affiche pas de bouton retour vers un autre onglet.
 - Les liens HTTP externes continuent a partir dans le navigateur systeme.
 - Le systeme permet d'ajouter un nouveau type de cible sans modifier la logique de creation de fenetre.
 

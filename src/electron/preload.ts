@@ -73,12 +73,20 @@ type ScraperAuthorWorkspaceTarget = {
     templateContext?: Record<string, string | undefined>;
 };
 
+type ScraperTagWorkspaceTarget = {
+    kind: "scraper.tag";
+    scraperId: string;
+    query: string;
+    title?: string;
+};
+
 type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
-    | ScraperAuthorWorkspaceTarget;
+    | ScraperAuthorWorkspaceTarget
+    | ScraperTagWorkspaceTarget;
 
 type WorkspaceOpenTargetOptions = {
     activate?: boolean;

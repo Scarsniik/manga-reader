@@ -36,6 +36,7 @@ type Props = {
   onOpenAuthor: (value: string, title: string) => void;
   onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenTag: (value: string, title: string) => void;
+  onOpenTagInWorkspace?: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onAddToLibrary: (chapter?: ScraperRuntimeChapterResult) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
@@ -66,6 +67,7 @@ export default function ScraperDetailsPanel({
   onOpenAuthor,
   onOpenAuthorInWorkspace,
   onOpenTag,
+  onOpenTagInWorkspace,
   onOpenReader,
   onAddToLibrary,
   onLinkSourceToManga,
@@ -300,7 +302,25 @@ export default function ScraperDetailsPanel({
                     type="button"
                     className="scraper-card__chip is-tag is-clickable"
                     onClick={() => onOpenTag(tagTarget, tag)}
+                    onMouseDown={onOpenTagInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                    } : undefined}
+                    onAuxClick={onOpenTagInWorkspace ? (event) => {
+                      if (event.button !== 1) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenTagInWorkspace(tagTarget, tag);
+                    } : undefined}
                     title={`Ouvrir la page tag pour ${tag}`}
+                    data-prevent-middle-click-autoscroll={onOpenTagInWorkspace ? 'true' : undefined}
                   >
                     {tag}
                   </button>

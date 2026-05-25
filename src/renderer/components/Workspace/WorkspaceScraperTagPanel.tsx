@@ -10,38 +10,32 @@ import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scrap
 import {
   extractScraperSearchPageFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
-  getScraperAuthorFeatureConfig,
   getScraperFeature,
+  getScraperTagFeatureConfig,
   isScraperFeatureConfigured,
-  resolveScraperAuthorTargetUrl,
+  resolveScraperTagTargetUrl,
 } from "@/renderer/utils/scraperRuntime";
-import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 
 type Props = {
   tabId: string;
   scraperId: string;
   query: string;
   title?: string;
-  templateContext?: ScraperTemplateContext;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onTitleChange: (title: string) => void;
 };
 
 const getWorkspaceApi = () => window.api ?? {};
 
-export default function WorkspaceScraperAuthorPanel({
+export default function WorkspaceScraperTagPanel({
   tabId,
   scraperId,
   query,
   title,
-  templateContext,
   onOpenReaderTarget,
   onTitleChange,
 }: Props) {
-  const targetKey = `scraper.author:${scraperId}:${JSON.stringify({
-    query,
-    templateContext: templateContext ?? null,
-  })}`;
+  const targetKey = `scraper.tag:${scraperId}:${query}`;
   const cachedEntry = readWorkspaceBrowserTabCache(tabId, targetKey);
   const requestIdRef = useRef(0);
   const [scraper, setScraper] = useState<ScraperRecord | null>(cachedEntry?.scraper ?? null);
@@ -49,7 +43,7 @@ export default function WorkspaceScraperAuthorPanel({
   const [loading, setLoading] = useState(!cachedEntry);
   const [error, setError] = useState<string | null>(null);
 
-  const loadAuthorPage = useCallback(async (options?: { forceRefresh?: boolean }) => {
+  const loadTagPage = useCallback(async (options?: { forceRefresh?: boolean }) => {
     const api = getWorkspaceApi();
     if (!api || typeof api.getScrapers !== "function" || typeof api.fetchScraperDocument !== "function") {
       setError("Le runtime du scrapper n'est pas disponible dans cette version.");
@@ -92,21 +86,20 @@ export default function WorkspaceScraperAuthorPanel({
         return;
       }
 
-      const authorFeature = getScraperFeature(nextScraper, "author");
-      const authorConfig = getScraperAuthorFeatureConfig(authorFeature);
-      if (!isScraperFeatureConfigured(authorFeature)
-        || !authorConfig
-        || !hasScraperFieldSelectorValue(authorConfig.titleSelector)
-        || !authorConfig.resultItemSelector) {
+      const tagFeature = getScraperFeature(nextScraper, "tag");
+      const tagConfig = getScraperTagFeatureConfig(tagFeature);
+      if (!isScraperFeatureConfigured(tagFeature)
+        || !tagConfig
+        || !hasScraperFieldSelectorValue(tagConfig.titleSelector)
+        || !tagConfig.resultItemSelector) {
         setScraper(nextScraper);
         setInitialState(null);
-        setError("Le composant Auteur de ce scrapper n'est pas assez configure pour ouvrir cette page.");
+        setError("Le composant Tag de ce scrapper n'est pas assez configure pour ouvrir cette page.");
         return;
       }
 
-      const targetUrl = resolveScraperAuthorTargetUrl(nextScraper.baseUrl, authorConfig, query, {
+      const targetUrl = resolveScraperTagTargetUrl(nextScraper.baseUrl, tagConfig, query, {
         pageIndex: 0,
-        templateContext,
       });
       const documentResult = await api.fetchScraperDocument({
         baseUrl: nextScraper.baseUrl,
@@ -119,33 +112,32 @@ export default function WorkspaceScraperAuthorPanel({
         setError(
           documentResult?.error
           || (typeof documentResult?.status === "number"
-            ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
-            : "Impossible de charger la page auteur demandee."),
+            ? `La page tag a repondu avec le code HTTP ${documentResult.status}.`
+            : "Impossible de charger la page tag demandee."),
         );
         return;
       }
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const authorPage = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
+      const tagPage = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, tagConfig, {
         requestedUrl: documentResult.requestedUrl,
         finalUrl: documentResult.finalUrl,
       }, async (request) => api.fetchScraperDocument(request));
       const displayQuery = formatScraperValueForDisplay(query);
-      const resolvedAuthorName = authorPage.authorNames?.[0] || title || displayQuery;
+      const resolvedTagName = tagPage.listingNames?.[0] || title || displayQuery;
       const nextInitialState: ScraperBrowserInitialState = {
         query: displayQuery,
-        listingMode: "author",
-        listingPage: authorPage,
-        listingVisitedPageUrls: [authorPage.currentPageUrl],
+        listingMode: "tag",
+        listingPage: tagPage,
+        listingVisitedPageUrls: [tagPage.currentPageUrl],
         listingPageIndex: 0,
-        listingResults: authorPage.items,
+        listingResults: tagPage.items,
         hasExecutedListing: true,
         listingReturnState: null,
-        authorTemplateContext: templateContext ?? null,
-        authorDisplayName: resolvedAuthorName,
+        tagDisplayName: resolvedTagName,
       };
-      const resolvedTitle = resolvedAuthorName || "Page auteur";
+      const resolvedTitle = resolvedTagName || "Page tag";
 
       setScraper(nextScraper);
       setInitialState(nextInitialState);
@@ -163,20 +155,20 @@ export default function WorkspaceScraperAuthorPanel({
 
       setScraper(null);
       setInitialState(null);
-      setError(loadError instanceof Error ? loadError.message : "Impossible de charger la page auteur.");
+      setError(loadError instanceof Error ? loadError.message : "Impossible de charger la page tag.");
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
-  }, [onTitleChange, query, scraperId, tabId, targetKey, templateContext, title]);
+  }, [onTitleChange, query, scraperId, tabId, targetKey, title]);
 
   useEffect(() => {
-    void loadAuthorPage();
+    void loadTagPage();
 
     const handleScrapersUpdated = () => {
       requestIdRef.current += 1;
-      void loadAuthorPage({ forceRefresh: true });
+      void loadTagPage({ forceRefresh: true });
     };
 
     window.addEventListener("scrapers-updated", handleScrapersUpdated);
@@ -184,12 +176,12 @@ export default function WorkspaceScraperAuthorPanel({
       requestIdRef.current += 1;
       window.removeEventListener("scrapers-updated", handleScrapersUpdated);
     };
-  }, [loadAuthorPage]);
+  }, [loadTagPage]);
 
   if (loading) {
     return (
       <div className="workspace-placeholder">
-        Chargement de la page auteur...
+        Chargement de la page tag...
       </div>
     );
   }
@@ -197,13 +189,13 @@ export default function WorkspaceScraperAuthorPanel({
   if (error || !scraper || !initialState) {
     return (
       <div className="workspace-placeholder is-error">
-        {error || "Impossible de charger cette page auteur."}
+        {error || "Impossible de charger cette page tag."}
       </div>
     );
   }
 
   return (
-    <div className="workspace-scraper-author">
+    <div className="workspace-scraper-tag">
       <ScraperBrowser
         scraper={scraper}
         initialState={initialState}

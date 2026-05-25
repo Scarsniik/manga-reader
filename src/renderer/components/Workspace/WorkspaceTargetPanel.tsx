@@ -5,11 +5,12 @@ import ScraperConfigWizard from "@/renderer/components/ScraperConfig/ScraperConf
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
 import WorkspaceScraperAuthorPanel from "@/renderer/components/Workspace/WorkspaceScraperAuthorPanel";
+import WorkspaceScraperTagPanel from "@/renderer/components/Workspace/WorkspaceScraperTagPanel";
 import {
   readWorkspaceBrowserTabCache,
   writeWorkspaceBrowserTabCache,
 } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
-import type { WorkspaceTarget } from "@/renderer/types/workspace";
+import type { ReaderWorkspaceTarget, WorkspaceTarget } from "@/renderer/types/workspace";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
   extractScraperDetailsFromDocumentWithImageFallbacks,
@@ -25,9 +26,15 @@ import { recordDetailsHistorySafe } from "@/renderer/utils/history";
 import { buildReaderSearch } from "@/renderer/utils/workspaceTargets";
 
 type Props = {
+  returnTarget?: WorkspaceTarget;
   tabId: string;
   target: WorkspaceTarget;
   onTitleChange: (tabId: string, title: string) => void;
+  onReplaceTarget: (tabId: string, target: WorkspaceTarget, options?: ReplaceTargetOptions) => void;
+};
+
+type ReplaceTargetOptions = {
+  returnTarget?: WorkspaceTarget;
 };
 
 type ScraperConfigPanelProps = {
@@ -40,6 +47,7 @@ type ScraperDetailsPanelProps = {
   scraperId: string;
   sourceUrl: string;
   title?: string;
+  onOpenReaderTarget: (target: ReaderWorkspaceTarget, options?: ReplaceTargetOptions) => void;
   onTitleChange: (title: string) => void;
 };
 
@@ -126,6 +134,7 @@ function ScraperDetailsPanel({
   scraperId,
   sourceUrl,
   title,
+  onOpenReaderTarget,
   onTitleChange,
 }: ScraperDetailsPanelProps) {
   const targetKey = `scraper.details:${scraperId}:${sourceUrl}`;
@@ -339,15 +348,34 @@ function ScraperDetailsPanel({
         scraper={scraper}
         initialState={initialState}
         routeSyncEnabled={false}
+        onOpenReaderTarget={onOpenReaderTarget}
       />
     </div>
   );
 }
 
-export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: Props) {
+export default function WorkspaceTargetPanel({
+  returnTarget,
+  tabId,
+  target,
+  onTitleChange,
+  onReplaceTarget,
+}: Props) {
   const handleTitleChange = useCallback((title: string) => {
     onTitleChange(tabId, title);
   }, [onTitleChange, tabId]);
+
+  const handleOpenReaderTarget = useCallback((readerTarget: ReaderWorkspaceTarget, options?: ReplaceTargetOptions) => {
+    onReplaceTarget(tabId, readerTarget, { returnTarget: options?.returnTarget ?? target });
+  }, [onReplaceTarget, tabId, target]);
+
+  const handleReaderBack = useCallback(() => {
+    if (!returnTarget) {
+      return;
+    }
+
+    onReplaceTarget(tabId, returnTarget);
+  }, [onReplaceTarget, returnTarget, tabId]);
 
   if (target.kind === "manga-manager.view") {
     return (
@@ -363,6 +391,8 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
       <Reader
         initialLocationSearch={buildReaderSearch(target.mangaId, target.page ?? 1)}
         initialLocationState={target.locationState ?? null}
+        onBack={returnTarget ? handleReaderBack : undefined}
+        showBackButton={Boolean(returnTarget)}
         syncWindowPageParam={false}
       />
     );
@@ -384,6 +414,7 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
         scraperId={target.scraperId}
         sourceUrl={target.sourceUrl}
         title={target.title}
+        onOpenReaderTarget={handleOpenReaderTarget}
         onTitleChange={handleTitleChange}
       />
     );
@@ -397,6 +428,20 @@ export default function WorkspaceTargetPanel({ tabId, target, onTitleChange }: P
         query={target.query}
         title={target.title}
         templateContext={target.templateContext}
+        onOpenReaderTarget={handleOpenReaderTarget}
+        onTitleChange={handleTitleChange}
+      />
+    );
+  }
+
+  if (target.kind === "scraper.tag") {
+    return (
+      <WorkspaceScraperTagPanel
+        tabId={tabId}
+        scraperId={target.scraperId}
+        query={target.query}
+        title={target.title}
+        onOpenReaderTarget={handleOpenReaderTarget}
         onTitleChange={handleTitleChange}
       />
     );

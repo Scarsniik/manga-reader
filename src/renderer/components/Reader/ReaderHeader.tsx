@@ -19,6 +19,7 @@ type Props = {
     copyFeedback: ReaderCopyFeedback | null;
     onBack: () => void;
     onCopyImage: () => void;
+    showBackButton?: boolean;
     onToggleFullscreen: () => void;
     onToggleOcr: () => void;
 };
@@ -35,6 +36,7 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
     copyFeedback,
     onBack,
     onCopyImage,
+    showBackButton = true,
     onToggleFullscreen,
     onToggleOcr,
 }, ref) => {
@@ -42,7 +44,9 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
 
     return (
         <div className="reader-header" ref={ref}>
-            <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
+            {showBackButton ? (
+                <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
+            ) : null}
             <div className="reader-info">
                 <div className="reader-info__text">
                     {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}

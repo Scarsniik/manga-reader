@@ -61,6 +61,8 @@ import { buildBookmarkRecommendationMangas } from '@/renderer/components/Reader/
 type ReaderProps = {
     initialLocationSearch?: string;
     initialLocationState?: ReaderLocationState;
+    onBack?: () => void;
+    showBackButton?: boolean;
     syncWindowPageParam?: boolean;
 };
 
@@ -81,6 +83,8 @@ const normalizeReaderSearch = (search: string | undefined): string => {
 const Reader: React.FC<ReaderProps> = ({
     initialLocationSearch,
     initialLocationState = null,
+    onBack,
+    showBackButton = true,
     syncWindowPageParam = true,
 }) => {
     const [ocrEnabled, setOcrEnabled] = React.useState<boolean>(false);
@@ -301,6 +305,7 @@ const Reader: React.FC<ReaderProps> = ({
         containerRef,
         navigate,
     });
+    const handleBack = onBack ?? navigation.handleBack;
 
     const activeOcrEnabled = ocrEnabled && !navigation.isTransitionPage && !navigation.isCompletionPage;
     const ocr = useReaderOcr({
@@ -394,10 +399,11 @@ const Reader: React.FC<ReaderProps> = ({
                 isFullscreen={fullscreen.isFullscreen}
                 canCopyImage={images.length > 0 && !navigation.isTransitionPage && !navigation.isCompletionPage}
                 copyFeedback={navigation.copyFeedback}
-                onBack={navigation.handleBack}
+                onBack={handleBack}
                 onCopyImage={() => {
                     void navigation.copyCurrentImage();
                 }}
+                showBackButton={showBackButton}
                 onToggleFullscreen={fullscreen.toggleFullscreen}
                 onToggleOcr={() => setOcrEnabled((value) => !value)}
             />

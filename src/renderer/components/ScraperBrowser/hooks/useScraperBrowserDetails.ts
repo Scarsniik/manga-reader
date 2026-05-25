@@ -16,9 +16,11 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
+  buildReaderWorkspaceTarget,
   buildReaderPath,
-  openReaderWorkspaceTarget,
+  openWorkspaceTarget,
 } from '@/renderer/utils/workspaceTargets';
+import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
 import {
   createScraperMangaId,
   extractScraperDetailsFromDocumentWithImageFallbacks,
@@ -41,6 +43,7 @@ type UseScraperBrowserDetailsOptions = {
   locationPathname: string;
   locationSearch: string;
   navigate: NavigateFunction;
+  onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   listingReturnState: ScraperListingReturnState | null;
   detailsResult: ScraperRuntimeDetailsResult | null;
   chaptersResult: ScraperRuntimeChapterResult[];
@@ -101,6 +104,7 @@ export function useScraperBrowserDetails({
   locationPathname,
   locationSearch,
   navigate,
+  onOpenReaderTarget,
   listingReturnState,
   detailsResult,
   chaptersResult,
@@ -556,17 +560,31 @@ export function useScraperBrowserDetails({
         },
       };
 
+      const readerTarget = buildReaderWorkspaceTarget({
+        mangaId: readerMangaId,
+        page: initialPage,
+        title: readerLocationState.scraperReader.title,
+        locationState: readerLocationState,
+      });
+
       if (options?.openInWorkspace) {
-        const opened = await openReaderWorkspaceTarget({
-          mangaId: readerMangaId,
-          page: initialPage,
-          title: readerLocationState.scraperReader.title,
-          locationState: readerLocationState,
-        });
+        const opened = await openWorkspaceTarget(readerTarget);
 
         if (!opened) {
           throw new Error('L\'ouverture du lecteur dans un onglet workspace n\'est pas disponible dans cette version.');
         }
+        return;
+      }
+
+      if (onOpenReaderTarget) {
+        onOpenReaderTarget(readerTarget, {
+          returnTarget: {
+            kind: 'scraper.details',
+            scraperId: scraper.id,
+            sourceUrl,
+            title: detailsResult.title || query.trim() || sourceUrl,
+          },
+        });
         return;
       }
 
@@ -588,6 +606,7 @@ export function useScraperBrowserDetails({
     locationPathname,
     locationSearch,
     navigate,
+    onOpenReaderTarget,
     pagesConfig,
     query,
     scraper.globalConfig.bookmark.excludedFields,
