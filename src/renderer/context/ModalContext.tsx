@@ -7,6 +7,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { createPortal } from "react-dom";
 import Modal from '@/renderer/components/Modal/Modal';
 
 export type ModalAction = {
@@ -49,14 +50,40 @@ type ModalStackItem = ModalOptions & {
   instanceId: number;
 };
 
+const getFullscreenModalTarget = (): Element | null => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return document.fullscreenElement;
+};
+
 export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [modalStack, setModalStack] = useState<ModalStackItem[]>([]);
+  const [fullscreenModalTarget, setFullscreenModalTarget] = useState<Element | null>(getFullscreenModalTarget);
   const modalStackRef = useRef<ModalStackItem[]>([]);
   const nextModalInstanceIdRef = useRef(1);
 
   useEffect(() => {
     modalStackRef.current = modalStack;
   }, [modalStack]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    const syncFullscreenModalTarget = () => {
+      setFullscreenModalTarget(getFullscreenModalTarget());
+    };
+
+    document.addEventListener("fullscreenchange", syncFullscreenModalTarget);
+    syncFullscreenModalTarget();
+
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenModalTarget);
+    };
+  }, []);
 
   const openModal = useCallback((opts: ModalOptions) => {
     const instanceId = nextModalInstanceIdRef.current;
@@ -122,21 +149,25 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setModalCloseGuard,
   }), [closeModal, openModal, setModalActions, setModalCloseGuard]);
 
+  const modalNodes = modalStack.map((modal) => (
+    <ModalInstanceContext.Provider key={modal.instanceId} value={modal.instanceId}>
+      <Modal
+        title={modal.title}
+        content={modal.content}
+        actions={modal.actions}
+        className={modal.className}
+        bodyClassName={modal.bodyClassName}
+        onClose={closeModal}
+      />
+    </ModalInstanceContext.Provider>
+  ));
+
   return (
     <ModalContext.Provider value={value}>
       {children}
-      {modalStack.map((modal) => (
-        <ModalInstanceContext.Provider key={modal.instanceId} value={modal.instanceId}>
-          <Modal
-            title={modal.title}
-            content={modal.content}
-            actions={modal.actions}
-            className={modal.className}
-            bodyClassName={modal.bodyClassName}
-            onClose={closeModal}
-          />
-        </ModalInstanceContext.Provider>
-      ))}
+      {fullscreenModalTarget
+        ? createPortal(modalNodes, fullscreenModalTarget)
+        : modalNodes}
     </ModalContext.Provider>
   );
 };
