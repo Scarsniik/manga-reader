@@ -81,7 +81,7 @@ export const buildScraperLatestCheckpointRequest = (options: {
   return {
     scraperId: options.scraper.id,
     module: options.module,
-    query: options.module === "search" ? options.query ?? "" : "",
+    query: options.module === "homepage" ? "" : options.query ?? "",
     includedLanguageCodes: options.includedLanguageCodes ?? [],
     scraperUpdatedAt: options.scraper.updatedAt,
     pageIndex: Math.max(0, Math.floor(options.pageIndex)),

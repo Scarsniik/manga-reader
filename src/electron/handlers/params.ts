@@ -357,6 +357,8 @@ const defaultSettings = {
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestIncludedLanguageCodes: [] as string[],
     scraperLatestIncludedScraperIds: [] as string[],
+    scraperLatestIncludedAuthorFavoriteIds: [] as string[],
+    scraperLatestIncludedTagFavoriteIds: [] as string[],
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
@@ -423,6 +425,12 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.scraperLatestIncludedScraperIds = normalizeStringListSetting(
         merged.scraperLatestIncludedScraperIds,
+    );
+    merged.scraperLatestIncludedAuthorFavoriteIds = normalizeStringListSetting(
+        merged.scraperLatestIncludedAuthorFavoriteIds,
+    );
+    merged.scraperLatestIncludedTagFavoriteIds = normalizeStringListSetting(
+        merged.scraperLatestIncludedTagFavoriteIds,
     );
     Object.assign(merged, normalizeScraperViewHistorySettings(merged));
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
@@ -663,6 +671,12 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.scraperLatestIncludedScraperIds = normalizeStringListSetting(
             nextSettings.scraperLatestIncludedScraperIds,
+        );
+        nextSettings.scraperLatestIncludedAuthorFavoriteIds = normalizeStringListSetting(
+            nextSettings.scraperLatestIncludedAuthorFavoriteIds,
+        );
+        nextSettings.scraperLatestIncludedTagFavoriteIds = normalizeStringListSetting(
+            nextSettings.scraperLatestIncludedTagFavoriteIds,
         );
         Object.assign(nextSettings, normalizeScraperViewHistorySettings(nextSettings));
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"

@@ -5,18 +5,24 @@ import {
   normalizeScraperLatestCheckpointQuery,
   type SaveScraperLatestCheckpointRequest,
   type ScraperLatestCheckpointRecord,
+  type ScraperLatestCheckpointModule,
   type ScraperRecord,
+  type ScraperTagFavoriteRecord,
+  type ScraperTagFavoriteSource,
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import {
   buildSourceResults,
   fetchHomepagePageWithRetry,
   fetchSearchPageWithRetry,
+  fetchTagPageWithRetry,
   getHomepageConfig,
   getPaceConfig,
   getSearchConfig,
+  getTagConfig,
   resolveHasNextHomepagePage,
   resolveHasNextPage,
+  resolveHasNextTagPage,
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
@@ -27,6 +33,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import {
+  hasTagPagePlaceholder,
   hasSearchPagePlaceholder,
   isScraperListingPaginationEndError,
 } from "@/renderer/utils/scraperRuntime";
@@ -38,13 +45,18 @@ import {
 } from "@/renderer/utils/scraperLatestCheckpoints";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
-export type ScraperLatestRunModule = "homepage" | "search";
+export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
 export type ScraperLatestSearchMode = "quick" | "deep";
+export type ScraperLatestRunSourceKind = "scraper" | "tagFavorite";
 
 export type ScraperLatestRun = {
   key: string;
+  sourceKind: ScraperLatestRunSourceKind;
   scraper: ScraperRecord;
   module: ScraperLatestRunModule;
+  query: string;
+  favorite?: ScraperTagFavoriteRecord;
+  favoriteSource?: ScraperTagFavoriteSource;
   status: ScraperLatestRunStatus;
   results: MultiSearchSourceResult[];
   excludedByLanguageCount: number;
@@ -65,6 +77,7 @@ type StartOptions = {
   quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
   includedScraperIds?: string[];
+  tagFavorites?: ScraperTagFavoriteRecord[];
 };
 
 type ProcessedLatestPage = {
@@ -107,14 +120,45 @@ const filterIncludedLatestScrapers = (
   return scrapers.filter((scraper) => includedScraperIdSet.has(scraper.id));
 };
 
+const buildScraperRunKey = (scraper: ScraperRecord): string => (
+  `scraper:${scraper.id}`
+);
+
+const buildTagFavoriteSourceKey = (
+  favorite: ScraperTagFavoriteRecord,
+  source: ScraperTagFavoriteSource,
+): string => (
+  `tag:${favorite.id}:${source.scraperId}:${source.tagUrl}`
+);
+
+const getScraperRunModule = (scraper: ScraperRecord): ScraperLatestRunModule => (
+  scraper.globalConfig.latest?.module === "search" ? "search" : "homepage"
+);
+
+const getScraperRunQuery = (scraper: ScraperRecord, module: ScraperLatestRunModule): string => (
+  module === "search" ? String(scraper.globalConfig.homeSearch?.query ?? "") : ""
+);
+
 const buildRun = (
-  scraper: ScraperRecord,
+  options: {
+    key: string;
+    sourceKind: ScraperLatestRunSourceKind;
+    scraper: ScraperRecord;
+    module: ScraperLatestRunModule;
+    query: string;
+    favorite?: ScraperTagFavoriteRecord;
+    favoriteSource?: ScraperTagFavoriteSource;
+  },
   checkpoint: ScraperLatestCheckpointRecord | null,
   searchMode: ScraperLatestSearchMode,
 ): ScraperLatestRun => ({
-  key: scraper.id,
-  scraper,
-  module: scraper.globalConfig.latest?.module === "search" ? "search" : "homepage",
+  key: options.key,
+  sourceKind: options.sourceKind,
+  scraper: options.scraper,
+  module: options.module,
+  query: options.query,
+  favorite: options.favorite,
+  favoriteSource: options.favoriteSource,
   status: "waiting",
   results: [],
   excludedByLanguageCount: 0,
@@ -125,6 +169,38 @@ const buildRun = (
   checkpointUsed: false,
   deepSearch: searchMode === "deep",
 });
+
+const buildScraperRun = (
+  scraper: ScraperRecord,
+  checkpoint: ScraperLatestCheckpointRecord | null,
+  searchMode: ScraperLatestSearchMode,
+): ScraperLatestRun => {
+  const module = getScraperRunModule(scraper);
+
+  return buildRun({
+    key: buildScraperRunKey(scraper),
+    sourceKind: "scraper",
+    scraper,
+    module,
+    query: getScraperRunQuery(scraper, module),
+  }, checkpoint, searchMode);
+};
+
+const buildTagFavoriteRun = (
+  favorite: ScraperTagFavoriteRecord,
+  source: ScraperTagFavoriteSource,
+  scraper: ScraperRecord,
+  checkpoint: ScraperLatestCheckpointRecord | null,
+  searchMode: ScraperLatestSearchMode,
+): ScraperLatestRun => buildRun({
+  key: buildTagFavoriteSourceKey(favorite, source),
+  sourceKind: "tagFavorite",
+  scraper,
+  module: "tag",
+  query: source.tagUrl,
+  favorite,
+  favoriteSource: source,
+}, checkpoint, searchMode);
 
 const getSourceHistoryId = (source: MultiSearchSourceResult): string => (
   buildScraperViewHistoryCardId(
@@ -289,16 +365,16 @@ const sourceMatchesIncludedLanguages = (
 const QUICK_CHECKPOINT_PAGE_BUDGET = 6;
 const CHECKPOINT_ANCHOR_OFFSETS = [0, 1, 2, 4, -1, -2];
 
-const getRunQuery = (run: Pick<ScraperLatestRun, "module" | "scraper">): string => (
-  run.module === "search"
-    ? normalizeScraperLatestCheckpointQuery(run.scraper.globalConfig.homeSearch?.query ?? "")
-    : ""
+const getRunQuery = (run: Pick<ScraperLatestRun, "query">): string => (
+  normalizeScraperLatestCheckpointQuery(run.query)
 );
 
 const getRunUsesTemplatePaging = (run: ScraperLatestRun): boolean => (
   run.module === "search"
     ? hasSearchPagePlaceholder(getSearchConfig(run.scraper))
-    : hasSearchPagePlaceholder(getHomepageConfig(run.scraper))
+    : run.module === "tag"
+      ? hasTagPagePlaceholder(getTagConfig(run.scraper))
+      : hasSearchPagePlaceholder(getHomepageConfig(run.scraper))
 );
 
 const getCheckpointCandidatePageIndexes = (
@@ -329,7 +405,7 @@ const buildQuickContinuationId = (key: ScraperLatestContinuationKey): string => 
 );
 
 const buildContinuationKeyForRun = (
-  run: Pick<ScraperLatestRun, "module" | "scraper">,
+  run: Pick<ScraperLatestRun, "module" | "query" | "scraper">,
   includedLanguageCodes: string[],
 ): ScraperLatestContinuationKey => ({
   scraperId: run.scraper.id,
@@ -360,7 +436,7 @@ const getQuickContinuationForKey = (
 };
 
 const buildQuickContinuationRun = (
-  scraper: ScraperRecord,
+  baseRun: ScraperLatestRun,
   continuation: ScraperLatestQuickContinuation,
   searchMode: ScraperLatestSearchMode,
 ): ScraperLatestRun => {
@@ -368,8 +444,13 @@ const buildQuickContinuationRun = (
   const canContinue = continuationPageIndex !== null;
   return {
     ...continuation.run,
-    key: scraper.id,
-    scraper,
+    key: baseRun.key,
+    sourceKind: baseRun.sourceKind,
+    scraper: baseRun.scraper,
+    module: baseRun.module,
+    query: baseRun.query,
+    favorite: baseRun.favorite,
+    favoriteSource: baseRun.favoriteSource,
     status: canContinue ? "waiting" : "done",
     error: undefined,
     deepSearch: searchMode === "deep",
@@ -398,11 +479,10 @@ const fetchLatestPage = async (
 
   if (run.module === "search") {
     const searchConfig = getSearchConfig(run.scraper);
-    const query = run.scraper.globalConfig.homeSearch?.query ?? "";
     const page = await fetchSearchPageWithRetry(
       run.scraper,
       searchConfig,
-      query,
+      run.query,
       pageIndex,
       nextPageUrl,
       paceConfig,
@@ -411,7 +491,25 @@ const fetchLatestPage = async (
     return {
       page,
       hasNextPage: resolveHasNextPage(searchConfig, page),
-      searchTerm: query,
+      searchTerm: run.query,
+    };
+  }
+
+  if (run.module === "tag") {
+    const tagConfig = getTagConfig(run.scraper);
+    const page = await fetchTagPageWithRetry(
+      run.scraper,
+      tagConfig,
+      run.query,
+      pageIndex,
+      nextPageUrl,
+      paceConfig,
+    );
+
+    return {
+      page,
+      hasNextPage: resolveHasNextTagPage(tagConfig, page),
+      searchTerm: run.favoriteSource?.name ?? run.favorite?.name ?? run.query,
     };
   }
 
@@ -885,8 +983,17 @@ export default function useScraperLatestRuns() {
     const resultLimit = normalizeResultLimit(resultLimitValue);
     const includedLanguageCodes = normalizeLanguageCodes(includedLanguageCodeValues);
     const includedScraperIds = normalizeScraperIds(options.includedScraperIds);
+    const tagFavorites = Array.isArray(options.tagFavorites) ? options.tagFavorites : [];
     const enabledScrapers = getEnabledLatestScrapers(scrapers);
     const includedScrapers = filterIncludedLatestScrapers(enabledScrapers, includedScraperIds);
+    const scrapersById = new Map(scrapers.map((scraper) => [scraper.id, scraper]));
+    const includedTagFavoriteSources = tagFavorites.flatMap((favorite) => (
+      favorite.sources.flatMap((source) => {
+        const scraper = scrapersById.get(source.scraperId);
+        return scraper ? [{ favorite, source, scraper }] : [];
+      })
+    ));
+    const includedSourceCount = includedScrapers.length + includedTagFavoriteSources.length;
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
     const quickConsecutiveSeenStopThreshold = normalizeQuickConsecutiveSeenStopThreshold(
@@ -899,15 +1006,13 @@ export default function useScraperLatestRuns() {
     setRuns([]);
     setMessage(null);
     setError(
-      includedScrapers.length
+      includedSourceCount
         ? null
-        : enabledScrapers.length
-          ? "Aucun scrapper n'est inclus dans le filtre des nouveautes."
-          : "Aucun scrapper n'est configure pour les nouveautes.",
+        : "Aucune source n'est incluse dans le scan des nouveautes.",
     );
-    setLoading(Boolean(includedScrapers.length));
+    setLoading(Boolean(includedSourceCount));
 
-    if (!includedScrapers.length) {
+    if (!includedSourceCount) {
       return;
     }
 
@@ -925,16 +1030,15 @@ export default function useScraperLatestRuns() {
         return;
       }
 
-      const continuationIdsToRefresh = new Set(includedScrapers.map((scraper) => {
-        const module: ScraperLatestRunModule = scraper.globalConfig.latest?.module === "search" ? "search" : "homepage";
-        return buildQuickContinuationId({
-          scraperId: scraper.id,
-          scraperUpdatedAt: scraper.updatedAt,
-          module,
-          query: module === "search" ? scraper.globalConfig.homeSearch?.query ?? "" : "",
-          includedLanguageCodes,
-        });
-      }));
+      const baseRuns = [
+        ...includedScrapers.map((scraper) => buildScraperRun(scraper, null, searchMode)),
+        ...includedTagFavoriteSources.map(({ favorite, source, scraper }) => (
+          buildTagFavoriteRun(favorite, source, scraper, null, searchMode)
+        )),
+      ];
+      const continuationIdsToRefresh = new Set(baseRuns.map((run) => (
+        buildQuickContinuationId(buildContinuationKeyForRun(run, includedLanguageCodes))
+      )));
 
       if (searchMode === "quick" && !continueFromQuickScan) {
         quickContinuationsRef.current = quickContinuationsRef.current.filter((continuation) => (
@@ -942,36 +1046,33 @@ export default function useScraperLatestRuns() {
         ));
       }
 
-      const initialRuns = includedScrapers.map((scraper) => {
-        const module: ScraperLatestRunModule = scraper.globalConfig.latest?.module === "search" ? "search" : "homepage";
-        const continuationKey = {
-          scraperId: scraper.id,
-          scraperUpdatedAt: scraper.updatedAt,
-          module,
-          query: module === "search" ? scraper.globalConfig.homeSearch?.query ?? "" : "",
-          includedLanguageCodes,
-        };
+      const initialRuns = baseRuns.map((baseRun) => {
+        const continuationKey = buildContinuationKeyForRun(baseRun, includedLanguageCodes);
         const quickContinuation = continueFromQuickScan
           ? getQuickContinuationForKey(quickContinuationsRef.current, continuationKey)
           : null;
 
-        if (quickContinuation) {
-          return buildQuickContinuationRun(scraper, quickContinuation, searchMode);
-        }
-
         const checkpoint = searchMode === "deep"
-          ? getScraperLatestCheckpointForKey(checkpoints, continuationKey, scraper.updatedAt)
+          ? getScraperLatestCheckpointForKey(checkpoints, continuationKey, baseRun.scraper.updatedAt)
           : null;
+        const run = {
+          ...baseRun,
+          checkpoint,
+        };
+
+        if (quickContinuation) {
+          return buildQuickContinuationRun(run, quickContinuation, searchMode);
+        }
 
         if (continueFromQuickScan) {
           return {
-            ...buildRun(scraper, null, searchMode),
+            ...run,
             status: "done" as const,
             hasNextPage: false,
           };
         }
 
-        return buildRun(scraper, checkpoint, searchMode);
+        return run;
       });
 
       setRuns(initialRuns);
@@ -998,8 +1099,8 @@ export default function useScraperLatestRuns() {
       if (token === tokenRef.current) {
         setMessage(
           includedLanguageCodes.length
-            ? `${resultLimit} resultat(s) non vu(s) recherches par scrapper dans les langues incluses${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`
-            : `${resultLimit} resultat(s) non vu(s) recherches par scrapper${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`,
+            ? `${resultLimit} resultat(s) non vu(s) recherches par source incluse dans les langues incluses${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`
+            : `${resultLimit} resultat(s) non vu(s) recherches par source incluse${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`,
         );
       }
     } catch (loadError) {

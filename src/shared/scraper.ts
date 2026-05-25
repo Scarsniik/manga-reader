@@ -706,7 +706,7 @@ export interface SetScraperCardReadRequest extends ScraperViewHistoryCardIdentit
   read: boolean;
 }
 
-export type ScraperLatestCheckpointModule = "homepage" | "search";
+export type ScraperLatestCheckpointModule = "homepage" | "search" | "tag";
 
 export interface ScraperLatestCheckpointKey {
   scraperId: string;
@@ -894,7 +894,13 @@ export function normalizeScraperLatestCheckpointLanguageCodes(value: unknown): s
 
 export function buildScraperLatestCheckpointId(key: ScraperLatestCheckpointKey): string {
   const scraperId = normalizeScraperViewHistoryText(key.scraperId);
-  const module = key.module === "search" ? "search" : key.module === "homepage" ? "homepage" : "";
+  const module = key.module === "search"
+    ? "search"
+    : key.module === "homepage"
+      ? "homepage"
+      : key.module === "tag"
+        ? "tag"
+        : "";
   const query = normalizeScraperLatestCheckpointQuery(key.query);
   const includedLanguageKey = normalizeScraperLatestCheckpointLanguageCodes(key.includedLanguageCodes).join("|");
 

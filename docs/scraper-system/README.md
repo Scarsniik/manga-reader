@@ -12,7 +12,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - [`source-linking.md`](./source-linking.md) : liaison entre une fiche scraper, un manga local et sa source externe
 - [`author-favorites.md`](./author-favorites.md) : favoris auteur scraper, rattachement multi-source et vue combinee
 - [`tag-favorites.md`](./tag-favorites.md) : favoris tag scraper, rattachement multi-source et vue de resultats paginee
-- [`latest.md`](./latest.md) : mode nouveautes, onglets auteurs/scrappers et reglages associes
+- [`latest.md`](./latest.md) : mode nouveautes, onglets sources/auteurs et reglages associes
 - [`v1-implementation-status.md`](./v1-implementation-status.md) : ce qui est effectivement branche dans l'application aujourd'hui
 - [`first-draft-archive.md`](./first-draft-archive.md) : archive integrale du brouillon initial, conservee sans perte d'information
 

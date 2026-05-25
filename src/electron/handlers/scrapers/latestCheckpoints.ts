@@ -33,7 +33,7 @@ const normalizeText = (value: unknown): string => (
 );
 
 const sanitizeModule = (value: unknown): ScraperLatestCheckpointModule | null => (
-  value === "homepage" || value === "search" ? value : null
+  value === "homepage" || value === "search" || value === "tag" ? value : null
 );
 
 const sanitizePageIndex = (value: unknown): number => {

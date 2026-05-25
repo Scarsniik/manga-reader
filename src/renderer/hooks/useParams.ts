@@ -45,6 +45,8 @@ export type AppParams = {
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestIncludedLanguageCodes?: string[];
     scraperLatestIncludedScraperIds?: string[];
+    scraperLatestIncludedAuthorFavoriteIds?: string[];
+    scraperLatestIncludedTagFavoriteIds?: string[];
     scraperViewHistoryMaxRecords?: number;
     scraperViewHistorySeenRetentionDays?: number;
     scraperViewHistoryReadRetentionDays?: number;

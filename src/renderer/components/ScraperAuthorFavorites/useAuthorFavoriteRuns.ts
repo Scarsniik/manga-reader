@@ -537,6 +537,14 @@ export default function useAuthorFavoriteRuns(
     await loadNextPageForRun(run, token);
   }, [loadNextPageForRun, runs]);
 
+  const reset = useCallback(() => {
+    tokenRef.current += 1;
+    setRuns([]);
+    setLoading(false);
+    setMessage(null);
+    setError(null);
+  }, []);
+
   return {
     runs,
     loading,
@@ -547,5 +555,6 @@ export default function useAuthorFavoriteRuns(
     loadMoreForAll,
     loadAllForAll,
     loadMoreForRun,
+    reset,
   };
 }

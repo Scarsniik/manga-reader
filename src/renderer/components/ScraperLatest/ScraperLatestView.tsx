@@ -4,11 +4,13 @@ import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
   ScraperRecord,
+  ScraperTagFavoriteRecord,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import { HistoryTabs } from "@/renderer/components/History/HistoryControls";
 import useParams from "@/renderer/hooks/useParams";
 import { useScraperAuthorFavorites } from "@/renderer/stores/scraperAuthorFavorites";
+import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
@@ -18,12 +20,23 @@ import useScraperLatestRuns, {
 } from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
 import {
   getEnabledLatestScrapers,
+  getIncludedLatestAuthorFavorites,
+  getIncludedLatestTagFavorites,
+  getLatestAuthorFavoriteLabels,
   getLatestLanguageLabel,
   getLatestScraperLabels,
+  getLatestTagFavoriteLabels,
+  LATEST_ALL_TAG_FAVORITES_VALUE,
+  LATEST_NO_AUTHOR_FAVORITES_VALUE,
+  LATEST_NO_SCRAPERS_VALUE,
+  normalizeLatestIncludedAuthorFavoriteIds,
   normalizeLatestIncludedLanguageCodes,
   normalizeLatestIncludedScraperIds,
+  normalizeLatestIncludedTagFavoriteIds,
+  ScraperLatestAuthorFavoriteIncludeBar,
   ScraperLatestLanguageIncludeBar,
   ScraperLatestScraperIncludeBar,
+  ScraperLatestTagFavoriteIncludeBar,
 } from "@/renderer/components/ScraperLatest/ScraperLatestIncludeFilters";
 import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLatestResults";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
@@ -41,7 +54,7 @@ const LATEST_TABS: Array<{
   id: LatestTabId;
   label: string;
 }> = [
-  { id: "scrapers", label: "Scrappers" },
+  { id: "scrapers", label: "Sources" },
   { id: "authors", label: "Auteurs" },
 ];
 
@@ -94,6 +107,18 @@ const buildLatestScrapersKey = (scrapers: ScraperRecord[]): string => (
     .join("|")
 );
 
+const buildLatestTagFavoritesKey = (favorites: ScraperTagFavoriteRecord[]): string => (
+  favorites
+    .map((favorite) => [
+      favorite.id,
+      favorite.updatedAt,
+      favorite.sources
+        .map((source) => `${source.scraperId}:${source.tagUrl}:${source.updatedAt}`)
+        .join(","),
+    ].join(":"))
+    .join("|")
+);
+
 const getScraperResultLimit = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 20;
@@ -131,10 +156,44 @@ export default function ScraperLatestView({ scrapers }: Props) {
     loading: authorFavoritesLoading,
     error: authorFavoritesError,
   } = useScraperAuthorFavorites();
+  const {
+    favorites: tagFavorites,
+    loaded: tagFavoritesLoaded,
+    loading: tagFavoritesLoading,
+    error: tagFavoritesError,
+  } = useScraperTagFavorites();
   const scrapersById = React.useMemo(() => buildScrapersById(scrapers), [scrapers]);
+  const authorFavoriteIds = React.useMemo(
+    () => authorFavorites.map((favorite) => favorite.id),
+    [authorFavorites],
+  );
+  const authorIncludedFavoriteIds = React.useMemo(
+    () => normalizeLatestIncludedAuthorFavoriteIds(
+      params?.scraperLatestIncludedAuthorFavoriteIds,
+      authorFavoritesLoaded ? authorFavoriteIds : undefined,
+    ),
+    [authorFavoriteIds, authorFavoritesLoaded, params?.scraperLatestIncludedAuthorFavoriteIds],
+  );
+  const authorIncludedFavorites = React.useMemo(
+    () => getIncludedLatestAuthorFavorites(authorFavorites, authorIncludedFavoriteIds),
+    [authorFavorites, authorIncludedFavoriteIds],
+  );
+  const authorIncludedFavoritesKey = authorIncludedFavoriteIds.join("|");
+  const authorIncludesNoFavorites = authorIncludedFavoriteIds.includes(LATEST_NO_AUTHOR_FAVORITES_VALUE);
+  const includedAuthorSourceCount = React.useMemo(
+    () => authorIncludedFavorites.reduce((count, favorite) => (
+      count + favorite.sources.filter((source) => scrapersById.has(source.scraperId)).length
+    ), 0),
+    [authorIncludedFavorites, scrapersById],
+  );
+  const shouldWaitForIncludedAuthorFavorites = authorIncludedFavoriteIds.length > 0 && !authorFavoritesLoaded;
+  const authorSelectionError = authorFavoritesLoaded && !shouldWaitForIncludedAuthorFavorites && includedAuthorSourceCount === 0
+    ? "Selectionne au moins un auteur favori avant de charger les nouveautes auteurs."
+    : null;
+  const authorActionsDisabled = Boolean(authorSelectionError) || shouldWaitForIncludedAuthorFavorites;
   const combinedAuthorFavorite = React.useMemo(
-    () => buildCombinedAuthorFavorite(authorFavorites, authorRefreshKey),
-    [authorFavorites, authorRefreshKey],
+    () => buildCombinedAuthorFavorite(authorIncludedFavorites, authorRefreshKey),
+    [authorIncludedFavorites, authorRefreshKey],
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
   const scraperResultLimit = getScraperResultLimit(params?.scraperLatestResultLimit);
@@ -160,6 +219,47 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [params?.scraperLatestIncludedScraperIds],
   );
   const scraperIncludedScrapersKey = scraperIncludedScraperIds.join("|");
+  const scraperIncludesNoScrapers = scraperIncludedScraperIds.includes(LATEST_NO_SCRAPERS_VALUE);
+  const includedLatestScraperCount = React.useMemo(() => {
+    if (scraperIncludesNoScrapers) {
+      return 0;
+    }
+
+    if (!scraperIncludedScraperIds.length) {
+      return enabledLatestScrapers.length;
+    }
+
+    const includedScraperIdSet = new Set(scraperIncludedScraperIds);
+    return enabledLatestScrapers.filter((scraper) => includedScraperIdSet.has(scraper.id)).length;
+  }, [enabledLatestScrapers, scraperIncludedScraperIds, scraperIncludesNoScrapers]);
+  const tagFavoriteIds = React.useMemo(
+    () => tagFavorites.map((favorite) => favorite.id),
+    [tagFavorites],
+  );
+  const scraperIncludedTagFavoriteIds = React.useMemo(
+    () => normalizeLatestIncludedTagFavoriteIds(
+      params?.scraperLatestIncludedTagFavoriteIds,
+      tagFavoritesLoaded ? tagFavoriteIds : undefined,
+    ),
+    [params?.scraperLatestIncludedTagFavoriteIds, tagFavoriteIds, tagFavoritesLoaded],
+  );
+  const scraperIncludedTagFavorites = React.useMemo(
+    () => getIncludedLatestTagFavorites(tagFavorites, scraperIncludedTagFavoriteIds),
+    [scraperIncludedTagFavoriteIds, tagFavorites],
+  );
+  const includedTagFavoriteSourceCount = React.useMemo(
+    () => scraperIncludedTagFavorites.reduce((count, favorite) => (
+      count + favorite.sources.filter((source) => scrapersById.has(source.scraperId)).length
+    ), 0),
+    [scraperIncludedTagFavorites, scrapersById],
+  );
+  const scraperIncludedTagFavoritesKey = scraperIncludedTagFavoriteIds.join("|");
+  const shouldWaitForIncludedTagFavorites = scraperIncludedTagFavoriteIds.length > 0 && !tagFavoritesLoaded;
+  const hasRunnableLatestSource = includedLatestScraperCount + includedTagFavoriteSourceCount > 0;
+  const scraperSelectionError = !shouldWaitForIncludedTagFavorites && !hasRunnableLatestSource
+    ? "Selectionne au moins un scrapper ou un tag favori avant de lancer un scan."
+    : null;
+  const scraperActionsDisabled = Boolean(scraperSelectionError) || shouldWaitForIncludedTagFavorites;
   const shouldWarnAboutLimitedViewHistory = params ? !isScraperViewHistoryUnlimited(params) : false;
   const authorRuns = useAuthorFavoriteRuns(combinedAuthorFavorite, scrapersById, {
     initialPageCount: authorPageCount,
@@ -176,21 +276,29 @@ export default function ScraperLatestView({ scrapers }: Props) {
   );
   const activeSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
   const selectedFavoriteId = activeTab === "authors"
-    ? combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`
+    ? [
+      combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`,
+      authorIncludedFavoritesKey || "all-authors",
+    ].join("-")
     : [
-      "latest-scrapers",
+      "latest-sources",
       scraperRefreshKey,
       scraperIncludedLanguagesKey || "all-languages",
       scraperIncludedScrapersKey || "all-scrapers",
+      scraperIncludedTagFavoritesKey || "no-tag-favorites",
     ].join("-");
   const sourceResults = useScraperSourceFavoriteResults({
     selectedFavoriteId,
     trackedSources: activeSources,
-    logLabel: activeTab === "authors" ? "latest authors" : "latest scrapers",
+    logLabel: activeTab === "authors" ? "latest authors" : "latest sources",
   });
   const latestScrapersKey = React.useMemo(
     () => buildLatestScrapersKey(scrapers),
     [scrapers],
+  );
+  const latestTagFavoritesKey = React.useMemo(
+    () => buildLatestTagFavoritesKey(tagFavorites),
+    [tagFavorites],
   );
 
   React.useEffect(() => {
@@ -201,6 +309,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     if (
       activeTab !== "authors"
       || !authorFavoritesLoaded
+      || authorActionsDisabled
       || authorRefreshKey === 0
       || lastStartedAuthorRefreshKeyRef.current === authorRefreshKey
     ) {
@@ -209,12 +318,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
 
     lastStartedAuthorRefreshKeyRef.current = authorRefreshKey;
     void authorRuns.start();
-  }, [activeTab, authorFavoritesLoaded, authorRefreshKey, authorRuns.start]);
+  }, [activeTab, authorActionsDisabled, authorFavoritesLoaded, authorRefreshKey, authorRuns.start]);
 
   React.useEffect(() => {
     if (
       activeTab !== "scrapers"
       || !sourceResults.viewHistoryLoaded
+      || shouldWaitForIncludedTagFavorites
       || scraperRefreshKey === 0
       || lastStartedScraperRefreshKeyRef.current === scraperRefreshKey
     ) {
@@ -235,15 +345,19 @@ export default function ScraperLatestView({ scrapers }: Props) {
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
         includedScraperIds: scraperIncludedScraperIds,
+        tagFavorites: scraperIncludedTagFavorites,
       },
     );
   }, [
     activeTab,
     latestScrapersKey,
+    latestTagFavoritesKey,
     scraperIncludedLanguageCodes,
     scraperIncludedLanguagesKey,
     scraperIncludedScraperIds,
     scraperIncludedScrapersKey,
+    scraperIncludedTagFavorites,
+    scraperIncludedTagFavoritesKey,
     scraperRefreshKey,
     scraperDeepPageLimit,
     scraperQuickConsecutiveSeenStopThreshold,
@@ -251,6 +365,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperSearchMode,
     scraperRuns.start,
     scrapers,
+    shouldWaitForIncludedTagFavorites,
     sourceResults.viewHistoryLoaded,
   ]);
 
@@ -265,10 +380,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
       }))
       : scraperRuns.runs.map((run) => ({
         key: run.key,
-        name: run.scraper.name,
+        name: run.sourceKind === "tagFavorite"
+          ? `${run.favorite?.name ?? run.favoriteSource?.name ?? "Tag favori"} - ${run.scraper.name}`
+          : run.scraper.name,
         status: run.status,
         detail: [
-          run.module === "search" ? "Recherche" : "Homepage",
+          run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
           `${run.results.length}/${scraperResultLimit} non vue(s)`,
           run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
           run.checkpointUsed ? "checkpoint utilise" : "",
@@ -279,6 +396,20 @@ export default function ScraperLatestView({ scrapers }: Props) {
         error: run.error,
       }))
   ), [activeTab, authorRuns.runs, scraperResultLimit, scraperRuns.runs]);
+
+  const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
+    setParams({
+      scraperLatestIncludedAuthorFavoriteIds: normalizeLatestIncludedAuthorFavoriteIds(
+        nextFavoriteIds,
+        authorFavoriteIds,
+      ),
+    }, {
+      remount: false,
+    });
+    lastStartedAuthorRefreshKeyRef.current = 0;
+    setAuthorRefreshKey(0);
+    authorRuns.reset();
+  }, [authorFavoriteIds, authorRuns.reset, setParams]);
 
   const handleScraperIncludedLanguageCodesChange = React.useCallback((nextLanguageCodes: string[]) => {
     setParams({
@@ -306,34 +437,88 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperRuns.reset();
   }, [enabledLatestScraperIds, scraperRuns, setParams]);
 
+  const handleScraperIncludedTagFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
+    setParams({
+      scraperLatestIncludedTagFavoriteIds: normalizeLatestIncludedTagFavoriteIds(nextFavoriteIds, tagFavoriteIds),
+    }, {
+      remount: false,
+    });
+    lastStartedScraperRefreshKeyRef.current = 0;
+    scraperContinueFromQuickScanRef.current = false;
+    setScraperRefreshKey(0);
+    setScraperSearchMode("quick");
+    scraperRuns.reset();
+  }, [scraperRuns, setParams, tagFavoriteIds]);
+
+  const authorSummary = React.useMemo(() => {
+    const includedAuthorLabels = getLatestAuthorFavoriteLabels(authorIncludedFavoriteIds, authorFavorites);
+    const baseSummary = `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori incluse.`;
+    const authorFilterSummary = !authorFavoritesLoaded
+      ? " Auteurs favoris : chargement."
+      : !authorFavorites.length
+        ? " Aucun auteur favori disponible."
+        : authorIncludesNoFavorites
+          ? " Auteurs favoris inclus : aucun."
+          : !authorIncludedFavoriteIds.length
+            ? " Auteurs favoris inclus : tous."
+            : includedAuthorLabels.length
+              ? ` Auteurs favoris inclus : ${includedAuthorLabels.join(", ")}.`
+              : " Aucun auteur favori inclus parmi les auteurs favoris disponibles.";
+
+    return `${baseSummary}${authorFilterSummary}`;
+  }, [
+    authorFavorites,
+    authorFavoritesLoaded,
+    authorIncludesNoFavorites,
+    authorIncludedFavoriteIds,
+    authorPageCount,
+  ]);
+
   const scraperSummary = React.useMemo(() => {
     const includedScraperLabels = getLatestScraperLabels(scraperIncludedScraperIds, enabledLatestScrapers);
-    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper ${
-      scraperIncludedScraperIds.length ? "inclus" : "active"
-    }.`;
+    const includedTagFavoriteLabels = getLatestTagFavoriteLabels(scraperIncludedTagFavoriteIds, tagFavorites);
+    const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
+    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par source incluse.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
       ? " Aucun scrapper actif dans les nouveautes."
+      : scraperIncludesNoScrapers
+        ? " Scrappers inclus : aucun."
       : !scraperIncludedScraperIds.length
         ? " Scrappers inclus : tous."
         : includedScraperLabels.length
           ? ` Scrappers inclus : ${includedScraperLabels.join(", ")}.`
           : " Aucun scrapper inclus parmi les scrappers actifs.";
+    const tagFavoriteFilterSummary = !scraperIncludedTagFavoriteIds.length
+      ? " Tags favoris inclus : aucun."
+      : !tagFavoritesLoaded
+        ? " Tags favoris : chargement."
+        : !tagFavorites.length
+          ? " Aucun tag favori disponible."
+          : includesAllTagFavorites
+            ? " Tags favoris inclus : tous."
+            : includedTagFavoriteLabels.length
+              ? ` Tags favoris inclus : ${includedTagFavoriteLabels.join(", ")}.`
+              : " Aucun tag favori inclus parmi les tags favoris disponibles.";
     const deepPageLimitSummary = scraperDeepPageLimit > 0
       ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
       : " Scan profond sans limite de pages.";
     const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${scraperFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
+      return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
     }
 
-    return `${baseSummary}${scraperFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}${quickSeenStopSummary}`;
+    return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}${quickSeenStopSummary}`;
   }, [
     enabledLatestScrapers,
+    scraperIncludesNoScrapers,
     scraperDeepPageLimit,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
+    scraperIncludedTagFavoriteIds,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    tagFavorites,
+    tagFavoritesLoaded,
   ]);
 
   const refreshViewHistorySnapshot = React.useCallback(async () => {
@@ -350,7 +535,15 @@ export default function ScraperLatestView({ scrapers }: Props) {
     sourceResults.setOpenError(null);
 
     if (activeTab === "authors") {
+      if (authorActionsDisabled) {
+        return;
+      }
+
       setAuthorRefreshKey((currentKey) => currentKey + 1);
+      return;
+    }
+
+    if (scraperActionsDisabled) {
       return;
     }
 
@@ -358,10 +551,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperContinueFromQuickScanRef.current = false;
     setScraperSearchMode("quick");
     setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, refreshViewHistorySnapshot, sourceResults]);
+  }, [activeTab, authorActionsDisabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
   const handleSearchDeeper = React.useCallback(async () => {
-    if (activeTab !== "scrapers") {
+    if (activeTab !== "scrapers" || scraperActionsDisabled) {
       return;
     }
 
@@ -371,10 +564,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperContinueFromQuickScanRef.current = false;
     setScraperSearchMode("deep");
     setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, refreshViewHistorySnapshot, sourceResults]);
+  }, [activeTab, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
   const handleContinueScan = React.useCallback(async () => {
-    if (activeTab !== "scrapers") {
+    if (activeTab !== "scrapers" || scraperActionsDisabled) {
       return;
     }
 
@@ -388,17 +581,18 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperContinueFromQuickScanRef.current = scraperSearchMode === "quick";
     setScraperSearchMode(scraperSearchMode);
     setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, refreshViewHistorySnapshot, scraperSearchMode, sourceResults]);
+  }, [activeTab, refreshViewHistorySnapshot, scraperActionsDisabled, scraperSearchMode, sourceResults]);
 
+  const hasIncludedTagFavoriteSelection = scraperIncludedTagFavoriteIds.length > 0;
   const loading = activeTab === "authors"
     ? authorFavoritesLoading || authorRuns.loading
-    : scraperRuns.loading;
+    : scraperRuns.loading || (hasIncludedTagFavoriteSelection && tagFavoritesLoading && scraperRefreshKey > 0);
   const message = activeTab === "authors"
     ? authorRuns.message
     : scraperRuns.message;
   const error = activeTab === "authors"
-    ? authorFavoritesError || authorRuns.error
-    : scraperRuns.error;
+    ? authorSelectionError || authorFavoritesError || authorRuns.error
+    : scraperSelectionError || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null) || scraperRuns.error;
   const activeTabHasStarted = activeTab === "authors"
     ? authorRefreshKey > 0
     : scraperRefreshKey > 0;
@@ -425,12 +619,27 @@ export default function ScraperLatestView({ scrapers }: Props) {
         </div>
       ) : null}
 
+      {activeTab === "authors" ? (
+        <div className="scraper-latest__filters">
+          <ScraperLatestAuthorFavoriteIncludeBar
+            favorites={authorFavorites}
+            value={authorIncludedFavoriteIds}
+            onChange={handleAuthorIncludedFavoriteIdsChange}
+          />
+        </div>
+      ) : null}
+
       {activeTab === "scrapers" ? (
         <div className="scraper-latest__filters">
           <ScraperLatestScraperIncludeBar
             scrapers={enabledLatestScrapers}
             value={scraperIncludedScraperIds}
             onChange={handleScraperIncludedScraperIdsChange}
+          />
+          <ScraperLatestTagFavoriteIncludeBar
+            favorites={tagFavorites}
+            value={scraperIncludedTagFavoriteIds}
+            onChange={handleScraperIncludedTagFavoriteIdsChange}
           />
           <ScraperLatestLanguageIncludeBar
             value={scraperIncludedLanguageCodes}
@@ -440,17 +649,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
       ) : null}
 
       <ScraperLatestResults
-        title={activeTab === "authors" ? "Auteurs favoris" : "Scrappers"}
+        title={activeTab === "authors" ? "Auteurs favoris" : "Sources"}
         summary={activeTab === "authors"
-          ? `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori.`
+          ? authorSummary
           : scraperSummary}
         emptyLabel={activeTab === "authors"
           ? activeTabHasStarted
             ? "Aucune nouveaute trouvee dans les auteurs favoris charges."
             : "Lance le chargement pour chercher les nouveautes des auteurs favoris."
           : activeTabHasStarted
-            ? "Aucune nouveaute trouvee sur les scrappers actives."
-            : "Lance un scan rapide ou profond pour chercher les nouveautes des scrappers actifs."}
+            ? "Aucune nouveaute trouvee sur les sources incluses."
+            : "Lance un scan rapide ou profond pour chercher les nouveautes des sources incluses."}
         sources={activeSources}
         loading={loading}
         message={message}
@@ -460,6 +669,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
         actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
         secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
         continueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
+        actionsDisabled={activeTab === "authors"
+          ? authorActionsDisabled
+          : activeTab === "scrapers"
+            ? scraperActionsDisabled
+            : false}
         libraryMangas={sourceResults.libraryMangas}
         bookmarkedSourceKeys={sourceResults.bookmarkedSourceKeys}
         sourceProgressIndex={sourceResults.sourceProgressIndex}

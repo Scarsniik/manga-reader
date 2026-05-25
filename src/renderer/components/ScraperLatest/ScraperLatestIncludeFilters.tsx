@@ -2,23 +2,35 @@ import React from "react";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import { languages } from "@/renderer/consts/languages";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
-import type { ScraperRecord } from "@/shared/scraper";
+import type {
+  ScraperAuthorFavoriteRecord,
+  ScraperRecord,
+  ScraperTagFavoriteRecord,
+} from "@/shared/scraper";
 
 type IncludeOption = {
   id: string;
   label: string;
 };
 
+export const LATEST_ALL_TAG_FAVORITES_VALUE = "__all_tag_favorites__";
+export const LATEST_NO_SCRAPERS_VALUE = "__no_scrapers__";
+export const LATEST_NO_AUTHOR_FAVORITES_VALUE = "__no_author_favorites__";
+
 type ScraperLatestIncludePanelProps = {
   title: string;
   allLabel: string;
   allButtonLabel: string;
+  noneLabel?: string;
+  noneButtonLabel?: string;
   emptySelectionLabel: string;
   emptyOptionsLabel?: string;
   ariaLabel: string;
   value: string[];
   options: IncludeOption[];
   onChange: (value: string[]) => void;
+  allValue?: string;
+  noneValue?: string;
   renderOptionContent?: (option: IncludeOption) => React.ReactNode;
 };
 
@@ -80,9 +92,38 @@ export const normalizeLatestIncludedLanguageCodes = (value: unknown): string[] =
 export const normalizeLatestIncludedScraperIds = (
   value: unknown,
   allowedScraperIds?: readonly string[],
-): string[] => (
-  normalizeStringList(value, { allowedValues: allowedScraperIds })
-);
+): string[] => {
+  const normalizedValues = normalizeStringList(value);
+  if (normalizedValues.includes(LATEST_NO_SCRAPERS_VALUE)) {
+    return [LATEST_NO_SCRAPERS_VALUE];
+  }
+
+  return normalizeStringList(value, { allowedValues: allowedScraperIds });
+};
+
+export const normalizeLatestIncludedAuthorFavoriteIds = (
+  value: unknown,
+  allowedFavoriteIds?: readonly string[],
+): string[] => {
+  const normalizedValues = normalizeStringList(value);
+  if (normalizedValues.includes(LATEST_NO_AUTHOR_FAVORITES_VALUE)) {
+    return [LATEST_NO_AUTHOR_FAVORITES_VALUE];
+  }
+
+  return normalizeStringList(value, { allowedValues: allowedFavoriteIds });
+};
+
+export const normalizeLatestIncludedTagFavoriteIds = (
+  value: unknown,
+  allowedFavoriteIds?: readonly string[],
+): string[] => {
+  const normalizedValues = normalizeStringList(value);
+  if (normalizedValues.includes(LATEST_ALL_TAG_FAVORITES_VALUE)) {
+    return [LATEST_ALL_TAG_FAVORITES_VALUE];
+  }
+
+  return normalizeStringList(value, { allowedValues: allowedFavoriteIds });
+};
 
 export const getEnabledLatestScrapers = (scrapers: readonly ScraperRecord[]): ScraperRecord[] => (
   scrapers.filter((scraper) => scraper.globalConfig.latest?.enabled)
@@ -103,37 +144,117 @@ export const getLatestScraperLabels = (
     .filter((label): label is string => Boolean(label));
 };
 
+export const getLatestAuthorFavoriteLabels = (
+  favoriteIds: readonly string[],
+  favorites: readonly ScraperAuthorFavoriteRecord[],
+): string[] => {
+  const favoritesById = new Map(favorites.map((favorite) => [favorite.id, favorite.name]));
+
+  return favoriteIds
+    .map((favoriteId) => favoritesById.get(favoriteId))
+    .filter((label): label is string => Boolean(label));
+};
+
+export const getLatestTagFavoriteLabels = (
+  favoriteIds: readonly string[],
+  favorites: readonly ScraperTagFavoriteRecord[],
+): string[] => {
+  const favoritesById = new Map(favorites.map((favorite) => [favorite.id, favorite.name]));
+
+  return favoriteIds
+    .map((favoriteId) => favoritesById.get(favoriteId))
+    .filter((label): label is string => Boolean(label));
+};
+
+export const getIncludedLatestAuthorFavorites = (
+  favorites: readonly ScraperAuthorFavoriteRecord[],
+  includedFavoriteIds: readonly string[],
+): ScraperAuthorFavoriteRecord[] => {
+  if (includedFavoriteIds.includes(LATEST_NO_AUTHOR_FAVORITES_VALUE)) {
+    return [];
+  }
+
+  if (!includedFavoriteIds.length) {
+    return [...favorites];
+  }
+
+  const includedFavoriteIdSet = new Set(includedFavoriteIds);
+  return favorites.filter((favorite) => includedFavoriteIdSet.has(favorite.id));
+};
+
+export const getIncludedLatestTagFavorites = (
+  favorites: readonly ScraperTagFavoriteRecord[],
+  includedFavoriteIds: readonly string[],
+): ScraperTagFavoriteRecord[] => {
+  if (includedFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE)) {
+    return [...favorites];
+  }
+
+  if (!includedFavoriteIds.length) {
+    return [];
+  }
+
+  const includedFavoriteIdSet = new Set(includedFavoriteIds);
+  return favorites.filter((favorite) => includedFavoriteIdSet.has(favorite.id));
+};
+
 function ScraperLatestIncludePanel({
   title,
   allLabel,
   allButtonLabel,
+  noneLabel,
+  noneButtonLabel,
   emptySelectionLabel,
   emptyOptionsLabel,
   ariaLabel,
   value,
   options,
   onChange,
+  allValue,
+  noneValue,
   renderOptionContent,
 }: ScraperLatestIncludePanelProps) {
-  const selectedIds = React.useMemo(() => new Set(value), [value]);
+  const isAllSelected = allValue ? value.includes(allValue) : !value.length;
+  const isNoneSelected = noneValue
+    ? value.includes(noneValue)
+    : Boolean(noneButtonLabel) && !value.length;
+  const selectedValue = React.useMemo(
+    () => value.filter((entry) => entry !== allValue && entry !== noneValue),
+    [allValue, noneValue, value],
+  );
+  const selectedIds = React.useMemo(() => new Set(selectedValue), [selectedValue]);
   const selectedOptions = React.useMemo(
     () => options.filter((option) => selectedIds.has(option.id)),
     [options, selectedIds],
   );
-  const selectedLabel = !value.length
-    ? allLabel
-    : selectedOptions.length
-      ? formatSelectedLabels(selectedOptions.map((option) => option.label))
-      : emptySelectionLabel;
+  const selectedLabel = React.useMemo(() => {
+    if (isAllSelected) {
+      return allLabel;
+    }
+
+    if (isNoneSelected) {
+      return noneLabel ?? emptySelectionLabel;
+    }
+
+    if (!selectedValue.length) {
+      return noneLabel ?? emptySelectionLabel;
+    }
+
+    if (!selectedOptions.length) {
+      return emptySelectionLabel;
+    }
+
+    return formatSelectedLabels(selectedOptions.map((option) => option.label));
+  }, [allLabel, emptySelectionLabel, isAllSelected, isNoneSelected, noneLabel, selectedOptions, selectedValue.length]);
 
   const toggleOption = React.useCallback((optionId: string) => {
     if (selectedIds.has(optionId)) {
-      onChange(value.filter((currentId) => currentId !== optionId));
+      onChange(selectedValue.filter((currentId) => currentId !== optionId));
       return;
     }
 
-    onChange([...value, optionId]);
-  }, [onChange, selectedIds, value]);
+    onChange([...selectedValue, optionId]);
+  }, [onChange, selectedIds, selectedValue]);
 
   return (
     <div className="scraper-latest__include-panel">
@@ -144,10 +265,19 @@ function ScraperLatestIncludePanel({
       <div className="scraper-latest__include-actions" aria-label={ariaLabel}>
         {options.length ? (
           <>
+            {noneButtonLabel ? (
+              <button
+                type="button"
+                className={isNoneSelected ? "is-active" : ""}
+                onClick={() => onChange(noneValue ? [noneValue] : [])}
+              >
+                {noneButtonLabel}
+              </button>
+            ) : null}
             <button
               type="button"
-              className={!value.length ? "is-active" : ""}
-              onClick={() => onChange([])}
+              className={isAllSelected ? "is-active" : ""}
+              onClick={() => onChange(allValue ? [allValue] : [])}
             >
               {allButtonLabel}
             </button>
@@ -207,6 +337,43 @@ export function ScraperLatestLanguageIncludeBar({
   );
 }
 
+type ScraperLatestAuthorFavoriteIncludeBarProps = {
+  favorites: ScraperAuthorFavoriteRecord[];
+  value: string[];
+  onChange: (value: string[]) => void;
+};
+
+export function ScraperLatestAuthorFavoriteIncludeBar({
+  favorites,
+  value,
+  onChange,
+}: ScraperLatestAuthorFavoriteIncludeBarProps) {
+  const favoriteOptions = React.useMemo(
+    () => favorites.map((favorite) => ({
+      id: favorite.id,
+      label: favorite.name,
+    })),
+    [favorites],
+  );
+
+  return (
+    <ScraperLatestIncludePanel
+      title="Auteurs favoris inclus"
+      allLabel="Tous les auteurs favoris"
+      allButtonLabel="Tous"
+      noneLabel="Aucun auteur favori inclus"
+      noneButtonLabel="Aucun"
+      emptySelectionLabel="Aucun auteur favori inclus"
+      emptyOptionsLabel="Aucun auteur favori disponible"
+      ariaLabel="Auteurs favoris inclus dans les nouveautes"
+      value={value}
+      options={favoriteOptions}
+      onChange={onChange}
+      noneValue={LATEST_NO_AUTHOR_FAVORITES_VALUE}
+    />
+  );
+}
+
 type ScraperLatestScraperIncludeBarProps = {
   scrapers: ScraperRecord[];
   value: string[];
@@ -231,12 +398,52 @@ export function ScraperLatestScraperIncludeBar({
       title="Scrappers inclus"
       allLabel="Tous les scrappers actifs"
       allButtonLabel="Tous"
+      noneLabel="Aucun scrapper inclus"
+      noneButtonLabel="Aucun"
       emptySelectionLabel="Aucun scrapper inclus"
       emptyOptionsLabel="Aucun scrapper actif dans les nouveautes"
       ariaLabel="Scrappers inclus dans les nouveautes"
       value={value}
       options={scraperOptions}
       onChange={onChange}
+      noneValue={LATEST_NO_SCRAPERS_VALUE}
+    />
+  );
+}
+
+type ScraperLatestTagFavoriteIncludeBarProps = {
+  favorites: ScraperTagFavoriteRecord[];
+  value: string[];
+  onChange: (value: string[]) => void;
+};
+
+export function ScraperLatestTagFavoriteIncludeBar({
+  favorites,
+  value,
+  onChange,
+}: ScraperLatestTagFavoriteIncludeBarProps) {
+  const favoriteOptions = React.useMemo(
+    () => favorites.map((favorite) => ({
+      id: favorite.id,
+      label: favorite.name,
+    })),
+    [favorites],
+  );
+
+  return (
+    <ScraperLatestIncludePanel
+      title="Tags favoris inclus"
+      allLabel="Tous les tags favoris"
+      allButtonLabel="Tous"
+      noneLabel="Aucun tag favori inclus"
+      noneButtonLabel="Aucun"
+      emptySelectionLabel="Aucun tag favori inclus"
+      emptyOptionsLabel="Aucun tag favori disponible"
+      ariaLabel="Tags favoris inclus dans les nouveautes"
+      value={value}
+      options={favoriteOptions}
+      onChange={onChange}
+      allValue={LATEST_ALL_TAG_FAVORITES_VALUE}
     />
   );
 }

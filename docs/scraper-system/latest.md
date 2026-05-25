@@ -1,18 +1,18 @@
 # Mode Nouveautes
 
-Date : 2026-05-24
+Date : 2026-05-25
 
 Le mode `Nouveautes` affiche des resultats fusionnes qui sont encore consideres comme nouveaux par
-l'historique de vue des cards. La vue ouvre d'abord l'onglet `Scrappers`, puis propose l'onglet
+l'historique de vue des cards. La vue ouvre d'abord l'onglet `Sources`, puis propose l'onglet
 `Auteurs`. Une card reste dans la vue tant qu'elle garde son liseret vert dans la liste courante.
 Au rechargement, les cards deja vues disparaissent.
 
 La collecte ne se lance pas automatiquement a l'ouverture de la vue ni au changement d'onglet.
 L'utilisateur doit lancer explicitement une collecte depuis l'action de l'onglet courant.
 
-## Onglet Scrappers
+## Onglet Sources
 
-L'onglet `Scrappers` parcourt chaque scraper active pour les nouveautes. Pour chaque scraper, le
+L'onglet `Sources` parcourt les scrapers inclus et les tags favoris inclus. Pour chaque source, le
 mode rapide part de la premiere page. Sur cette premiere page, tant qu'au moins une card incluse est
 encore non vue, les nouveautes de la page sont affichees et le scan peut continuer. A partir des
 pages suivantes, le scan rapide affiche les nouveautes trouvees sur la page puis s'arrete quand la
@@ -24,10 +24,10 @@ rapide. Ce curseur pointe la page suivante apres l'arret rapide, mais il n'est p
 et ne reutilise pas le checkpoint persistant. La reprise garde la meme regle d'arret que le scan
 rapide.
 
-Quand un checkpoint existe pour le scraper, il est reserve au scan profond. Le checkpoint contient
-le scraper, le module (`homepage` ou `search`), la requete, les langues incluses, la page, les URLs
-de pagination et l'identite d'une card d'ancrage. Le runtime verifie cette card d'ancrage avant de
-continuer autour du checkpoint.
+Quand un checkpoint existe pour la source, il est reserve au scan profond. Le checkpoint contient
+le scraper, le module (`homepage`, `search` ou `tag`), la requete ou l'URL du tag, les langues
+incluses, la page, les URLs de pagination et l'identite d'une card d'ancrage. Le runtime verifie
+cette card d'ancrage avant de continuer autour du checkpoint.
 
 Les checkpoints sont separes par selection de langues. `Toutes les langues`, `ja`, `en` et `ja+en`
 ont donc chacun un point de reprise different.
@@ -55,15 +55,27 @@ les langues sont acceptees.
 
 Le filtre `Scrappers inclus` utilise le parametre `scraperLatestIncludedScraperIds`. Il ne propose
 que les scrapers actives par `latest.enabled`. Si la liste est vide, tous les scrapers actifs sont
-inclus. Si elle contient des IDs, seuls ces scrapers sont lances par l'onglet `Scrappers`.
+inclus. La valeur `__no_scrapers__` correspond a l'option `Aucun` et exclut tous les scrapers.
+Si la liste contient des IDs, seuls ces scrapers sont lances par l'onglet `Sources`.
+
+Le filtre `Tags favoris inclus` utilise le parametre `scraperLatestIncludedTagFavoriteIds`. Contrairement
+aux scrapers, la liste vide signifie qu'aucun tag favori n'est inclus par defaut. L'option `Tous`
+enregistre une valeur speciale qui inclut tous les tags favoris actuels et futurs. Si la liste contient
+des IDs de tags favoris, seules les sources de ces tags favoris sont lancees. Chaque source tag utilise
+le module `tag`, participe au scan rapide, au scan profond, au bouton `Continuer` et aux checkpoints
+persistants des nouveautes.
+
+Si les scrapers sont sur `Aucun` et qu'aucun tag favori lancable n'est inclus, les actions de scan
+sont bloquees jusqu'a ce qu'au moins une source soit selectionnee.
 
 Chaque scraper choisit son module de collecte :
 
 - `Homepage` charge le module `Homepage`
 - `Recherche` charge le module `Recherche` avec `homeSearch.query` comme requete par defaut
 
-Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Si une
-valeur tres grande est configuree, le runtime suit ce choix et peut donc charger beaucoup de pages.
+Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Il s'applique
+par source incluse. Si une valeur tres grande est configuree, le runtime suit ce choix et peut donc
+charger beaucoup de pages.
 Le parametre global `scraperLatestQuickConsecutiveSeenStopThreshold` a un minimum de 0. Il indique
 combien de cards deja vues d'affilee sont tolerees avant que le scan rapide s'arrete. Le parametre
 global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
@@ -80,8 +92,16 @@ cas, des cards deja vues peuvent redevenir des nouveautes apres nettoyage automa
 
 ## Onglet Auteurs
 
-L'onglet `Auteurs` regroupe toutes les sources des auteurs favoris. Il charge les pages auteur avec
+L'onglet `Auteurs` regroupe les sources des auteurs favoris inclus. Il charge les pages auteur avec
 le meme runtime que les favoris auteur, puis fusionne les resultats comme la recherche multi-sources.
+
+Le filtre `Auteurs favoris inclus` utilise le parametre
+`scraperLatestIncludedAuthorFavoriteIds`. Si la liste est vide, tous les auteurs favoris sont
+inclus par defaut. La valeur `__no_author_favorites__` correspond a l'option `Aucun`. Si la liste
+contient des IDs d'auteurs favoris, seuls ces auteurs favoris sont lances.
+
+Si les auteurs favoris sont sur `Aucun` ou qu'aucune source auteur lancable n'est disponible, les
+actions de chargement sont bloquees jusqu'a ce qu'au moins une source soit selectionnee.
 
 Le nombre de pages chargees par source reprend le parametre global
 `scraperAuthorFavoritePageCount`. Les resultats deja connus dans l'historique de vue ne sont pas
@@ -91,7 +111,7 @@ affiches.
 
 Dans les reglages globaux d'un scraper :
 
-- `latest.enabled` active le scraper dans l'onglet `Scrappers`
+- `latest.enabled` active le scraper dans le filtre `Scrappers inclus` de l'onglet `Sources`
 - `latest.module` vaut `homepage` ou `search`
 
 Le choix du module est propose uniquement si le module correspondant est configure sur le scraper.

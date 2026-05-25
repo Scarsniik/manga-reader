@@ -215,28 +215,39 @@ scraper.
 | `chapterDownloads.autoAssignSeries` | rattache les telechargements de chapitre a une serie creee depuis le titre de la fiche |
 | `homeSearch.enabled` | lance une recherche automatiquement a l'ouverture du scraper, si le module `Homepage` n'est pas utilise comme accueil |
 | `homeSearch.query` | requete utilisee pour cette recherche d'accueil, vide pour une recherche globale |
-| `latest.enabled` | active le scraper dans l'onglet `Scrappers` du mode `Nouveautes` |
+| `latest.enabled` | active le scraper dans le filtre `Scrappers inclus` du mode `Nouveautes` |
 | `latest.module` | module utilise pour les nouveautes du scraper : `homepage` ou `search` |
 
 Les champs de bookmark excluables sont : `cover`, `summary`, `description`, `authors`, `tags`,
 `mangaStatus`, `pageCount`.
 
 Le mode `Nouveautes` possede aussi un parametre applicatif global :
-`scraperLatestResultLimit`. Il indique combien de resultats non vus chercher par scraper active. Le
+`scraperLatestResultLimit`. Il indique combien de resultats non vus chercher par source incluse. Le
 minimum est 1 et aucune limite haute n'est appliquee.
 
 Le parametre applicatif `scraperLatestDeepPageLimit` limite le nombre de pages consultees par le
 scan profond des nouveautes. Le minimum est 0, et 0 signifie aucune limite de pages.
 
-Le parametre applicatif `scraperLatestIncludedLanguageCodes` limite l'onglet `Scrappers` du mode
+Le parametre applicatif `scraperLatestIncludedLanguageCodes` limite l'onglet `Sources` du mode
 `Nouveautes` aux langues selectionnees. La liste est exclusive et s'applique pendant la collecte :
 les resultats hors liste ne comptent pas dans `scraperLatestResultLimit`. Si la liste est vide,
 toutes les langues sont acceptees. La valeur `__multi_search_unknown__` correspond a l'option
 `Inconnue` et conserve les cards sans langue detectee quand une restriction est activee.
 
-Le parametre applicatif `scraperLatestIncludedScraperIds` limite l'onglet `Scrappers` aux scrapers
+Le parametre applicatif `scraperLatestIncludedScraperIds` limite l'onglet `Sources` aux scrapers
 selectionnes parmi ceux qui sont actives par `latest.enabled`. Si la liste est vide, tous les
-scrapers actifs sont inclus.
+scrapers actifs sont inclus. La valeur `__no_scrapers__` correspond a l'option `Aucun`.
+
+Le parametre applicatif `scraperLatestIncludedAuthorFavoriteIds` limite l'onglet `Auteurs` aux
+auteurs favoris selectionnes. Si la liste est vide, tous les auteurs favoris sont inclus par
+defaut. La valeur `__no_author_favorites__` correspond a l'option `Aucun`.
+
+Le parametre applicatif `scraperLatestIncludedTagFavoriteIds` limite l'onglet `Sources` aux tags
+favoris selectionnes. Si la liste est vide, aucun tag favori n'est inclus par defaut. La valeur
+`__all_tag_favorites__` correspond a l'option `Tous` et inclut tous les tags favoris.
+
+Quand `scraperLatestIncludedScraperIds` vaut `__no_scrapers__` et qu'aucun tag favori lancable
+n'est inclus, les scans de nouveautes sont desactives.
 
 ## Module Homepage
 

@@ -40,6 +40,7 @@ type Props = {
   actionLabel?: string;
   secondaryActionLabel?: string;
   continueActionLabel?: string;
+  actionsDisabled?: boolean;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -102,6 +103,7 @@ export default function ScraperLatestResults({
   actionLabel = "Recharger",
   secondaryActionLabel,
   continueActionLabel,
+  actionsDisabled = false,
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -195,7 +197,7 @@ export default function ScraperLatestResults({
               setMergeRefreshKey((currentKey) => currentKey + 1);
               onReload();
             }}
-            disabled={loading}
+            disabled={loading || actionsDisabled}
           >
             {loading ? "Chargement..." : actionLabel}
           </button>
@@ -207,7 +209,7 @@ export default function ScraperLatestResults({
                 setMergeRefreshKey((currentKey) => currentKey + 1);
                 onSecondaryAction();
               }}
-              disabled={loading}
+              disabled={loading || actionsDisabled}
             >
               {secondaryActionLabel}
             </button>
@@ -280,7 +282,7 @@ export default function ScraperLatestResults({
               setMergeRefreshKey((currentKey) => currentKey + 1);
               onContinue();
             }}
-            disabled={loading}
+            disabled={loading || actionsDisabled}
           >
             {loading ? "Chargement..." : continueActionLabel}
           </button>
