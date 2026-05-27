@@ -12,6 +12,9 @@ import {
 type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
+    locationState?: {
+        multiSearchPrefillQuery?: string;
+    };
     title?: string;
 };
 
@@ -113,6 +116,22 @@ const isOptionalObject = (value: unknown): boolean => (
     || (typeof value === "object" && !Array.isArray(value))
 );
 
+const isMangaManagerLocationState = (value: unknown): boolean => {
+    if (value === undefined || value === null) {
+        return true;
+    }
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+    }
+
+    const candidate = value as { multiSearchPrefillQuery?: unknown };
+    return (
+        candidate.multiSearchPrefillQuery === undefined
+        || typeof candidate.multiSearchPrefillQuery === "string"
+    );
+};
+
 const isOptionalPositivePage = (value: unknown): boolean => (
     value === undefined
     || (
@@ -130,7 +149,11 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
     const candidate = value as Partial<WorkspaceTarget>;
 
     if (candidate.kind === "manga-manager.view") {
-        return typeof candidate.viewId === "string" && candidate.viewId.trim().length > 0;
+        return (
+            typeof candidate.viewId === "string"
+            && candidate.viewId.trim().length > 0
+            && isMangaManagerLocationState(candidate.locationState)
+        );
     }
 
     if (candidate.kind === "reader") {

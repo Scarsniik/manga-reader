@@ -4,6 +4,7 @@ import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { Manga } from '@/renderer/types';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
+import { MagnifyingGlassIcon } from '@/renderer/components/icons';
 import {
   formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
@@ -30,6 +31,7 @@ type Props = {
   downloading: boolean;
   addingToLibrary: boolean;
   loadingMoreThumbnails: boolean;
+  multiSearchTitle?: string;
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   getLinkedLocalMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   onBack?: () => void;
@@ -42,6 +44,8 @@ type Props = {
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
   onLoadMoreThumbnails: () => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
+  onOpenTitleMultiSearch?: () => void;
+  onOpenTitleMultiSearchInWorkspace?: () => void;
 };
 
 export default function ScraperDetailsPanel({
@@ -61,6 +65,7 @@ export default function ScraperDetailsPanel({
   downloading,
   addingToLibrary,
   loadingMoreThumbnails,
+  multiSearchTitle = '',
   getLinkedMangaForSource,
   getLinkedLocalMangaForSource,
   onBack,
@@ -73,6 +78,8 @@ export default function ScraperDetailsPanel({
   onLinkSourceToManga,
   onLoadMoreThumbnails,
   onDownload,
+  onOpenTitleMultiSearch,
+  onOpenTitleMultiSearchInWorkspace,
 }: Props) {
   if (!detailsResult) {
     return null;
@@ -117,6 +124,15 @@ export default function ScraperDetailsPanel({
       ...options,
       openInWorkspace: true,
     });
+  };
+  const handleOpenTitleMultiSearchAuxClick = (event: React.MouseEvent) => {
+    if (event.button !== MIDDLE_BUTTON) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenTitleMultiSearchInWorkspace?.();
   };
 
   return (
@@ -216,6 +232,27 @@ export default function ScraperDetailsPanel({
               ) : null}
               {sourceUrl ? (
                 <>
+                  {onOpenTitleMultiSearch ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__author-multi-search"
+                      onClick={onOpenTitleMultiSearch}
+                      onMouseDown={(event) => {
+                        if (event.button === MIDDLE_BUTTON) {
+                          event.preventDefault();
+                        }
+                      }}
+                      onAuxClick={handleOpenTitleMultiSearchAuxClick}
+                      disabled={!multiSearchTitle}
+                      title={multiSearchTitle
+                        ? `Ouvrir une recherche multi-sources avec ${multiSearchTitle}. Clic molette : nouvel onglet workspace`
+                        : 'Aucun titre exploitable'}
+                      data-prevent-middle-click-autoscroll="true"
+                    >
+                      <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+                      <span>Recherche multi-source</span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="scraper-browser__link-source"

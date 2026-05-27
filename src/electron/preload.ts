@@ -41,6 +41,9 @@ type WindowStateChangeListener = (state: WindowState) => void;
 type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
+    locationState?: {
+        multiSearchPrefillQuery?: string;
+    };
     title?: string;
 };
 

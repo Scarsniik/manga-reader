@@ -22,6 +22,7 @@ type Props = {
   query: string;
   title?: string;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
+  onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onTitleChange: (title: string) => void;
 };
 
@@ -33,6 +34,7 @@ export default function WorkspaceScraperTagPanel({
   query,
   title,
   onOpenReaderTarget,
+  onOpenWorkspaceTarget,
   onTitleChange,
 }: Props) {
   const targetKey = `scraper.tag:${scraperId}:${query}`;
@@ -200,6 +202,7 @@ export default function WorkspaceScraperTagPanel({
         scraper={scraper}
         initialState={initialState}
         onOpenReaderTarget={onOpenReaderTarget}
+        onOpenWorkspaceTarget={onOpenWorkspaceTarget}
         routeSyncEnabled={false}
       />
     </div>

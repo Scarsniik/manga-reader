@@ -3,6 +3,9 @@ import type { ReaderLocationState } from "@/renderer/components/Reader/types";
 export type MangaManagerViewWorkspaceTarget = {
   kind: "manga-manager.view";
   viewId: string;
+  locationState?: {
+    multiSearchPrefillQuery?: string;
+  };
   title?: string;
 };
 

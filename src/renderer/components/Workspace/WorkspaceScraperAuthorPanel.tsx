@@ -24,6 +24,7 @@ type Props = {
   title?: string;
   templateContext?: ScraperTemplateContext;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
+  onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onTitleChange: (title: string) => void;
 };
 
@@ -36,6 +37,7 @@ export default function WorkspaceScraperAuthorPanel({
   title,
   templateContext,
   onOpenReaderTarget,
+  onOpenWorkspaceTarget,
   onTitleChange,
 }: Props) {
   const targetKey = `scraper.author:${scraperId}:${JSON.stringify({
@@ -208,6 +210,7 @@ export default function WorkspaceScraperAuthorPanel({
         scraper={scraper}
         initialState={initialState}
         onOpenReaderTarget={onOpenReaderTarget}
+        onOpenWorkspaceTarget={onOpenWorkspaceTarget}
         routeSyncEnabled={false}
       />
     </div>

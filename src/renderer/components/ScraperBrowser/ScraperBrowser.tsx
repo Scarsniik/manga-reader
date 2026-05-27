@@ -100,6 +100,7 @@ import {
   getScraperPagesFeatureConfig,
   getScraperSearchFeatureConfig,
   getScraperTagFeatureConfig,
+  getScraperTitleAnalysisFeatureConfig,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasTagPagePlaceholder,
@@ -108,6 +109,7 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
+import { getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import {
   buildUniqueAuthorSearchNames,
@@ -117,12 +119,14 @@ import {
 import generateId from '@/utils/id';
 import useParams from '@/renderer/hooks/useParams';
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
+import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import './style.scss';
 
 type Props = {
   scraper: ScraperRecord;
   initialState?: ScraperBrowserInitialState | null;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
+  onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   routeSyncEnabled?: boolean;
 };
 
@@ -214,6 +218,7 @@ export default function ScraperBrowser({
   scraper,
   initialState = null,
   onOpenReaderTarget,
+  onOpenWorkspaceTarget,
   routeSyncEnabled = true,
 }: Props) {
   const location = useLocation();
@@ -230,6 +235,7 @@ export default function ScraperBrowser({
   const tagFeature = useMemo(() => getScraperFeature(scraper, 'tag'), [scraper]);
   const chaptersFeature = useMemo(() => getScraperFeature(scraper, 'chapters'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
+  const titleAnalysisFeature = useMemo(() => getScraperFeature(scraper, 'titleAnalysis'), [scraper]);
   const homepageConfig = useMemo(() => getScraperHomepageFeatureConfig(homepageFeature), [homepageFeature]);
   const searchConfig = useMemo(() => getScraperSearchFeatureConfig(searchFeature), [searchFeature]);
   const detailsConfig = useMemo(() => getScraperDetailsFeatureConfig(detailsFeature), [detailsFeature]);
@@ -237,6 +243,10 @@ export default function ScraperBrowser({
   const tagConfig = useMemo(() => getScraperTagFeatureConfig(tagFeature), [tagFeature]);
   const chaptersConfig = useMemo(() => getScraperChaptersFeatureConfig(chaptersFeature), [chaptersFeature]);
   const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
+  const titleAnalysisConfig = useMemo(
+    () => getScraperTitleAnalysisFeatureConfig(titleAnalysisFeature),
+    [titleAnalysisFeature],
+  );
 
   const hasHomepage = isScraperFeatureConfigured(homepageFeature);
   const hasSearch = isScraperFeatureConfigured(searchFeature);
@@ -359,6 +369,14 @@ export default function ScraperBrowser({
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
   const historySourceKind = locationState?.scraperBrowserHistorySource?.kind ?? null;
+  const titleMultiSearchQuery = useMemo(() => {
+    const rawTitle = detailsResult?.title?.trim() ?? '';
+    if (!rawTitle) {
+      return '';
+    }
+
+    return getScraperTitleAnalysisSearchTitle(rawTitle, titleAnalysisConfig).trim();
+  }, [detailsResult?.title, titleAnalysisConfig]);
 
   const clearFeedback = useCallback(() => {
     setRuntimeMessage(null);
@@ -1061,6 +1079,88 @@ export default function ScraperBrowser({
       },
     );
   }, [authorMultiSearchQuery, location.search, navigate, setRuntimeError]);
+  const buildTitleMultiSearchTarget = useCallback((): WorkspaceTarget | null => {
+    if (!titleMultiSearchQuery) {
+      return null;
+    }
+
+    return {
+      kind: 'manga-manager.view',
+      viewId: SCRAPER_MULTI_SEARCH_VIEW_ID,
+      title: 'Recherche multi-sources',
+      locationState: {
+        multiSearchPrefillQuery: titleMultiSearchQuery,
+      },
+    };
+  }, [titleMultiSearchQuery]);
+
+  const handleOpenTitleMultiSearch = useCallback(() => {
+    const target = buildTitleMultiSearchTarget();
+    if (!target) {
+      setRuntimeError('Aucun titre exploitable n\'est disponible pour pre-remplir la recherche multi-sources.');
+      return;
+    }
+
+    if (onOpenWorkspaceTarget) {
+      onOpenWorkspaceTarget(target);
+      return;
+    }
+
+    const multiSearch = writeScraperRouteState(location.search, {
+      scraperId: SCRAPER_MULTI_SEARCH_VIEW_ID,
+      mode: 'search',
+      homepageActive: false,
+      homepagePage: 1,
+      searchActive: false,
+      searchQuery: '',
+      searchPage: 1,
+      authorActive: false,
+      authorQuery: '',
+      authorPage: 1,
+      tagActive: false,
+      tagQuery: '',
+      tagPage: 1,
+      mangaQuery: '',
+      mangaUrl: '',
+      bookmarksFilterScraperId: null,
+    });
+
+    navigate(
+      {
+        pathname: '/',
+        search: multiSearch,
+      },
+      {
+        state: {
+          multiSearchPrefillQuery: titleMultiSearchQuery,
+        },
+      },
+    );
+  }, [
+    buildTitleMultiSearchTarget,
+    location.search,
+    navigate,
+    onOpenWorkspaceTarget,
+    setRuntimeError,
+    titleMultiSearchQuery,
+  ]);
+  const handleOpenTitleMultiSearchInWorkspace = useCallback(() => {
+    const target = buildTitleMultiSearchTarget();
+    if (!target) {
+      setRuntimeError('Aucun titre exploitable n\'est disponible pour pre-remplir la recherche multi-sources.');
+      return;
+    }
+
+    void openWorkspaceTarget(target)
+      .then((opened) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir la recherche multi-sources dans un onglet workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir la recherche multi-sources dans un onglet workspace.');
+      });
+  }, [buildTitleMultiSearchTarget, setRuntimeError]);
   const handleSwitchAuthorCombinedView = useCallback((enabled: boolean) => {
     setParams({ scraperAuthorCombinedView: enabled }, { remount: false });
   }, [setParams]);
@@ -1979,6 +2079,7 @@ export default function ScraperBrowser({
         downloading={downloading}
         addingToLibrary={addingToLibrary}
         loadingMoreThumbnails={loadingMoreThumbnails}
+        multiSearchTitle={titleMultiSearchQuery}
         getLinkedMangaForSource={getLinkedMangaForSource}
         getLinkedLocalMangaForSource={getLinkedLocalMangaForSource}
         onBack={canNavigateBack ? handleNavigateBack : () => void handleBackToListing()}
@@ -1996,6 +2097,8 @@ export default function ScraperBrowser({
         }}
         onLinkSourceToManga={(chapter) => handleLinkSourceToManga(chapter)}
         onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}
+        onOpenTitleMultiSearch={handleOpenTitleMultiSearch}
+        onOpenTitleMultiSearchInWorkspace={handleOpenTitleMultiSearchInWorkspace}
         onDownload={(chapter) => {
           const linkedManga = getLinkedMangaForSource(chapter);
           void handleDownload(chapter, {

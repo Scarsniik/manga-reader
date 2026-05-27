@@ -98,6 +98,7 @@ import useParams from "@/renderer/hooks/useParams";
 import "./style.scss";
 
 type Props = {
+  initialPrefillQuery?: string;
   scrapers: ScraperRecord[];
 };
 
@@ -117,7 +118,10 @@ const buildEmptyStatusCounts = (): Record<MultiSearchScraperRun["status"], numbe
   error: 0,
 });
 
-export default function MultiSearchBrowser({ scrapers }: Props) {
+export default function MultiSearchBrowser({
+  initialPrefillQuery = "",
+  scrapers,
+}: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const { openModal } = useModal();
@@ -175,9 +179,16 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
     [bookmarkMap],
   );
   const locationState = location.state as MultiSearchPrefillLocationState | null;
-  const multiSearchPrefillQuery = typeof locationState?.multiSearchPrefillQuery === "string"
+  const locationPrefillQuery = typeof locationState?.multiSearchPrefillQuery === "string"
     ? locationState.multiSearchPrefillQuery.trim()
     : "";
+  const initialPrefillQueryValue = initialPrefillQuery.trim();
+  const multiSearchPrefillQuery = locationPrefillQuery || initialPrefillQueryValue;
+  const multiSearchPrefillKey = locationPrefillQuery
+    ? `location:${location.key}`
+    : initialPrefillQueryValue
+      ? `initial:${initialPrefillQueryValue}`
+      : "";
   const canShowUnseenFirst = false;
   const showUnseenFirst = canShowUnseenFirst && params?.multiSearchShowUnseenFirst === true;
   const mergeOptions = useMemo(() => ({
@@ -248,8 +259,8 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
   }, []);
 
   useEffect(() => {
-    if (multiSearchPrefillQuery && consumedPrefillLocationKeyRef.current !== location.key) {
-      consumedPrefillLocationKeyRef.current = location.key;
+    if (multiSearchPrefillQuery && consumedPrefillLocationKeyRef.current !== multiSearchPrefillKey) {
+      consumedPrefillLocationKeyRef.current = multiSearchPrefillKey;
       restoredStateRef.current = true;
       initializedSelectionRef.current = true;
 
@@ -305,7 +316,7 @@ export default function MultiSearchBrowser({ scrapers }: Props) {
 
     initializedSelectionRef.current = true;
     setSelectedScraperIds(searchableScrapers.map((scraper) => scraper.id));
-  }, [location.key, multiSearchPrefillQuery, restoreRuns, searchableScrapers]);
+  }, [multiSearchPrefillKey, multiSearchPrefillQuery, restoreRuns, searchableScrapers]);
 
   useEffect(() => {
     if (!restoredStateRef.current) {

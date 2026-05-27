@@ -106,6 +106,14 @@ Exemple de forme cible :
 ```ts
 type WorkspaceTarget =
   | {
+      kind: "manga-manager.view";
+      viewId: string;
+      locationState?: {
+        multiSearchPrefillQuery?: string;
+      };
+      title?: string;
+    }
+  | {
       kind: "scraper.config";
       scraperId: string;
       title?: string;

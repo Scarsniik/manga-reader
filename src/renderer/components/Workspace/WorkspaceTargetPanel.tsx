@@ -48,6 +48,7 @@ type ScraperDetailsPanelProps = {
   sourceUrl: string;
   title?: string;
   onOpenReaderTarget: (target: ReaderWorkspaceTarget, options?: ReplaceTargetOptions) => void;
+  onOpenWorkspaceTarget: (target: WorkspaceTarget, options?: ReplaceTargetOptions) => void;
   onTitleChange: (title: string) => void;
 };
 
@@ -135,6 +136,7 @@ function ScraperDetailsPanel({
   sourceUrl,
   title,
   onOpenReaderTarget,
+  onOpenWorkspaceTarget,
   onTitleChange,
 }: ScraperDetailsPanelProps) {
   const targetKey = `scraper.details:${scraperId}:${sourceUrl}`;
@@ -349,6 +351,7 @@ function ScraperDetailsPanel({
         initialState={initialState}
         routeSyncEnabled={false}
         onOpenReaderTarget={onOpenReaderTarget}
+        onOpenWorkspaceTarget={onOpenWorkspaceTarget}
       />
     </div>
   );
@@ -369,6 +372,10 @@ export default function WorkspaceTargetPanel({
     onReplaceTarget(tabId, readerTarget, { returnTarget: options?.returnTarget ?? target });
   }, [onReplaceTarget, tabId, target]);
 
+  const handleOpenWorkspaceTarget = useCallback((nextTarget: WorkspaceTarget, options?: ReplaceTargetOptions) => {
+    onReplaceTarget(tabId, nextTarget, options);
+  }, [onReplaceTarget, tabId]);
+
   const handleReaderBack = useCallback(() => {
     if (!returnTarget) {
       return;
@@ -381,6 +388,7 @@ export default function WorkspaceTargetPanel({
     return (
       <MangaManager
         forcedViewId={target.viewId}
+        forcedLocationState={target.locationState ?? null}
         showHeader={false}
       />
     );
@@ -415,6 +423,7 @@ export default function WorkspaceTargetPanel({
         sourceUrl={target.sourceUrl}
         title={target.title}
         onOpenReaderTarget={handleOpenReaderTarget}
+        onOpenWorkspaceTarget={handleOpenWorkspaceTarget}
         onTitleChange={handleTitleChange}
       />
     );
@@ -429,6 +438,7 @@ export default function WorkspaceTargetPanel({
         title={target.title}
         templateContext={target.templateContext}
         onOpenReaderTarget={handleOpenReaderTarget}
+        onOpenWorkspaceTarget={handleOpenWorkspaceTarget}
         onTitleChange={handleTitleChange}
       />
     );
@@ -442,6 +452,7 @@ export default function WorkspaceTargetPanel({
         query={target.query}
         title={target.title}
         onOpenReaderTarget={handleOpenReaderTarget}
+        onOpenWorkspaceTarget={handleOpenWorkspaceTarget}
         onTitleChange={handleTitleChange}
       />
     );

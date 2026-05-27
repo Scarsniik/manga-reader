@@ -1,5 +1,13 @@
 export type ScraperSourceKind = 'site' | 'api';
-export type ScraperFeatureKind = 'homepage' | 'search' | 'details' | 'author' | 'tag' | 'chapters' | 'pages';
+export type ScraperFeatureKind =
+  | 'homepage'
+  | 'search'
+  | 'details'
+  | 'author'
+  | 'tag'
+  | 'chapters'
+  | 'pages'
+  | 'titleAnalysis';
 export type ScraperFeatureStatus = 'not_configured' | 'configured' | 'validated';
 export type ScraperRequestMethod = 'GET' | 'POST';
 export type ScraperRequestBodyMode = 'form' | 'raw';
@@ -20,6 +28,81 @@ export interface ScraperLanguageDetectionConfig {
   languageSelector?: ScraperFieldSelector;
   processedLanguageSelector?: ScraperFieldSelector;
   valueMappings?: ScraperLanguageValueMapping[];
+}
+
+export type ScraperTitleAnalysisBlockKind =
+  | "title"
+  | "bracket"
+  | "bracketWithParentheses"
+  | "parentheses"
+  | "suffixes";
+
+export type ScraperTitleAnalysisField =
+  | "title"
+  | "circle"
+  | "authors"
+  | "parody"
+  | "extra";
+
+export type ScraperTitleAnalysisValidationKind = "none" | "language";
+export type ScraperTitleAnalysisValidationFailureBehavior = "rejectVariant" | "continue";
+export type ScraperTitleSuffixMappingKind = "language" | "tag";
+export type ScraperTitleSequenceKind = "chapter" | "volume" | "part";
+
+export interface ScraperTitleAnalysisBlockConfig {
+  id: string;
+  kind: ScraperTitleAnalysisBlockKind;
+  enabled: boolean;
+  optional: boolean;
+  field?: ScraperTitleAnalysisField;
+  innerField?: ScraperTitleAnalysisField;
+  validation?: ScraperTitleAnalysisValidationKind;
+  onValidationFailure?: ScraperTitleAnalysisValidationFailureBehavior;
+}
+
+export interface ScraperTitleAnalysisVariantConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  blocks: ScraperTitleAnalysisBlockConfig[];
+}
+
+export interface ScraperTitleSuffixMapping {
+  value: string;
+  kind: ScraperTitleSuffixMappingKind;
+  languageCode?: string;
+}
+
+export interface ScraperTitleAnalysisConfig {
+  enabled: boolean;
+  variants: ScraperTitleAnalysisVariantConfig[];
+  suffixMappings: ScraperTitleSuffixMapping[];
+  manualTestTitles: string[];
+  searchTestQuery?: string;
+  searchTestLimit?: number;
+}
+
+export interface ScraperTitleSequenceMarker {
+  kind: ScraperTitleSequenceKind;
+  label: string;
+  value: string;
+}
+
+export interface ScraperTitleAnalysisResult {
+  rawTitle: string;
+  matched: boolean;
+  variantId?: string;
+  variantName?: string;
+  title: string;
+  alternativeTitles: string[];
+  circle?: string;
+  authors: string[];
+  parody?: string;
+  languageCode?: string;
+  languageLabel?: string;
+  suffixTags: string[];
+  unmatchedParts: string[];
+  sequenceMarkers: ScraperTitleSequenceMarker[];
 }
 
 export interface ScraperRegexPattern {
@@ -955,6 +1038,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     kind: 'pages',
     label: 'Pages',
     description: 'Definir comment recuperer les pages du manga et ouvrir un lecteur.',
+  },
+  {
+    kind: 'titleAnalysis',
+    label: 'Analyse des titres',
+    description: 'Definir comment structurer les titres du scrapper pour isoler le titre, les auteurs, la langue et les tomes ou chapitres.',
   },
 ];
 

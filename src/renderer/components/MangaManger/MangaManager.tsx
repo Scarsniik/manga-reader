@@ -40,6 +40,7 @@ import {
     writeMangaManagerViewState,
 } from '@/renderer/utils/readerNavigation';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
+import type { MangaManagerViewWorkspaceTarget } from '@/renderer/types/workspace';
 
 declare global {
     interface Window {
@@ -55,11 +56,13 @@ const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 
 
 type MangaManagerProps = {
     forcedViewId?: string;
+    forcedLocationState?: MangaManagerViewWorkspaceTarget['locationState'] | null;
     showHeader?: boolean;
 };
 
 const MangaManager: React.FC<MangaManagerProps> = ({
     forcedViewId,
+    forcedLocationState = null,
     showHeader = true,
 }) => {
     const location = useLocation();
@@ -381,6 +384,9 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const isTagFavoritesView = activeViewId === SCRAPER_TAG_FAVORITES_VIEW_ID;
     const isHistoryView = activeViewId === SCRAPER_HISTORY_VIEW_ID;
     const isLatestView = activeViewId === SCRAPER_LATEST_VIEW_ID;
+    const forcedMultiSearchPrefillQuery = typeof forcedLocationState?.multiSearchPrefillQuery === 'string'
+        ? forcedLocationState.multiSearchPrefillQuery.trim()
+        : '';
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -750,7 +756,10 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                     {!hasLoadedScrapers ? (
                         <div className="empty">{isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees...' : 'Chargement du scrapper...'}</div>
                     ) : isMultiSearchView ? (
-                        <MultiSearchBrowser scrapers={sortedScrapers} />
+                        <MultiSearchBrowser
+                            scrapers={sortedScrapers}
+                            initialPrefillQuery={forcedMultiSearchPrefillQuery}
+                        />
                     ) : isLatestView ? (
                         <ScraperLatestView scrapers={sortedScrapers} />
                     ) : isHistoryView ? (

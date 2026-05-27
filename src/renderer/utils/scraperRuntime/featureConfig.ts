@@ -19,7 +19,9 @@ import {
   type ScraperRequestField,
   type ScraperSearchFeatureConfig,
   type ScraperTagFeatureConfig,
+  type ScraperTitleAnalysisConfig,
 } from "@/shared/scraper";
+import { normalizeScraperTitleAnalysisConfig } from "@/renderer/utils/scraperTitleAnalysis";
 import { normalizeSelectorInput } from "@/renderer/utils/scraperRuntime/display";
 import { DETAILS_FIELD_KEYS, type DetailsFieldKey } from "@/renderer/utils/scraperRuntime/types";
 
@@ -327,4 +329,15 @@ export const getScraperPagesFeatureConfig = (
     pageImageSelector: trimOptionalFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === "template" ? Boolean(raw.linkedToChapters) : false,
   };
+};
+
+export const getScraperTitleAnalysisFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperTitleAnalysisConfig | null => {
+  const raw = getFeatureConfigRecord(feature);
+  if (!raw) {
+    return null;
+  }
+
+  return normalizeScraperTitleAnalysisConfig(raw);
 };
