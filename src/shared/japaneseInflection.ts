@@ -52,7 +52,19 @@ export type JapaneseInflectionFormKey =
   | "progressive-past-affirmative"
   | "progressive-past-negative"
   | "progressive-past-affirmative-polite"
-  | "progressive-past-negative-polite";
+  | "progressive-past-negative-polite"
+  | "potential-affirmative"
+  | "potential-negative"
+  | "potential-past-affirmative"
+  | "potential-past-negative"
+  | "potential-te-form-affirmative"
+  | "potential-te-form-negative"
+  | "causative-affirmative"
+  | "causative-negative"
+  | "causative-past-affirmative"
+  | "causative-past-negative"
+  | "causative-te-form-affirmative"
+  | "causative-te-form-negative";
 
 export type JapaneseInflectionAnalysis = {
   surface: string;

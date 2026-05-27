@@ -29,7 +29,13 @@ type BaseFormKey =
   | "tai-form-past"
   | "volitional"
   | "progressive-present"
-  | "progressive-past";
+  | "progressive-past"
+  | "potential"
+  | "potential-past"
+  | "potential-te-form"
+  | "causative"
+  | "causative-past"
+  | "causative-te-form";
 
 const getTokenSurface = (token: JapaneseAnalyzerToken): string => token.surface_form ?? "";
 
@@ -80,6 +86,50 @@ const hasPassiveSuffix = (tokens: JapaneseAnalyzerToken[]): boolean => (
     && token.pos_detail_1 === "接尾"
     && ["れる", "られる"].includes(getTokenBaseForm(token))
   ))
+);
+
+const hasGodanPotential = (tokens: JapaneseAnalyzerToken[]): boolean => (
+  tokens.some((token) => (
+    token.pos === "動詞"
+    && typeof token.conjugated_type === 'string'
+    && token.conjugated_type.includes("五段")
+    && getTokenSurface(token).endsWith("める")
+  ))
+);
+
+const hasPotentialAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
+  // できる constructions (suru -> dekiru)
+  hasBasicForm(tokens, ["できる"]) ||
+  // godan verbs in -える (ex: 読める)
+  hasGodanPotential(tokens) ||
+  // ichidan potential using られる/れる (may collide with passive; order matters)
+  tokens.some((token, index) => (
+    index > 0
+    && token.pos === "動詞"
+    && token.pos_detail_1 === "接尾"
+    && ["られる", "れる"].includes(getTokenBaseForm(token))
+  ))
+);
+
+const hasCausativeAuxiliary = (tokens: JapaneseAnalyzerToken[]): boolean => (
+  // explicit causative verbs / suffixes
+  tokens.some((token) => {
+    const base = getTokenBaseForm(token);
+    if (!base || token.pos !== "動詞") {
+      return false;
+    }
+
+    // common causative endings: させる, ...せる (godan causative often ends with せる)
+    if (base.endsWith("させる") || base.endsWith("せる")) {
+      return true;
+    }
+
+    return false;
+  })
+);
+
+const hasContractedTeParticle = (tokens: JapaneseAnalyzerToken[]): boolean => (
+  tokens.some((token) => ["ちゃ", "じゃ"].includes(getTokenSurface(token)))
 );
 
 const hasTariEnding = (tokens: JapaneseAnalyzerToken[]): boolean => {
@@ -156,14 +206,61 @@ export const getFormInfo = (
   const isPolite = hasPoliteAuxiliary(scopedTokens);
   const isVolitional = hasVolitionalAuxiliary(scopedTokens) || mainToken.conjugated_form === "未然ウ接続";
   const isProgressive = wordInfo.kind === "verb" && hasProgressiveAuxiliary(scopedTokens);
-  const isTeForm = !isProgressive && hasTeEnding(scopedTokens);
+  const hasContractedTe = hasContractedTeParticle(scopedTokens);
+  const isTeForm = !isProgressive && (hasTeEnding(scopedTokens) || hasContractedTe);
   const isPassive = wordInfo.kind === "verb" && hasPassiveSuffix(scopedTokens);
   const polarity = isNegative ? "negative" : "affirmative";
+  // Detect causative before potential/passive since forms can be ambiguous (e.g. 言わせては -> 言わせちゃ)
+  if (wordInfo.kind === "verb" && hasCausativeAuxiliary(scopedTokens)) {
+    const baseFormKey = isTeForm ? "causative-te-form" : isPast ? "causative-past" : "causative";
 
+    return {
+      formKey: getPreciseFormKey(baseFormKey, polarity, false),
+      formName: isTeForm ? "Causatif en て" : isPast ? "Causatif passé" : "Causatif",
+      polarity,
+      isPolite: false,
+      label: hasContractedTe ? "Contraction familière (ちゃ/じゃ)" : undefined,
+    };
+  }
+
+  // Detect たら conditional before potential since 〜ら (e.g. たら) should be prioritized
+  // (ex: 近づかれたら is たら conditional on passive, not potential)
   if (hasTaraConditionalEnding(scopedTokens)) {
     return {
       formKey: getPreciseFormKey("tara-conditional", polarity, false),
       formName: "Conditionnel en たら",
+      polarity,
+      isPolite: false,
+    };
+  }
+
+  // Detect passive before potential to avoid misclassifying passive forms as potential
+  if (isPassive) {
+    const baseFormKey = isTeForm
+      ? "passive-te-form"
+      : isPast
+        ? "passive-past"
+        : "passive";
+
+    return {
+      formKey: getPreciseFormKey(baseFormKey, polarity, false),
+      formName: isTeForm
+        ? "Passif en て"
+        : isPast
+          ? "Passif passé"
+          : "Passif",
+      polarity,
+      isPolite: false,
+    };
+  }
+
+  // Detect potential after passive since forms like "食べられる" are ambiguous.
+  if (wordInfo.kind === "verb" && hasPotentialAuxiliary(scopedTokens)) {
+    const baseFormKey = isTeForm ? "potential-te-form" : isPast ? "potential-past" : "potential";
+
+    return {
+      formKey: getPreciseFormKey(baseFormKey, polarity, false),
+      formName: isTeForm ? "Forme potentielle en て" : isPast ? "Forme potentielle passée" : "Forme potentielle",
       polarity,
       isPolite: false,
     };

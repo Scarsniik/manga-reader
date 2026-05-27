@@ -45,6 +45,16 @@ import progressivePastAffirmativeMarkdown from "@/renderer/content/japaneseGramm
 import progressivePastNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/progressive-past-negative.md?raw";
 import progressivePastAffirmativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/progressive-past-affirmative-polite.md?raw";
 import progressivePastNegativePoliteMarkdown from "@/renderer/content/japaneseGrammar/forms/progressive-past-negative-polite.md?raw";
+import potentialAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-affirmative.md?raw";
+import potentialNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-negative.md?raw";
+import potentialPastAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-past-affirmative.md?raw";
+import potentialPastNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-past-negative.md?raw";
+import potentialTeFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-te-form-affirmative.md?raw";
+import potentialTeFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/potential-te-form-negative.md?raw";
+import causativeAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/causative-affirmative.md?raw";
+import causativeNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/causative-negative.md?raw";
+import causativeTeFormAffirmativeMarkdown from "@/renderer/content/japaneseGrammar/forms/causative-te-form-affirmative.md?raw";
+import causativeTeFormNegativeMarkdown from "@/renderer/content/japaneseGrammar/forms/causative-te-form-negative.md?raw";
 
 export type JapaneseGrammarReference = {
   title: string;
@@ -226,6 +236,54 @@ export const japaneseFormReferences: Record<JapaneseInflectionFormKey, JapaneseG
   "progressive-past-negative-polite": {
     title: "Progressif passé négatif poli",
     markdown: progressivePastNegativePoliteMarkdown,
+  },
+  "potential-affirmative": {
+    title: "Potentiel affirmatif",
+    markdown: potentialAffirmativeMarkdown,
+  },
+  "potential-negative": {
+    title: "Potentiel négatif",
+    markdown: potentialNegativeMarkdown,
+  },
+  "potential-past-affirmative": {
+    title: "Potentiel passé affirmatif",
+    markdown: potentialPastAffirmativeMarkdown,
+  },
+  "potential-past-negative": {
+    title: "Potentiel passé négatif",
+    markdown: potentialPastNegativeMarkdown,
+  },
+  "potential-te-form-affirmative": {
+    title: "Potentiel en て affirmatif",
+    markdown: potentialTeFormAffirmativeMarkdown,
+  },
+  "potential-te-form-negative": {
+    title: "Potentiel en て négatif",
+    markdown: potentialTeFormNegativeMarkdown,
+  },
+  "causative-affirmative": {
+    title: "Causatif affirmatif",
+    markdown: causativeAffirmativeMarkdown,
+  },
+  "causative-negative": {
+    title: "Causatif négatif",
+    markdown: causativeNegativeMarkdown,
+  },
+  "causative-te-form-affirmative": {
+    title: "Causatif en て affirmatif",
+    markdown: causativeTeFormAffirmativeMarkdown,
+  },
+  "causative-te-form-negative": {
+    title: "Causatif en て négatif",
+    markdown: causativeTeFormNegativeMarkdown,
+  },
+  "causative-past-affirmative": {
+    title: "Causatif passé affirmatif",
+    markdown: causativeAffirmativeMarkdown,
+  },
+  "causative-past-negative": {
+    title: "Causatif passé négatif",
+    markdown: causativeNegativeMarkdown,
   },
 };
 
