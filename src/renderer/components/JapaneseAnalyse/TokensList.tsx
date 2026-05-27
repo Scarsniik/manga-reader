@@ -18,6 +18,17 @@ export default function TokensList({
 }: Props) {
   const tokenCount = sentenceSegments.filter((segment) => segment.kind === 'token').length;
 
+  const handleCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const selection = window.getSelection()?.toString() || '';
+    // Only override default copy when the selection contains newlines
+    // (the problematic case where each token becomes a separate line).
+    if (!selection.includes('\n')) {
+      return;
+    }
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', text);
+  };
+
   return (
     <div className="tokens">
       <div className="tokens-header">
@@ -27,7 +38,7 @@ export default function TokensList({
         </span>
       </div>
 
-      <div className="tokens-list" lang="ja">
+      <div className="tokens-list" lang="ja" onCopy={handleCopy}>
         {text.length === 0 ? <i>— aucun texte —</i> : null}
 
         {sentenceSegments.map((segment, index) => {
