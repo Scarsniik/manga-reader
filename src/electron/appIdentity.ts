@@ -88,8 +88,12 @@ const pathExists = (targetPath: string): boolean => {
     }
 };
 
+const getRoamingAppDataPath = (): string => (
+    process.env.APPDATA || app.getPath("appData")
+);
+
 const getLegacyUserDataCandidates = (localAppData: string): string[] => {
-    const appData = app.getPath("appData");
+    const appData = getRoamingAppDataPath();
 
     return [
         ...LEGACY_USER_DATA_DIR_NAMES.map((dirName) => path.join(localAppData, dirName)),
@@ -189,6 +193,7 @@ export const configureApplicationIdentity = (): void => {
         fs.mkdirSync(userDataPath, { recursive: true });
         migrateLegacyUserDataDirectory(userDataPath, localAppData);
         app.setPath("userData", userDataPath);
+        app.setPath("sessionData", userDataPath);
     } catch (error) {
         console.warn("Could not set custom userData path:", error);
     }

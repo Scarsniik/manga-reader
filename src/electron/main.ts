@@ -7,6 +7,9 @@ import { resolveLocalProtocolPath } from "./utils/localProtocol";
 let mainWindow: BrowserWindow | null;
 let startupWindowShowTimer: NodeJS.Timeout | null = null;
 
+// Configure identity and profile paths before Chromium initializes session/cache storage.
+configureApplicationIdentity();
+
 const showMainWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
@@ -192,8 +195,6 @@ if (!singleInstanceLock) {
 // without disabling webSecurity. We register it when the app is ready.
 app.whenReady()
     .then(() => {
-        configureApplicationIdentity();
-
         const appUpdate = require("./handlers/appUpdate") as typeof import("./handlers/appUpdate");
 
         protocol.registerFileProtocol("local", (request, callback) => {

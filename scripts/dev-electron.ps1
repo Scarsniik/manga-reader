@@ -20,6 +20,19 @@ function Test-ViteReady {
     }
 }
 
+function Stop-ProcessTree {
+    param(
+        [int]$ProcessId
+    )
+
+    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+    foreach ($child in $children) {
+        Stop-ProcessTree -ProcessId ([int]$child.ProcessId)
+    }
+
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 if (-not (Test-Path $electronPath)) {
     throw "Electron introuvable: $electronPath"
 }
@@ -80,7 +93,11 @@ try {
 
     Push-Location $repoRoot
     try {
-        & $electronPath .
+        $electronProcess = Start-Process -FilePath $electronPath `
+            -ArgumentList @('.') `
+            -WorkingDirectory $repoRoot `
+            -PassThru
+        $electronProcess.WaitForExit()
     }
     finally {
         Pop-Location
@@ -88,6 +105,6 @@ try {
 }
 finally {
     if ($viteProcess -and -not $viteProcess.HasExited) {
-        Stop-Process -Id $viteProcess.Id -Force -ErrorAction SilentlyContinue
+        Stop-ProcessTree -ProcessId $viteProcess.Id
     }
 }
