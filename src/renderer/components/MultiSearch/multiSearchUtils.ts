@@ -16,8 +16,19 @@ import type {
 import {
   extractTentativeAuthorNamesFromTitle,
 } from "@/renderer/components/MultiSearch/multiSearchTitleMerge";
-import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
-export { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
+import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
+import {
+  NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
+  NO_MULTI_SEARCH_LANGUAGES_VALUE,
+  NO_MULTI_SEARCH_SCRAPERS_VALUE,
+  UNKNOWN_MULTI_SEARCH_VALUE,
+} from "@/renderer/components/MultiSearch/multiSearchConstants";
+export {
+  NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
+  NO_MULTI_SEARCH_LANGUAGES_VALUE,
+  NO_MULTI_SEARCH_SCRAPERS_VALUE,
+  UNKNOWN_MULTI_SEARCH_VALUE,
+} from "@/renderer/components/MultiSearch/multiSearchConstants";
 export {
   mergeMultiSearchResults,
   mergeMultiSearchSourceIntoGroups,
@@ -179,24 +190,60 @@ export const matchesMultiSearchFilters = (
     selectedContentTypes: string[];
   },
 ): boolean => {
-  if (filters.selectedScraperIds.length && !filters.selectedScraperIds.includes(scraper.id)) {
+  if (filters.selectedScraperIds.includes(NO_MULTI_SEARCH_SCRAPERS_VALUE)) {
     return false;
   }
 
+  const selectedScraperIds = filters.selectedScraperIds.filter((scraperId) => (
+    scraperId !== NO_MULTI_SEARCH_SCRAPERS_VALUE
+  ));
+  const scraperFilterValues = splitIncludeFilterValues(selectedScraperIds);
+  if (scraperFilterValues.excludedValues.includes(scraper.id)) {
+    return false;
+  }
+
+  if (scraperFilterValues.includedValues.length && !scraperFilterValues.includedValues.includes(scraper.id)) {
+    return false;
+  }
+
+  if (filters.selectedLanguageCodes.includes(NO_MULTI_SEARCH_LANGUAGES_VALUE)) {
+    return false;
+  }
+
+  const selectedLanguageCodes = filters.selectedLanguageCodes.filter((languageCode) => (
+    languageCode !== NO_MULTI_SEARCH_LANGUAGES_VALUE
+  ));
+  const languageFilterValues = splitIncludeFilterValues(selectedLanguageCodes);
   const scraperLanguages = getScraperSourceLanguages(scraper);
   const languageValues = scraperLanguages.length ? scraperLanguages : [UNKNOWN_MULTI_SEARCH_VALUE];
+  if (languageValues.some((language) => languageFilterValues.excludedValues.includes(language))) {
+    return false;
+  }
+
   if (
-    filters.selectedLanguageCodes.length
-    && !languageValues.some((language) => filters.selectedLanguageCodes.includes(language))
+    languageFilterValues.includedValues.length
+    && !languageValues.some((language) => languageFilterValues.includedValues.includes(language))
   ) {
     return false;
   }
 
+  if (filters.selectedContentTypes.includes(NO_MULTI_SEARCH_CONTENT_TYPES_VALUE)) {
+    return false;
+  }
+
+  const selectedContentTypes = filters.selectedContentTypes.filter((contentType) => (
+    contentType !== NO_MULTI_SEARCH_CONTENT_TYPES_VALUE
+  ));
+  const contentTypeFilterValues = splitIncludeFilterValues(selectedContentTypes);
   const scraperContentTypes = getScraperContentTypes(scraper);
   const contentTypeValues = scraperContentTypes.length ? scraperContentTypes : [UNKNOWN_MULTI_SEARCH_VALUE];
+  if (contentTypeValues.some((contentType) => contentTypeFilterValues.excludedValues.includes(contentType))) {
+    return false;
+  }
+
   if (
-    filters.selectedContentTypes.length
-    && !contentTypeValues.some((contentType) => filters.selectedContentTypes.includes(contentType))
+    contentTypeFilterValues.includedValues.length
+    && !contentTypeValues.some((contentType) => contentTypeFilterValues.includedValues.includes(contentType))
   ) {
     return false;
   }

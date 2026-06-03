@@ -27,6 +27,11 @@ import {
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
+import {
+  buildIncludeFilterExcludedValue,
+  getIncludeFilterExcludedId,
+  splitIncludeFilterValues,
+} from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type {
   MultiSearchSourceResult,
@@ -112,12 +117,17 @@ const filterIncludedLatestScrapers = (
   scrapers: ScraperRecord[],
   includedScraperIds: string[],
 ): ScraperRecord[] => {
-  if (!includedScraperIds.length) {
-    return scrapers;
+  const { includedValues, excludedValues } = splitIncludeFilterValues(includedScraperIds);
+  const excludedScraperIdSet = new Set(excludedValues);
+
+  if (!includedValues.length) {
+    return scrapers.filter((scraper) => !excludedScraperIdSet.has(scraper.id));
   }
 
-  const includedScraperIdSet = new Set(includedScraperIds);
-  return scrapers.filter((scraper) => includedScraperIdSet.has(scraper.id));
+  const includedScraperIdSet = new Set(includedValues);
+  return scrapers.filter((scraper) => (
+    includedScraperIdSet.has(scraper.id) && !excludedScraperIdSet.has(scraper.id)
+  ));
 };
 
 const buildScraperRunKey = (scraper: ScraperRecord): string => (
@@ -281,8 +291,11 @@ const normalizeLanguageCodes = (value: readonly string[] | undefined): string[] 
 
   const seen = new Set<string>();
   return value.reduce<string[]>((result, entry) => {
-    const normalized = String(entry ?? "").trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) {
+    const rawEntry = String(entry ?? "").trim();
+    const excludedId = getIncludeFilterExcludedId(rawEntry);
+    const normalizedValue = (excludedId ?? rawEntry).toLowerCase();
+    const normalized = excludedId ? buildIncludeFilterExcludedValue(normalizedValue) : normalizedValue;
+    if (!normalizedValue || seen.has(normalized)) {
       return result;
     }
 
@@ -349,17 +362,22 @@ const sourceMatchesIncludedLanguages = (
   source: MultiSearchSourceResult,
   includedLanguageCodes: string[],
 ): boolean => {
-  if (!includedLanguageCodes.length) {
-    return true;
-  }
+  const { includedValues, excludedValues } = splitIncludeFilterValues(includedLanguageCodes);
 
   const sourceLanguageCodes = source.sourceLanguageCodes.length
     ? source.sourceLanguageCodes
     : [UNKNOWN_MULTI_SEARCH_VALUE];
+  const normalizedSourceLanguageCodes = sourceLanguageCodes.map((languageCode) => languageCode.trim().toLowerCase());
 
-  return sourceLanguageCodes
-    .map((languageCode) => languageCode.trim().toLowerCase())
-    .some((languageCode) => includedLanguageCodes.includes(languageCode));
+  if (normalizedSourceLanguageCodes.some((languageCode) => excludedValues.includes(languageCode))) {
+    return false;
+  }
+
+  if (!includedValues.length) {
+    return true;
+  }
+
+  return normalizedSourceLanguageCodes.some((languageCode) => includedValues.includes(languageCode));
 };
 
 const QUICK_CHECKPOINT_PAGE_BUDGET = 6;

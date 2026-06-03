@@ -45,6 +45,10 @@ const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
 const MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 0;
+const DEFAULT_MULTI_SEARCH_DEPTH_MODE = "quick";
+const DEFAULT_MULTI_SEARCH_ADVANCED_PAGES = 3;
+const DEFAULT_MULTI_SEARCH_PACE_MODE = "fast";
+const DEFAULT_MULTI_SEARCH_VIEW_MODE = "merged";
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -273,6 +277,30 @@ const normalizeScraperLatestQuickConsecutiveSeenStopThreshold = (value: unknown)
     )
 );
 
+const normalizeMultiSearchDepthMode = (value: unknown): string => (
+    value === "extended" || value === "advanced" ? value : DEFAULT_MULTI_SEARCH_DEPTH_MODE
+);
+
+const normalizeMultiSearchAdvancedPages = (value: unknown): number | "maximum" => {
+    if (value === "maximum") {
+        return "maximum";
+    }
+
+    return normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_MULTI_SEARCH_ADVANCED_PAGES,
+        1,
+    );
+};
+
+const normalizeMultiSearchPaceMode = (value: unknown): string => (
+    value === "careful" ? "careful" : DEFAULT_MULTI_SEARCH_PACE_MODE
+);
+
+const normalizeMultiSearchViewMode = (value: unknown): string => (
+    value === "byScraper" ? "byScraper" : DEFAULT_MULTI_SEARCH_VIEW_MODE
+);
+
 const normalizeShortcutBinding = (value: unknown): string => {
     const normalizedValue = typeof value === "string" ? value.trim() : "";
     return normalizedValue.length === 1 ? normalizedValue.toUpperCase() : normalizedValue;
@@ -347,6 +375,13 @@ const defaultSettings = {
     savedScraperSearches: [],
     multiSearchShowUnseenFirst: false,
     multiSearchEnableRomajiPhoneticMerge: false,
+    multiSearchSelectedScraperIds: [] as string[],
+    multiSearchSelectedLanguageCodes: [] as string[],
+    multiSearchSelectedContentTypes: [] as string[],
+    multiSearchDepthMode: DEFAULT_MULTI_SEARCH_DEPTH_MODE,
+    multiSearchAdvancedPages: DEFAULT_MULTI_SEARCH_ADVANCED_PAGES as number | "maximum",
+    multiSearchPaceMode: DEFAULT_MULTI_SEARCH_PACE_MODE,
+    multiSearchViewMode: DEFAULT_MULTI_SEARCH_VIEW_MODE,
     scraperAuthorCombinedView: false,
     scraperAuthorFavoriteShowUnseenFirst: false,
     scraperTagFavoriteShowUnseenFirst: true,
@@ -439,6 +474,19 @@ const normalizeSettings = (value: unknown) => {
     merged.multiSearchEnableRomajiPhoneticMerge = typeof merged.multiSearchEnableRomajiPhoneticMerge === "boolean"
         ? merged.multiSearchEnableRomajiPhoneticMerge
         : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
+    merged.multiSearchSelectedScraperIds = normalizeStringListSetting(
+        merged.multiSearchSelectedScraperIds,
+    );
+    merged.multiSearchSelectedLanguageCodes = normalizeLowercaseStringListSetting(
+        merged.multiSearchSelectedLanguageCodes,
+    );
+    merged.multiSearchSelectedContentTypes = normalizeStringListSetting(
+        merged.multiSearchSelectedContentTypes,
+    );
+    merged.multiSearchDepthMode = normalizeMultiSearchDepthMode(merged.multiSearchDepthMode);
+    merged.multiSearchAdvancedPages = normalizeMultiSearchAdvancedPages(merged.multiSearchAdvancedPages);
+    merged.multiSearchPaceMode = normalizeMultiSearchPaceMode(merged.multiSearchPaceMode);
+    merged.multiSearchViewMode = normalizeMultiSearchViewMode(merged.multiSearchViewMode);
     merged.scraperAuthorCombinedView = typeof merged.scraperAuthorCombinedView === "boolean"
         ? merged.scraperAuthorCombinedView
         : defaultSettings.scraperAuthorCombinedView;
@@ -682,6 +730,19 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
             ? nextSettings.multiSearchEnableRomajiPhoneticMerge
             : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
+        nextSettings.multiSearchSelectedScraperIds = normalizeStringListSetting(
+            nextSettings.multiSearchSelectedScraperIds,
+        );
+        nextSettings.multiSearchSelectedLanguageCodes = normalizeLowercaseStringListSetting(
+            nextSettings.multiSearchSelectedLanguageCodes,
+        );
+        nextSettings.multiSearchSelectedContentTypes = normalizeStringListSetting(
+            nextSettings.multiSearchSelectedContentTypes,
+        );
+        nextSettings.multiSearchDepthMode = normalizeMultiSearchDepthMode(nextSettings.multiSearchDepthMode);
+        nextSettings.multiSearchAdvancedPages = normalizeMultiSearchAdvancedPages(nextSettings.multiSearchAdvancedPages);
+        nextSettings.multiSearchPaceMode = normalizeMultiSearchPaceMode(nextSettings.multiSearchPaceMode);
+        nextSettings.multiSearchViewMode = normalizeMultiSearchViewMode(nextSettings.multiSearchViewMode);
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;

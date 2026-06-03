@@ -190,9 +190,9 @@
 }
 
 .multi-search__filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .multi-search__filter-group {

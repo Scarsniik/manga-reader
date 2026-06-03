@@ -1,22 +1,23 @@
 import React from "react";
+import IncludeFilterBar, {
+  type IncludeFilterOption,
+} from "@/renderer/components/IncludeFilterBar/IncludeFilterBar";
+import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
+import {
+  NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
+  NO_MULTI_SEARCH_LANGUAGES_VALUE,
+  NO_MULTI_SEARCH_SCRAPERS_VALUE,
+} from "@/renderer/components/MultiSearch/multiSearchConstants";
 
-export type MultiSearchCheckboxOption = {
+export type MultiSearchFilterOption = {
   label: string;
   value: string;
-  description?: string;
-};
-
-type CheckboxGroupProps = {
-  title: string;
-  options: MultiSearchCheckboxOption[];
-  selectedValues: string[];
-  onChange: (value: string[]) => void;
 };
 
 type Props = {
-  scraperOptions: MultiSearchCheckboxOption[];
-  languageOptions: MultiSearchCheckboxOption[];
-  contentTypeOptions: MultiSearchCheckboxOption[];
+  scraperOptions: MultiSearchFilterOption[];
+  languageOptions: MultiSearchFilterOption[];
+  contentTypeOptions: MultiSearchFilterOption[];
   selectedScraperIds: string[];
   selectedLanguageCodes: string[];
   selectedContentTypes: string[];
@@ -25,55 +26,12 @@ type Props = {
   onSelectedContentTypesChange: (value: string[]) => void;
 };
 
-function MultiSearchCheckboxGroup({
-  title,
-  options,
-  selectedValues,
-  onChange,
-}: CheckboxGroupProps) {
-  const selectedSet = new Set(selectedValues);
-
-  return (
-    <div className="multi-search__filter-group">
-      <div className="multi-search__filter-head">
-        <strong>{title}</strong>
-        <div>
-          <button type="button" onClick={() => onChange(options.map((option) => option.value))}>
-            Tout
-          </button>
-          <button type="button" onClick={() => onChange([])}>
-            Aucun
-          </button>
-        </div>
-      </div>
-
-      <div className="multi-search__checkbox-list">
-        {options.length ? options.map((option) => (
-          <label key={option.value} className="multi-search__checkbox">
-            <input
-              type="checkbox"
-              checked={selectedSet.has(option.value)}
-              onChange={(event) => {
-                if (event.target.checked) {
-                  onChange([...selectedValues, option.value]);
-                  return;
-                }
-
-                onChange(selectedValues.filter((value) => value !== option.value));
-              }}
-            />
-            <span>
-              {option.label}
-              {option.description ? <small>{option.description}</small> : null}
-            </span>
-          </label>
-        )) : (
-          <span className="multi-search__empty-filter">Aucune option disponible</span>
-        )}
-      </div>
-    </div>
-  );
-}
+const toIncludeOptions = (options: MultiSearchFilterOption[]): IncludeFilterOption[] => (
+  options.map((option) => ({
+    id: option.value,
+    label: option.label,
+  }))
+);
 
 export default function MultiSearchFilters({
   scraperOptions,
@@ -86,25 +44,68 @@ export default function MultiSearchFilters({
   onSelectedLanguageCodesChange,
   onSelectedContentTypesChange,
 }: Props) {
+  const includeScraperOptions = React.useMemo(
+    () => toIncludeOptions(scraperOptions),
+    [scraperOptions],
+  );
+  const includeLanguageOptions = React.useMemo(
+    () => toIncludeOptions(languageOptions),
+    [languageOptions],
+  );
+  const includeContentTypeOptions = React.useMemo(
+    () => toIncludeOptions(contentTypeOptions),
+    [contentTypeOptions],
+  );
+
   return (
     <div className="multi-search__filters">
-      <MultiSearchCheckboxGroup
+      <IncludeFilterBar
         title="Scrappers"
-        options={scraperOptions}
-        selectedValues={selectedScraperIds}
+        allLabel="Tous les scrappers"
+        allButtonLabel="Tous"
+        noneLabel="Aucun scrapper"
+        noneButtonLabel="Aucun"
+        emptySelectionLabel="Aucun scrapper"
+        emptyOptionsLabel="Aucun scrapper disponible"
+        ariaLabel="Scrappers inclus dans la recherche multi-source"
+        value={selectedScraperIds}
+        options={includeScraperOptions}
         onChange={onSelectedScraperIdsChange}
+        noneValue={NO_MULTI_SEARCH_SCRAPERS_VALUE}
       />
-      <MultiSearchCheckboxGroup
+      <IncludeFilterBar
         title="Langues"
-        options={languageOptions}
-        selectedValues={selectedLanguageCodes}
+        allLabel="Toutes les langues"
+        allButtonLabel="Toutes"
+        noneLabel="Aucune langue"
+        noneButtonLabel="Aucun"
+        emptySelectionLabel="Aucune langue"
+        emptyOptionsLabel="Aucune langue disponible"
+        ariaLabel="Langues incluses dans la recherche multi-source"
+        value={selectedLanguageCodes}
+        options={includeLanguageOptions}
         onChange={onSelectedLanguageCodesChange}
+        noneValue={NO_MULTI_SEARCH_LANGUAGES_VALUE}
+        renderOptionContent={(language) => (
+          <>
+            <LanguageFlags languageCodes={[language.id]} />
+            <span>{language.label}</span>
+          </>
+        )}
       />
-      <MultiSearchCheckboxGroup
+      <IncludeFilterBar
         title="Types"
-        options={contentTypeOptions}
-        selectedValues={selectedContentTypes}
+        allLabel="Tous les types"
+        allButtonLabel="Tous"
+        noneLabel="Aucun type"
+        noneButtonLabel="Aucun"
+        emptySelectionLabel="Aucun type"
+        emptyOptionsLabel="Aucun type disponible"
+        ariaLabel="Types inclus dans la recherche multi-source"
+        value={selectedContentTypes}
+        options={includeContentTypeOptions}
         onChange={onSelectedContentTypesChange}
+        noneValue={NO_MULTI_SEARCH_CONTENT_TYPES_VALUE}
       />
     </div>
   );

@@ -53,6 +53,9 @@ nouveautes. Le runtime continue donc a charger des pages jusqu'a atteindre la li
 resultats dans les langues incluses, ou jusqu'a la fin de pagination. Si la liste est vide, toutes
 les langues sont acceptees.
 
+Dans les filtres d'inclusion, le clic gauche inclut une valeur et le clic droit l'exclut. Une valeur
+exclue apparait en rouge et retire les sources correspondantes du scan.
+
 Le filtre `Scrappers inclus` utilise le parametre `scraperLatestIncludedScraperIds`. Il ne propose
 que les scrapers actives par `latest.enabled`. Si la liste est vide, tous les scrapers actifs sont
 inclus. La valeur `__no_scrapers__` correspond a l'option `Aucun` et exclut tous les scrapers.

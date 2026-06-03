@@ -6,7 +6,12 @@ import type {
   MultiSearchPaceMode,
   MultiSearchViewMode,
 } from "@/renderer/components/MultiSearch/types";
-import { getLanguageLabel } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import {
+  NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
+  NO_MULTI_SEARCH_LANGUAGES_VALUE,
+  getLanguageLabel,
+} from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 
 type BuildMultiSearchHistorySettingsOptions = {
   selectedScrapers: ScraperRecord[];
@@ -54,6 +59,49 @@ const sortedFallbackList = (values: string[], fallback: string): string[] => {
   return entries.length ? entries : [fallback];
 };
 
+const formatIncludedExcludedList = (
+  values: string[],
+  options: {
+    allLabel: string;
+    mapLabel?: (value: string) => string;
+  },
+): string[] => {
+  const { includedValues, excludedValues } = splitIncludeFilterValues(values);
+  const mapLabel = options.mapLabel ?? ((value: string) => value);
+  const includedLabels = sortedList(includedValues.map(mapLabel));
+  const excludedLabels = sortedList(excludedValues.map(mapLabel));
+
+  if (!excludedLabels.length) {
+    return includedLabels.length ? includedLabels : [options.allLabel];
+  }
+
+  if (!includedLabels.length) {
+    return [`${options.allLabel} sauf ${excludedLabels.join(", ")}`];
+  }
+
+  return [
+    ...includedLabels,
+    `sauf ${excludedLabels.join(", ")}`,
+  ];
+};
+
+const formatSelectedLanguages = (selectedLanguageCodes: string[]): string[] => (
+  selectedLanguageCodes.includes(NO_MULTI_SEARCH_LANGUAGES_VALUE)
+    ? ["Aucune"]
+    : formatIncludedExcludedList(selectedLanguageCodes, {
+      allLabel: "Toutes",
+      mapLabel: getLanguageLabel,
+    })
+);
+
+const formatSelectedContentTypes = (selectedContentTypes: string[]): string[] => (
+  selectedContentTypes.includes(NO_MULTI_SEARCH_CONTENT_TYPES_VALUE)
+    ? ["Aucun"]
+    : formatIncludedExcludedList(selectedContentTypes, {
+      allLabel: "Tous",
+    })
+);
+
 export const buildMultiSearchHistorySettings = ({
   selectedScrapers,
   selectedLanguageCodes,
@@ -65,8 +113,8 @@ export const buildMultiSearchHistorySettings = ({
 }: BuildMultiSearchHistorySettingsOptions): SearchHistorySettings => ({
   Scrappers: sortedFallbackList(selectedScrapers.map((scraper) => scraper.name), "Aucun"),
   _scraperIds: sortedList(selectedScrapers.map((scraper) => scraper.id)),
-  Langues: sortedFallbackList(selectedLanguageCodes.map(getLanguageLabel), "Toutes"),
-  Types: sortedFallbackList(selectedContentTypes, "Tous"),
+  Langues: formatSelectedLanguages(selectedLanguageCodes),
+  Types: formatSelectedContentTypes(selectedContentTypes),
   Profondeur: formatDepth(depthMode, advancedPages),
   Rythme: formatPace(paceMode),
   Vue: formatView(viewMode),

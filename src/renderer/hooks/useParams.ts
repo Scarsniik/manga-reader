@@ -35,6 +35,13 @@ export type AppParams = {
     savedScraperSearches?: SavedScraperSearch[];
     multiSearchShowUnseenFirst?: boolean;
     multiSearchEnableRomajiPhoneticMerge?: boolean;
+    multiSearchSelectedScraperIds?: string[];
+    multiSearchSelectedLanguageCodes?: string[];
+    multiSearchSelectedContentTypes?: string[];
+    multiSearchDepthMode?: string;
+    multiSearchAdvancedPages?: number | "maximum";
+    multiSearchPaceMode?: string;
+    multiSearchViewMode?: string;
     scraperAuthorCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;

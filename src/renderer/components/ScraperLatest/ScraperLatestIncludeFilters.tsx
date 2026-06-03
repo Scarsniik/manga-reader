@@ -1,4 +1,10 @@
 import React from "react";
+import IncludeFilterBar from "@/renderer/components/IncludeFilterBar/IncludeFilterBar";
+import {
+  buildIncludeFilterExcludedValue,
+  getIncludeFilterExcludedId,
+  splitIncludeFilterValues,
+} from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import { languages } from "@/renderer/consts/languages";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
@@ -8,31 +14,9 @@ import type {
   ScraperTagFavoriteRecord,
 } from "@/shared/scraper";
 
-type IncludeOption = {
-  id: string;
-  label: string;
-};
-
 export const LATEST_ALL_TAG_FAVORITES_VALUE = "__all_tag_favorites__";
 export const LATEST_NO_SCRAPERS_VALUE = "__no_scrapers__";
 export const LATEST_NO_AUTHOR_FAVORITES_VALUE = "__no_author_favorites__";
-
-type ScraperLatestIncludePanelProps = {
-  title: string;
-  allLabel: string;
-  allButtonLabel: string;
-  noneLabel?: string;
-  noneButtonLabel?: string;
-  emptySelectionLabel: string;
-  emptyOptionsLabel?: string;
-  ariaLabel: string;
-  value: string[];
-  options: IncludeOption[];
-  onChange: (value: string[]) => void;
-  allValue?: string;
-  noneValue?: string;
-  renderOptionContent?: (option: IncludeOption) => React.ReactNode;
-};
 
 const LATEST_LANGUAGE_OPTIONS = [
   ...languages.map((language) => ({
@@ -44,14 +28,6 @@ const LATEST_LANGUAGE_OPTIONS = [
     label: "Inconnue",
   },
 ];
-
-const formatSelectedLabels = (labels: string[]): string => {
-  if (labels.length <= 4) {
-    return labels.join(", ");
-  }
-
-  return `${labels.slice(0, 4).join(", ")} et ${labels.length - 4} autre(s)`;
-};
 
 const normalizeStringList = (
   value: unknown,
@@ -70,12 +46,19 @@ const normalizeStringList = (
   const seen = new Set<string>();
 
   return value.reduce<string[]>((result, entry) => {
-    const normalizedEntry = String(entry ?? "").trim();
-    const normalized = options?.lowercase
+    const rawEntry = String(entry ?? "").trim();
+    const excludedId = getIncludeFilterExcludedId(rawEntry);
+    const normalizedEntry = excludedId ?? rawEntry;
+    const normalizedValue = options?.lowercase
       ? normalizedEntry.toLowerCase()
       : normalizedEntry;
+    const normalized = excludedId ? buildIncludeFilterExcludedValue(normalizedValue) : normalizedValue;
 
-    if (!normalized || seen.has(normalized) || (allowedValues && !allowedValues.has(normalized))) {
+    if (
+      !normalizedValue
+      || seen.has(normalized)
+      || (allowedValues && !allowedValues.has(normalizedValue))
+    ) {
       return result;
     }
 
@@ -83,6 +66,30 @@ const normalizeStringList = (
     result.push(normalized);
     return result;
   }, []);
+};
+
+const filterByIncludeValues = <Item,>(
+  items: readonly Item[],
+  values: readonly string[],
+  getId: (item: Item) => string,
+  defaultMode: "all" | "none",
+): Item[] => {
+  const { includedValues, excludedValues } = splitIncludeFilterValues(values);
+  const excludedValueSet = new Set(excludedValues);
+
+  if (includedValues.length) {
+    const includedValueSet = new Set(includedValues);
+    return items.filter((item) => {
+      const itemId = getId(item);
+      return includedValueSet.has(itemId) && !excludedValueSet.has(itemId);
+    });
+  }
+
+  if (!excludedValues.length && defaultMode === "none") {
+    return [];
+  }
+
+  return items.filter((item) => !excludedValueSet.has(getId(item)));
 };
 
 export const normalizeLatestIncludedLanguageCodes = (value: unknown): string[] => (
@@ -174,12 +181,7 @@ export const getIncludedLatestAuthorFavorites = (
     return [];
   }
 
-  if (!includedFavoriteIds.length) {
-    return [...favorites];
-  }
-
-  const includedFavoriteIdSet = new Set(includedFavoriteIds);
-  return favorites.filter((favorite) => includedFavoriteIdSet.has(favorite.id));
+  return filterByIncludeValues(favorites, includedFavoriteIds, (favorite) => favorite.id, "all");
 };
 
 export const getIncludedLatestTagFavorites = (
@@ -190,123 +192,8 @@ export const getIncludedLatestTagFavorites = (
     return [...favorites];
   }
 
-  if (!includedFavoriteIds.length) {
-    return [];
-  }
-
-  const includedFavoriteIdSet = new Set(includedFavoriteIds);
-  return favorites.filter((favorite) => includedFavoriteIdSet.has(favorite.id));
+  return filterByIncludeValues(favorites, includedFavoriteIds, (favorite) => favorite.id, "none");
 };
-
-function ScraperLatestIncludePanel({
-  title,
-  allLabel,
-  allButtonLabel,
-  noneLabel,
-  noneButtonLabel,
-  emptySelectionLabel,
-  emptyOptionsLabel,
-  ariaLabel,
-  value,
-  options,
-  onChange,
-  allValue,
-  noneValue,
-  renderOptionContent,
-}: ScraperLatestIncludePanelProps) {
-  const isAllSelected = allValue ? value.includes(allValue) : !value.length;
-  const isNoneSelected = noneValue
-    ? value.includes(noneValue)
-    : Boolean(noneButtonLabel) && !value.length;
-  const selectedValue = React.useMemo(
-    () => value.filter((entry) => entry !== allValue && entry !== noneValue),
-    [allValue, noneValue, value],
-  );
-  const selectedIds = React.useMemo(() => new Set(selectedValue), [selectedValue]);
-  const selectedOptions = React.useMemo(
-    () => options.filter((option) => selectedIds.has(option.id)),
-    [options, selectedIds],
-  );
-  const selectedLabel = React.useMemo(() => {
-    if (isAllSelected) {
-      return allLabel;
-    }
-
-    if (isNoneSelected) {
-      return noneLabel ?? emptySelectionLabel;
-    }
-
-    if (!selectedValue.length) {
-      return noneLabel ?? emptySelectionLabel;
-    }
-
-    if (!selectedOptions.length) {
-      return emptySelectionLabel;
-    }
-
-    return formatSelectedLabels(selectedOptions.map((option) => option.label));
-  }, [allLabel, emptySelectionLabel, isAllSelected, isNoneSelected, noneLabel, selectedOptions, selectedValue.length]);
-
-  const toggleOption = React.useCallback((optionId: string) => {
-    if (selectedIds.has(optionId)) {
-      onChange(selectedValue.filter((currentId) => currentId !== optionId));
-      return;
-    }
-
-    onChange([...selectedValue, optionId]);
-  }, [onChange, selectedIds, selectedValue]);
-
-  return (
-    <div className="scraper-latest__include-panel">
-      <div>
-        <strong>{title}</strong>
-        <span>{selectedLabel}</span>
-      </div>
-      <div className="scraper-latest__include-actions" aria-label={ariaLabel}>
-        {options.length ? (
-          <>
-            {noneButtonLabel ? (
-              <button
-                type="button"
-                className={isNoneSelected ? "is-active" : ""}
-                onClick={() => onChange(noneValue ? [noneValue] : [])}
-              >
-                {noneButtonLabel}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={isAllSelected ? "is-active" : ""}
-              onClick={() => onChange(allValue ? [allValue] : [])}
-            >
-              {allButtonLabel}
-            </button>
-            {options.map((option) => {
-              const isActive = selectedIds.has(option.id);
-
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={isActive ? "is-active" : ""}
-                  onClick={() => toggleOption(option.id)}
-                  aria-pressed={isActive}
-                  title={option.label}
-                >
-                  {renderOptionContent
-                    ? renderOptionContent(option)
-                    : <span>{option.label}</span>}
-                </button>
-              );
-            })}
-          </>
-        ) : (
-          <span className="scraper-latest__include-empty">{emptyOptionsLabel ?? emptySelectionLabel}</span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 type ScraperLatestLanguageIncludeBarProps = {
   value: string[];
@@ -318,7 +205,7 @@ export function ScraperLatestLanguageIncludeBar({
   onChange,
 }: ScraperLatestLanguageIncludeBarProps) {
   return (
-    <ScraperLatestIncludePanel
+    <IncludeFilterBar
       title="Langues incluses"
       allLabel="Toutes les langues"
       allButtonLabel="Toutes"
@@ -357,7 +244,7 @@ export function ScraperLatestAuthorFavoriteIncludeBar({
   );
 
   return (
-    <ScraperLatestIncludePanel
+    <IncludeFilterBar
       title="Auteurs favoris inclus"
       allLabel="Tous les auteurs favoris"
       allButtonLabel="Tous"
@@ -394,7 +281,7 @@ export function ScraperLatestScraperIncludeBar({
   );
 
   return (
-    <ScraperLatestIncludePanel
+    <IncludeFilterBar
       title="Scrappers inclus"
       allLabel="Tous les scrappers actifs"
       allButtonLabel="Tous"
@@ -431,7 +318,7 @@ export function ScraperLatestTagFavoriteIncludeBar({
   );
 
   return (
-    <ScraperLatestIncludePanel
+    <IncludeFilterBar
       title="Tags favoris inclus"
       allLabel="Tous les tags favoris"
       allButtonLabel="Tous"

@@ -22,10 +22,7 @@ import {
   getEnabledLatestScrapers,
   getIncludedLatestAuthorFavorites,
   getIncludedLatestTagFavorites,
-  getLatestAuthorFavoriteLabels,
   getLatestLanguageLabel,
-  getLatestScraperLabels,
-  getLatestTagFavoriteLabels,
   LATEST_ALL_TAG_FAVORITES_VALUE,
   LATEST_NO_AUTHOR_FAVORITES_VALUE,
   LATEST_NO_SCRAPERS_VALUE,
@@ -38,6 +35,7 @@ import {
   ScraperLatestScraperIncludeBar,
   ScraperLatestTagFavoriteIncludeBar,
 } from "@/renderer/components/ScraperLatest/ScraperLatestIncludeFilters";
+import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLatestResults";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import "@/renderer/components/History/style.scss";
@@ -139,6 +137,58 @@ const getAuthorPageCount = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
 };
 
+const filterRecordsByIncludeValues = <RecordType,>(
+  records: readonly RecordType[],
+  values: readonly string[],
+  getId: (record: RecordType) => string,
+  defaultMode: "all" | "none",
+): RecordType[] => {
+  const { includedValues, excludedValues } = splitIncludeFilterValues(values);
+  const excludedValueSet = new Set(excludedValues);
+
+  if (includedValues.length) {
+    const includedValueSet = new Set(includedValues);
+    return records.filter((record) => {
+      const recordId = getId(record);
+      return includedValueSet.has(recordId) && !excludedValueSet.has(recordId);
+    });
+  }
+
+  if (!excludedValues.length && defaultMode === "none") {
+    return [];
+  }
+
+  return records.filter((record) => !excludedValueSet.has(getId(record)));
+};
+
+const formatIncludeValuesSummary = (
+  values: readonly string[],
+  labelsById: Map<string, string>,
+  allLabel: string,
+): string => {
+  const { includedValues, excludedValues } = splitIncludeFilterValues(values);
+  const includedLabels = includedValues
+    .map((value) => labelsById.get(value))
+    .filter((label): label is string => Boolean(label));
+  const excludedLabels = excludedValues
+    .map((value) => labelsById.get(value))
+    .filter((label): label is string => Boolean(label));
+
+  if (!includedLabels.length && !excludedLabels.length) {
+    return allLabel;
+  }
+
+  if (!includedLabels.length) {
+    return `${allLabel} sauf ${excludedLabels.join(", ")}`;
+  }
+
+  if (!excludedLabels.length) {
+    return includedLabels.join(", ");
+  }
+
+  return `${includedLabels.join(", ")} sauf ${excludedLabels.join(", ")}`;
+};
+
 export default function ScraperLatestView({ scrapers }: Props) {
   const { params, setParams } = useParams();
   const [activeTab, setActiveTab] = React.useState<LatestTabId>("scrapers");
@@ -220,18 +270,19 @@ export default function ScraperLatestView({ scrapers }: Props) {
   );
   const scraperIncludedScrapersKey = scraperIncludedScraperIds.join("|");
   const scraperIncludesNoScrapers = scraperIncludedScraperIds.includes(LATEST_NO_SCRAPERS_VALUE);
-  const includedLatestScraperCount = React.useMemo(() => {
+  const includedLatestScrapers = React.useMemo(() => {
     if (scraperIncludesNoScrapers) {
-      return 0;
+      return [];
     }
 
-    if (!scraperIncludedScraperIds.length) {
-      return enabledLatestScrapers.length;
-    }
-
-    const includedScraperIdSet = new Set(scraperIncludedScraperIds);
-    return enabledLatestScrapers.filter((scraper) => includedScraperIdSet.has(scraper.id)).length;
+    return filterRecordsByIncludeValues(
+      enabledLatestScrapers,
+      scraperIncludedScraperIds,
+      (scraper) => scraper.id,
+      "all",
+    );
   }, [enabledLatestScrapers, scraperIncludedScraperIds, scraperIncludesNoScrapers]);
+  const includedLatestScraperCount = includedLatestScrapers.length;
   const tagFavoriteIds = React.useMemo(
     () => tagFavorites.map((favorite) => favorite.id),
     [tagFavorites],
@@ -451,7 +502,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
   }, [scraperRuns, setParams, tagFavoriteIds]);
 
   const authorSummary = React.useMemo(() => {
-    const includedAuthorLabels = getLatestAuthorFavoriteLabels(authorIncludedFavoriteIds, authorFavorites);
+    const authorLabelsById = new Map(authorFavorites.map((favorite) => [favorite.id, favorite.name]));
+    const includedAuthorLabel = formatIncludeValuesSummary(authorIncludedFavoriteIds, authorLabelsById, "tous");
     const baseSummary = `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori incluse.`;
     const authorFilterSummary = !authorFavoritesLoaded
       ? " Auteurs favoris : chargement."
@@ -461,9 +513,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
           ? " Auteurs favoris inclus : aucun."
           : !authorIncludedFavoriteIds.length
             ? " Auteurs favoris inclus : tous."
-            : includedAuthorLabels.length
-              ? ` Auteurs favoris inclus : ${includedAuthorLabels.join(", ")}.`
-              : " Aucun auteur favori inclus parmi les auteurs favoris disponibles.";
+            : ` Auteurs favoris inclus : ${includedAuthorLabel}.`;
 
     return `${baseSummary}${authorFilterSummary}`;
   }, [
@@ -475,8 +525,31 @@ export default function ScraperLatestView({ scrapers }: Props) {
   ]);
 
   const scraperSummary = React.useMemo(() => {
-    const includedScraperLabels = getLatestScraperLabels(scraperIncludedScraperIds, enabledLatestScrapers);
-    const includedTagFavoriteLabels = getLatestTagFavoriteLabels(scraperIncludedTagFavoriteIds, tagFavorites);
+    const scraperLabelsById = new Map(enabledLatestScrapers.map((scraper) => [scraper.id, scraper.name]));
+    const tagFavoriteLabelsById = new Map(tagFavorites.map((favorite) => [favorite.id, favorite.name]));
+    const languageFilterValues = splitIncludeFilterValues(scraperIncludedLanguageCodes);
+    const languageLabelsById = new Map([
+      ...languageFilterValues.includedValues,
+      ...languageFilterValues.excludedValues,
+    ].map((languageCode) => [
+      languageCode,
+      getLatestLanguageLabel(languageCode),
+    ]));
+    const includedScraperLabel = formatIncludeValuesSummary(
+      scraperIncludedScraperIds,
+      scraperLabelsById,
+      "tous",
+    );
+    const includedTagFavoriteLabel = formatIncludeValuesSummary(
+      scraperIncludedTagFavoriteIds,
+      tagFavoriteLabelsById,
+      "tous",
+    );
+    const includedLanguageLabel = formatIncludeValuesSummary(
+      scraperIncludedLanguageCodes,
+      languageLabelsById,
+      "toutes",
+    );
     const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
     const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par source incluse.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
@@ -485,9 +558,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         ? " Scrappers inclus : aucun."
       : !scraperIncludedScraperIds.length
         ? " Scrappers inclus : tous."
-        : includedScraperLabels.length
-          ? ` Scrappers inclus : ${includedScraperLabels.join(", ")}.`
-          : " Aucun scrapper inclus parmi les scrappers actifs.";
+        : ` Scrappers inclus : ${includedScraperLabel}.`;
     const tagFavoriteFilterSummary = !scraperIncludedTagFavoriteIds.length
       ? " Tags favoris inclus : aucun."
       : !tagFavoritesLoaded
@@ -496,9 +567,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
           ? " Aucun tag favori disponible."
           : includesAllTagFavorites
             ? " Tags favoris inclus : tous."
-            : includedTagFavoriteLabels.length
-              ? ` Tags favoris inclus : ${includedTagFavoriteLabels.join(", ")}.`
-              : " Aucun tag favori inclus parmi les tags favoris disponibles.";
+            : ` Tags favoris inclus : ${includedTagFavoriteLabel}.`;
     const deepPageLimitSummary = scraperDeepPageLimit > 0
       ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
       : " Scan profond sans limite de pages.";
@@ -507,7 +576,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
       return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
     }
 
-    return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${scraperIncludedLanguageCodes.map(getLatestLanguageLabel).join(", ")}.${deepPageLimitSummary}${quickSeenStopSummary}`;
+    return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}`;
   }, [
     enabledLatestScrapers,
     scraperIncludesNoScrapers,

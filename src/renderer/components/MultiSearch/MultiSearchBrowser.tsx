@@ -16,7 +16,7 @@ import {
 import type { Manga } from "@/renderer/types";
 import MultiSearchControls, { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
 import MultiSearchFilters, {
-  type MultiSearchCheckboxOption,
+  type MultiSearchFilterOption,
 } from "@/renderer/components/MultiSearch/MultiSearchFilters";
 import MultiSearchResultsSection from "@/renderer/components/MultiSearch/MultiSearchResultsSection";
 import MultiSearchStatusPanel from "@/renderer/components/MultiSearch/MultiSearchStatusPanel";
@@ -24,6 +24,9 @@ import MultiSearchAuthorsDialog from "@/renderer/components/MultiSearch/MultiSea
 import useMultiSearch from "@/renderer/components/MultiSearch/useMultiSearch";
 import {
   UNKNOWN_MULTI_SEARCH_VALUE,
+  NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
+  NO_MULTI_SEARCH_LANGUAGES_VALUE,
+  NO_MULTI_SEARCH_SCRAPERS_VALUE,
   buildContentTypeFilterOptions,
   buildLanguageFilterOptions,
   flattenMultiSearchSources,
@@ -60,6 +63,13 @@ import {
   readMultiSearchState,
   saveMultiSearchState,
 } from "@/renderer/components/MultiSearch/multiSearchPersistence";
+import {
+  getMultiSearchPersistentSettingsFromParams,
+  normalizeMultiSearchSelectedContentTypes,
+  normalizeMultiSearchSelectedLanguageCodes,
+  normalizeMultiSearchSelectedScraperIds,
+  type MultiSearchPersistentSettings,
+} from "@/renderer/components/MultiSearch/multiSearchSettings";
 import { openMultiSearchSourceReader } from "@/renderer/components/MultiSearch/multiSearchReader";
 import {
   buildMultiSearchExportPayload,
@@ -95,6 +105,7 @@ import {
 import { recordSearchHistorySafe } from "@/renderer/utils/history";
 import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
+import type { AppParams } from "@/renderer/hooks/useParams";
 import "./style.scss";
 
 type Props = {
@@ -118,6 +129,18 @@ const buildEmptyStatusCounts = (): Record<MultiSearchScraperRun["status"], numbe
   error: 0,
 });
 
+const buildMultiSearchSettingsParamsPatch = (
+  settings: Partial<MultiSearchPersistentSettings>,
+): Partial<AppParams> => ({
+  ...(settings.selectedScraperIds ? { multiSearchSelectedScraperIds: settings.selectedScraperIds } : {}),
+  ...(settings.selectedLanguageCodes ? { multiSearchSelectedLanguageCodes: settings.selectedLanguageCodes } : {}),
+  ...(settings.selectedContentTypes ? { multiSearchSelectedContentTypes: settings.selectedContentTypes } : {}),
+  ...(settings.depthMode ? { multiSearchDepthMode: settings.depthMode } : {}),
+  ...(settings.advancedPages ? { multiSearchAdvancedPages: settings.advancedPages } : {}),
+  ...(settings.paceMode ? { multiSearchPaceMode: settings.paceMode } : {}),
+  ...(settings.viewMode ? { multiSearchViewMode: settings.viewMode } : {}),
+});
+
 export default function MultiSearchBrowser({
   initialPrefillQuery = "",
   scrapers,
@@ -125,7 +148,7 @@ export default function MultiSearchBrowser({
   const location = useLocation();
   const navigate = useNavigate();
   const { openModal } = useModal();
-  const { params } = useParams();
+  const { params, loading: paramsLoading, setParams } = useParams();
   const initializedSelectionRef = useRef(false);
   const restoredStateRef = useRef(false);
   const consumedPrefillLocationKeyRef = useRef<string | null>(null);
@@ -154,6 +177,10 @@ export default function MultiSearchBrowser({
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
     [scrapers],
+  );
+  const persistentSettings = useMemo(
+    () => getMultiSearchPersistentSettingsFromParams(params, searchableScrapers),
+    [params, searchableScrapers],
   );
   const {
     runs,
@@ -194,6 +221,60 @@ export default function MultiSearchBrowser({
   const mergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+
+  const applyPersistentSettings = React.useCallback((settings: MultiSearchPersistentSettings) => {
+    setSelectedScraperIds(settings.selectedScraperIds);
+    setSelectedLanguageCodes(settings.selectedLanguageCodes);
+    setSelectedContentTypes(settings.selectedContentTypes);
+    setDepthMode(settings.depthMode);
+    setAdvancedPages(settings.advancedPages);
+    setPaceMode(settings.paceMode);
+    setViewMode(settings.viewMode);
+  }, []);
+
+  const persistMultiSearchSettings = React.useCallback((settings: Partial<MultiSearchPersistentSettings>) => {
+    setParams(buildMultiSearchSettingsParamsPatch(settings), {
+      remount: false,
+    });
+  }, [setParams]);
+
+  const handleSelectedScraperIdsChange = React.useCallback((value: string[]) => {
+    const normalizedValue = normalizeMultiSearchSelectedScraperIds(value, searchableScrapers);
+    setSelectedScraperIds(normalizedValue);
+    persistMultiSearchSettings({ selectedScraperIds: normalizedValue });
+  }, [persistMultiSearchSettings, searchableScrapers]);
+
+  const handleSelectedLanguageCodesChange = React.useCallback((value: string[]) => {
+    const normalizedValue = normalizeMultiSearchSelectedLanguageCodes(value);
+    setSelectedLanguageCodes(normalizedValue);
+    persistMultiSearchSettings({ selectedLanguageCodes: normalizedValue });
+  }, [persistMultiSearchSettings]);
+
+  const handleSelectedContentTypesChange = React.useCallback((value: string[]) => {
+    const normalizedValue = normalizeMultiSearchSelectedContentTypes(value);
+    setSelectedContentTypes(normalizedValue);
+    persistMultiSearchSettings({ selectedContentTypes: normalizedValue });
+  }, [persistMultiSearchSettings]);
+
+  const handleDepthModeChange = React.useCallback((value: MultiSearchDepthMode) => {
+    setDepthMode(value);
+    persistMultiSearchSettings({ depthMode: value });
+  }, [persistMultiSearchSettings]);
+
+  const handleAdvancedPagesChange = React.useCallback((value: MultiSearchAdvancedPages) => {
+    setAdvancedPages(value);
+    persistMultiSearchSettings({ advancedPages: value });
+  }, [persistMultiSearchSettings]);
+
+  const handlePaceModeChange = React.useCallback((value: MultiSearchPaceMode) => {
+    setPaceMode(value);
+    persistMultiSearchSettings({ paceMode: value });
+  }, [persistMultiSearchSettings]);
+
+  const handleViewModeChange = React.useCallback((value: MultiSearchViewMode) => {
+    setViewMode(value);
+    persistMultiSearchSettings({ viewMode: value });
+  }, [persistMultiSearchSettings]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -259,27 +340,25 @@ export default function MultiSearchBrowser({
   }, []);
 
   useEffect(() => {
+    if (paramsLoading) {
+      return;
+    }
+
     if (multiSearchPrefillQuery && consumedPrefillLocationKeyRef.current !== multiSearchPrefillKey) {
       consumedPrefillLocationKeyRef.current = multiSearchPrefillKey;
       restoredStateRef.current = true;
       initializedSelectionRef.current = true;
 
       setQuery(multiSearchPrefillQuery);
-      setSelectedScraperIds(searchableScrapers.map((scraper) => scraper.id));
-      setSelectedLanguageCodes([]);
-      setSelectedContentTypes([]);
+      applyPersistentSettings(persistentSettings);
       setResultLanguageFilterModes({});
       setResultReadingStatusFilters([]);
       setResultTextFilter("");
       setDebouncedResultTextFilter("");
       setNewSourceHistoryIds(new Set());
-      setDepthMode("quick");
-      setAdvancedPages(3);
-      setPaceMode("fast");
-      setViewMode("merged");
       setOpenError(null);
       setAuthorExtractionProgress(null);
-      restoreRuns([], "fast");
+      restoreRuns([], persistentSettings.paceMode);
       return;
     }
 
@@ -287,36 +366,40 @@ export default function MultiSearchBrowser({
       const restoredState = readMultiSearchState(searchableScrapers);
       restoredStateRef.current = true;
       initializedSelectionRef.current = true;
+      applyPersistentSettings(persistentSettings);
 
       if (restoredState) {
         setQuery(restoredState.query);
-        setSelectedScraperIds(restoredState.selectedScraperIds);
-        setSelectedLanguageCodes(restoredState.selectedLanguageCodes);
-        setSelectedContentTypes(restoredState.selectedContentTypes);
         setResultLanguageFilterModes(restoredState.resultLanguageFilterModes);
         setResultReadingStatusFilters(restoredState.resultReadingStatusFilters);
         setResultTextFilter(restoredState.resultTextFilter);
         setDebouncedResultTextFilter(restoredState.resultTextFilter);
         setNewSourceHistoryIds(new Set(restoredState.newSourceHistoryIds));
-        setDepthMode(restoredState.depthMode);
-        setAdvancedPages(restoredState.advancedPages);
-        setPaceMode(restoredState.paceMode);
-        setViewMode(restoredState.viewMode);
-        restoreRuns(restoredState.runs, restoredState.paceMode);
+        restoreRuns(restoredState.runs, persistentSettings.paceMode);
         return;
       }
+
+      return;
     }
 
     if (initializedSelectionRef.current) {
       setSelectedScraperIds((currentIds) => (
-        currentIds.filter((scraperId) => searchableScrapers.some((scraper) => scraper.id === scraperId))
+        normalizeMultiSearchSelectedScraperIds(currentIds, searchableScrapers)
       ));
       return;
     }
 
     initializedSelectionRef.current = true;
-    setSelectedScraperIds(searchableScrapers.map((scraper) => scraper.id));
-  }, [multiSearchPrefillKey, multiSearchPrefillQuery, restoreRuns, searchableScrapers]);
+    applyPersistentSettings(persistentSettings);
+  }, [
+    applyPersistentSettings,
+    multiSearchPrefillKey,
+    multiSearchPrefillQuery,
+    paramsLoading,
+    persistentSettings,
+    restoreRuns,
+    searchableScrapers,
+  ]);
 
   useEffect(() => {
     if (!restoredStateRef.current) {
@@ -468,6 +551,9 @@ export default function MultiSearchBrowser({
       return counts;
     }, buildEmptyStatusCounts())
   ), [runs]);
+  const hasNoSelectedScraper = selectedScraperIds.includes(NO_MULTI_SEARCH_SCRAPERS_VALUE);
+  const hasNoSelectedLanguage = selectedLanguageCodes.includes(NO_MULTI_SEARCH_LANGUAGES_VALUE);
+  const hasNoSelectedContentType = selectedContentTypes.includes(NO_MULTI_SEARCH_CONTENT_TYPES_VALUE);
   const selectedLanguageSummary = useMemo(() => {
     const values = selectedScrapers.flatMap((scraper) => {
       const scraperLanguages = getScraperSourceLanguages(scraper);
@@ -484,14 +570,17 @@ export default function MultiSearchBrowser({
 
     return Array.from(new Set(values));
   }, [selectedScrapers]);
-  const scraperOptions = useMemo<MultiSearchCheckboxOption[]>(() => (
+  const selectedScraperSummaryLabel = hasNoSelectedScraper ? "aucun" : String(selectedScrapers.length);
+  const selectedLanguageSummaryLabel = hasNoSelectedLanguage
+    ? "Aucune"
+    : formatList(selectedLanguageSummary, "Toutes");
+  const selectedTypeSummaryLabel = hasNoSelectedContentType
+    ? "Aucun"
+    : formatList(selectedTypeSummary, "Tous");
+  const scraperOptions = useMemo<MultiSearchFilterOption[]>(() => (
     searchableScrapers.map((scraper) => ({
       label: scraper.name,
       value: scraper.id,
-      description: [
-        formatList(getScraperSourceLanguages(scraper).map(getLanguageLabel), "Langue non renseignee"),
-        formatList(getScraperContentTypes(scraper), "Type non renseigne"),
-      ].join(" · "),
     }))
   ), [searchableScrapers]);
 
@@ -865,10 +954,10 @@ export default function MultiSearchBrowser({
         onSubmit={handleSubmit}
         onStopSearch={stopSearch}
         onQueryChange={setQuery}
-        onDepthModeChange={setDepthMode}
-        onAdvancedPagesChange={setAdvancedPages}
-        onPaceModeChange={setPaceMode}
-        onViewModeChange={setViewMode}
+        onDepthModeChange={handleDepthModeChange}
+        onAdvancedPagesChange={handleAdvancedPagesChange}
+        onPaceModeChange={handlePaceModeChange}
+        onViewModeChange={handleViewModeChange}
       />
 
       <MultiSearchFilters
@@ -878,16 +967,16 @@ export default function MultiSearchBrowser({
         selectedScraperIds={selectedScraperIds}
         selectedLanguageCodes={selectedLanguageCodes}
         selectedContentTypes={selectedContentTypes}
-        onSelectedScraperIdsChange={setSelectedScraperIds}
-        onSelectedLanguageCodesChange={setSelectedLanguageCodes}
-        onSelectedContentTypesChange={setSelectedContentTypes}
+        onSelectedScraperIdsChange={handleSelectedScraperIdsChange}
+        onSelectedLanguageCodesChange={handleSelectedLanguageCodesChange}
+        onSelectedContentTypesChange={handleSelectedContentTypesChange}
       />
 
       <section className="multi-search__panel multi-search__summary">
         <div className="multi-search__summary-main">
-          <strong>Recherche sur {selectedScrapers.length} scrapper(s)</strong>
-          <span>Langues : {formatList(selectedLanguageSummary, "Toutes")}</span>
-          <span>Types : {formatList(selectedTypeSummary, "Tous")}</span>
+          <strong>Recherche sur {selectedScraperSummaryLabel} scrapper(s)</strong>
+          <span>Langues : {selectedLanguageSummaryLabel}</span>
+          <span>Types : {selectedTypeSummaryLabel}</span>
           <div className="multi-search__summary-counts">
             <span>{statusCounts.done} termine(s)</span>
             <span>{statusCounts.loading} en cours</span>

@@ -604,6 +604,8 @@ La V1 du multi-search repose sur les choix suivants :
 - Les types de contenu sont libres (`contentTypes`) et ne reposent pas sur une liste predefinie. La page multi-search propose les types deja renseignes sur les scrapers.
 - Les scrapers sans langue ou sans type renseignes restent utilisables et apparaissent sous `Non renseigne`.
 - La page conserve le dernier etat de recherche dans la session de l'onglet afin qu'un retour arriere depuis une fiche restaure les resultats charges. Une nouvelle recherche remplace cet etat.
+- Les parametres de lancement hors requete sont conserves dans les settings utilisateur : scrapers, langues, types, profondeur, nombre de pages avance, rythme et vue. Le texte recherche reste propre a la recherche courante.
+- Dans les filtres de lancement, le clic gauche inclut une valeur et le clic droit l'exclut. Une valeur incluse apparait en bleu ; une valeur exclue apparait en rouge et retire les scrapers qui portent cette valeur.
 - Le statut detaille d'un scraper affiche l'adresse de la derniere page chargee quand elle est disponible.
 - Le merge ignore les marqueurs de langue explicites presents dans les titres, par exemple `[EN]`, `VF`, `RAW` ou `English`, et ces marqueurs enrichissent aussi l'affichage des langues detectees.
 - Les codes de langue courts (`de`, `en`, `fr`, etc.) ne sont detectes dans les titres que lorsqu'ils sont dans un marqueur explicite comme `[DE]` ou `(EN)`, afin d'eviter les faux positifs sur des mots ordinaires.
