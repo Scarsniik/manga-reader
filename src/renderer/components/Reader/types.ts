@@ -27,6 +27,12 @@ export type ReaderLocationState = {
     };
 } | null;
 
+export type ReaderMangaSourceRequest = {
+    scraperId: string;
+    sourceUrl: string;
+    title?: string | null;
+};
+
 export type ReaderOcrBox = {
     id: string;
     text: string;

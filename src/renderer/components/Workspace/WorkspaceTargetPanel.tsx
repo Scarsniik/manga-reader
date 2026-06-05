@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import MangaManager from "@/renderer/components/MangaManger/MangaManager";
 import Reader from "@/renderer/components/Reader/Reader";
+import type { ReaderMangaSourceRequest } from "@/renderer/components/Reader/types";
 import ScraperConfigWizard from "@/renderer/components/ScraperConfig/ScraperConfigWizard";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
@@ -384,6 +385,17 @@ export default function WorkspaceTargetPanel({
     onReplaceTarget(tabId, returnTarget);
   }, [onReplaceTarget, returnTarget, tabId]);
 
+  const handleOpenReaderMangaSource = useCallback((request: ReaderMangaSourceRequest) => {
+    onReplaceTarget(tabId, {
+      kind: "scraper.details",
+      scraperId: request.scraperId,
+      sourceUrl: request.sourceUrl,
+      title: request.title?.trim() || request.sourceUrl,
+    });
+
+    return true;
+  }, [onReplaceTarget, tabId]);
+
   if (target.kind === "manga-manager.view") {
     return (
       <MangaManager
@@ -400,6 +412,7 @@ export default function WorkspaceTargetPanel({
         initialLocationSearch={buildReaderSearch(target.mangaId, target.page ?? 1)}
         initialLocationState={target.locationState ?? null}
         onBack={returnTarget ? handleReaderBack : undefined}
+        onOpenMangaSource={handleOpenReaderMangaSource}
         showBackButton={Boolean(returnTarget)}
         syncWindowPageParam={false}
       />

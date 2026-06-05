@@ -31,6 +31,7 @@ import {
     ReaderAdjacentTarget,
     ReaderCopyFeedback,
     ReaderLocationState,
+    ReaderMangaSourceRequest,
 } from '../types';
 import {
     copyImageViaBrowserClipboard,
@@ -55,6 +56,7 @@ type Args = {
     imgRef: React.RefObject<HTMLImageElement | null>;
     containerRef: React.RefObject<HTMLDivElement | null>;
     navigate: NavigateFunction;
+    onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
 };
 
 const useReaderNavigation = ({
@@ -73,6 +75,7 @@ const useReaderNavigation = ({
     imgRef,
     containerRef,
     navigate,
+    onOpenMangaSource,
 }: Args) => {
     const [transitionDirection, setTransitionDirection] = React.useState<'previous' | 'next' | null>(null);
     const [isCompletionPage, setIsCompletionPage] = React.useState<boolean>(false);
@@ -398,6 +401,18 @@ const useReaderNavigation = ({
                         : null;
 
                     if (sourceScraper) {
+                        if (onOpenMangaSource) {
+                            const wasHandled = await onOpenMangaSource({
+                                scraperId: sourceScraper.id,
+                                sourceUrl: completionSourceUrl,
+                                title: manga?.title || locationState?.scraperReader?.title || null,
+                            });
+
+                            if (wasHandled !== false) {
+                                return;
+                            }
+                        }
+
                         const baseSearch = locationState?.from?.pathname === '/'
                             ? locationState.from.search ?? ''
                             : '';
@@ -443,7 +458,7 @@ const useReaderNavigation = ({
             console.error('Reader: failed to open manga source', error);
             alert('Impossible d\'ouvrir la source.');
         }
-    }, [completionSourceUrl, locationState, manga?.scraperId, navigate]);
+    }, [completionSourceUrl, locationState, manga?.scraperId, manga?.title, navigate, onOpenMangaSource]);
 
     const resolveLocalMangaPageCount = React.useCallback(async (targetManga: Manga): Promise<number | null> => {
         if (typeof targetManga.pages === 'number' && targetManga.pages > 0) {

@@ -46,6 +46,7 @@ import {
 } from '@/shared/readerSettings';
 import {
     ReaderLocationState,
+    ReaderMangaSourceRequest,
 } from './types';
 import {
     normalizeBooleanSetting,
@@ -62,6 +63,7 @@ type ReaderProps = {
     initialLocationSearch?: string;
     initialLocationState?: ReaderLocationState;
     onBack?: () => void;
+    onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
     showBackButton?: boolean;
     syncWindowPageParam?: boolean;
 };
@@ -84,6 +86,7 @@ const Reader: React.FC<ReaderProps> = ({
     initialLocationSearch,
     initialLocationState = null,
     onBack,
+    onOpenMangaSource,
     showBackButton = true,
     syncWindowPageParam = true,
 }) => {
@@ -304,6 +307,7 @@ const Reader: React.FC<ReaderProps> = ({
         imgRef,
         containerRef,
         navigate,
+        onOpenMangaSource,
     });
     const handleBack = onBack ?? navigation.handleBack;
 
