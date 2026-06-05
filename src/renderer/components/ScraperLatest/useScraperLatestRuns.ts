@@ -81,6 +81,7 @@ type StartOptions = {
   continueFromQuickScan?: boolean;
   quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
+  concurrency?: number;
   includedScraperIds?: string[];
   tagFavorites?: ScraperTagFavoriteRecord[];
 };
@@ -273,6 +274,14 @@ const normalizeQuickConsecutiveSeenStopThreshold = (value: number | undefined): 
   }
 
   return Math.max(0, Math.floor(value ?? DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD));
+};
+
+const normalizeConcurrency = (value: number | undefined, fallback: number): number => {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.floor(value ?? fallback));
 };
 
 const isDeepPageLimitReached = (
@@ -1018,6 +1027,7 @@ export default function useScraperLatestRuns() {
       options.quickConsecutiveSeenStopThreshold,
     );
     const deepPageLimit = normalizeDeepPageLimit(options.deepPageLimit);
+    const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
     const token = tokenRef.current + 1;
     tokenRef.current = token;
 
@@ -1111,7 +1121,7 @@ export default function useScraperLatestRuns() {
             deepPageLimit,
           );
         }),
-        paceConfigRef.current.concurrency,
+        concurrency,
       );
 
       if (token === tokenRef.current) {

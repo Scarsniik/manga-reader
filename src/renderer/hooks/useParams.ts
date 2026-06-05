@@ -48,6 +48,7 @@ export type AppParams = {
     scraperAuthorFavoritePageCount?: number;
     scraperAuthorFavoriteCacheResults?: boolean;
     scraperLatestResultLimit?: number;
+    scraperLatestConcurrency?: number;
     scraperLatestDeepPageLimit?: number;
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestIncludedLanguageCodes?: string[];

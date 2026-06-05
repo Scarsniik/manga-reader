@@ -26,6 +26,7 @@ export type AuthorFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "er
 type AuthorFavoriteRunsOptions = {
   initialPageCount: number;
   cacheResults: boolean;
+  concurrency?: number;
 };
 
 export type AuthorFavoriteSourceRun = {
@@ -42,6 +43,14 @@ export type AuthorFavoriteSourceRun = {
 };
 
 const MAX_AUTHOR_FAVORITE_AUTO_PAGES = 250;
+
+const normalizeConcurrency = (value: number | undefined, fallback: number): number => {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.floor(value ?? fallback));
+};
 
 const buildSourceKey = (source: ScraperAuthorFavoriteSource): string => (
   `${source.scraperId}::${source.authorUrl}`
@@ -174,6 +183,7 @@ export default function useAuthorFavoriteRuns(
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
+  const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
   const canLoadMore = useMemo(
     () => runs.some((run) => run.hasNextPage && run.status !== "loading"),
     [runs],
@@ -324,11 +334,11 @@ export default function useAuthorFavoriteRuns(
           ? await loadAllPagesForRun(run, token, updateState)
           : await loadPagesForRun(run, pageCount, token, updateState);
       }),
-      paceConfigRef.current.concurrency,
+      concurrency,
     );
 
     return loadedRuns.filter((run): run is AuthorFavoriteSourceRun => Boolean(run));
-  }, [loadAllPagesForRun, loadPagesForRun]);
+  }, [concurrency, loadAllPagesForRun, loadPagesForRun]);
 
   const readCachedRuns = useCallback(async (
     initialRuns: AuthorFavoriteSourceRun[],
@@ -470,7 +480,7 @@ export default function useAuthorFavoriteRuns(
         loadableRuns.map((run) => async () => {
           await loadNextPageForRun(run, token);
         }),
-        paceConfigRef.current.concurrency,
+        concurrency,
       );
 
       if (token === tokenRef.current) {
@@ -481,7 +491,7 @@ export default function useAuthorFavoriteRuns(
         setLoading(false);
       }
     }
-  }, [loadNextPageForRun, runs]);
+  }, [concurrency, loadNextPageForRun, runs]);
 
   const loadAllForAll = useCallback(async () => {
     const loadableRuns = runs.filter((run) => run.hasNextPage && run.status !== "loading");

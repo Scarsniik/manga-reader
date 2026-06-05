@@ -136,6 +136,13 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperLatestConcurrency',
+          label: 'Scrapings nouveautés simultanés',
+          type: 'number',
+          min: 1,
+          step: 1,
+        },
+        {
           name: 'scraperLatestDeepPageLimit',
           label: 'Pages max du scan profond nouveautés (0 = infini)',
           type: 'number',
@@ -266,6 +273,7 @@ export default function SettingsModalContent() {
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
     const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
+    const scraperLatestConcurrency = Number(values.scraperLatestConcurrency)
     const scraperLatestDeepPageLimit = Number(values.scraperLatestDeepPageLimit)
     const scraperLatestQuickConsecutiveSeenStopThreshold = Number(
       values.scraperLatestQuickConsecutiveSeenStopThreshold,
@@ -293,6 +301,9 @@ export default function SettingsModalContent() {
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
+      scraperLatestConcurrency: Number.isFinite(scraperLatestConcurrency)
+        ? Math.max(1, Math.floor(scraperLatestConcurrency))
+        : 2,
       scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit) ? scraperLatestDeepPageLimit : 0,
       scraperLatestQuickConsecutiveSeenStopThreshold: Number.isFinite(scraperLatestQuickConsecutiveSeenStopThreshold)
         ? scraperLatestQuickConsecutiveSeenStopThreshold

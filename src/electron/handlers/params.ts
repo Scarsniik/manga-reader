@@ -41,6 +41,8 @@ const MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
 const MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 20;
 const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT = 20;
 const MIN_SCRAPER_LATEST_RESULT_LIMIT = 1;
+const DEFAULT_SCRAPER_LATEST_CONCURRENCY = 2;
+const MIN_SCRAPER_LATEST_CONCURRENCY = 1;
 const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
@@ -261,6 +263,14 @@ const normalizeScraperLatestResultLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestConcurrency = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_CONCURRENCY,
+        MIN_SCRAPER_LATEST_CONCURRENCY,
+    )
+);
+
 const normalizeScraperLatestDeepPageLimit = (value: unknown): number => (
     normalizeIntegerSettingWithoutMax(
         value,
@@ -388,6 +398,7 @@ const defaultSettings = {
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestConcurrency: DEFAULT_SCRAPER_LATEST_CONCURRENCY,
     scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestIncludedLanguageCodes: [] as string[],
@@ -451,6 +462,7 @@ const normalizeSettings = (value: unknown) => {
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
+    merged.scraperLatestConcurrency = normalizeScraperLatestConcurrency(merged.scraperLatestConcurrency);
     merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
     merged.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
         merged.scraperLatestQuickConsecutiveSeenStopThreshold,
@@ -708,6 +720,9 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        nextSettings.scraperLatestConcurrency = normalizeScraperLatestConcurrency(
+            nextSettings.scraperLatestConcurrency,
+        );
         nextSettings.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(
             nextSettings.scraperLatestDeepPageLimit,
         );

@@ -79,6 +79,9 @@ Chaque scraper choisit son module de collecte :
 Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Il s'applique
 par source incluse. Si une valeur tres grande est configuree, le runtime suit ce choix et peut donc
 charger beaucoup de pages.
+Le parametre global `scraperLatestConcurrency` a un minimum de 1 et pas de limite haute. Il indique
+combien de sources peuvent etre chargees en parallele dans les onglets `Sources` et `Auteurs` du
+mode `Nouveautes`. La valeur par defaut est 2.
 Le parametre global `scraperLatestQuickConsecutiveSeenStopThreshold` a un minimum de 0. Il indique
 combien de cards deja vues d'affilee sont tolerees avant que le scan rapide s'arrete. Le parametre
 global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
@@ -108,7 +111,7 @@ actions de chargement sont bloquees jusqu'a ce qu'au moins une source soit selec
 
 Le nombre de pages chargees par source reprend le parametre global
 `scraperAuthorFavoritePageCount`. Les resultats deja connus dans l'historique de vue ne sont pas
-affiches.
+affiches. Le nombre de sources auteur chargees en parallele reprend `scraperLatestConcurrency`.
 
 ## Reglages par scraper
 

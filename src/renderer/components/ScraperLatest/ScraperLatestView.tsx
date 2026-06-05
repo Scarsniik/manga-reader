@@ -132,6 +132,11 @@ const getScraperQuickConsecutiveSeenStopThreshold = (value: unknown): number => 
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 2;
 };
 
+const getScraperLatestConcurrency = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 2;
+};
+
 const getAuthorPageCount = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
@@ -251,6 +256,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const scraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
     params?.scraperLatestQuickConsecutiveSeenStopThreshold,
   );
+  const scraperLatestConcurrency = getScraperLatestConcurrency(params?.scraperLatestConcurrency);
   const scraperIncludedLanguageCodes = React.useMemo(
     () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
     [params?.scraperLatestIncludedLanguageCodes],
@@ -315,6 +321,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const authorRuns = useAuthorFavoriteRuns(combinedAuthorFavorite, scrapersById, {
     initialPageCount: authorPageCount,
     cacheResults: false,
+    concurrency: scraperLatestConcurrency,
   });
   const scraperRuns = useScraperLatestRuns();
   const authorSources = React.useMemo(
@@ -395,6 +402,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         continueFromQuickScan,
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
+        concurrency: scraperLatestConcurrency,
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
       },
@@ -411,6 +419,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedTagFavoritesKey,
     scraperRefreshKey,
     scraperDeepPageLimit,
+    scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperSearchMode,
@@ -504,7 +513,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const authorSummary = React.useMemo(() => {
     const authorLabelsById = new Map(authorFavorites.map((favorite) => [favorite.id, favorite.name]));
     const includedAuthorLabel = formatIncludeValuesSummary(authorIncludedFavoriteIds, authorLabelsById, "tous");
-    const baseSummary = `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori incluse.`;
+    const baseSummary = `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori incluse.`
+      + ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const authorFilterSummary = !authorFavoritesLoaded
       ? " Auteurs favoris : chargement."
       : !authorFavorites.length
@@ -522,6 +532,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     authorIncludesNoFavorites,
     authorIncludedFavoriteIds,
     authorPageCount,
+    scraperLatestConcurrency,
   ]);
 
   const scraperSummary = React.useMemo(() => {
@@ -552,6 +563,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     );
     const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
     const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par source incluse.`;
+    const concurrencySummary = ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
       ? " Aucun scrapper actif dans les nouveautes."
       : scraperIncludesNoScrapers
@@ -573,10 +585,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
       : " Scan profond sans limite de pages.";
     const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
+      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
     }
 
-    return `${baseSummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}`;
+    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}`;
   }, [
     enabledLatestScrapers,
     scraperIncludesNoScrapers,
@@ -584,6 +596,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
+    scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     tagFavorites,

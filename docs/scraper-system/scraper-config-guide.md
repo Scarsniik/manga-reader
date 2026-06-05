@@ -225,6 +225,10 @@ Le mode `Nouveautes` possede aussi un parametre applicatif global :
 `scraperLatestResultLimit`. Il indique combien de resultats non vus chercher par source incluse. Le
 minimum est 1 et aucune limite haute n'est appliquee.
 
+Le parametre applicatif `scraperLatestConcurrency` indique combien de sources peuvent etre
+chargees en parallele dans les onglets `Sources` et `Auteurs` du mode `Nouveautes`. Le minimum est
+1, aucune limite haute n'est appliquee et la valeur par defaut est 2.
+
 Le parametre applicatif `scraperLatestDeepPageLimit` limite le nombre de pages consultees par le
 scan profond des nouveautes. Le minimum est 0, et 0 signifie aucune limite de pages.
 
