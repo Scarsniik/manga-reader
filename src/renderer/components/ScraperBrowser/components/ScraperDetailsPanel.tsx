@@ -3,7 +3,9 @@ import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { Manga } from '@/renderer/types';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
+import ScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
+import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 import { MagnifyingGlassIcon } from '@/renderer/components/icons';
 import {
   formatScraperPageCountForDisplay,
@@ -31,6 +33,9 @@ type Props = {
   downloading: boolean;
   addingToLibrary: boolean;
   loadingMoreThumbnails: boolean;
+  potentialReadingMatches: ScraperPotentialMangaMatch[];
+  potentialBookmarkMatches: ScraperPotentialMangaMatch[];
+  loadingPotentialMatches?: boolean;
   multiSearchTitle?: string;
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
   getLinkedLocalMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
@@ -44,6 +49,8 @@ type Props = {
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
   onLoadMoreThumbnails: () => void;
   onDownload: (chapter?: ScraperRuntimeChapterResult) => void;
+  onOpenPotentialMatch: (match: ScraperPotentialMangaMatch) => void;
+  onOpenPotentialMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
   onOpenTitleMultiSearch?: () => void;
   onOpenTitleMultiSearchInWorkspace?: () => void;
 };
@@ -65,6 +72,9 @@ export default function ScraperDetailsPanel({
   downloading,
   addingToLibrary,
   loadingMoreThumbnails,
+  potentialReadingMatches,
+  potentialBookmarkMatches,
+  loadingPotentialMatches = false,
   multiSearchTitle = '',
   getLinkedMangaForSource,
   getLinkedLocalMangaForSource,
@@ -78,6 +88,8 @@ export default function ScraperDetailsPanel({
   onLinkSourceToManga,
   onLoadMoreThumbnails,
   onDownload,
+  onOpenPotentialMatch,
+  onOpenPotentialMatchInWorkspace,
   onOpenTitleMultiSearch,
   onOpenTitleMultiSearchInWorkspace,
 }: Props) {
@@ -273,6 +285,14 @@ export default function ScraperDetailsPanel({
               ) : null}
             </div>
           ) : null}
+
+          <ScraperPotentialMangaMatches
+            readingMatches={potentialReadingMatches}
+            bookmarkMatches={potentialBookmarkMatches}
+            loading={loadingPotentialMatches}
+            onOpenMatch={onOpenPotentialMatch}
+            onOpenMatchInWorkspace={onOpenPotentialMatchInWorkspace}
+          />
 
           {detailsResult.authors.length ? (
             <div className="scraper-card__chips">

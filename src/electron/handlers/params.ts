@@ -47,6 +47,8 @@ const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
 const MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 0;
+const DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT = 60;
+const MIN_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT = 0;
 const DEFAULT_MULTI_SEARCH_DEPTH_MODE = "quick";
 const DEFAULT_MULTI_SEARCH_ADVANCED_PAGES = 3;
 const DEFAULT_MULTI_SEARCH_PACE_MODE = "fast";
@@ -287,6 +289,14 @@ const normalizeScraperLatestQuickConsecutiveSeenStopThreshold = (value: unknown)
     )
 );
 
+const normalizeScraperLatestLanguageRejectLimit = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
+        MIN_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
+    )
+);
+
 const normalizeMultiSearchDepthMode = (value: unknown): string => (
     value === "extended" || value === "advanced" ? value : DEFAULT_MULTI_SEARCH_DEPTH_MODE
 );
@@ -398,9 +408,12 @@ const defaultSettings = {
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestScraperResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestTagResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestConcurrency: DEFAULT_SCRAPER_LATEST_CONCURRENCY,
     scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
+    scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
     scraperLatestIncludedLanguageCodes: [] as string[],
     scraperLatestIncludedScraperIds: [] as string[],
     scraperLatestIncludedAuthorFavoriteIds: [] as string[],
@@ -427,9 +440,18 @@ const pathExists = async (targetPath: string): Promise<boolean> => {
 };
 
 const normalizeSettings = (value: unknown) => {
+    const sourceSettings = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const hasScraperLatestScraperResultLimit = Object.prototype.hasOwnProperty.call(
+        sourceSettings,
+        "scraperLatestScraperResultLimit",
+    );
+    const hasScraperLatestTagResultLimit = Object.prototype.hasOwnProperty.call(
+        sourceSettings,
+        "scraperLatestTagResultLimit",
+    );
     const merged = {
         ...defaultSettings,
-        ...(value && typeof value === "object" ? value as Record<string, unknown> : {}),
+        ...sourceSettings,
     };
 
     const legacyReaderPreloadPageCount = (merged as Record<string, unknown>).readerPreloadPageCount;
@@ -462,10 +484,23 @@ const normalizeSettings = (value: unknown) => {
         : defaultSettings.readerRecommendBookmarks;
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
+    merged.scraperLatestScraperResultLimit = normalizeScraperLatestResultLimit(
+        hasScraperLatestScraperResultLimit
+            ? merged.scraperLatestScraperResultLimit
+            : merged.scraperLatestResultLimit,
+    );
+    merged.scraperLatestTagResultLimit = normalizeScraperLatestResultLimit(
+        hasScraperLatestTagResultLimit
+            ? merged.scraperLatestTagResultLimit
+            : merged.scraperLatestResultLimit,
+    );
     merged.scraperLatestConcurrency = normalizeScraperLatestConcurrency(merged.scraperLatestConcurrency);
     merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
     merged.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
         merged.scraperLatestQuickConsecutiveSeenStopThreshold,
+    );
+    merged.scraperLatestLanguageRejectLimit = normalizeScraperLatestLanguageRejectLimit(
+        merged.scraperLatestLanguageRejectLimit,
     );
     merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.scraperLatestIncludedLanguageCodes,
@@ -677,10 +712,19 @@ export async function getSettings() {
 export async function saveSettings(event: any, settings: any) {
     try {
         const storedSettings = await readStoredSettings();
+        const incomingSettings = settings && typeof settings === "object"
+            ? settings as Record<string, unknown>
+            : {};
+        const shouldApplyLegacyLatestResultLimit = Object.prototype.hasOwnProperty.call(
+            incomingSettings,
+            "scraperLatestResultLimit",
+        )
+            && !Object.prototype.hasOwnProperty.call(incomingSettings, "scraperLatestScraperResultLimit")
+            && !Object.prototype.hasOwnProperty.call(incomingSettings, "scraperLatestTagResultLimit");
         const nextSettings = {
             ...defaultSettings,
             ...storedSettings,
-            ...(settings || {}),
+            ...incomingSettings,
         };
         const legacyReaderPreloadPageCount = (nextSettings as Record<string, unknown>).readerPreloadPageCount;
         nextSettings.readerOcrPreloadPageCount = normalizeReaderOcrPreloadPageCount(
@@ -720,6 +764,16 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperAuthorFavoritePageCount,
         );
         nextSettings.scraperLatestResultLimit = normalizeScraperLatestResultLimit(nextSettings.scraperLatestResultLimit);
+        nextSettings.scraperLatestScraperResultLimit = normalizeScraperLatestResultLimit(
+            shouldApplyLegacyLatestResultLimit
+                ? nextSettings.scraperLatestResultLimit
+                : nextSettings.scraperLatestScraperResultLimit,
+        );
+        nextSettings.scraperLatestTagResultLimit = normalizeScraperLatestResultLimit(
+            shouldApplyLegacyLatestResultLimit
+                ? nextSettings.scraperLatestResultLimit
+                : nextSettings.scraperLatestTagResultLimit,
+        );
         nextSettings.scraperLatestConcurrency = normalizeScraperLatestConcurrency(
             nextSettings.scraperLatestConcurrency,
         );
@@ -728,6 +782,9 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
             nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold,
+        );
+        nextSettings.scraperLatestLanguageRejectLimit = normalizeScraperLatestLanguageRejectLimit(
+            nextSettings.scraperLatestLanguageRejectLimit,
         );
         nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.scraperLatestIncludedLanguageCodes,

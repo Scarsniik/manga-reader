@@ -4,6 +4,7 @@ export type MangaManagerViewWorkspaceTarget = {
   kind: "manga-manager.view";
   viewId: string;
   locationState?: {
+    librarySearchQuery?: string;
     multiSearchPrefillQuery?: string;
   };
   title?: string;

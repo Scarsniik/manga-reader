@@ -122,6 +122,11 @@ const getScraperResultLimit = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 20;
 };
 
+const getScraperLanguageRejectLimit = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 60;
+};
+
 const getScraperDeepPageLimit = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
@@ -251,7 +256,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [authorIncludedFavorites, authorRefreshKey],
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
-  const scraperResultLimit = getScraperResultLimit(params?.scraperLatestResultLimit);
+  const scraperResultLimit = getScraperResultLimit(
+    params?.scraperLatestScraperResultLimit ?? params?.scraperLatestResultLimit,
+  );
+  const tagResultLimit = getScraperResultLimit(
+    params?.scraperLatestTagResultLimit ?? params?.scraperLatestResultLimit,
+  );
+  const scraperLanguageRejectLimit = getScraperLanguageRejectLimit(params?.scraperLatestLanguageRejectLimit);
   const scraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
   const scraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
     params?.scraperLatestQuickConsecutiveSeenStopThreshold,
@@ -329,7 +340,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [authorRuns.runs],
   );
   const scraperSources = React.useMemo(
-    () => flattenMultiSearchSources(scraperRuns.runs),
+    () => scraperRuns.runs.flatMap((run) => [...run.results].reverse()),
     [scraperRuns.runs],
   );
   const activeSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
@@ -403,6 +414,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
         concurrency: scraperLatestConcurrency,
+        tagResultLimit,
+        languageRejectLimit: scraperLanguageRejectLimit,
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
       },
@@ -419,9 +432,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedTagFavoritesKey,
     scraperRefreshKey,
     scraperDeepPageLimit,
+    scraperLanguageRejectLimit,
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    tagResultLimit,
     scraperSearchMode,
     scraperRuns.start,
     scrapers,
@@ -446,8 +461,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
         status: run.status,
         detail: [
           run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
-          `${run.results.length}/${scraperResultLimit} non vue(s)`,
+          `${run.results.length}/${run.sourceKind === "tagFavorite" ? tagResultLimit : scraperResultLimit} non vue(s)`,
+          run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
           run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
+          run.languageRejectLimitReached ? "arret langue" : "",
           run.checkpointUsed ? "checkpoint utilise" : "",
           run.deepSearch ? "recherche profonde" : "mode rapide",
           `${run.checkedPages} page(s) consultee(s)`,
@@ -455,7 +472,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         ].filter(Boolean).join(" - "),
         error: run.error,
       }))
-  ), [activeTab, authorRuns.runs, scraperResultLimit, scraperRuns.runs]);
+  ), [activeTab, authorRuns.runs, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
 
   const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
     setParams({
@@ -562,7 +579,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
       "toutes",
     );
     const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
-    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par source incluse.`;
+    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori.`;
     const concurrencySummary = ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
       ? " Aucun scrapper actif dans les nouveautes."
@@ -584,11 +601,14 @@ export default function ScraperLatestView({ scrapers }: Props) {
       ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
       : " Scan profond sans limite de pages.";
     const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
+    const languageRejectSummary = scraperLanguageRejectLimit > 0
+      ? ` Arret d'une source apres ${scraperLanguageRejectLimit} resultat(s) refuses par langue.`
+      : " Arret par refus de langue desactive.";
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}`;
+      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
     }
 
-    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}`;
+    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
   }, [
     enabledLatestScrapers,
     scraperIncludesNoScrapers,
@@ -596,9 +616,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
+    scraperLanguageRejectLimit,
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    tagResultLimit,
     tagFavorites,
     tagFavoritesLoaded,
   ]);
@@ -684,7 +706,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
       <div className="scraper-latest__header">
         <div>
           <h2>Nouveautes</h2>
-          <p>Cartes fusionnees qui sont encore marquees comme nouvelles.</p>
+          <p>Cartes non vues trouvees dans les sources incluses.</p>
         </div>
         <HistoryTabs
           tabs={LATEST_TABS}

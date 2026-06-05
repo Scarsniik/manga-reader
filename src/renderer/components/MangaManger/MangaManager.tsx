@@ -387,6 +387,9 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const forcedMultiSearchPrefillQuery = typeof forcedLocationState?.multiSearchPrefillQuery === 'string'
         ? forcedLocationState.multiSearchPrefillQuery.trim()
         : '';
+    const forcedLibrarySearchQuery = typeof forcedLocationState?.librarySearchQuery === 'string'
+        ? forcedLocationState.librarySearchQuery.trim()
+        : '';
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -727,7 +730,12 @@ const MangaManager: React.FC<MangaManagerProps> = ({
 
             {isLibraryView ? (
                 <>
-                    <SearchAndSort mangaList={mangas} onSearch={handleSearchResults} />
+                    <SearchAndSort
+                        mangaList={mangas}
+                        onSearch={handleSearchResults}
+                        defaultSearch={forcedLibrarySearchQuery}
+                        ignorePersistedFilters={Boolean(forcedLibrarySearchQuery)}
+                    />
                     <div className="mangaManager-content" ref={contentRef}>
                         {!hasLoadedMangas ? (
                             <div className="empty">Chargement de la bibliothèque...</div>

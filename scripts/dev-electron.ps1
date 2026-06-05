@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $electronPath = Join-Path $repoRoot 'node_modules\electron\dist\electron.exe'
+$viteScriptPath = Join-Path $repoRoot 'node_modules\vite\bin\vite.js'
 $viteStdout = Join-Path $repoRoot '.vite-dev.stdout.log'
 $viteStderr = Join-Path $repoRoot '.vite-dev.stderr.log'
 $viteUrl = 'http://127.0.0.1:3000'
@@ -11,12 +12,25 @@ function Test-ViteReady {
         [string]$Url
     )
 
+    $client = $null
     try {
-        Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 1 | Out-Null
-        return $true
+        $uri = [Uri]$Url
+        $port = if ($uri.Port -gt 0) { $uri.Port } elseif ($uri.Scheme -eq 'https') { 443 } else { 80 }
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $connectTask = $client.ConnectAsync($uri.Host, $port)
+        if (-not $connectTask.Wait(1000)) {
+            return $false
+        }
+
+        return $client.Connected -and -not $connectTask.IsFaulted -and -not $connectTask.IsCanceled
     }
     catch {
         return $false
+    }
+    finally {
+        if ($client) {
+            $client.Dispose()
+        }
     }
 }
 
@@ -37,6 +51,16 @@ if (-not (Test-Path $electronPath)) {
     throw "Electron introuvable: $electronPath"
 }
 
+if (-not (Test-Path $viteScriptPath)) {
+    throw "Vite introuvable: $viteScriptPath"
+}
+
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+    throw "Node introuvable: node.exe"
+}
+$nodePath = $nodeCommand.Source
+
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 
 Push-Location $repoRoot
@@ -54,9 +78,10 @@ $reuseExistingServer = Test-ViteReady -Url $viteUrl
 $viteProcess = $null
 
 if (-not $reuseExistingServer) {
-    $viteProcess = Start-Process -FilePath 'npm.cmd' `
-        -ArgumentList @('run', 'dev', '--', '--host', '127.0.0.1', '--strictPort') `
+    $viteProcess = Start-Process -FilePath $nodePath `
+        -ArgumentList @($viteScriptPath, '--host', '127.0.0.1', '--strictPort') `
         -WorkingDirectory $repoRoot `
+        -WindowStyle Hidden `
         -PassThru `
         -RedirectStandardOutput $viteStdout `
         -RedirectStandardError $viteStderr

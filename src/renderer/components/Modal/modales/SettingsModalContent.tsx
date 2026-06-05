@@ -97,6 +97,35 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'stackMangaInSeries',
+          label: 'Empiler les mangas dans une série dans la bibliothèque',
+          type: 'checkbox',
+        },
+      ],
+    },
+    {
+      type: 'section',
+      id: 'library-display',
+      title: 'Affichage bibliothèque',
+      fields: [
+        {
+          name: 'showPageNumbers',
+          label: 'Afficher le nombre de pages sur les cartes',
+          type: 'checkbox',
+        },
+        {
+          name: 'titleLineCount',
+          label: 'Nombre de lignes pour le titre des cartes',
+          type: 'number',
+        },
+      ],
+    },
+    {
+      type: 'section',
+      id: 'scraping',
+      title: 'Scraping',
+      fields: [
+        {
           name: 'showSavedScraperSearches',
           label: 'Afficher les recherches enregistrées des scrappers',
           type: 'checkbox',
@@ -129,8 +158,15 @@ export default function SettingsModalContent() {
           },
         },
         {
-          name: 'scraperLatestResultLimit',
+          name: 'scraperLatestScraperResultLimit',
           label: 'Résultats nouveautés par scrapper',
+          type: 'number',
+          min: 1,
+          step: 1,
+        },
+        {
+          name: 'scraperLatestTagResultLimit',
+          label: 'Résultats nouveautés par tag favori',
           type: 'number',
           min: 1,
           step: 1,
@@ -152,6 +188,13 @@ export default function SettingsModalContent() {
         {
           name: 'scraperLatestQuickConsecutiveSeenStopThreshold',
           label: 'Cards vues d\'affilée tolérées avant arrêt du scan rapide nouveautés',
+          type: 'number',
+          min: 0,
+          step: 1,
+        },
+        {
+          name: 'scraperLatestLanguageRejectLimit',
+          label: 'Résultats refusés par langue avant arrêt du scraping (0 = désactivé)',
           type: 'number',
           min: 0,
           step: 1,
@@ -179,28 +222,6 @@ export default function SettingsModalContent() {
           min: 0,
           step: 1,
           placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS),
-        },
-        {
-          name: 'stackMangaInSeries',
-          label: 'Empiler les mangas dans une série dans la bibliothèque',
-          type: 'checkbox',
-        },
-      ],
-    },
-    {
-      type: 'section',
-      id: 'library-display',
-      title: 'Affichage bibliothèque',
-      fields: [
-        {
-          name: 'showPageNumbers',
-          label: 'Afficher le nombre de pages sur les cartes',
-          type: 'checkbox',
-        },
-        {
-          name: 'titleLineCount',
-          label: 'Nombre de lignes pour le titre des cartes',
-          type: 'number',
         },
       ],
     },
@@ -272,12 +293,18 @@ export default function SettingsModalContent() {
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
     const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
-    const scraperLatestResultLimit = Number(values.scraperLatestResultLimit)
+    const scraperLatestScraperResultLimit = Number(
+      values.scraperLatestScraperResultLimit ?? values.scraperLatestResultLimit,
+    )
+    const scraperLatestTagResultLimit = Number(
+      values.scraperLatestTagResultLimit ?? values.scraperLatestResultLimit,
+    )
     const scraperLatestConcurrency = Number(values.scraperLatestConcurrency)
     const scraperLatestDeepPageLimit = Number(values.scraperLatestDeepPageLimit)
     const scraperLatestQuickConsecutiveSeenStopThreshold = Number(
       values.scraperLatestQuickConsecutiveSeenStopThreshold,
     )
+    const scraperLatestLanguageRejectLimit = Number(values.scraperLatestLanguageRejectLimit)
     const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
 
     // convert types
@@ -300,7 +327,15 @@ export default function SettingsModalContent() {
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
-      scraperLatestResultLimit: Number.isFinite(scraperLatestResultLimit) ? scraperLatestResultLimit : 20,
+      scraperLatestResultLimit: Number.isFinite(scraperLatestScraperResultLimit)
+        ? scraperLatestScraperResultLimit
+        : 20,
+      scraperLatestScraperResultLimit: Number.isFinite(scraperLatestScraperResultLimit)
+        ? Math.max(1, Math.floor(scraperLatestScraperResultLimit))
+        : 20,
+      scraperLatestTagResultLimit: Number.isFinite(scraperLatestTagResultLimit)
+        ? Math.max(1, Math.floor(scraperLatestTagResultLimit))
+        : 20,
       scraperLatestConcurrency: Number.isFinite(scraperLatestConcurrency)
         ? Math.max(1, Math.floor(scraperLatestConcurrency))
         : 2,
@@ -308,6 +343,9 @@ export default function SettingsModalContent() {
       scraperLatestQuickConsecutiveSeenStopThreshold: Number.isFinite(scraperLatestQuickConsecutiveSeenStopThreshold)
         ? scraperLatestQuickConsecutiveSeenStopThreshold
         : 2,
+      scraperLatestLanguageRejectLimit: Number.isFinite(scraperLatestLanguageRejectLimit)
+        ? Math.max(0, Math.floor(scraperLatestLanguageRejectLimit))
+        : 60,
       ...scraperViewHistorySettings,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),

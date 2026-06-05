@@ -65,12 +65,14 @@ export type ScraperLatestRun = {
   status: ScraperLatestRunStatus;
   results: MultiSearchSourceResult[];
   excludedByLanguageCount: number;
+  includedByLanguageCount: number;
   loadedPages: number;
   checkedPages: number;
   hasNextPage: boolean;
   checkpoint?: ScraperLatestCheckpointRecord | null;
   checkpointUsed: boolean;
   deepSearch: boolean;
+  languageRejectLimitReached?: boolean;
   currentPageUrl?: string;
   nextPageUrl?: string;
   error?: string;
@@ -82,6 +84,8 @@ type StartOptions = {
   quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
   concurrency?: number;
+  tagResultLimit?: number;
+  languageRejectLimit?: number;
   includedScraperIds?: string[];
   tagFavorites?: ScraperTagFavoriteRecord[];
 };
@@ -173,6 +177,7 @@ const buildRun = (
   status: "waiting",
   results: [],
   excludedByLanguageCount: 0,
+  includedByLanguageCount: 0,
   loadedPages: 0,
   checkedPages: 0,
   hasNextPage: true,
@@ -267,6 +272,7 @@ const normalizeDeepPageLimit = (value: number | undefined): number => {
 };
 
 const DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
+const DEFAULT_LANGUAGE_REJECT_LIMIT = 60;
 
 const normalizeQuickConsecutiveSeenStopThreshold = (value: number | undefined): number => {
   if (!Number.isFinite(value)) {
@@ -274,6 +280,14 @@ const normalizeQuickConsecutiveSeenStopThreshold = (value: number | undefined): 
   }
 
   return Math.max(0, Math.floor(value ?? DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD));
+};
+
+const normalizeLanguageRejectLimit = (value: number | undefined): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_LANGUAGE_REJECT_LIMIT;
+  }
+
+  return Math.max(0, Math.floor(value ?? DEFAULT_LANGUAGE_REJECT_LIMIT));
 };
 
 const normalizeConcurrency = (value: number | undefined, fallback: number): number => {
@@ -292,6 +306,22 @@ const isDeepPageLimitReached = (
   && deepPageLimit > 0
   && run.checkedPages >= deepPageLimit
 );
+
+const isLanguageRejectLimitReached = (
+  run: ScraperLatestRun,
+  languageRejectLimit: number,
+): boolean => (
+  languageRejectLimit > 0
+  && run.includedByLanguageCount === 0
+  && run.excludedByLanguageCount >= languageRejectLimit
+);
+
+const stopRunByLanguageRejectLimit = (run: ScraperLatestRun): ScraperLatestRun => ({
+  ...run,
+  status: "done",
+  hasNextPage: false,
+  languageRejectLimitReached: true,
+});
 
 const normalizeLanguageCodes = (value: readonly string[] | undefined): string[] => {
   if (!Array.isArray(value)) {
@@ -662,6 +692,7 @@ export default function useScraperLatestRuns() {
       results: nextResults,
       checkpoint: nextCheckpoint,
       excludedByLanguageCount: currentRun.excludedByLanguageCount + newPageResults.length - includedPageResults.length,
+      includedByLanguageCount: currentRun.includedByLanguageCount + includedPageResults.length,
       loadedPages: Math.max(currentRun.loadedPages, pageIndex + 1),
       checkedPages: currentRun.checkedPages + 1,
       hasNextPage: !hasOnlyDuplicateResults && latestPage.hasNextPage,
@@ -690,6 +721,7 @@ export default function useScraperLatestRuns() {
     loadedSourceKeys: Set<string>,
     token: number,
     deepPageLimit: number,
+    languageRejectLimit: number,
   ): Promise<ScraperLatestRun> => {
     const checkpoint = currentRun.checkpoint;
     if (!checkpoint || token !== tokenRef.current) {
@@ -731,6 +763,11 @@ export default function useScraperLatestRuns() {
         checkpointUsed: true,
       };
       checkedCheckpointPages += 1;
+
+      if (isLanguageRejectLimitReached(run, languageRejectLimit)) {
+        run = stopRunByLanguageRejectLimit(run);
+      }
+
       patchRun(token, run.key, () => run);
 
       if (pageContainsCheckpointAnchor(processedPage.pageResults, checkpoint)) {
@@ -750,6 +787,7 @@ export default function useScraperLatestRuns() {
           token !== tokenRef.current
           || run.results.length >= resultLimit
           || isDeepPageLimitReached(run, deepPageLimit)
+          || run.languageRejectLimitReached
         ) {
           return run;
         }
@@ -780,6 +818,7 @@ export default function useScraperLatestRuns() {
         && run.results.length < resultLimit
         && token === tokenRef.current
         && !isDeepPageLimitReached(run, deepPageLimit)
+        && !run.languageRejectLimitReached
       ) {
         if (!run.deepSearch && checkedCheckpointPages >= QUICK_CHECKPOINT_PAGE_BUDGET) {
           break;
@@ -821,6 +860,7 @@ export default function useScraperLatestRuns() {
       && token === tokenRef.current
       && (run.deepSearch || checkedCheckpointPages < QUICK_CHECKPOINT_PAGE_BUDGET)
       && !isDeepPageLimitReached(run, deepPageLimit)
+      && !run.languageRejectLimitReached
     ) {
       const processedPage = await applyCheckpointPage(nextPageIndex, nextPageUrl);
       nextPageIndex += 1;
@@ -843,6 +883,7 @@ export default function useScraperLatestRuns() {
     continueFromQuickScan = false,
     quickConsecutiveSeenStopThreshold = DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     deepPageLimit = 0,
+    languageRejectLimit = DEFAULT_LANGUAGE_REJECT_LIMIT,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
     let quickConsecutiveSeenResultCount = 0;
@@ -857,6 +898,7 @@ export default function useScraperLatestRuns() {
       && run.results.length < resultLimit
       && token === tokenRef.current
       && !isDeepPageLimitReached(run, deepPageLimit)
+      && !run.languageRejectLimitReached
     ) {
       const pageIndex = run.loadedPages;
 
@@ -871,6 +913,12 @@ export default function useScraperLatestRuns() {
           token,
         );
         run = processedPage.run;
+
+        if (isLanguageRejectLimitReached(run, languageRejectLimit)) {
+          run = stopRunByLanguageRejectLimit(run);
+          patchRun(token, run.key, () => run);
+          return run;
+        }
 
         const pageHasOnlyExcludedLanguageResults = processedPage.newPageResults.length > 0
           && processedPage.includedPageResults.length === 0;
@@ -939,6 +987,7 @@ export default function useScraperLatestRuns() {
                 loadedSourceKeys,
                 token,
                 deepPageLimit,
+                languageRejectLimit,
               );
               return run;
             }
@@ -988,7 +1037,7 @@ export default function useScraperLatestRuns() {
       }
     }
 
-    if (!run.deepSearch && token === tokenRef.current) {
+    if (!run.deepSearch && !run.languageRejectLimitReached && token === tokenRef.current) {
       saveQuickContinuation(buildQuickContinuation(
         run,
         includedLanguageCodes,
@@ -1008,6 +1057,7 @@ export default function useScraperLatestRuns() {
     options: StartOptions = {},
   ) => {
     const resultLimit = normalizeResultLimit(resultLimitValue);
+    const tagResultLimit = normalizeResultLimit(options.tagResultLimit ?? resultLimitValue);
     const includedLanguageCodes = normalizeLanguageCodes(includedLanguageCodeValues);
     const includedScraperIds = normalizeScraperIds(options.includedScraperIds);
     const tagFavorites = Array.isArray(options.tagFavorites) ? options.tagFavorites : [];
@@ -1027,6 +1077,7 @@ export default function useScraperLatestRuns() {
       options.quickConsecutiveSeenStopThreshold,
     );
     const deepPageLimit = normalizeDeepPageLimit(options.deepPageLimit);
+    const languageRejectLimit = normalizeLanguageRejectLimit(options.languageRejectLimit);
     const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
     const token = tokenRef.current + 1;
     tokenRef.current = token;
@@ -1107,9 +1158,10 @@ export default function useScraperLatestRuns() {
 
       await runWithConcurrency(
         initialRuns.map((run) => async () => {
+          const baseRunResultLimit = run.sourceKind === "tagFavorite" ? tagResultLimit : resultLimit;
           const runResultLimit = continueFromQuickScan
-            ? run.results.length + resultLimit
-            : resultLimit;
+            ? run.results.length + baseRunResultLimit
+            : baseRunResultLimit;
           await loadRun(
             run,
             runResultLimit,
@@ -1119,6 +1171,7 @@ export default function useScraperLatestRuns() {
             continueFromQuickScan,
             quickConsecutiveSeenStopThreshold,
             deepPageLimit,
+            languageRejectLimit,
           );
         }),
         concurrency,
@@ -1127,8 +1180,8 @@ export default function useScraperLatestRuns() {
       if (token === tokenRef.current) {
         setMessage(
           includedLanguageCodes.length
-            ? `${resultLimit} resultat(s) non vu(s) recherches par source incluse dans les langues incluses${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`
-            : `${resultLimit} resultat(s) non vu(s) recherches par source incluse${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`,
+            ? `${resultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori recherches dans les langues incluses${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`
+            : `${resultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori recherches${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`,
         );
       }
     } catch (loadError) {

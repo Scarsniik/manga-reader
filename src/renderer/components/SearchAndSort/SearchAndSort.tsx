@@ -22,6 +22,7 @@ type Props = {
     onSearch: (result: Manga[]) => void;
     defaultSort?: string;
     defaultSearch?: string;
+    ignorePersistedFilters?: boolean;
 };
 
 type MangaListFilterState = LibrarySearchFilterState;
@@ -214,7 +215,13 @@ function serializeUrlManagedFilters(state: {
     });
 }
 
-const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort = 'date-desc', defaultSearch = '' }) => {
+const SearchAndSort: React.FC<Props> = ({
+    mangaList = [],
+    onSearch,
+    defaultSort = 'date-desc',
+    defaultSearch = '',
+    ignorePersistedFilters = false,
+}) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { tags } = useTags();
@@ -477,7 +484,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
 
         let startingFilters = initialUrlStateRef.current.filters;
 
-        if (!initialUrlStateRef.current.hasUrlFilters && persistMangaFilters && params?.mangaListFilters) {
+        if (!initialUrlStateRef.current.hasUrlFilters && !ignorePersistedFilters && persistMangaFilters && params?.mangaListFilters) {
             startingFilters = normalizePersistedFilters(params.mangaListFilters, defaultSort, defaultSearch);
         }
 
@@ -504,6 +511,7 @@ const SearchAndSort: React.FC<Props> = ({ mangaList = [], onSearch, defaultSort 
         currentUiFilterState,
         defaultSearch,
         defaultSort,
+        ignorePersistedFilters,
         loading,
         normalizeUiFilterState,
         params?.mangaListFilters,

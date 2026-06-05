@@ -22,6 +22,7 @@ import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components
 import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperAuthorCombinedView';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
+import useScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
@@ -30,6 +31,7 @@ import ScraperAuthorFavoriteButton from '@/renderer/components/ScraperAuthorFavo
 import ScraperTagFavoriteButton from '@/renderer/components/ScraperTagFavoriteButton/ScraperTagFavoriteButton';
 import { DownloadArrowIcon, MagnifyingGlassIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
 import type { MultiSearchSourceResult } from '@/renderer/components/MultiSearch/types';
+import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
@@ -56,6 +58,7 @@ import {
   useScraperViewHistory,
 } from '@/renderer/stores/scraperViewHistory';
 import {
+  clearScraperRouteState,
   parseScraperRouteState,
   SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
   SCRAPER_MULTI_SEARCH_VIEW_ID,
@@ -377,6 +380,19 @@ export default function ScraperBrowser({
 
     return getScraperTitleAnalysisSearchTitle(rawTitle, titleAnalysisConfig).trim();
   }, [detailsResult?.title, titleAnalysisConfig]);
+  const potentialMatchMergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+  }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+  const {
+    readingMatches: potentialReadingMatches,
+    bookmarkMatches: potentialBookmarkMatches,
+    loading: loadingPotentialMatches,
+  } = useScraperPotentialMangaMatches({
+    scraper,
+    detailsResult,
+    libraryMangas,
+    mergeOptions: potentialMatchMergeOptions,
+  });
 
   const clearFeedback = useCallback(() => {
     setRuntimeMessage(null);
@@ -1161,6 +1177,104 @@ export default function ScraperBrowser({
         setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir la recherche multi-sources dans un onglet workspace.');
       });
   }, [buildTitleMultiSearchTarget, setRuntimeError]);
+  const buildLibrarySearchTarget = useCallback((title: string): WorkspaceTarget => ({
+    kind: 'manga-manager.view',
+    viewId: 'library',
+    title: 'Bibliotheque',
+    locationState: {
+      librarySearchQuery: title,
+    },
+  }), []);
+  const buildPotentialMatchTarget = useCallback((match: ScraperPotentialMangaMatch): WorkspaceTarget => {
+    if (match.target.kind === 'library') {
+      return buildLibrarySearchTarget(match.target.title);
+    }
+
+    return {
+      kind: 'scraper.details',
+      scraperId: match.target.scraperId,
+      sourceUrl: match.target.sourceUrl,
+      title: match.target.title,
+    };
+  }, [buildLibrarySearchTarget]);
+  const buildLibraryRouteSearch = useCallback((title: string): string => {
+    const clearedSearch = clearScraperRouteState(location.search);
+    const searchParams = new URLSearchParams(clearedSearch.startsWith('?') ? clearedSearch.slice(1) : clearedSearch);
+    searchParams.set('q', title);
+    const nextSearch = searchParams.toString();
+    return nextSearch ? `?${nextSearch}` : '';
+  }, [location.search]);
+  const handleOpenPotentialMatch = useCallback((match: ScraperPotentialMangaMatch) => {
+    if (match.target.kind === 'library') {
+      if (onOpenWorkspaceTarget && !routeSyncEnabled) {
+        onOpenWorkspaceTarget(buildLibrarySearchTarget(match.target.title));
+        return;
+      }
+
+      navigate({
+        pathname: location.pathname,
+        search: buildLibraryRouteSearch(match.target.title),
+      });
+      return;
+    }
+
+    if (onOpenWorkspaceTarget && !routeSyncEnabled) {
+      onOpenWorkspaceTarget(buildPotentialMatchTarget(match));
+      return;
+    }
+
+    navigate({
+      pathname: location.pathname,
+      search: writeScraperRouteState(location.search, {
+        scraperId: match.target.scraperId,
+        mode: 'manga',
+        searchActive: false,
+        searchQuery: '',
+        searchPage: 1,
+        authorActive: false,
+        authorQuery: '',
+        authorPage: 1,
+        tagActive: false,
+        tagQuery: '',
+        tagPage: 1,
+        mangaQuery: '',
+        mangaUrl: match.target.sourceUrl,
+        bookmarksFilterScraperId: null,
+      }),
+    }, {
+      state: {
+        ...(locationState ?? {}),
+        scraperBrowserHistorySource: {
+          kind: 'manga',
+        },
+        scraperBrowserListingReturnState: null,
+        scraperBrowserAuthorTemplateContext: null,
+      },
+    });
+  }, [
+    buildLibraryRouteSearch,
+    buildLibrarySearchTarget,
+    buildPotentialMatchTarget,
+    location.pathname,
+    location.search,
+    locationState,
+    navigate,
+    onOpenWorkspaceTarget,
+    routeSyncEnabled,
+  ]);
+  const handleOpenPotentialMatchInWorkspace = useCallback((match: ScraperPotentialMangaMatch) => {
+    const target = buildPotentialMatchTarget(match);
+
+    void openWorkspaceTarget(target)
+      .then((opened) => {
+        if (!opened) {
+          setRuntimeError('Impossible d\'ouvrir cette correspondance dans un onglet workspace.');
+        }
+      })
+      .catch((error: unknown) => {
+        setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette correspondance dans un onglet workspace.');
+      });
+  }, [buildPotentialMatchTarget, setRuntimeError]);
   const handleSwitchAuthorCombinedView = useCallback((enabled: boolean) => {
     setParams({ scraperAuthorCombinedView: enabled }, { remount: false });
   }, [setParams]);
@@ -2079,6 +2193,9 @@ export default function ScraperBrowser({
         downloading={downloading}
         addingToLibrary={addingToLibrary}
         loadingMoreThumbnails={loadingMoreThumbnails}
+        potentialReadingMatches={potentialReadingMatches}
+        potentialBookmarkMatches={potentialBookmarkMatches}
+        loadingPotentialMatches={loadingPotentialMatches}
         multiSearchTitle={titleMultiSearchQuery}
         getLinkedMangaForSource={getLinkedMangaForSource}
         getLinkedLocalMangaForSource={getLinkedLocalMangaForSource}
@@ -2097,6 +2214,8 @@ export default function ScraperBrowser({
         }}
         onLinkSourceToManga={(chapter) => handleLinkSourceToManga(chapter)}
         onLoadMoreThumbnails={() => void handleLoadMoreThumbnails()}
+        onOpenPotentialMatch={handleOpenPotentialMatch}
+        onOpenPotentialMatchInWorkspace={handleOpenPotentialMatchInWorkspace}
         onOpenTitleMultiSearch={handleOpenTitleMultiSearch}
         onOpenTitleMultiSearchInWorkspace={handleOpenTitleMultiSearchInWorkspace}
         onDownload={(chapter) => {
