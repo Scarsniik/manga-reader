@@ -11,7 +11,14 @@ import {
 } from '@/shared/scraper';
 import ScraperBookmarkFilters from '@/renderer/components/ScraperBookmarks/ScraperBookmarkFilters';
 import ScraperBookmarkCard from '@/renderer/components/ScraperBookmarks/ScraperBookmarkCard';
-import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkDuplicateReviewModal';
+import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
+import {
+  findScraperBookmarkDuplicateGroups,
+  type ScraperBookmarkDuplicateDetectionProgress,
+  type ScraperBookmarkDuplicateGroup,
+} from '@/renderer/components/ScraperBookmarks/bookmarkDuplicateDetection';
+import { removeScraperBookmark, useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
 import useScraperBookmarkRefresh from '@/renderer/components/ScraperBookmarks/useScraperBookmarkRefresh';
 import {
   buildBookmarkLanguageFilterCodes,
@@ -47,6 +54,8 @@ import {
 import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
+import { useModal } from '@/renderer/hooks/useModal';
+import { useParams } from '@/renderer/hooks/useParams';
 import './style.scss';
 
 type Props = {
@@ -84,12 +93,26 @@ const getStandaloneDownloadConfig = (scraper: ScraperRecord | null | undefined) 
   };
 };
 
+const normalizeTitleLineCount = (value: unknown): number => {
+  const parsed = typeof value === 'number'
+    ? value
+    : Number.parseInt(String(value ?? ''), 10);
+
+  if (!Number.isFinite(parsed)) {
+    return 2;
+  }
+
+  return Math.min(4, Math.max(1, Math.floor(parsed)));
+};
+
 export default function ScraperBookmarksView({
   scrapers,
   filterScraperId = null,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openModal } = useModal();
+  const { params } = useParams();
   const locationState = location.state as ScraperBookmarksLocationState;
   const { bookmarks, loading, loaded, error, reload } = useScraperBookmarks({ scraperId: filterScraperId });
   const { bookmarks: allBookmarks, reload: reloadAllBookmarks } = useScraperBookmarks();
@@ -108,6 +131,12 @@ export default function ScraperBookmarksView({
   const [downloadingSourceUrl, setDownloadingSourceUrl] = useState<string | null>(null);
   const [addingSourceUrl, setAddingSourceUrl] = useState<string | null>(null);
   const [newBookmarkIds, setNewBookmarkIds] = useState<Set<string>>(() => new Set());
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicateCheckProgress, setDuplicateCheckProgress] = useState<ScraperBookmarkDuplicateDetectionProgress>({
+    compared: 0,
+    total: 0,
+  });
+  const [duplicateCheckError, setDuplicateCheckError] = useState<string | null>(null);
   const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
 
   const scrapersById = useMemo(
@@ -142,11 +171,24 @@ export default function ScraperBookmarksView({
       viewHistoryRecordsById,
     ],
   );
+  const surpriseBookmarkPool = useMemo(() => (
+    displayedBookmarks.filter((bookmark) => (
+      Boolean(scrapersById.get(bookmark.scraperId))
+    ))
+  ), [displayedBookmarks, scrapersById]);
+  const bookmarkDuplicateMergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+  }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+  const titleLineCount = useMemo(
+    () => normalizeTitleLineCount(params?.titleLineCount),
+    [params?.titleLineCount],
+  );
   const clearRefreshFeedback = useCallback(() => {
     setDownloadMessage(null);
     setDownloadError(null);
     setLibraryMessage(null);
     setLibraryError(null);
+    setDuplicateCheckError(null);
   }, []);
   const {
     refreshAllBookmarks,
@@ -323,6 +365,83 @@ export default function ScraperBookmarksView({
         setDownloadError(error instanceof Error ? error.message : 'Impossible d\'ouvrir cette fiche dans le workspace.');
       });
   }, [scrapersById]);
+
+  const handleOpenSurpriseBookmarks = useCallback(() => {
+    openModal(buildScraperBookmarkSurpriseModal({
+      bookmarks: surpriseBookmarkPool,
+      scrapersById,
+      titleLineCount,
+      onOpenBookmark: handleOpenBookmark,
+      onOpenBookmarkInWorkspace: handleOpenBookmarkInWorkspace,
+    }));
+  }, [
+    handleOpenBookmark,
+    handleOpenBookmarkInWorkspace,
+    openModal,
+    scrapersById,
+    surpriseBookmarkPool,
+    titleLineCount,
+  ]);
+
+  const handleKeepOnlyDuplicateBookmark = useCallback(async (
+    group: ScraperBookmarkDuplicateGroup,
+    bookmarkToKeep: ScraperBookmarkRecord,
+  ) => {
+    const keepKey = `${bookmarkToKeep.scraperId}::${bookmarkToKeep.sourceUrl}`;
+    const bookmarksToRemove = group.bookmarks.filter((bookmark) => (
+      `${bookmark.scraperId}::${bookmark.sourceUrl}` !== keepKey
+    ));
+
+    await Promise.all(bookmarksToRemove.map((bookmark) => (
+      removeScraperBookmark({
+        scraperId: bookmark.scraperId,
+        sourceUrl: bookmark.sourceUrl,
+      })
+    )));
+  }, []);
+
+  const handleCheckBookmarkDuplicates = useCallback(async () => {
+    if (checkingDuplicates || bookmarks.length < 2) {
+      return;
+    }
+
+    setCheckingDuplicates(true);
+    setDuplicateCheckError(null);
+    setDuplicateCheckProgress({
+      compared: 0,
+      total: Math.max(0, (bookmarks.length * (bookmarks.length - 1)) / 2),
+    });
+
+    try {
+      const groups = await findScraperBookmarkDuplicateGroups({
+        bookmarks,
+        scrapersById,
+        mergeOptions: bookmarkDuplicateMergeOptions,
+        onProgress: setDuplicateCheckProgress,
+      });
+
+      openModal(buildScraperBookmarkDuplicateReviewModal({
+        groups,
+        scrapersById,
+        titleLineCount,
+        onOpenBookmarkInWorkspace: handleOpenBookmarkInWorkspace,
+        onKeepOnly: handleKeepOnlyDuplicateBookmark,
+      }));
+    } catch (err) {
+      setDuplicateCheckError(err instanceof Error ? err.message : 'Impossible de verifier les doublons.');
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  }, [
+    bookmarkDuplicateMergeOptions,
+    bookmarks,
+    checkingDuplicates,
+    handleKeepOnlyDuplicateBookmark,
+    handleOpenBookmarkInWorkspace,
+    openModal,
+    scrapersById,
+    titleLineCount,
+  ]);
 
   const getLinkedMangaForBookmark = useCallback((bookmark: ScraperBookmarkRecord): Manga | null => (
     findMangaLinkedToSource(libraryMangas, {
@@ -606,6 +725,31 @@ export default function ScraperBookmarksView({
           <button
             type="button"
             className="scraper-bookmarks-view__clear"
+            onClick={handleOpenSurpriseBookmarks}
+            disabled={surpriseBookmarkPool.length === 0}
+            title={surpriseBookmarkPool.length
+              ? 'Tirer 3 bookmarks au hasard dans la selection actuelle'
+              : 'Aucun bookmark ouvrable en fiche dans la selection actuelle'}
+          >
+            Surprends moi
+          </button>
+
+          <button
+            type="button"
+            className="scraper-bookmarks-view__clear"
+            onClick={() => {
+              void handleCheckBookmarkDuplicates();
+            }}
+            disabled={checkingDuplicates || bookmarks.length < 2}
+          >
+            {checkingDuplicates
+              ? `Verification ${duplicateCheckProgress.compared}/${duplicateCheckProgress.total}`
+              : 'Verifier les doublons'}
+          </button>
+
+          <button
+            type="button"
+            className="scraper-bookmarks-view__clear"
             onClick={() => {
               void refreshAllBookmarks();
             }}
@@ -664,6 +808,10 @@ export default function ScraperBookmarksView({
 
       {historyError ? (
         <div className="scraper-browser__message is-error">{historyError}</div>
+      ) : null}
+
+      {duplicateCheckError ? (
+        <div className="scraper-browser__message is-error">{duplicateCheckError}</div>
       ) : null}
 
       {bookmarks.length > 0 ? (

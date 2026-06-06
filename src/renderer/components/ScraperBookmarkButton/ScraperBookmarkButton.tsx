@@ -37,6 +37,7 @@ type Props = {
   disabled?: boolean;
   autoSyncWhenBookmarked?: boolean;
   stopPropagation?: boolean;
+  onBeforeToggle?: (nextIsBookmarked: boolean, proceed: () => void) => void;
 };
 
 export default function ScraperBookmarkButton({
@@ -57,6 +58,7 @@ export default function ScraperBookmarkButton({
   disabled = false,
   autoSyncWhenBookmarked = true,
   stopPropagation = true,
+  onBeforeToggle,
 }: Props) {
   const normalizedScraperId = String(scraperId ?? '').trim();
   const normalizedSourceUrl = String(sourceUrl ?? '').trim();
@@ -101,6 +103,7 @@ export default function ScraperBookmarkButton({
   const { bookmark, isBookmarked } = useScraperBookmark(normalizedScraperId, normalizedSourceUrl);
   const [pending, setPending] = useState(false);
   const syncInFlightRef = useRef(false);
+  const skipNextAutoSyncRef = useRef(false);
 
   const label = isBookmarked
     ? `Retirer ${normalizedTitle} des bookmarks`
@@ -108,6 +111,11 @@ export default function ScraperBookmarkButton({
 
   useEffect(() => {
     if (!autoSyncWhenBookmarked || !bookmarkRequest || !isBookmarked || syncInFlightRef.current) {
+      return;
+    }
+
+    if (skipNextAutoSyncRef.current) {
+      skipNextAutoSyncRef.current = false;
       return;
     }
 
@@ -135,13 +143,7 @@ export default function ScraperBookmarkButton({
     };
   }, [autoSyncWhenBookmarked, bookmark, bookmarkRequest, isBookmarked]);
 
-  const handleToggle = useCallback(async (
-    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
-  ) => {
-    if (stopPropagation) {
-      event.stopPropagation();
-    }
-
+  const runToggle = useCallback(async () => {
     if (!bookmarkRequest || disabled || pending) {
       return;
     }
@@ -156,14 +158,37 @@ export default function ScraperBookmarkButton({
         });
       } else {
         const enrichedBookmarkRequest = await enrichBookmarkRequestFromDetails(bookmarkRequest);
+        skipNextAutoSyncRef.current = true;
         await saveScraperBookmark(enrichedBookmarkRequest);
       }
     } catch (error) {
+      skipNextAutoSyncRef.current = false;
       console.error('Failed to toggle scraper bookmark', error);
     } finally {
       setPending(false);
     }
-  }, [bookmarkRequest, disabled, isBookmarked, pending, stopPropagation]);
+  }, [bookmarkRequest, disabled, isBookmarked, pending]);
+
+  const handleToggle = useCallback((
+    event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (stopPropagation) {
+      event.stopPropagation();
+    }
+
+    if (!bookmarkRequest || disabled || pending) {
+      return;
+    }
+
+    if (onBeforeToggle) {
+      onBeforeToggle(!isBookmarked, () => {
+        void runToggle();
+      });
+      return;
+    }
+
+    void runToggle();
+  }, [bookmarkRequest, disabled, isBookmarked, onBeforeToggle, pending, runToggle, stopPropagation]);
 
   if (!bookmarkRequest) {
     return null;

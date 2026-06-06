@@ -44,6 +44,8 @@ type MangaTitleMergeProfile = {
 };
 
 const mangaTitleMergeProfileCache = new WeakMap<MatchableManga, Map<string, MangaTitleMergeProfile>>();
+const mangaTitleMergeProfileValueCache = new Map<string, MangaTitleMergeProfile>();
+const MAX_MANGA_TITLE_PROFILE_VALUE_CACHE_SIZE = 5000;
 
 export const DEFAULT_MANGA_MERGE_OPTIONS: MangaMergeOptions = {
   enableRomajiPhoneticMerge: false,
@@ -259,6 +261,48 @@ const getTitleMergeOptionsCacheKey = (options: MangaMergeOptions): string => (
   options.enableRomajiPhoneticMerge ? "phonetic" : "standard"
 );
 
+const getMangaTitleMergeProfileValueCacheKey = (
+  manga: MatchableManga,
+  options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
+): string => (
+  JSON.stringify([
+    getTitleMergeOptionsCacheKey(options),
+    manga.title,
+    manga.authorNames ?? [],
+    manga.advancedRomanizedTitleVariants ?? [],
+    manga.advancedRomanizedAuthorNameVariants ?? [],
+  ])
+);
+
+const getCachedMangaTitleMergeProfileByValue = (
+  cacheKey: string,
+): MangaTitleMergeProfile | null => {
+  const cachedProfile = mangaTitleMergeProfileValueCache.get(cacheKey);
+  if (!cachedProfile) {
+    return null;
+  }
+
+  mangaTitleMergeProfileValueCache.delete(cacheKey);
+  mangaTitleMergeProfileValueCache.set(cacheKey, cachedProfile);
+  return cachedProfile;
+};
+
+const setCachedMangaTitleMergeProfileByValue = (
+  cacheKey: string,
+  profile: MangaTitleMergeProfile,
+): void => {
+  mangaTitleMergeProfileValueCache.set(cacheKey, profile);
+
+  if (mangaTitleMergeProfileValueCache.size <= MAX_MANGA_TITLE_PROFILE_VALUE_CACHE_SIZE) {
+    return;
+  }
+
+  const oldestCacheKey = mangaTitleMergeProfileValueCache.keys().next().value;
+  if (oldestCacheKey) {
+    mangaTitleMergeProfileValueCache.delete(oldestCacheKey);
+  }
+};
+
 const getMangaTitleMergeProfile = (
   manga: MatchableManga,
   options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
@@ -270,7 +314,19 @@ const getMangaTitleMergeProfile = (
     return cachedProfile;
   }
 
+  const valueCacheKey = getMangaTitleMergeProfileValueCacheKey(manga, options);
+  const cachedProfileByValue = getCachedMangaTitleMergeProfileByValue(valueCacheKey);
+  if (cachedProfileByValue) {
+    if (cachedProfiles) {
+      cachedProfiles.set(cacheKey, cachedProfileByValue);
+    } else {
+      mangaTitleMergeProfileCache.set(manga, new Map([[cacheKey, cachedProfileByValue]]));
+    }
+    return cachedProfileByValue;
+  }
+
   const profile = buildMangaTitleMergeProfile(manga, options);
+  setCachedMangaTitleMergeProfileByValue(valueCacheKey, profile);
   if (cachedProfiles) {
     cachedProfiles.set(cacheKey, profile);
   } else {

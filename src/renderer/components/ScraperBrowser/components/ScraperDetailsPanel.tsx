@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { Manga } from '@/renderer/types';
+import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import ScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 import { MagnifyingGlassIcon } from '@/renderer/components/icons';
+import { useModal } from '@/renderer/hooks/useModal';
 import {
   formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
@@ -15,6 +17,40 @@ import {
 } from '@/renderer/utils/scraperRuntime';
 
 const MIDDLE_BUTTON = 1;
+const POTENTIAL_MATCH_WARNING_DETAIL_LIMIT = 4;
+
+const getPotentialWarningMatchLabel = (match: ScraperPotentialMangaMatch): string => (
+  `${match.title} - ${match.sourceLabel} (${match.detailLabel})`
+);
+
+const buildPotentialMatchWarningDetails = (
+  readingMatches: ScraperPotentialMangaMatch[],
+  bookmarkMatches: ScraperPotentialMangaMatch[],
+): React.ReactNode => {
+  const matches = [
+    ...readingMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Lecture" })),
+    ...bookmarkMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Bookmark" })),
+  ];
+  const visibleMatches = matches.slice(0, POTENTIAL_MATCH_WARNING_DETAIL_LIMIT);
+  const hiddenCount = Math.max(0, matches.length - visibleMatches.length);
+
+  return (
+    <>
+      <ul>
+        {visibleMatches.map((match) => (
+          <li key={`${match.kind}:${match.label}`}>
+            <strong>{match.kind}</strong>
+            {" - "}
+            {match.label}
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 ? (
+        <p>{hiddenCount} autre{hiddenCount > 1 ? "s" : ""} correspondance{hiddenCount > 1 ? "s" : ""}.</p>
+      ) : null}
+    </>
+  );
+};
 
 type Props = {
   scraperId: string;
@@ -93,6 +129,45 @@ export default function ScraperDetailsPanel({
   onOpenTitleMultiSearch,
   onOpenTitleMultiSearchInWorkspace,
 }: Props) {
+  const { openModal } = useModal();
+  const potentialActionMatchCount = potentialReadingMatches.length + potentialBookmarkMatches.length;
+  const potentialActionWarningDetails = useMemo(() => (
+    buildPotentialMatchWarningDetails(potentialReadingMatches, potentialBookmarkMatches)
+  ), [potentialBookmarkMatches, potentialReadingMatches]);
+  const confirmBookmarkWithPotentialMatches = useCallback((
+    action: () => void,
+  ) => {
+    if (!potentialActionMatchCount) {
+      action();
+      return;
+    }
+
+    openModal(buildConfirmActionModal({
+      title: "Correspondance potentielle",
+      message: (
+        <>
+          Attention, cette fiche ressemble a un manga deja lu, en cours ou bookmarke.
+          {" "}
+          Verifie la correspondance avant de continuer.
+        </>
+      ),
+      details: potentialActionWarningDetails,
+      confirmLabel: "Bookmarker quand meme",
+      onConfirm: action,
+    }));
+  }, [openModal, potentialActionMatchCount, potentialActionWarningDetails]);
+  const handleBookmarkBeforeToggle = useCallback((
+    nextIsBookmarked: boolean,
+    proceed: () => void,
+  ) => {
+    if (!nextIsBookmarked) {
+      proceed();
+      return;
+    }
+
+    confirmBookmarkWithPotentialMatches(proceed);
+  }, [confirmBookmarkWithPotentialMatches]);
+
   if (!detailsResult) {
     return null;
   }
@@ -197,6 +272,7 @@ export default function ScraperDetailsPanel({
                 pageCount={detailsResult.pageCount}
                 languageCodes={languageCodes}
                 excludedFields={bookmarkExcludedFields}
+                onBeforeToggle={handleBookmarkBeforeToggle}
               />
             </div>
           </div>

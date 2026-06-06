@@ -27,6 +27,7 @@ let state: ScraperBookmarksState = {
 
 let inFlightLoad: Promise<ScraperBookmarkRecord[]> | null = null;
 let hasBoundWindowEvents = false;
+let localBookmarkWriteEventSkips = 0;
 
 const getSnapshot = (): ScraperBookmarksState => state;
 
@@ -93,6 +94,11 @@ const removeBookmark = (
 );
 
 const handleExternalBookmarksUpdate = () => {
+  if (localBookmarkWriteEventSkips > 0) {
+    localBookmarkWriteEventSkips -= 1;
+    return;
+  }
+
   void loadScraperBookmarks(true);
 };
 
@@ -103,6 +109,20 @@ const bindWindowEvents = () => {
 
   window.addEventListener('scraper-bookmarks-updated', handleExternalBookmarksUpdate as EventListener);
   hasBoundWindowEvents = true;
+};
+
+const reserveLocalBookmarkWriteEventSkip = () => {
+  localBookmarkWriteEventSkips += 1;
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.setTimeout(() => {
+    if (localBookmarkWriteEventSkips > 0) {
+      localBookmarkWriteEventSkips -= 1;
+    }
+  }, 3000);
 };
 
 export const getScraperBookmarkKey = (
@@ -185,6 +205,7 @@ export const saveScraperBookmark = async (
     throw new Error('Les bookmarks scraper ne sont pas disponibles dans cette version.');
   }
 
+  reserveLocalBookmarkWriteEventSkip();
   const saved = await api.saveScraperBookmark(request);
   if (!saved) {
     throw new Error('Le bookmark scraper n\'a pas pu etre enregistre.');
@@ -210,6 +231,7 @@ export const removeScraperBookmark = async (
     throw new Error('Les bookmarks scraper ne sont pas disponibles dans cette version.');
   }
 
+  reserveLocalBookmarkWriteEventSkip();
   const removed = await api.removeScraperBookmark(request);
 
   if (removed) {
