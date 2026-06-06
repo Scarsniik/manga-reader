@@ -17,8 +17,10 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import { buildSearchResultViewHistoryIdentity, isScraperViewHistoryCardNew } from "@/renderer/utils/scraperViewHistory";
 import type { Manga } from "@/renderer/types";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 
 type StatusItem = {
   key: string;
@@ -47,6 +49,8 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   languageFilterModes: MultiSearchLanguageFilterModes;
   onReload: () => void;
   onSecondaryAction?: () => void;
@@ -123,6 +127,8 @@ export default function ScraperLatestResults({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   languageFilterModes,
   onReload,
   onSecondaryAction,
@@ -156,9 +162,18 @@ export default function ScraperLatestResults({
     )),
     [languageFilteredResults, newViewHistoryIds, viewHistoryRecordsById],
   );
+  const displayedResults = React.useMemo(
+    () => filterBlacklistedMultiSearchResults(
+      visibleResults,
+      tagBlacklistByScraper,
+      hideBlacklistedCards,
+    ),
+    [hideBlacklistedCards, tagBlacklistByScraper, visibleResults],
+  );
+  const hiddenVisibleResultCount = visibleResults.length - displayedResults.length;
   const visibleSourceCount = React.useMemo(
-    () => visibleResults.reduce((count, result) => count + result.sources.length, 0),
-    [visibleResults],
+    () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
+    [displayedResults],
   );
   const feedback = error || openError || message;
   const statusPanelId = React.useId();
@@ -178,7 +193,10 @@ export default function ScraperLatestResults({
           <h3>{title}</h3>
           <p>{summary}</p>
           <p>
-            {visibleResults.length} carte(s), {visibleSourceCount} source(s) non vue(s).
+            {displayedResults.length} carte(s), {visibleSourceCount} source(s) non vue(s)
+            {hideBlacklistedCards && hiddenVisibleResultCount > 0
+              ? `, ${hiddenVisibleResultCount} masquee(s)`
+              : ""}.
           </p>
           <div className="multi-search__result-filter-stack">
             <MultiSearchLanguageFilterBar
@@ -252,25 +270,28 @@ export default function ScraperLatestResults({
         </div>
       ) : null}
 
-      {visibleResults.length ? (
+      {displayedResults.length ? (
         <MultiSearchVirtualizedResultsGrid
-          results={visibleResults}
+          results={displayedResults}
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
           sourceProgressIndex={sourceProgressIndex}
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newViewHistoryIds}
+          tagBlacklistByScraper={tagBlacklistByScraper}
           viewHistoryRecordingDisabled={loading}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
           onSetSourcesRead={onSetSourcesRead}
         />
+      ) : !loading && hideBlacklistedCards && visibleResults.length ? (
+        <div className="multi-search__message is-info">Tous les resultats visibles sont masques par la blacklist.</div>
       ) : !loading ? (
         <div className="multi-search__message is-info">{emptyLabel}</div>
       ) : null}
 
-      {visibleResults.length > 0 && continueActionLabel && onContinue ? (
+      {displayedResults.length > 0 && continueActionLabel && onContinue ? (
         <div className="scraper-latest-results__continue">
           <button
             type="button"

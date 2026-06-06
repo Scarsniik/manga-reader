@@ -24,6 +24,11 @@ import {
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
+import {
+  getMultiSearchBlacklistedTagMatches,
+  getMultiSearchBlacklistedTagMatchKey,
+} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import "./card.scss";
 
 type Props = {
@@ -33,6 +38,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -118,6 +124,7 @@ export default function MultiSearchResultCard({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
   viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -141,6 +148,11 @@ export default function MultiSearchResultCard({
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : undefined;
   const languageLabels = result.sourceLanguageCodes.map(getLanguageLabel);
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
+  const blacklistedTagMatches = React.useMemo(
+    () => getMultiSearchBlacklistedTagMatches(result, tagBlacklistByScraper),
+    [result, tagBlacklistByScraper],
+  );
+  const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const viewHistoryIdentities = React.useMemo(
     () => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
     [result.sources],
@@ -244,6 +256,15 @@ export default function MultiSearchResultCard({
       </span>
       <span>Types : {formatValues(result.contentTypes, "Non renseigne")}</span>
       {pageCountLabel ? <span>{pageCountLabel}</span> : null}
+      {blacklistedTagMatches.map((match) => (
+        <span
+          key={getMultiSearchBlacklistedTagMatchKey(match)}
+          className="multi-search-card__blacklisted-tag"
+          title={`${match.scraperName}: tag blackliste`}
+        >
+          {match.tag}
+        </span>
+      ))}
       {librarySourceCount ? (
         <span className="multi-search-card__state-badge is-library">
           Bibliotheque{formatMatchedSourceCount(librarySourceCount)}
@@ -502,6 +523,7 @@ export default function MultiSearchResultCard({
           className={[
             result.sources.length > 1 ? "is-merged" : "",
             historyClassName,
+            hasBlacklistedTags ? "is-tag-blacklisted" : "",
           ].join(" ").trim()}
           isActionable={result.sources.length === 1 && Boolean(result.sources[0].result.detailUrl)}
           onClick={result.sources.length === 1 ? () => onOpenSource(result.sources[0]) : undefined}

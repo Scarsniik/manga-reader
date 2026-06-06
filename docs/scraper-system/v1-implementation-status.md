@@ -166,6 +166,7 @@ Les reglages globaux du scraper couvrent maintenant :
 - la recherche d'accueil eventuelle, distincte du module executable `Homepage`
 - l'activation du scraper dans le mode `Nouveautes`, avec choix du module `Homepage` ou `Recherche`
 - les metadonnees de bookmark a exclure du stockage local
+- le masquage optionnel des cards dont la fiche contient un tag blackliste pour le scraper source
 
 Pour les bookmarks, une section dediee permet de choisir plusieurs informations a ne pas conserver, par exemple :
 
@@ -438,6 +439,21 @@ Le mode `Recherche` permet deja :
 - de naviguer entre les pages de recherche
 - d'ouvrir `Fiche` depuis un resultat quand un lien detail est disponible
 - d'ouvrir `Auteur` depuis un resultat quand un lien auteur est disponible
+
+POC : le parametre `scraperScrapeDetailsWithCards` permet d'enrichir chaque
+card en scrapant sa `Fiche` pendant le chargement des listings scraper,
+nouveautes, auteurs favoris et tags favoris. L'option est desactivee par
+defaut, limite les requetes de fiches en parallele, et complete les champs
+manquants des cards sans remplacer les valeurs deja extraites du listing. La
+recherche multi-sources utilise un parametre separe,
+`multiSearchScrapeDetailsWithCards`, car son volume de resultats peut etre
+nettement plus lourd.
+
+POC : une page `Tag` peut ajouter le tag courant a
+`scraperBlacklistedTagsByScraper` pour le scraper actif. Quand une card a ete
+enrichie avec sa `Fiche`, ses tags sont compares a cette blacklist : la card
+est grisee et les tags blacklistes sont affiches en rouge dans ses metadatas.
+Les chips de tags de la fiche utilisent le meme marquage rouge.
 
 Le mode `Auteur` permet deja :
 

@@ -77,7 +77,9 @@ export default function ScraperTagFavoritesView({
     reload,
     goToPreviousPage,
     goToNextPage,
-  } = useTagFavoriteRuns(selectedFavorite, scrapersById);
+  } = useTagFavoriteRuns(selectedFavorite, scrapersById, {
+    scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+  });
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
   const {
     libraryMangas,
@@ -203,6 +205,8 @@ export default function ScraperTagFavoritesView({
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
+        tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         showUnseenFirst={showUnseenFirst}
         onBack={() => handleSelectFavorite(null)}
         onReload={() => void reload()}

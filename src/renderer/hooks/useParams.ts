@@ -1,6 +1,7 @@
 import useRefresh from '@/renderer/hooks/useRefresh';
 import { useEffect, useState, useCallback } from 'react';
 import type { LibrarySearchFilterState, SavedLibrarySearch, SavedScraperSearch } from '@/renderer/types';
+import type { ScraperTagBlacklistByScraper } from '@/renderer/utils/scraperTagBlacklist';
 
 export type AppParams = {
     libraryPath?: string;
@@ -42,11 +43,15 @@ export type AppParams = {
     multiSearchAdvancedPages?: number | "maximum";
     multiSearchPaceMode?: string;
     multiSearchViewMode?: string;
+    multiSearchScrapeDetailsWithCards?: boolean;
     scraperAuthorCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;
     scraperAuthorFavoritePageCount?: number;
     scraperAuthorFavoriteCacheResults?: boolean;
+    scraperScrapeDetailsWithCards?: boolean;
+    scraperHideBlacklistedTagCards?: boolean;
+    scraperBlacklistedTagsByScraper?: ScraperTagBlacklistByScraper;
     scraperLatestResultLimit?: number;
     scraperLatestScraperResultLimit?: number;
     scraperLatestTagResultLimit?: number;

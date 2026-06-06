@@ -9,6 +9,7 @@ import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/Mult
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
+import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type {
   MultiSearchLanguageFilterMode,
@@ -19,6 +20,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 
 type Props = {
   title: string;
@@ -41,6 +43,8 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   backLabel?: string | null;
   sourceSectionTitle?: string;
   resultsSectionTitle?: string;
@@ -98,6 +102,8 @@ export default function ScraperAuthorCombinedResults({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   backLabel = null,
   sourceSectionTitle = "Sources",
   resultsSectionTitle = "Resultats combines",
@@ -124,6 +130,15 @@ export default function ScraperAuthorCombinedResults({
   onOpenProgressReader,
   onSetSourcesRead,
 }: Props) {
+  const visibleDisplayedResults = React.useMemo(
+    () => filterBlacklistedMultiSearchResults(
+      displayedResults,
+      tagBlacklistByScraper,
+      hideBlacklistedCards,
+    ),
+    [displayedResults, hideBlacklistedCards, tagBlacklistByScraper],
+  );
+
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
       <div className="scraper-author-favorites-view__header">
@@ -231,7 +246,12 @@ export default function ScraperAuthorCombinedResults({
           <div className="multi-search__section-head">
             <div>
               <h3>{resultsSectionTitle}</h3>
-              <p>{visibleResultCount} carte(s), {loadedSourceCount} source(s) chargee(s).</p>
+              <p>
+                {visibleDisplayedResults.length} carte(s), {loadedSourceCount} source(s) chargee(s)
+                {hideBlacklistedCards && visibleDisplayedResults.length < visibleResultCount
+                  ? `, ${visibleResultCount - visibleDisplayedResults.length} masquee(s)`
+                  : ""}.
+              </p>
               <div className="multi-search__result-filter-stack">
                 <MultiSearchTextFilterBar
                   value={textFilter}
@@ -256,7 +276,7 @@ export default function ScraperAuthorCombinedResults({
           </div>
 
           <div className="multi-search__results-grid">
-            {displayedResults.map((result) => (
+            {visibleDisplayedResults.map((result) => (
               <MultiSearchResultCard
                 key={result.id}
                 result={result}
@@ -265,6 +285,7 @@ export default function ScraperAuthorCombinedResults({
                 sourceProgressIndex={sourceProgressIndex}
                 viewHistoryRecordsById={viewHistoryRecordsById}
                 newViewHistoryIds={newViewHistoryIds}
+                tagBlacklistByScraper={tagBlacklistByScraper}
                 viewHistoryRecordingDisabled={loading}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
@@ -273,6 +294,9 @@ export default function ScraperAuthorCombinedResults({
               />
             ))}
           </div>
+          {!visibleDisplayedResults.length ? (
+            <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
+          ) : null}
         </section>
       ) : loading ? (
         <div className="scraper-browser__message">{loadingMessage}</div>

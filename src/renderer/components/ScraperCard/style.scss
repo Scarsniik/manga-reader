@@ -28,6 +28,21 @@
   box-shadow: 0 0 0 1px rgba(142, 142, 142, 0.16);
 }
 
+.scraper-card.is-tag-blacklisted {
+  background: #141414;
+  border-color: rgba(239, 83, 80, 0.46);
+  box-shadow: inset 0 0 0 1px rgba(142, 142, 142, 0.16);
+}
+
+.scraper-card.is-tag-blacklisted .scraper-card__media img {
+  filter: grayscale(1) brightness(0.68);
+}
+
+.scraper-card.is-tag-blacklisted .scraper-card__body h4,
+.scraper-card.is-tag-blacklisted .scraper-card__summary {
+  color: #969696;
+}
+
 .scraper-card__media {
   width: 100%;
   aspect-ratio: 3 / 4;
@@ -339,4 +354,11 @@ button.scraper-card__chip {
   background: rgba(95, 173, 122, 0.14);
   border: 1px solid rgba(95, 173, 122, 0.24);
   color: #8ee0a3;
+}
+
+.scraper-card__metadata span.is-blacklisted-tag,
+.scraper-card__chip.is-blacklisted-tag {
+  border-color: rgba(239, 83, 80, 0.58);
+  background: rgba(239, 83, 80, 0.18);
+  color: #ff8a80;
 }

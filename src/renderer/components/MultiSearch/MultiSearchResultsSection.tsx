@@ -26,6 +26,8 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -44,6 +46,8 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   viewHistoryRecordingDisabled?: boolean;
   showUnseenFirst: boolean;
   isExportingJson: boolean;
@@ -134,6 +138,8 @@ export default function MultiSearchResultsSection({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   viewHistoryRecordingDisabled = false,
   showUnseenFirst,
   isExportingJson,
@@ -165,9 +171,14 @@ export default function MultiSearchResultsSection({
     )
   ), [newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById]);
   const displayedMergedResults = React.useMemo(
-    () => sortMergedResultsByUnseen(mergedResults),
-    [mergedResults, sortMergedResultsByUnseen],
+    () => filterBlacklistedMultiSearchResults(
+      sortMergedResultsByUnseen(mergedResults),
+      tagBlacklistByScraper,
+      hideBlacklistedCards,
+    ),
+    [hideBlacklistedCards, mergedResults, sortMergedResultsByUnseen, tagBlacklistByScraper],
   );
+  const hiddenMergedResultCount = mergedResults.length - displayedMergedResults.length;
   const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
   const mergeProgressClassName = [
     "multi-search__merge-progress",
@@ -178,10 +189,15 @@ export default function MultiSearchResultsSection({
       ? runs.map((run) => ({
         scraperId: run.scraper.id,
         scraperName: run.scraper.name,
-        results: sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
+        sourceResultCount: run.results.length,
+        results: filterBlacklistedMultiSearchResults(
+          sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
+          tagBlacklistByScraper,
+          hideBlacklistedCards,
+        ),
       }))
       : []
-  ), [runs, sortMergedResultsByUnseen, viewMode]);
+  ), [hideBlacklistedCards, runs, sortMergedResultsByUnseen, tagBlacklistByScraper, viewMode]);
 
   if (viewMode === "merged") {
     return (
@@ -189,7 +205,12 @@ export default function MultiSearchResultsSection({
         <div className="multi-search__section-head">
           <div>
             <h3>Resultats fusionnes</h3>
-            <p>{mergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s).</p>
+            <p>
+              {displayedMergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s)
+              {hideBlacklistedCards && hiddenMergedResultCount > 0
+                ? `, ${hiddenMergedResultCount} masquee(s)`
+                : ""}.
+            </p>
             <div
               className={mergeProgressClassName}
               role={mergeProgress.isActive ? "status" : undefined}
@@ -279,12 +300,16 @@ export default function MultiSearchResultsSection({
           sourceProgressIndex={sourceProgressIndex}
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newViewHistoryIds}
+          tagBlacklistByScraper={tagBlacklistByScraper}
           viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
           onSetSourcesRead={onSetSourcesRead}
         />
+        {!displayedMergedResults.length && mergedResults.length ? (
+          <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
+        ) : null}
       </section>
     );
   }
@@ -353,12 +378,16 @@ export default function MultiSearchResultsSection({
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              tagBlacklistByScraper={tagBlacklistByScraper}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}
               onSetSourcesRead={onSetSourcesRead}
             />
+            {!group.results.length && hideBlacklistedCards && group.sourceResultCount > 0 ? (
+              <div className="scraper-browser__message">Tous les resultats visibles sont masques par la blacklist.</div>
+            ) : null}
           </div>
         ))}
       </div>

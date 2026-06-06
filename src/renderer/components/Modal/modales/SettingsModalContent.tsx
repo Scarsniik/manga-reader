@@ -136,6 +136,16 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperScrapeDetailsWithCards',
+          label: 'Scraper la fiche pendant l\'extraction des cards scrapper et nouveautés (POC)',
+          type: 'checkbox',
+        },
+        {
+          name: 'scraperHideBlacklistedTagCards',
+          label: 'Masquer les cards avec tags blacklistés',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperAuthorCombinedView',
           label: 'Afficher les pages auteur en vue combinée',
           type: 'checkbox',
@@ -248,6 +258,11 @@ export default function SettingsModalContent() {
           label: 'Activer le merge phonétique romaji / katakana',
           type: 'checkbox',
         },
+        {
+          name: 'multiSearchScrapeDetailsWithCards',
+          label: 'Scraper la fiche pendant la recherche multi-sources (POC lourd)',
+          type: 'checkbox',
+        },
       ],
     },
     {
@@ -323,9 +338,12 @@ export default function SettingsModalContent() {
       showSavedLibrarySearches,
       showSavedScraperSearches,
       multiSearchEnableRomajiPhoneticMerge: !!values.multiSearchEnableRomajiPhoneticMerge,
+      multiSearchScrapeDetailsWithCards: !!values.multiSearchScrapeDetailsWithCards,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
+      scraperScrapeDetailsWithCards: !!values.scraperScrapeDetailsWithCards,
+      scraperHideBlacklistedTagCards: !!values.scraperHideBlacklistedTagCards,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestScraperResultLimit)
         ? scraperLatestScraperResultLimit

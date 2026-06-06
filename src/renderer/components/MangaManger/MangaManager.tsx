@@ -1,30 +1,18 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Manga } from '@/renderer/types';
-import { ScraperRecord } from '@/shared/scraper';
+import type { Manga } from '@/renderer/types';
+import type { ScraperRecord } from '@/shared/scraper';
 import CardList from '@/renderer/components/utils/CardList/CardList';
 import './style.scss';
 import { useModal } from '@/renderer/hooks/useModal';
-import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModal';
-import buildTagsModal from '@/renderer/components/Modal/modales/TagsModal';
-import buildBatchEditModal from '@/renderer/components/Modal/modales/BatchEditModal';
-import buildOcrQueueModal from '@/renderer/components/Modal/modales/OcrQueueModal';
-import buildScraperDownloadQueueModal from '@/renderer/components/Modal/modales/ScraperDownloadQueueModal';
-import buildScraperConfigModal from '@/renderer/components/Modal/modales/ScraperConfigModal';
+import type { ModalOptions } from '@/renderer/context/ModalContext';
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
 import MangaManagerViewMenu, {
     MangaManagerViewOption,
 } from '@/renderer/components/MangaManger/MangaManagerViewMenu';
-import ScraperBrowser from '@/renderer/components/ScraperBrowser/ScraperBrowser';
-import ScraperBookmarksView from '@/renderer/components/ScraperBookmarks/ScraperBookmarksView';
-import ScraperAuthorFavoritesView from '@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView';
-import ScraperTagFavoritesView from '@/renderer/components/ScraperTagFavorites/ScraperTagFavoritesView';
-import HistoryView from '@/renderer/components/History/HistoryView';
-import MultiSearchBrowser from '@/renderer/components/MultiSearch/MultiSearchBrowser';
-import ScraperLatestView from '@/renderer/components/ScraperLatest/ScraperLatestView';
-import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
+import type { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 import {
     clearScraperRouteState,
     parseScraperRouteState,
@@ -41,6 +29,37 @@ import {
 } from '@/renderer/utils/readerNavigation';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import type { MangaManagerViewWorkspaceTarget } from '@/renderer/types/workspace';
+
+type DefaultComponentModule = {
+    default: React.ComponentType<any>;
+};
+
+type ModalBuilder<TArgs extends unknown[] = []> = (...args: TArgs) => ModalOptions;
+
+type OcrQueueModalInput = {
+    selectedMangaIds?: string[];
+    filteredMangaIds?: string[];
+};
+
+const loadDefaultComponent = async (loader: () => Promise<unknown>): Promise<DefaultComponentModule> => {
+    const loaded = await loader() as DefaultComponentModule;
+    return { default: loaded.default };
+};
+
+const loadModalBuilder = async <TArgs extends unknown[]>(
+    loader: () => Promise<unknown>,
+): Promise<ModalBuilder<TArgs>> => {
+    const loaded = await loader() as { default: ModalBuilder<TArgs> };
+    return loaded.default;
+};
+
+const ScraperBrowser = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperBrowser/ScraperBrowser.js')));
+const ScraperBookmarksView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperBookmarks/ScraperBookmarksView.js')));
+const ScraperAuthorFavoritesView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView.js')));
+const ScraperTagFavoritesView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperTagFavorites/ScraperTagFavoritesView.js')));
+const HistoryView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/History/HistoryView.js')));
+const MultiSearchBrowser = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/MultiSearch/MultiSearchBrowser.js')));
+const ScraperLatestView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperLatest/ScraperLatestView.js')));
 
 declare global {
     interface Window {
@@ -407,6 +426,42 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         })),
     ], [sortedScrapers]);
 
+    const openTagsModal = useCallback(async () => {
+        const buildTagsModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/TagsModal.js'));
+        openModal(buildTagsModal());
+    }, [openModal]);
+
+    const openOcrQueueModal = useCallback(async () => {
+        const buildOcrQueueModal = await loadModalBuilder<[OcrQueueModalInput?]>(() => import('@/renderer/components/Modal/modales/OcrQueueModal.js'));
+        openModal(buildOcrQueueModal({
+            selectedMangaIds: selectedIds,
+            filteredMangaIds: displayedMangas.map((manga) => manga.id),
+        }));
+    }, [displayedMangas, openModal, selectedIds]);
+
+    const openScraperDownloadQueueModal = useCallback(async () => {
+        const buildScraperDownloadQueueModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/ScraperDownloadQueueModal.js'));
+        openModal(buildScraperDownloadQueueModal());
+    }, [openModal]);
+
+    const openSettingsModal = useCallback(async () => {
+        const buildSettingsModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/SettingsModal.js'));
+        openModal(buildSettingsModal());
+    }, [openModal]);
+
+    const openScraperConfigModal = useCallback(async () => {
+        const buildScraperConfigModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/ScraperConfigModal.js'));
+        openModal(buildScraperConfigModal());
+    }, [openModal]);
+
+    const openBatchEditModal = useCallback(async () => {
+        const buildBatchEditModal = await loadModalBuilder<[string[], (() => void)?]>(() => import('@/renderer/components/Modal/modales/BatchEditModal.js'));
+        openModal(buildBatchEditModal(selectedIds, () => {
+            void loadMangas();
+            setSelectedIds([]);
+        }));
+    }, [loadMangas, openModal, selectedIds]);
+
     useEffect(() => {
         if (forcedViewId) {
             return;
@@ -693,22 +748,19 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                     <div className="mangaManager-header__actions">
                         {isLibraryView ? (
                             <>
-                                <button onClick={() => openModal(buildTagsModal())}>Tags</button>
+                                <button onClick={() => { void openTagsModal(); }}>Tags</button>
                                 <button
-                                    onClick={() => openModal(buildOcrQueueModal({
-                                        selectedMangaIds: selectedIds,
-                                        filteredMangaIds: displayedMangas.map((m) => m.id),
-                                    }))}
+                                    onClick={() => { void openOcrQueueModal(); }}
                                 >
                                     Avancement OCR
                                 </button>
                             </>
                         ) : null}
-                        <button onClick={() => openModal(buildScraperDownloadQueueModal())}>
+                        <button onClick={() => { void openScraperDownloadQueueModal(); }}>
                             {downloadQueueButtonLabel}
                         </button>
-                        <button onClick={() => openModal(buildSettingsModal())}>Parametres</button>
-                        <button onClick={() => openModal(buildScraperConfigModal())}>Scrappers</button>
+                        <button onClick={() => { void openSettingsModal(); }}>Parametres</button>
+                        <button onClick={() => { void openScraperConfigModal(); }}>Scrappers</button>
                         {isLibraryView ? (
                             <>
                                 <button onClick={onAddClick}>Ajouter</button>
@@ -720,7 +772,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                                     {selectionMode ? 'Quitter sélection' : 'Sélection'}
                                 </button>
                                 {selectedIds.length > 0 ? (
-                                    <button onClick={() => openModal(buildBatchEditModal(selectedIds, () => { loadMangas(); setSelectedIds([]); }))}>Modification multiple ({selectedIds.length})</button>
+                                    <button onClick={() => { void openBatchEditModal(); }}>Modification multiple ({selectedIds.length})</button>
                                 ) : null}
                             </>
                         ) : null}
@@ -761,37 +813,39 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                 </>
             ) : (
                 <div className="mangaManager-content mangaManager-content--scraper">
-                    {!hasLoadedScrapers ? (
-                        <div className="empty">{isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees...' : 'Chargement du scrapper...'}</div>
-                    ) : isMultiSearchView ? (
-                        <MultiSearchBrowser
-                            scrapers={sortedScrapers}
-                            initialPrefillQuery={forcedMultiSearchPrefillQuery}
-                        />
-                    ) : isLatestView ? (
-                        <ScraperLatestView scrapers={sortedScrapers} />
-                    ) : isHistoryView ? (
-                        <HistoryView scrapers={sortedScrapers} />
-                    ) : isAuthorFavoritesView ? (
-                        <ScraperAuthorFavoritesView scrapers={sortedScrapers} />
-                    ) : isTagFavoritesView ? (
-                        <ScraperTagFavoritesView scrapers={sortedScrapers} />
-                    ) : isBookmarksView ? (
-                        <ScraperBookmarksView
-                            scrapers={sortedScrapers}
-                            filterScraperId={routeScraperState.bookmarksFilterScraperId ?? null}
-                        />
-                    ) : activeScraper ? (
-                        <ScraperBrowser
-                            scraper={activeScraper}
-                            initialState={scraperBrowserSeed && scraperBrowserSeed.scraperId === activeScraper.id
-                                ? scraperBrowserSeed
-                                : null}
-                            routeSyncEnabled={!forcedViewId}
-                        />
-                    ) : (
-                        <div className="empty">Le scrapper selectionne est introuvable.</div>
-                    )}
+                    <React.Suspense fallback={<div className="app-route-loading" aria-label="Chargement de la vue" aria-busy="true" />}>
+                        {!hasLoadedScrapers ? (
+                            <div className="app-route-loading" aria-label={isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees' : 'Chargement du scrapper'} aria-busy="true" />
+                        ) : isMultiSearchView ? (
+                            <MultiSearchBrowser
+                                scrapers={sortedScrapers}
+                                initialPrefillQuery={forcedMultiSearchPrefillQuery}
+                            />
+                        ) : isLatestView ? (
+                            <ScraperLatestView scrapers={sortedScrapers} />
+                        ) : isHistoryView ? (
+                            <HistoryView scrapers={sortedScrapers} />
+                        ) : isAuthorFavoritesView ? (
+                            <ScraperAuthorFavoritesView scrapers={sortedScrapers} />
+                        ) : isTagFavoritesView ? (
+                            <ScraperTagFavoritesView scrapers={sortedScrapers} />
+                        ) : isBookmarksView ? (
+                            <ScraperBookmarksView
+                                scrapers={sortedScrapers}
+                                filterScraperId={routeScraperState.bookmarksFilterScraperId ?? null}
+                            />
+                        ) : activeScraper ? (
+                            <ScraperBrowser
+                                scraper={activeScraper}
+                                initialState={scraperBrowserSeed && scraperBrowserSeed.scraperId === activeScraper.id
+                                    ? scraperBrowserSeed
+                                    : null}
+                                routeSyncEnabled={!forcedViewId}
+                            />
+                        ) : (
+                            <div className="empty">Le scrapper selectionne est introuvable.</div>
+                        )}
+                    </React.Suspense>
                 </div>
             )}
         </div>

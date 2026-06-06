@@ -10,6 +10,7 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import {
   MEASUREMENT_PRECISION_PX,
   MIN_OVERSCAN_PX,
@@ -37,6 +38,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -63,6 +65,7 @@ function MeasuredMultiSearchResultCard({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
   viewHistoryRecordingDisabled,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -154,6 +157,7 @@ function MeasuredMultiSearchResultCard({
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newViewHistoryIds}
+        tagBlacklistByScraper={tagBlacklistByScraper}
         viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
@@ -171,6 +175,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
   viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -436,6 +441,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               sourceProgressIndex={sourceProgressIndex}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              tagBlacklistByScraper={tagBlacklistByScraper}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}

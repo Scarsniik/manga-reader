@@ -32,6 +32,10 @@ export type TagFavoriteSourceRun = {
   error?: string;
 };
 
+type TagFavoriteRunsOptions = {
+  scrapeDetailsWithCards?: boolean;
+};
+
 const buildSourceKey = (source: ScraperTagFavoriteSource): string => (
   `${source.scraperId}::${source.tagUrl}`
 );
@@ -86,7 +90,9 @@ const keepNewSourceResults = (
 export default function useTagFavoriteRuns(
   favorite: ScraperTagFavoriteRecord | null,
   scrapersById: Map<string, ScraperRecord>,
+  options: TagFavoriteRunsOptions = {},
 ) {
+  const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
   const [runs, setRuns] = useState<TagFavoriteSourceRun[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -150,6 +156,9 @@ export default function useTagFavoriteRuns(
         nextPageIndex,
         run.nextPageUrl,
         paceConfigRef.current,
+        {
+          scrapeDetailsWithCards,
+        },
       );
       const pageResults = await enrichSourceResultsWithJapaneseRomanization(
         buildSourceResults(run.scraper, page, nextPageIndex, run.favoriteSource.name),
@@ -187,7 +196,7 @@ export default function useTagFavoriteRuns(
       }
       return failedRun;
     }
-  }, [patchRun]);
+  }, [patchRun, scrapeDetailsWithCards]);
 
   const loadPageForRun = useCallback(async (
     run: TagFavoriteSourceRun,

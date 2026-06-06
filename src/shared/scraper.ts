@@ -431,6 +431,8 @@ export interface ScraperSearchResultItem {
   authorUrl?: string;
   authorUrls?: string[];
   authorNames?: string[];
+  tags?: string[];
+  tagUrls?: string[];
   thumbnailUrl?: string;
   summary?: string;
   pageCount?: string;

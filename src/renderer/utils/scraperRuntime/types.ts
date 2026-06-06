@@ -32,6 +32,14 @@ export type ScraperRuntimeDetailsResult = {
   derivedValues: Record<string, string>;
 };
 
+export type ScraperRuntimeCardDetailsScrapeStats = {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  durationMs: number;
+};
+
 export type ScraperReaderSession = {
   id: string;
   scraperId: string;
@@ -46,6 +54,7 @@ export type ScraperRuntimeSearchPageResult = {
   nextPageUrl?: string;
   authorNames?: string[];
   listingNames?: string[];
+  detailsScrape?: ScraperRuntimeCardDetailsScrapeStats;
   items: ScraperSearchResultItem[];
 };
 

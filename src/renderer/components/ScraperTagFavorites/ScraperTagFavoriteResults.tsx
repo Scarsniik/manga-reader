@@ -12,6 +12,7 @@ import {
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
+import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -21,6 +22,7 @@ import type {
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type { Manga } from "@/renderer/types";
 import type { TagFavoriteSourceRun } from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -43,6 +45,8 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   showUnseenFirst: boolean;
   onBack: () => void;
   onReload: () => void;
@@ -126,6 +130,8 @@ export default function ScraperTagFavoriteResults({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   showUnseenFirst,
   onBack,
   onReload,
@@ -142,15 +148,27 @@ export default function ScraperTagFavoriteResults({
   onSetSourcesRead,
 }: Props) {
   const displayedMergedResults = React.useMemo(
-    () => sortByScraperViewHistoryNewState(
+    () => filterBlacklistedMultiSearchResults(
+      sortByScraperViewHistoryNewState(
+        mergedResults,
+        (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+        viewHistoryRecordsById,
+        newViewHistoryIds,
+        showUnseenFirst,
+      ),
+      tagBlacklistByScraper,
+      hideBlacklistedCards,
+    ),
+    [
+      hideBlacklistedCards,
       mergedResults,
-      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-      viewHistoryRecordsById,
       newViewHistoryIds,
       showUnseenFirst,
-    ),
-    [mergedResults, newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById],
+      tagBlacklistByScraper,
+      viewHistoryRecordsById,
+    ],
   );
+  const hiddenMergedResultCount = mergedResults.length - displayedMergedResults.length;
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -215,8 +233,11 @@ export default function ScraperTagFavoriteResults({
           <div>
             <h3>Resultats</h3>
             <p>
-              Page {pageIndex + 1}, {mergedResults.length} carte(s), {visibleSourceCount} resultat(s)
-              source visible(s).
+              Page {pageIndex + 1}, {displayedMergedResults.length} carte(s), {visibleSourceCount} resultat(s)
+              source visible(s)
+              {hideBlacklistedCards && hiddenMergedResultCount > 0
+                ? `, ${hiddenMergedResultCount} masquee(s)`
+                : ""}.
             </p>
             <div className="multi-search__result-filter-stack">
               <MultiSearchTextFilterBar
@@ -255,6 +276,7 @@ export default function ScraperTagFavoriteResults({
                 sourceProgressIndex={sourceProgressIndex}
                 viewHistoryRecordsById={viewHistoryRecordsById}
                 newViewHistoryIds={newViewHistoryIds}
+                tagBlacklistByScraper={tagBlacklistByScraper}
                 viewHistoryRecordingDisabled={loading}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}

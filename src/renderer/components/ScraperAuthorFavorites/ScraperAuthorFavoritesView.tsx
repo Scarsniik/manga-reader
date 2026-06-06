@@ -98,6 +98,7 @@ export default function ScraperAuthorFavoritesView({
     {
       initialPageCount: params?.scraperAuthorFavoritePageCount ?? 1,
       cacheResults: params?.scraperAuthorFavoriteCacheResults === true,
+      scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     },
   );
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
@@ -298,6 +299,8 @@ export default function ScraperAuthorFavoritesView({
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
+        tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         onBack={() => handleSelectFavorite(null)}
         onReload={() => void start()}
         onOpenMultiSearch={handleOpenSelectedFavoriteMultiSearch}

@@ -7,6 +7,11 @@ import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 import { buildRemoteThumbnailUrl } from '@/renderer/utils/remoteThumbnails';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
+import {
+  getBlacklistedScraperTags,
+  normalizeScraperTagBlacklistValue,
+  type ScraperTagBlacklistEntry,
+} from '@/renderer/utils/scraperTagBlacklist';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
@@ -16,12 +21,17 @@ type Props = {
   readAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
+  tagBlacklistEntries?: ScraperTagBlacklistEntry[];
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
   onOpenBookmarkInWorkspace?: (bookmark: ScraperBookmarkRecord) => void;
   onViewed?: (bookmark: ScraperBookmarkRecord) => void;
 };
 
-const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
+const renderChipGroup = (
+  values: string[],
+  variant: 'author' | 'tag',
+  blacklistedTagKeys?: Set<string>,
+) => {
   if (!values.length) {
     return null;
   }
@@ -29,7 +39,17 @@ const renderChipGroup = (values: string[], variant: 'author' | 'tag') => {
   return (
     <div className="scraper-card__chips">
       {values.map((value) => (
-        <span key={value} className={`scraper-card__chip is-${variant}`}>{value}</span>
+        <span
+          key={value}
+          className={[
+            'scraper-card__chip',
+            `is-${variant}`,
+            blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value)) ? 'is-blacklisted-tag' : '',
+          ].filter(Boolean).join(' ')}
+          title={blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value)) ? 'Tag blackliste' : undefined}
+        >
+          {value}
+        </span>
       ))}
     </div>
   );
@@ -65,6 +85,7 @@ export default function ScraperBookmarkCard({
   readAction = null,
   addToLibraryAction = null,
   downloadAction = null,
+  tagBlacklistEntries = [],
   onOpenBookmark,
   onOpenBookmarkInWorkspace,
   onViewed,
@@ -77,6 +98,15 @@ export default function ScraperBookmarkCard({
   const coverUrlsKey = coverUrls.join('\n');
   const [coverIndex, setCoverIndex] = React.useState(0);
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : null;
+  const blacklistedTagMatches = React.useMemo(
+    () => getBlacklistedScraperTags(tagBlacklistEntries, bookmark.tags),
+    [bookmark.tags, tagBlacklistEntries],
+  );
+  const blacklistedTagKeys = React.useMemo(
+    () => new Set(blacklistedTagMatches.map((match) => normalizeScraperTagBlacklistValue(match.tag))),
+    [blacklistedTagMatches],
+  );
+  const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const actions: ScraperCardAction[] = [
     ...(readAction ? [readAction] : []),
     {
@@ -147,13 +177,14 @@ export default function ScraperBookmarkCard({
             </div>
           ) : null}
           {renderChipGroup(bookmark.authors, 'author')}
-          {renderChipGroup(bookmark.tags, 'tag')}
+          {renderChipGroup(bookmark.tags, 'tag', blacklistedTagKeys)}
         </>
       )}
       actions={actions}
       className={[
         'scraper-bookmarks-view__card',
         viewState === 'read' ? 'is-history-read' : viewState === 'new' ? 'is-history-new' : '',
+        hasBlacklistedTags ? 'is-tag-blacklisted' : '',
       ].join(' ').trim()}
       isActionable={canOpenBookmark}
       onClick={canOpenBookmark ? () => onOpenBookmark(bookmark) : undefined}

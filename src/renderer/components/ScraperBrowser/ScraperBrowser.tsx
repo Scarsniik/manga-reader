@@ -115,6 +115,12 @@ import {
 import { getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import {
+  buildScraperTagBlacklistEntry,
+  findScraperTagBlacklistEntry,
+  getScraperTagBlacklistEntries,
+  removeScraperTagBlacklistEntry,
+} from '@/renderer/utils/scraperTagBlacklist';
+import {
   buildUniqueAuthorSearchNames,
   formatAuthorDisplayName,
   formatAuthorMultiSearchQuery,
@@ -229,6 +235,10 @@ export default function ScraperBrowser({
   const locationState = location.state as ScraperBrowserLocationState | null;
   const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
+  const scraperTagBlacklistEntries = useMemo(
+    () => getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, scraper.id),
+    [params?.scraperBlacklistedTagsByScraper, scraper.id],
+  );
   const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
   const scraperAuthorCombinedViewEnabled = params?.scraperAuthorCombinedView === true;
   const homepageFeature = useMemo(() => getScraperFeature(scraper, 'homepage'), [scraper]);
@@ -568,6 +578,7 @@ export default function ScraperBrowser({
     handleModeChange,
   } = useScraperBrowserSearch({
     scraper,
+    scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     routeSyncEnabled,
     locationPathname: location.pathname,
     locationSearch: location.search,
@@ -1008,6 +1019,43 @@ export default function ScraperBrowser({
     : formatScraperValueForDisplay(query) || query;
   const tagSourceName = listingPage?.listingNames?.[0] || fallbackTagSourceName;
   const tagResultsTitle = tagSourceName ? formatScraperValueForDisplay(tagSourceName) : 'Tag';
+  const activeTagBlacklistEntry = mode === 'tag' && query.trim()
+    ? findScraperTagBlacklistEntry(scraperTagBlacklistEntries, tagResultsTitle, query)
+    : null;
+  const handleToggleActiveTagBlacklist = useCallback(() => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      return;
+    }
+
+    const currentBlacklist = params?.scraperBlacklistedTagsByScraper ?? {};
+    const currentEntries = getScraperTagBlacklistEntries(currentBlacklist, scraper.id);
+    const nextEntries = activeTagBlacklistEntry
+      ? removeScraperTagBlacklistEntry(currentEntries, tagResultsTitle, normalizedQuery)
+      : [
+        ...currentEntries,
+        buildScraperTagBlacklistEntry(normalizedQuery, tagResultsTitle),
+      ];
+    const nextBlacklist = {
+      ...currentBlacklist,
+      [scraper.id]: nextEntries,
+    };
+
+    if (nextEntries.length === 0) {
+      delete nextBlacklist[scraper.id];
+    }
+
+    setParams({
+      scraperBlacklistedTagsByScraper: nextBlacklist,
+    }, { remount: false });
+  }, [
+    activeTagBlacklistEntry,
+    params?.scraperBlacklistedTagsByScraper,
+    query,
+    scraper.id,
+    setParams,
+    tagResultsTitle,
+  ]);
   const handleOpenAuthorFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
     const favoritesSearch = writeScraperAuthorFavoriteRouteState(
       writeScraperRouteState(location.search, {
@@ -1325,6 +1373,22 @@ export default function ScraperBrowser({
       disabled={loading}
     />
   ) : null;
+  const tagBlacklistAction = mode === 'tag' && query.trim() ? (
+    <button
+      type="button"
+      className={[
+        'scraper-browser__tag-blacklist',
+        activeTagBlacklistEntry ? 'is-active' : '',
+      ].join(' ').trim()}
+      onClick={handleToggleActiveTagBlacklist}
+      disabled={loading}
+      title={activeTagBlacklistEntry
+        ? `Retirer ${tagResultsTitle} de la blacklist de ${scraper.name}`
+        : `Blacklister ${tagResultsTitle} pour ${scraper.name}`}
+    >
+      {activeTagBlacklistEntry ? 'Blacklisté' : 'Blacklister'}
+    </button>
+  ) : null;
   const authorHeaderAction = mode === 'author' ? (
     <>
       {authorCombinedViewAction}
@@ -1335,6 +1399,7 @@ export default function ScraperBrowser({
   const tagHeaderAction = mode === 'tag' ? (
     <>
       {tagFavoriteAction}
+      {tagBlacklistAction}
     </>
   ) : null;
   const listingHeaderAction = mode === 'tag' ? tagHeaderAction : authorHeaderAction;
@@ -2132,8 +2197,11 @@ export default function ScraperBrowser({
           authorTitle={authorResultsTitle}
           authorMultiSearchQuery={authorMultiSearchQuery}
           initialPageCount={params?.scraperAuthorFavoritePageCount ?? 1}
+          scrapeDetailsWithCards={params?.scraperScrapeDetailsWithCards === true}
           cover={listingResults[0]?.thumbnailUrl}
           templateContext={authorTemplateContext}
+          tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+          hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
           favoriteAction={authorFavoriteAction}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
@@ -2160,6 +2228,8 @@ export default function ScraperBrowser({
           canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newSearchResultIds}
+          tagBlacklistEntries={scraperTagBlacklistEntries}
+          hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
           renderReadAction={renderSearchResultReadAction}
           renderBookmarkAction={renderSearchResultBookmarkAction}
           renderAddToLibraryAction={renderSearchResultAddToLibraryAction}
@@ -2181,6 +2251,7 @@ export default function ScraperBrowser({
         scraperId={scraper.id}
         bookmarkExcludedFields={scraper.globalConfig.bookmark.excludedFields}
         detailsResult={detailsResult}
+        tagBlacklistEntries={scraperTagBlacklistEntries}
         chapters={chaptersResult}
         hasAuthor={hasAuthor}
         hasTag={hasTag}

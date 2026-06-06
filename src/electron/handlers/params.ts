@@ -169,6 +169,56 @@ const normalizeStringListSetting = (value: unknown): string[] => {
     }, []);
 };
 
+const normalizeScraperTagBlacklistByScraper = (value: unknown): Record<string, Array<{
+    value: string;
+    label?: string;
+    addedAt?: string;
+}>> => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+
+    return Object.entries(value as Record<string, unknown>).reduce<Record<string, Array<{
+        value: string;
+        label?: string;
+        addedAt?: string;
+    }>>>((result, [scraperId, rawEntries]) => {
+        const normalizedScraperId = String(scraperId ?? "").trim();
+        if (!normalizedScraperId || !Array.isArray(rawEntries)) {
+            return result;
+        }
+
+        const seen = new Set<string>();
+        const entries = rawEntries.reduce<Array<{ value: string; label?: string; addedAt?: string }>>((items, rawEntry) => {
+            const entry: Record<string, unknown> = rawEntry && typeof rawEntry === "object" && !Array.isArray(rawEntry)
+                ? rawEntry as Record<string, unknown>
+                : { value: rawEntry };
+            const normalizedValue = String(entry.value ?? "").trim();
+            const normalizedLabel = String(entry.label ?? "").trim();
+            const normalizedAddedAt = String(entry.addedAt ?? "").trim();
+            const key = `${normalizedValue.toLowerCase()}::${normalizedLabel.toLowerCase()}`;
+
+            if (!normalizedValue || seen.has(key)) {
+                return items;
+            }
+
+            seen.add(key);
+            items.push({
+                value: normalizedValue,
+                ...(normalizedLabel ? { label: normalizedLabel } : {}),
+                ...(normalizedAddedAt ? { addedAt: normalizedAddedAt } : {}),
+            });
+            return items;
+        }, []);
+
+        if (entries.length) {
+            result[normalizedScraperId] = entries;
+        }
+
+        return result;
+    }, {});
+};
+
 const normalizeReaderOcrAutoAnalyzeBubbles = (value: unknown): boolean => (
     normalizeBooleanSetting(value, DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES)
 );
@@ -402,11 +452,15 @@ const defaultSettings = {
     multiSearchAdvancedPages: DEFAULT_MULTI_SEARCH_ADVANCED_PAGES as number | "maximum",
     multiSearchPaceMode: DEFAULT_MULTI_SEARCH_PACE_MODE,
     multiSearchViewMode: DEFAULT_MULTI_SEARCH_VIEW_MODE,
+    multiSearchScrapeDetailsWithCards: false,
     scraperAuthorCombinedView: false,
     scraperAuthorFavoriteShowUnseenFirst: false,
     scraperTagFavoriteShowUnseenFirst: true,
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
     scraperAuthorFavoriteCacheResults: false,
+    scraperScrapeDetailsWithCards: false,
+    scraperHideBlacklistedTagCards: false,
+    scraperBlacklistedTagsByScraper: {} as Record<string, Array<{ value: string; label?: string; addedAt?: string }>>,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestScraperResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestTagResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
@@ -534,6 +588,9 @@ const normalizeSettings = (value: unknown) => {
     merged.multiSearchAdvancedPages = normalizeMultiSearchAdvancedPages(merged.multiSearchAdvancedPages);
     merged.multiSearchPaceMode = normalizeMultiSearchPaceMode(merged.multiSearchPaceMode);
     merged.multiSearchViewMode = normalizeMultiSearchViewMode(merged.multiSearchViewMode);
+    merged.multiSearchScrapeDetailsWithCards = typeof merged.multiSearchScrapeDetailsWithCards === "boolean"
+        ? merged.multiSearchScrapeDetailsWithCards
+        : defaultSettings.multiSearchScrapeDetailsWithCards;
     merged.scraperAuthorCombinedView = typeof merged.scraperAuthorCombinedView === "boolean"
         ? merged.scraperAuthorCombinedView
         : defaultSettings.scraperAuthorCombinedView;
@@ -550,6 +607,15 @@ const normalizeSettings = (value: unknown) => {
             legacyAuthorFavoriteScrapeAllPages,
             defaultSettings.scraperAuthorFavoriteCacheResults,
         );
+    merged.scraperScrapeDetailsWithCards = typeof merged.scraperScrapeDetailsWithCards === "boolean"
+        ? merged.scraperScrapeDetailsWithCards
+        : defaultSettings.scraperScrapeDetailsWithCards;
+    merged.scraperHideBlacklistedTagCards = typeof merged.scraperHideBlacklistedTagCards === "boolean"
+        ? merged.scraperHideBlacklistedTagCards
+        : defaultSettings.scraperHideBlacklistedTagCards;
+    merged.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
+        merged.scraperBlacklistedTagsByScraper,
+    );
     delete (merged as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
     merged.shortcuts = normalizeShortcutSettings(merged);
     return merged;
@@ -815,6 +881,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.multiSearchAdvancedPages = normalizeMultiSearchAdvancedPages(nextSettings.multiSearchAdvancedPages);
         nextSettings.multiSearchPaceMode = normalizeMultiSearchPaceMode(nextSettings.multiSearchPaceMode);
         nextSettings.multiSearchViewMode = normalizeMultiSearchViewMode(nextSettings.multiSearchViewMode);
+        nextSettings.multiSearchScrapeDetailsWithCards = typeof nextSettings.multiSearchScrapeDetailsWithCards === "boolean"
+            ? nextSettings.multiSearchScrapeDetailsWithCards
+            : defaultSettings.multiSearchScrapeDetailsWithCards;
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;
@@ -825,6 +894,15 @@ export async function saveSettings(event: any, settings: any) {
                 legacyAuthorFavoriteScrapeAllPages,
                 defaultSettings.scraperAuthorFavoriteCacheResults,
             );
+        nextSettings.scraperScrapeDetailsWithCards = typeof nextSettings.scraperScrapeDetailsWithCards === "boolean"
+            ? nextSettings.scraperScrapeDetailsWithCards
+            : defaultSettings.scraperScrapeDetailsWithCards;
+        nextSettings.scraperHideBlacklistedTagCards = typeof nextSettings.scraperHideBlacklistedTagCards === "boolean"
+            ? nextSettings.scraperHideBlacklistedTagCards
+            : defaultSettings.scraperHideBlacklistedTagCards;
+        nextSettings.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
+            nextSettings.scraperBlacklistedTagsByScraper,
+        );
         delete (nextSettings as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
         nextSettings.shortcuts = normalizeShortcutSettings(nextSettings);
 

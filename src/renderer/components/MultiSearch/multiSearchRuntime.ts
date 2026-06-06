@@ -12,8 +12,10 @@ import {
 } from "@/shared/scraper";
 import {
   extractScraperSearchPageFromDocumentWithImageFallbacks,
+  enrichScraperSearchPageWithDetails,
   getScraperFeature,
   getScraperAuthorFeatureConfig,
+  getScraperDetailsFeatureConfig,
   getScraperHomepageFeatureConfig,
   getScraperSearchFeatureConfig,
   getScraperTagFeatureConfig,
@@ -27,6 +29,7 @@ import {
   resolveScraperSearchTargetUrl,
   resolveScraperAuthorTargetUrl,
   resolveScraperTagTargetUrl,
+  type ScraperDocumentFetcher,
   ScraperRuntimeSearchPageResult,
   throwIfScraperListingPaginationEnded,
 } from "@/renderer/utils/scraperRuntime";
@@ -47,6 +50,10 @@ export type PaceConfig = {
   concurrency: number;
   pageDelayMs: number;
   retryCount: number;
+};
+
+export type ScraperCardDetailsFetchOptions = {
+  scrapeDetailsWithCards?: boolean;
 };
 
 export const getPaceConfig = (paceMode: MultiSearchPaceMode): PaceConfig => (
@@ -169,12 +176,27 @@ export const getTagConfig = (scraper: ScraperRecord): ScraperTagFeatureConfig =>
   return tagConfig;
 };
 
+const enrichListingPageWithDetails = (
+  scraper: ScraperRecord,
+  page: ScraperRuntimeSearchPageResult,
+  fetchScraperDocument: ScraperDocumentFetcher,
+  options?: ScraperCardDetailsFetchOptions,
+): Promise<ScraperRuntimeSearchPageResult> => (
+  enrichScraperSearchPageWithDetails(page, {
+    enabled: options?.scrapeDetailsWithCards === true,
+    scraper,
+    detailsConfig: getScraperDetailsFeatureConfig(getScraperFeature(scraper, "details")),
+    fetchDocument: fetchScraperDocument,
+  })
+);
+
 const fetchSearchPage = async (
   scraper: ScraperRecord,
   searchConfig: ScraperSearchFeatureConfig,
   query: string,
   pageIndex: number,
   nextPageUrl?: string,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
   if (typeof fetchScraperDocument !== "function") {
@@ -213,10 +235,12 @@ const fetchSearchPage = async (
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
+  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
   }, async (request) => fetchScraperDocument(request));
+
+  return enrichListingPageWithDetails(scraper, page, async (request) => fetchScraperDocument(request), options);
 };
 
 export const fetchSearchPageWithRetry = async (
@@ -226,10 +250,11 @@ export const fetchSearchPageWithRetry = async (
   pageIndex: number,
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
   pageIndex,
   paceConfig,
-  () => fetchSearchPage(scraper, searchConfig, query, pageIndex, nextPageUrl),
+  () => fetchSearchPage(scraper, searchConfig, query, pageIndex, nextPageUrl, options),
   "Impossible de charger la page de recherche.",
 );
 
@@ -253,6 +278,7 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
       query: string,
       pageIndex: number,
     ) => ScraperRequestConfig | undefined;
+    scrapeDetailsWithCards?: boolean;
   },
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
@@ -292,10 +318,12 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
 
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, config, {
+  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, config, {
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
   }, async (request) => fetchScraperDocument(request));
+
+  return enrichListingPageWithDetails(scraper, page, async (request) => fetchScraperDocument(request), options);
 };
 
 const fetchAuthorPage = async (
@@ -305,6 +333,7 @@ const fetchAuthorPage = async (
   pageIndex: number,
   nextPageUrl?: string,
   templateContext?: ScraperTemplateContext | null,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
   scraper,
   authorConfig,
@@ -323,6 +352,7 @@ const fetchAuthorPage = async (
         templateContext: templateContext ?? undefined,
       },
     ),
+    scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
   },
 );
 
@@ -334,10 +364,11 @@ export const fetchAuthorPageWithRetry = async (
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
   templateContext?: ScraperTemplateContext | null,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
   pageIndex,
   paceConfig,
-  () => fetchAuthorPage(scraper, authorConfig, query, pageIndex, nextPageUrl, templateContext),
+  () => fetchAuthorPage(scraper, authorConfig, query, pageIndex, nextPageUrl, templateContext, options),
   "Impossible de charger la page auteur.",
 );
 
@@ -346,6 +377,7 @@ const fetchHomepagePage = async (
   homepageConfig: ScraperHomepageFeatureConfig,
   pageIndex: number,
   nextPageUrl?: string,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
   scraper,
   homepageConfig,
@@ -364,6 +396,7 @@ const fetchHomepagePage = async (
       config,
       { pageIndex: targetPageIndex },
     ),
+    scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
   },
 );
 
@@ -373,10 +406,11 @@ export const fetchHomepagePageWithRetry = async (
   pageIndex: number,
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
   pageIndex,
   paceConfig,
-  () => fetchHomepagePage(scraper, homepageConfig, pageIndex, nextPageUrl),
+  () => fetchHomepagePage(scraper, homepageConfig, pageIndex, nextPageUrl, options),
   "Impossible de charger la page homepage.",
 );
 
@@ -386,6 +420,7 @@ const fetchTagPage = async (
   query: string,
   pageIndex: number,
   nextPageUrl?: string,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchListingPage(
   scraper,
   tagConfig,
@@ -401,6 +436,7 @@ const fetchTagPage = async (
       value,
       { pageIndex: targetPageIndex },
     ),
+    scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
   },
 );
 
@@ -411,10 +447,11 @@ export const fetchTagPageWithRetry = async (
   pageIndex: number,
   nextPageUrl: string | undefined,
   paceConfig: PaceConfig,
+  options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => fetchPageWithRetry(
   pageIndex,
   paceConfig,
-  () => fetchTagPage(scraper, tagConfig, query, pageIndex, nextPageUrl),
+  () => fetchTagPage(scraper, tagConfig, query, pageIndex, nextPageUrl, options),
   "Impossible de charger la page tag.",
 );
 
@@ -465,6 +502,33 @@ export const buildSourceResultsFromItems = (
     items: [result],
   }, getPageIndex(result, index), getSearchTerm(result, index)))
 );
+
+export const enrichSourceResultsWithCardDetails = async (
+  scraper: ScraperRecord,
+  sources: MultiSearchSourceResult[],
+  options?: ScraperCardDetailsFetchOptions,
+): Promise<MultiSearchSourceResult[]> => {
+  if (options?.scrapeDetailsWithCards !== true || sources.length === 0) {
+    return sources;
+  }
+
+  const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+  if (typeof fetchScraperDocument !== "function") {
+    throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
+  }
+
+  const enrichedPage = await enrichListingPageWithDetails(scraper, {
+    currentPageUrl: "",
+    items: sources.map((source) => source.result),
+  }, async (request) => fetchScraperDocument(request), options);
+
+  return buildSourceResultsFromItems(
+    scraper,
+    enrichedPage.items,
+    (_result, index) => sources[index]?.pageIndex ?? 0,
+    (_result, index) => sources[index]?.searchTerm ?? "",
+  );
+};
 
 const resolveHasNextListingPage = (
   hasTemplatePaging: boolean,

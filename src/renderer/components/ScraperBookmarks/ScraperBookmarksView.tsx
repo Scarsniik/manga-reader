@@ -51,11 +51,16 @@ import {
   getScraperPagesFeatureConfig,
   isScraperFeatureConfigured,
 } from '@/renderer/utils/scraperRuntime';
+import {
+  getBlacklistedScraperTags,
+  getScraperTagBlacklistEntries,
+} from '@/renderer/utils/scraperTagBlacklist';
 import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useParams } from '@/renderer/hooks/useParams';
+import '@/renderer/components/ScraperBrowser/style.scss';
 import './style.scss';
 
 type Props = {
@@ -155,7 +160,7 @@ export default function ScraperBookmarksView({
     () => buildBookmarkLanguageFilterCodes(bookmarks, scrapersById),
     [bookmarks, scrapersById],
   );
-  const displayedBookmarks = useMemo(
+  const filteredBookmarks = useMemo(
     () => filterAndSortScraperBookmarks({
       bookmarks,
       scrapersById,
@@ -171,6 +176,24 @@ export default function ScraperBookmarksView({
       viewHistoryRecordsById,
     ],
   );
+  const hideBlacklistedBookmarkCards = params?.scraperHideBlacklistedTagCards === true;
+  const displayedBookmarks = useMemo(() => {
+    if (!hideBlacklistedBookmarkCards) {
+      return filteredBookmarks;
+    }
+
+    return filteredBookmarks.filter((bookmark) => (
+      getBlacklistedScraperTags(
+        getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, bookmark.scraperId),
+        bookmark.tags,
+      ).length === 0
+    ));
+  }, [
+    filteredBookmarks,
+    hideBlacklistedBookmarkCards,
+    params?.scraperBlacklistedTagsByScraper,
+  ]);
+  const hiddenBlacklistedBookmarkCount = filteredBookmarks.length - displayedBookmarks.length;
   const surpriseBookmarkPool = useMemo(() => (
     displayedBookmarks.filter((bookmark) => (
       Boolean(scrapersById.get(bookmark.scraperId))
@@ -832,6 +855,10 @@ export default function ScraperBookmarksView({
             ? 'Aucun bookmark n\'a encore ete enregistre pour ce scrapper.'
             : 'Aucun bookmark scraper n\'a encore ete enregistre.'}
         </div>
+      ) : displayedBookmarks.length === 0 && hideBlacklistedBookmarkCards && hiddenBlacklistedBookmarkCount > 0 ? (
+        <div className="scraper-browser__message is-warning">
+          Tous les bookmarks visibles sont masques par la blacklist.
+        </div>
       ) : displayedBookmarks.length === 0 ? (
         <div className="scraper-browser__message is-warning">
           Aucun bookmark ne correspond aux filtres actuels.
@@ -851,6 +878,10 @@ export default function ScraperBookmarksView({
                 readAction={renderBookmarkReadAction(bookmark)}
                 addToLibraryAction={renderBookmarkAddToLibraryAction(bookmark, scraper)}
                 downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
+                tagBlacklistEntries={getScraperTagBlacklistEntries(
+                  params?.scraperBlacklistedTagsByScraper,
+                  bookmark.scraperId,
+                )}
                 onOpenBookmark={handleOpenBookmark}
                 onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}
                 onViewed={handleBookmarkViewed}

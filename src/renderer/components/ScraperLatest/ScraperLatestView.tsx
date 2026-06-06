@@ -13,8 +13,10 @@ import { useScraperAuthorFavorites } from "@/renderer/stores/scraperAuthorFavori
 import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { enrichSourceResultsWithCardDetails } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import { loadScraperViewHistory } from "@/renderer/stores/scraperViewHistory";
+import { getScraperTagBlacklistEntries } from "@/renderer/utils/scraperTagBlacklist";
 import useScraperLatestRuns, {
   type ScraperLatestSearchMode,
 } from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
@@ -62,6 +64,17 @@ const buildScrapersById = (scrapers: ScraperRecord[]): Map<string, ScraperRecord
 
 const buildAuthorSourceKey = (source: ScraperAuthorFavoriteSource): string => (
   `${source.scraperId}::${source.authorUrl}`
+);
+
+const buildLatestSourceEnrichmentKey = (source: MultiSearchSourceResult): string => [
+  source.scraper.id,
+  source.pageIndex,
+  source.searchTerm,
+  source.result.detailUrl || source.result.authorUrl || source.result.title,
+].join("::");
+
+const sourceHasTags = (source: MultiSearchSourceResult): boolean => (
+  Boolean(source.result.tags?.length)
 );
 
 const buildCombinedAuthorFavorite = (
@@ -333,6 +346,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     initialPageCount: authorPageCount,
     cacheResults: false,
     concurrency: scraperLatestConcurrency,
+    scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
   });
   const scraperRuns = useScraperLatestRuns();
   const authorSources = React.useMemo(
@@ -343,7 +357,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
     () => scraperRuns.runs.flatMap((run) => [...run.results].reverse()),
     [scraperRuns.runs],
   );
-  const activeSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
+  const baseActiveSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
+  const [blacklistEnrichedSourcesByKey, setBlacklistEnrichedSourcesByKey] = React.useState<
+    Map<string, MultiSearchSourceResult>
+  >(() => new Map());
+  const blacklistEnrichmentAttemptedKeysRef = React.useRef<Set<string>>(new Set());
+  const activeSources = React.useMemo(
+    () => baseActiveSources.map((source) => (
+      blacklistEnrichedSourcesByKey.get(buildLatestSourceEnrichmentKey(source)) ?? source
+    )),
+    [baseActiveSources, blacklistEnrichedSourcesByKey],
+  );
   const selectedFavoriteId = activeTab === "authors"
     ? [
       combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`,
@@ -356,6 +380,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
       scraperIncludedScrapersKey || "all-scrapers",
       scraperIncludedTagFavoritesKey || "no-tag-favorites",
     ].join("-");
+
+  React.useEffect(() => {
+    blacklistEnrichmentAttemptedKeysRef.current.clear();
+    setBlacklistEnrichedSourcesByKey(new Map());
+  }, [params?.scraperBlacklistedTagsByScraper, selectedFavoriteId]);
+
   const sourceResults = useScraperSourceFavoriteResults({
     selectedFavoriteId,
     trackedSources: activeSources,
@@ -373,6 +403,99 @@ export default function ScraperLatestView({ scrapers }: Props) {
   React.useEffect(() => {
     viewHistoryRecordsByIdRef.current = sourceResults.viewHistoryRecordsById;
   }, [sourceResults.viewHistoryRecordsById]);
+
+  React.useEffect(() => {
+    if (params?.scraperScrapeDetailsWithCards !== true) {
+      return undefined;
+    }
+
+    const blacklist = params.scraperBlacklistedTagsByScraper;
+    if (!blacklist || Object.keys(blacklist).length === 0) {
+      return undefined;
+    }
+
+    const sourcesToEnrich = baseActiveSources.filter((source) => {
+      if (
+        sourceHasTags(source)
+        || !source.result.detailUrl
+        || !getScraperTagBlacklistEntries(blacklist, source.scraper.id).length
+      ) {
+        return false;
+      }
+
+      const key = buildLatestSourceEnrichmentKey(source);
+      if (
+        blacklistEnrichmentAttemptedKeysRef.current.has(key)
+        || blacklistEnrichedSourcesByKey.has(key)
+      ) {
+        return false;
+      }
+
+      blacklistEnrichmentAttemptedKeysRef.current.add(key);
+      return true;
+    });
+
+    if (!sourcesToEnrich.length) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const sourcesByScraperId = sourcesToEnrich.reduce<Map<string, MultiSearchSourceResult[]>>((groups, source) => {
+      const group = groups.get(source.scraper.id) ?? [];
+      group.push(source);
+      groups.set(source.scraper.id, group);
+      return groups;
+    }, new Map());
+
+    void Promise.all(Array.from(sourcesByScraperId.values()).map(async (sources) => {
+      const scraper = sources[0]?.scraper;
+      if (!scraper) {
+        return [];
+      }
+
+      return enrichSourceResultsWithCardDetails(scraper, sources, {
+        scrapeDetailsWithCards: true,
+      });
+    }))
+      .then((groups) => {
+        if (cancelled) {
+          return;
+        }
+
+        const enrichedSources = groups.flat();
+        if (!enrichedSources.length) {
+          return;
+        }
+
+        setBlacklistEnrichedSourcesByKey((currentSources) => {
+          let changed = false;
+          const nextSources = new Map(currentSources);
+
+          enrichedSources.forEach((source) => {
+            if (!sourceHasTags(source)) {
+              return;
+            }
+
+            nextSources.set(buildLatestSourceEnrichmentKey(source), source);
+            changed = true;
+          });
+
+          return changed ? nextSources : currentSources;
+        });
+      })
+      .catch((error) => {
+        console.warn("Failed to enrich latest sources for tag blacklist", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    baseActiveSources,
+    blacklistEnrichedSourcesByKey,
+    params?.scraperBlacklistedTagsByScraper,
+    params?.scraperScrapeDetailsWithCards,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -418,12 +541,14 @@ export default function ScraperLatestView({ scrapers }: Props) {
         languageRejectLimit: scraperLanguageRejectLimit,
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
+        scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
       },
     );
   }, [
     activeTab,
     latestScrapersKey,
     latestTagFavoritesKey,
+    params?.scraperScrapeDetailsWithCards,
     scraperIncludedLanguageCodes,
     scraperIncludedLanguagesKey,
     scraperIncludedScraperIds,
@@ -783,6 +908,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
         sourceProgressIndex={sourceResults.sourceProgressIndex}
         viewHistoryRecordsById={sourceResults.viewHistoryRecordsById}
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
+        tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         languageFilterModes={sourceResults.languageFilterModes}
         onReload={handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}

@@ -342,6 +342,38 @@
   opacity: 0.65;
 }
 
+.scraper-browser__tag-blacklist {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(239, 83, 80, 0.42);
+  border-radius: 8px;
+  background: rgba(239, 83, 80, 0.12);
+  color: #ffb3ad;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.scraper-browser__tag-blacklist:hover,
+.scraper-browser__tag-blacklist:focus-visible,
+.scraper-browser__tag-blacklist.is-active {
+  border-color: rgba(239, 83, 80, 0.72);
+  background: rgba(239, 83, 80, 0.22);
+  color: #ffe2df;
+}
+
+.scraper-browser__tag-blacklist:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(239, 83, 80, 0.18);
+}
+
+.scraper-browser__tag-blacklist:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .scraper-browser__results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));

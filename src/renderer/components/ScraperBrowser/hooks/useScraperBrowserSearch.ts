@@ -21,6 +21,7 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   buildScraperListingPaginationEndPage,
+  enrichScraperSearchPageWithDetails,
   extractScraperSearchPageFromDocumentWithImageFallbacks,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
@@ -62,6 +63,7 @@ type FetchListingPageOptions = {
 
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
+  scrapeDetailsWithCards: boolean;
   routeSyncEnabled: boolean;
   locationPathname: string;
   locationSearch: string;
@@ -126,6 +128,29 @@ const getListingModeLabel = (mode: ScraperListingMode): string => (
         ? 'homepage'
         : 'recherche'
 );
+
+const formatDuration = (durationMs: number): string => (
+  durationMs >= 1000
+    ? `${(durationMs / 1000).toFixed(1)} s`
+    : `${Math.max(0, Math.round(durationMs))} ms`
+);
+
+const buildCardDetailsScrapeMessage = (page: ScraperRuntimeSearchPageResult): string | null => {
+  const stats = page.detailsScrape;
+  if (!stats) {
+    return null;
+  }
+
+  const suffixParts = [
+    stats.failed ? `${stats.failed} echec(s)` : "",
+    stats.skipped ? `${stats.skipped} sans lien fiche` : "",
+  ].filter(Boolean);
+
+  return [
+    `POC fiches cards : ${stats.succeeded}/${stats.attempted} enrichie(s) en ${formatDuration(stats.durationMs)}`,
+    suffixParts.length ? `(${suffixParts.join(", ")})` : "",
+  ].filter(Boolean).join(" ");
+};
 
 const getRouteStateForNavigation = (options: {
   routeSearch: string;
@@ -229,6 +254,7 @@ const getRouteStateForNavigation = (options: {
 
 export function useScraperBrowserSearch({
   scraper,
+  scrapeDetailsWithCards,
   routeSyncEnabled,
   locationPathname,
   locationSearch,
@@ -321,11 +347,18 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, homepageConfig, {
+    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, homepageConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
     }, async (request) => fetchScraperDocument(request));
-  }, [homepageConfig, scraper.baseUrl]);
+
+    return enrichScraperSearchPageWithDetails(page, {
+      enabled: scrapeDetailsWithCards,
+      scraper,
+      detailsConfig,
+      fetchDocument: async (request) => fetchScraperDocument(request),
+    });
+  }, [detailsConfig, homepageConfig, scrapeDetailsWithCards, scraper]);
 
   const fetchSearchPage = useCallback(async (
     targetUrl: string,
@@ -369,11 +402,18 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
+    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
     }, async (request) => fetchScraperDocument(request));
-  }, [scraper.baseUrl, searchConfig]);
+
+    return enrichScraperSearchPageWithDetails(page, {
+      enabled: scrapeDetailsWithCards,
+      scraper,
+      detailsConfig,
+      fetchDocument: async (request) => fetchScraperDocument(request),
+    });
+  }, [detailsConfig, scraper, scrapeDetailsWithCards, searchConfig]);
 
   const fetchAuthorPage = useCallback(async (
     targetUrl: string,
@@ -410,11 +450,18 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
+    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
     }, async (request) => fetchScraperDocument(request));
-  }, [authorConfig, scraper.baseUrl]);
+
+    return enrichScraperSearchPageWithDetails(page, {
+      enabled: scrapeDetailsWithCards,
+      scraper,
+      detailsConfig,
+      fetchDocument: async (request) => fetchScraperDocument(request),
+    });
+  }, [authorConfig, detailsConfig, scraper, scrapeDetailsWithCards]);
 
   const fetchTagPage = useCallback(async (
     targetUrl: string,
@@ -451,11 +498,18 @@ export function useScraperBrowserSearch({
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    return extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, tagConfig, {
+    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, tagConfig, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
     }, async (request) => fetchScraperDocument(request));
-  }, [scraper.baseUrl, tagConfig]);
+
+    return enrichScraperSearchPageWithDetails(page, {
+      enabled: scrapeDetailsWithCards,
+      scraper,
+      detailsConfig,
+      fetchDocument: async (request) => fetchScraperDocument(request),
+    });
+  }, [detailsConfig, scraper, scrapeDetailsWithCards, tagConfig]);
 
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
     listingMode === 'author'
@@ -663,7 +717,7 @@ export function useScraperBrowserSearch({
       setListingVisitedPageUrls(extractedListingState.visitedPageUrls);
       setListingPageIndex(extractedListingState.pageIndex);
       setListingResults(extractedResults);
-      setRuntimeMessage(null);
+      setRuntimeMessage(buildCardDetailsScrapeMessage(extractedPage));
     } catch (error) {
       if (canCommit()) {
         setRuntimeError(error instanceof Error ? error.message : 'Echec temporaire du chargement.');
@@ -795,12 +849,15 @@ export function useScraperBrowserSearch({
         return [...trimmedHistory, nextPage.currentPageUrl];
       });
       setListingPageIndex((previous) => previous + 1);
-      setRuntimeMessage(buildSearchPageLoadedMessage(
-        nextPageIndex,
-        usesTemplatePaging,
-        Boolean(nextPage.nextPageUrl),
-        getListingModeLabel(mode),
-      ));
+      setRuntimeMessage([
+        buildSearchPageLoadedMessage(
+          nextPageIndex,
+          usesTemplatePaging,
+          Boolean(nextPage.nextPageUrl),
+          getListingModeLabel(mode),
+        ),
+        buildCardDetailsScrapeMessage(nextPage),
+      ].filter(Boolean).join(" "));
       scrollToBrowserTop();
     } catch (error) {
       if (isScraperListingPaginationEndError(error)) {
@@ -875,7 +932,10 @@ export function useScraperBrowserSearch({
         nextHistory[listingPageIndex - 1] = previousPage.currentPageUrl;
         return nextHistory;
       });
-      setRuntimeMessage(`Retour a la page ${listingPageIndex}.`);
+      setRuntimeMessage([
+        `Retour a la page ${listingPageIndex}.`,
+        buildCardDetailsScrapeMessage(previousPage),
+      ].filter(Boolean).join(" "));
       scrollToBrowserTop();
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de revenir a la page precedente.');

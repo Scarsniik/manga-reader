@@ -1,6 +1,6 @@
 {
   "name": "scaramanga",
-  "version": "0.9.13",
+  "version": "0.9.14",
   "description": "A lightweight desktop application for learning Japanese through manga.",
   "author": "",
   "repository": {
@@ -25,6 +25,7 @@
     "package:app:dir": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win dir --publish never",
     "package:win-unpacked": "npm run package:app:dir",
     "dev:electron": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron.ps1",
+    "electron:dev": "npm run dev:electron",
     "dev:electron:ocr-test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron-ocr-test.ps1",
     "dev:electron:ocr-test:fresh": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-electron-ocr-test.ps1 -ResetRuntimeState",
     "prepare:ocr-bundle": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ocr-bundle.ps1",

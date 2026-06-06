@@ -26,6 +26,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import {
   buildSearchResultViewHistoryIdentity,
   sortByScraperViewHistoryNewState,
@@ -40,8 +41,11 @@ type Props = {
   authorTitle: string;
   authorMultiSearchQuery: string;
   initialPageCount: number;
+  scrapeDetailsWithCards: boolean;
   cover?: string;
   templateContext?: ScraperTemplateContext | null;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   favoriteAction?: React.ReactNode;
   onOpenMultiSearch: () => void;
   onSwitchToPagedView: () => void;
@@ -84,8 +88,11 @@ export default function ScraperAuthorCombinedView({
   authorTitle,
   authorMultiSearchQuery,
   initialPageCount,
+  scrapeDetailsWithCards,
   cover,
   templateContext,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   favoriteAction = null,
   onOpenMultiSearch,
   onSwitchToPagedView,
@@ -118,6 +125,7 @@ export default function ScraperAuthorCombinedView({
     {
       initialPageCount,
       cacheResults: false,
+      scrapeDetailsWithCards,
     },
   );
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
@@ -229,6 +237,8 @@ export default function ScraperAuthorCombinedView({
       sourceProgressIndex={sourceProgressIndex}
       viewHistoryRecordsById={viewHistoryRecordsById}
       newViewHistoryIds={newSourceHistoryIds}
+      tagBlacklistByScraper={tagBlacklistByScraper}
+      hideBlacklistedCards={hideBlacklistedCards}
       sourceSectionTitle="Page auteur"
       loadingMessage="Chargement de la vue auteur combinee..."
       viewModeAction={(

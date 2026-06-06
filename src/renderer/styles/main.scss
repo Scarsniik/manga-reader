@@ -37,6 +37,30 @@ body,
     overflow: auto;
 }
 
+.app-route-loading {
+    display: flex;
+    min-height: 100%;
+    align-items: center;
+    justify-content: center;
+    color: #b9c4d0;
+}
+
+.app-route-loading::before {
+    content: "";
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(185, 196, 208, 0.22);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: app-route-loading-spin 0.8s linear infinite;
+}
+
+@keyframes app-route-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 h1, h2, h3 {
     color: #fff;
 }

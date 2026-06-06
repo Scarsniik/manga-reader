@@ -6,6 +6,10 @@ import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared
 import { DetailsCardIcon, ImageExpandIcon } from '@/renderer/components/icons';
 import { buildSearchResultViewHistoryIdentity } from '@/renderer/utils/scraperViewHistory';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
+import {
+  getBlacklistedScraperTags,
+  type ScraperTagBlacklistEntry,
+} from '@/renderer/utils/scraperTagBlacklist';
 
 type Props = {
   scraperId: string;
@@ -16,6 +20,7 @@ type Props = {
   canOpenAuthorResult: boolean;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistEntries?: ScraperTagBlacklistEntry[];
   viewHistoryRecordingDisabled?: boolean;
   readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
@@ -39,6 +44,7 @@ export default function ScraperSearchResultCard({
   canOpenAuthorResult,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistEntries = [],
   viewHistoryRecordingDisabled = false,
   readAction,
   bookmarkAction,
@@ -55,6 +61,11 @@ export default function ScraperSearchResultCard({
   const actions: ScraperCardAction[] = [];
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
   const hasLanguageCodes = Boolean(result.languageCodes?.length);
+  const blacklistedTagMatches = React.useMemo(
+    () => getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls),
+    [result.tagUrls, result.tags, tagBlacklistEntries],
+  );
+  const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const viewHistoryIdentities = React.useMemo(
     () => [buildSearchResultViewHistoryIdentity(scraperId, result)],
     [result, scraperId],
@@ -131,7 +142,7 @@ export default function ScraperSearchResultCard({
           coverUrl={result.thumbnailUrl}
           coverAlt={result.title}
           summary={result.summary}
-          metadata={pageCountLabel || hasLanguageCodes ? (
+          metadata={pageCountLabel || hasLanguageCodes || hasBlacklistedTags ? (
             <div className="scraper-card__metadata">
               {hasLanguageCodes ? (
                 <span>
@@ -139,10 +150,22 @@ export default function ScraperSearchResultCard({
                 </span>
               ) : null}
               {pageCountLabel ? <span>{pageCountLabel}</span> : null}
+              {blacklistedTagMatches.map((match, index) => (
+                <span
+                  key={`${match.entry.value}-${match.tagUrl || match.tag}-${index}`}
+                  className="is-blacklisted-tag"
+                  title="Tag blackliste pour ce scraper"
+                >
+                  {match.tag}
+                </span>
+              ))}
             </div>
           ) : undefined}
           actions={actions}
-          className={historyClassName}
+          className={[
+            historyClassName,
+            hasBlacklistedTags ? 'is-tag-blacklisted' : '',
+          ].join(' ').trim()}
           isActionable={canOpenResult}
           onClick={canOpenResult ? () => onOpenResult(result) : undefined}
           onKeyDown={canOpenResult ? (event) => onResultKeyDown(event, result) : undefined}

@@ -16,6 +16,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
+import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 
 type Props = {
   favorite: ScraperAuthorFavoriteRecord;
@@ -37,6 +38,8 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  hideBlacklistedCards?: boolean;
   onBack: () => void;
   onReload: () => void;
   onOpenMultiSearch: () => void;
@@ -84,6 +87,8 @@ export default function ScraperAuthorFavoriteResults({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistByScraper,
+  hideBlacklistedCards = false,
   onBack,
   onReload,
   onOpenMultiSearch,
@@ -123,6 +128,8 @@ export default function ScraperAuthorFavoriteResults({
       sourceProgressIndex={sourceProgressIndex}
       viewHistoryRecordsById={viewHistoryRecordsById}
       newViewHistoryIds={newViewHistoryIds}
+      tagBlacklistByScraper={tagBlacklistByScraper}
+      hideBlacklistedCards={hideBlacklistedCards}
       backLabel="Retour aux auteurs favoris"
       onBack={onBack}
       onReload={onReload}

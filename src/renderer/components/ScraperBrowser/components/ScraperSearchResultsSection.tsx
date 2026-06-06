@@ -4,6 +4,10 @@ import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime'
 import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared/scraper';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
 import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultCard';
+import {
+  getBlacklistedScraperTags,
+  type ScraperTagBlacklistEntry,
+} from '@/renderer/utils/scraperTagBlacklist';
 
 type Props = {
   scraperId: string;
@@ -25,6 +29,8 @@ type Props = {
   canOpenSearchResultsAsAuthor: boolean;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  tagBlacklistEntries?: ScraperTagBlacklistEntry[];
+  hideBlacklistedCards?: boolean;
   renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderAddToLibraryAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
@@ -61,6 +67,8 @@ export default function ScraperSearchResultsSection({
   canOpenSearchResultsAsAuthor,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  tagBlacklistEntries = [],
+  hideBlacklistedCards = false,
   renderReadAction,
   renderBookmarkAction,
   renderAddToLibraryAction,
@@ -76,6 +84,16 @@ export default function ScraperSearchResultsSection({
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
 }: Props) {
+  const displayedSearchResults = React.useMemo(() => {
+    if (!hideBlacklistedCards) {
+      return visibleSearchResults;
+    }
+
+    return visibleSearchResults.filter((result) => (
+      getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length === 0
+    ));
+  }, [hideBlacklistedCards, tagBlacklistEntries, visibleSearchResults]);
+
   if (!visibleSearchResults.length && !backLabel) {
     return null;
   }
@@ -147,9 +165,9 @@ export default function ScraperSearchResultsSection({
               Page {searchPageIndex + 1}
             </span>
           ) : null}
-          {searchResultsCount > visibleSearchResults.length ? (
+          {searchResultsCount > displayedSearchResults.length ? (
             <span className="scraper-browser__results-count">
-              {visibleSearchResults.length} / {searchResultsCount}
+              {displayedSearchResults.length} / {searchResultsCount}
             </span>
           ) : null}
         </div>
@@ -167,7 +185,7 @@ export default function ScraperSearchResultsSection({
       ) : null}
 
       <div className="scraper-browser__results-grid">
-        {visibleSearchResults.map((result) => {
+        {displayedSearchResults.map((result) => {
           const canOpenResult = Boolean(result.detailUrl && canOpenSearchResultsAsDetails);
           const canOpenAuthorResult = Boolean(result.authorUrl && canOpenSearchResultsAsAuthor);
 
@@ -182,6 +200,7 @@ export default function ScraperSearchResultsSection({
               canOpenAuthorResult={canOpenAuthorResult}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
+              tagBlacklistEntries={tagBlacklistEntries}
               viewHistoryRecordingDisabled={loading}
               readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
@@ -198,6 +217,9 @@ export default function ScraperSearchResultsSection({
           );
         })}
       </div>
+      {!displayedSearchResults.length && visibleSearchResults.length ? (
+        <div className="scraper-browser__message">Tous les resultats visibles sont masques par la blacklist.</div>
+      ) : null}
 
       {shouldShowSearchPagination ? (
         <ScraperSearchPagination

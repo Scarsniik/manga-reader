@@ -34,6 +34,7 @@ type RunSearchOptions = {
   scrapers: ScraperRecord[];
   maxPages: MultiSearchPageLimit;
   paceMode: MultiSearchPaceMode;
+  scrapeDetailsWithCards: boolean;
 };
 
 export default function useMultiSearch() {
@@ -44,6 +45,7 @@ export default function useMultiSearch() {
   const searchTokenRef = useRef(0);
   const cancelledScraperIdsRef = useRef(new Set<string>());
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
+  const lastScrapeDetailsWithCardsRef = useRef(false);
   const {
     clearRunUpdates,
     flushRunUpdates,
@@ -80,6 +82,7 @@ export default function useMultiSearch() {
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
+    lastScrapeDetailsWithCardsRef.current = false;
     setRuns(restoredRuns.map((run) => (
       isMultiSearchRunActive(run) ? cancelMultiSearchRun(run) : run
     )));
@@ -120,6 +123,9 @@ export default function useMultiSearch() {
         pageIndex,
         termRun.nextPageUrl,
         paceConfig,
+        {
+          scrapeDetailsWithCards: lastScrapeDetailsWithCardsRef.current,
+        },
       );
       if (isRunCancelled(token, run.scraper.id)) {
         return null;
@@ -237,6 +243,7 @@ export default function useMultiSearch() {
     scrapers,
     maxPages,
     paceMode,
+    scrapeDetailsWithCards,
   }: RunSearchOptions) => {
     const searchTerms = parseMultiSearchTerms(query);
     if (!searchTerms.length) {
@@ -255,6 +262,7 @@ export default function useMultiSearch() {
     searchTokenRef.current = token;
     cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
+    lastScrapeDetailsWithCardsRef.current = scrapeDetailsWithCards;
     clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
     const pageLimit = maxPages === null ? null : Math.max(1, maxPages);

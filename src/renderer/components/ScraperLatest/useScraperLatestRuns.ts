@@ -13,6 +13,7 @@ import {
 } from "@/shared/scraper";
 import {
   buildSourceResults,
+  enrichSourceResultsWithCardDetails,
   fetchHomepagePageWithRetry,
   fetchSearchPageWithRetry,
   fetchTagPageWithRetry,
@@ -88,6 +89,7 @@ type StartOptions = {
   languageRejectLimit?: number;
   includedScraperIds?: string[];
   tagFavorites?: ScraperTagFavoriteRecord[];
+  scrapeDetailsWithCards?: boolean;
 };
 
 type ProcessedLatestPage = {
@@ -543,6 +545,9 @@ const fetchLatestPage = async (
       pageIndex,
       nextPageUrl,
       paceConfig,
+      {
+        scrapeDetailsWithCards: false,
+      },
     );
 
     return {
@@ -561,6 +566,9 @@ const fetchLatestPage = async (
       pageIndex,
       nextPageUrl,
       paceConfig,
+      {
+        scrapeDetailsWithCards: false,
+      },
     );
 
     return {
@@ -577,6 +585,9 @@ const fetchLatestPage = async (
     pageIndex,
     nextPageUrl,
     paceConfig,
+    {
+      scrapeDetailsWithCards: false,
+    },
   );
 
   return {
@@ -629,6 +640,7 @@ export default function useScraperLatestRuns() {
     loadedSourceKeys: Set<string>,
     token: number,
     nextPageUrlOverride?: string,
+    scrapeDetailsWithCards = false,
   ): Promise<ProcessedLatestPage> => {
     patchRun(token, currentRun.key, (run) => ({
       ...run,
@@ -657,7 +669,40 @@ export default function useScraperLatestRuns() {
     const includedPageResults = newPageResults.filter((source) => (
       sourceMatchesIncludedLanguages(source, includedLanguageCodes)
     ));
-    const unseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
+    const rawUnseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
+    const remainingResultSlots = Math.max(0, resultLimit - currentRun.results.length);
+    let unseenResults = rawUnseenResults;
+
+    if (scrapeDetailsWithCards && remainingResultSlots > 0 && rawUnseenResults.length > 0) {
+      const enrichedUnseenResults: MultiSearchSourceResult[] = [];
+      let nextCandidateIndex = 0;
+
+      while (
+        nextCandidateIndex < rawUnseenResults.length
+        && enrichedUnseenResults.length < remainingResultSlots
+      ) {
+        const batchSize = remainingResultSlots - enrichedUnseenResults.length;
+        const candidateBatch = rawUnseenResults.slice(nextCandidateIndex, nextCandidateIndex + batchSize);
+        nextCandidateIndex += candidateBatch.length;
+
+        const enrichedBatch = await enrichSourceResultsWithJapaneseRomanization(
+          await enrichSourceResultsWithCardDetails(currentRun.scraper, candidateBatch, {
+            scrapeDetailsWithCards: true,
+          }),
+        );
+        const acceptedBatch = enrichedBatch.filter((source) => (
+          sourceMatchesIncludedLanguages(source, includedLanguageCodes)
+          && isUnseenSource(source, recordsById)
+        ));
+
+        enrichedUnseenResults.push(
+          ...acceptedBatch.slice(0, remainingResultSlots - enrichedUnseenResults.length),
+        );
+      }
+
+      unseenResults = enrichedUnseenResults;
+    }
+
     const nextResults = [...currentRun.results, ...unseenResults].slice(0, resultLimit);
     const hasOnlyDuplicateResults = pageResults.length > 0 && newPageResults.length === 0;
     const checkpointSource = unseenResults[unseenResults.length - 1];
@@ -722,6 +767,7 @@ export default function useScraperLatestRuns() {
     token: number,
     deepPageLimit: number,
     languageRejectLimit: number,
+    scrapeDetailsWithCards = false,
   ): Promise<ScraperLatestRun> => {
     const checkpoint = currentRun.checkpoint;
     if (!checkpoint || token !== tokenRef.current) {
@@ -756,6 +802,7 @@ export default function useScraperLatestRuns() {
         loadedSourceKeys,
         token,
         pageUrl,
+        scrapeDetailsWithCards,
       );
 
       run = {
@@ -884,6 +931,7 @@ export default function useScraperLatestRuns() {
     quickConsecutiveSeenStopThreshold = DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     deepPageLimit = 0,
     languageRejectLimit = DEFAULT_LANGUAGE_REJECT_LIMIT,
+    scrapeDetailsWithCards = false,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
     let quickConsecutiveSeenResultCount = 0;
@@ -911,6 +959,8 @@ export default function useScraperLatestRuns() {
           includedLanguageCodes,
           loadedSourceKeys,
           token,
+          undefined,
+          scrapeDetailsWithCards,
         );
         run = processedPage.run;
 
@@ -988,6 +1038,7 @@ export default function useScraperLatestRuns() {
                 token,
                 deepPageLimit,
                 languageRejectLimit,
+                scrapeDetailsWithCards,
               );
               return run;
             }
@@ -1073,6 +1124,7 @@ export default function useScraperLatestRuns() {
     const includedSourceCount = includedScrapers.length + includedTagFavoriteSources.length;
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
+    const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
     const quickConsecutiveSeenStopThreshold = normalizeQuickConsecutiveSeenStopThreshold(
       options.quickConsecutiveSeenStopThreshold,
     );
@@ -1172,6 +1224,7 @@ export default function useScraperLatestRuns() {
             quickConsecutiveSeenStopThreshold,
             deepPageLimit,
             languageRejectLimit,
+            scrapeDetailsWithCards,
           );
         }),
         concurrency,

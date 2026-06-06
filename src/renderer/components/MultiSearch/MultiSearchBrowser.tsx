@@ -633,6 +633,7 @@ export default function MultiSearchBrowser({
       scrapers: selectedScrapers,
       maxPages: getDepthPages(depthMode, advancedPages),
       paceMode,
+      scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
     });
 
     if (searchTerms.length && selectedScrapers.length) {
@@ -1023,6 +1024,8 @@ export default function MultiSearchBrowser({
         sourceProgressIndex={sourceProgressIndex}
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
+        tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         viewHistoryRecordingDisabled={isSearching}
         showUnseenFirst={showUnseenFirst}
         isExportingJson={isExportingJson}

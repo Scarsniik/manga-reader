@@ -15,6 +15,10 @@ import {
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
+import {
+  findScraperTagBlacklistEntry,
+  type ScraperTagBlacklistEntry,
+} from '@/renderer/utils/scraperTagBlacklist';
 
 const MIDDLE_BUTTON = 1;
 const POTENTIAL_MATCH_WARNING_DETAIL_LIMIT = 4;
@@ -56,6 +60,7 @@ type Props = {
   scraperId: string;
   bookmarkExcludedFields: ScraperBookmarkMetadataField[];
   detailsResult: ScraperRuntimeDetailsResult | null;
+  tagBlacklistEntries?: ScraperTagBlacklistEntry[];
   chapters: ScraperRuntimeChapterResult[];
   hasAuthor: boolean;
   hasTag: boolean;
@@ -95,6 +100,7 @@ export default function ScraperDetailsPanel({
   scraperId,
   bookmarkExcludedFields,
   detailsResult,
+  tagBlacklistEntries = [],
   chapters,
   hasAuthor,
   hasTag,
@@ -422,10 +428,26 @@ export default function ScraperDetailsPanel({
                 const tagUrl = (detailsResult.tagUrls ?? [])[index];
                 const canOpenTag = hasTag && Boolean(tagUrl || (canResolveTagName && tag));
                 const tagTarget = tagUrl || tag;
+                const isBlacklistedTag = Boolean(findScraperTagBlacklistEntry(
+                  tagBlacklistEntries,
+                  tag,
+                  tagUrl,
+                ));
+                const tagClassName = [
+                  'scraper-card__chip',
+                  'is-tag',
+                  isBlacklistedTag ? 'is-blacklisted-tag' : '',
+                ].join(' ').trim();
 
                 if (!canOpenTag || !tagTarget) {
                   return (
-                    <span key={`${tag}-${index}`} className="scraper-card__chip is-tag">{tag}</span>
+                    <span
+                      key={`${tag}-${index}`}
+                      className={tagClassName}
+                      title={isBlacklistedTag ? 'Tag blackliste pour ce scraper' : undefined}
+                    >
+                      {tag}
+                    </span>
                   );
                 }
 
@@ -433,7 +455,7 @@ export default function ScraperDetailsPanel({
                   <button
                     key={`${tag}-${index}`}
                     type="button"
-                    className="scraper-card__chip is-tag is-clickable"
+                    className={`${tagClassName} is-clickable`}
                     onClick={() => onOpenTag(tagTarget, tag)}
                     onMouseDown={onOpenTagInWorkspace ? (event) => {
                       if (event.button !== 1) {
@@ -452,7 +474,9 @@ export default function ScraperDetailsPanel({
                       event.stopPropagation();
                       onOpenTagInWorkspace(tagTarget, tag);
                     } : undefined}
-                    title={`Ouvrir la page tag pour ${tag}`}
+                    title={isBlacklistedTag
+                      ? `Tag blackliste pour ce scraper. Ouvrir la page tag pour ${tag}`
+                      : `Ouvrir la page tag pour ${tag}`}
                     data-prevent-middle-click-autoscroll={onOpenTagInWorkspace ? 'true' : undefined}
                   >
                     {tag}

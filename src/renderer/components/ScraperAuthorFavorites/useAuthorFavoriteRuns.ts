@@ -27,6 +27,7 @@ type AuthorFavoriteRunsOptions = {
   initialPageCount: number;
   cacheResults: boolean;
   concurrency?: number;
+  scrapeDetailsWithCards?: boolean;
 };
 
 export type AuthorFavoriteSourceRun = {
@@ -177,6 +178,7 @@ export default function useAuthorFavoriteRuns(
   options: AuthorFavoriteRunsOptions,
 ) {
   const { initialPageCount, cacheResults } = options;
+  const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
   const [runs, setRuns] = useState<AuthorFavoriteSourceRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -231,6 +233,9 @@ export default function useAuthorFavoriteRuns(
         run.nextPageUrl,
         paceConfigRef.current,
         run.favoriteSource.templateContext ?? null,
+        {
+          scrapeDetailsWithCards,
+        },
       );
       const pageResults = await enrichSourceResultsWithJapaneseRomanization(
         buildSourceResults(run.scraper, page, pageIndex, run.favoriteSource.name),
@@ -268,7 +273,7 @@ export default function useAuthorFavoriteRuns(
       }
       return failedRun;
     }
-  }, [patchRun]);
+  }, [patchRun, scrapeDetailsWithCards]);
 
   const loadPagesForRun = useCallback(async (
     run: AuthorFavoriteSourceRun,
