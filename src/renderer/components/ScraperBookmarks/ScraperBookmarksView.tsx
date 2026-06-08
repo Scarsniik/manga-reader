@@ -19,6 +19,7 @@ import {
   type ScraperBookmarkDuplicateGroup,
 } from '@/renderer/components/ScraperBookmarks/bookmarkDuplicateDetection';
 import { removeScraperBookmark, useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import { useScraperTagFavorites } from '@/renderer/stores/scraperTagFavorites';
 import useScraperBookmarkRefresh from '@/renderer/components/ScraperBookmarks/useScraperBookmarkRefresh';
 import {
   buildBookmarkLanguageFilterCodes,
@@ -55,6 +56,7 @@ import {
   getBlacklistedScraperTags,
   getScraperTagBlacklistEntries,
 } from '@/renderer/utils/scraperTagBlacklist';
+import { getScraperTagFavoriteSources } from '@/renderer/utils/scraperTagFavorites';
 import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
@@ -121,6 +123,7 @@ export default function ScraperBookmarksView({
   const locationState = location.state as ScraperBookmarksLocationState;
   const { bookmarks, loading, loaded, error, reload } = useScraperBookmarks({ scraperId: filterScraperId });
   const { bookmarks: allBookmarks, reload: reloadAllBookmarks } = useScraperBookmarks();
+  const { favorites: tagFavorites } = useScraperTagFavorites();
   const {
     loaded: viewHistoryLoaded,
     recordsById: viewHistoryRecordsById,
@@ -882,6 +885,7 @@ export default function ScraperBookmarksView({
                   params?.scraperBlacklistedTagsByScraper,
                   bookmark.scraperId,
                 )}
+                tagFavoriteSources={getScraperTagFavoriteSources(tagFavorites, bookmark.scraperId)}
                 onOpenBookmark={handleOpenBookmark}
                 onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}
                 onViewed={handleBookmarkViewed}

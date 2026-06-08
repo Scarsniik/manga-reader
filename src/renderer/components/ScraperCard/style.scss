@@ -356,6 +356,13 @@ button.scraper-card__chip {
   color: #8ee0a3;
 }
 
+.scraper-card__metadata span.is-favorite-tag,
+.scraper-card__chip.is-favorite-tag {
+  border-color: rgba(236, 72, 153, 0.58);
+  background: rgba(236, 72, 153, 0.18);
+  color: #f9a8d4;
+}
+
 .scraper-card__metadata span.is-blacklisted-tag,
 .scraper-card__chip.is-blacklisted-tag {
   border-color: rgba(239, 83, 80, 0.58);

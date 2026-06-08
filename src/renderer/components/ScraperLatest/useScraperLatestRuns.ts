@@ -49,6 +49,11 @@ import {
   getScraperLatestCheckpoints,
   saveScraperLatestCheckpoint,
 } from "@/renderer/utils/scraperLatestCheckpoints";
+import {
+  getBlacklistedScraperTags,
+  getScraperTagBlacklistEntries,
+  type ScraperTagBlacklistByScraper,
+} from "@/renderer/utils/scraperTagBlacklist";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
@@ -66,6 +71,7 @@ export type ScraperLatestRun = {
   status: ScraperLatestRunStatus;
   results: MultiSearchSourceResult[];
   excludedByLanguageCount: number;
+  excludedByBlacklistedTagCount: number;
   includedByLanguageCount: number;
   loadedPages: number;
   checkedPages: number;
@@ -90,6 +96,8 @@ type StartOptions = {
   includedScraperIds?: string[];
   tagFavorites?: ScraperTagFavoriteRecord[];
   scrapeDetailsWithCards?: boolean;
+  excludeBlacklistedTagCards?: boolean;
+  tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
 };
 
 type ProcessedLatestPage = {
@@ -97,7 +105,9 @@ type ProcessedLatestPage = {
   pageResults: MultiSearchSourceResult[];
   newPageResults: MultiSearchSourceResult[];
   includedPageResults: MultiSearchSourceResult[];
+  rawUnseenResults: MultiSearchSourceResult[];
   unseenResults: MultiSearchSourceResult[];
+  excludedByBlacklistedTagCount: number;
   hasOnlyDuplicateResults: boolean;
 };
 
@@ -179,6 +189,7 @@ const buildRun = (
   status: "waiting",
   results: [],
   excludedByLanguageCount: 0,
+  excludedByBlacklistedTagCount: 0,
   includedByLanguageCount: 0,
   loadedPages: 0,
   checkedPages: 0,
@@ -421,6 +432,17 @@ const sourceMatchesIncludedLanguages = (
   return normalizedSourceLanguageCodes.some((languageCode) => includedValues.includes(languageCode));
 };
 
+const sourceMatchesBlacklistedTags = (
+  source: MultiSearchSourceResult,
+  blacklistByScraper: ScraperTagBlacklistByScraper | null | undefined,
+): boolean => (
+  getBlacklistedScraperTags(
+    getScraperTagBlacklistEntries(blacklistByScraper, source.scraper.id),
+    source.result.tags,
+    source.result.tagUrls,
+  ).length > 0
+);
+
 const QUICK_CHECKPOINT_PAGE_BUDGET = 6;
 const CHECKPOINT_ANCHOR_OFFSETS = [0, 1, 2, 4, -1, -2];
 
@@ -641,6 +663,8 @@ export default function useScraperLatestRuns() {
     token: number,
     nextPageUrlOverride?: string,
     scrapeDetailsWithCards = false,
+    excludeBlacklistedTagCards = false,
+    tagBlacklistByScraper?: ScraperTagBlacklistByScraper,
   ): Promise<ProcessedLatestPage> => {
     patchRun(token, currentRun.key, (run) => ({
       ...run,
@@ -672,6 +696,21 @@ export default function useScraperLatestRuns() {
     const rawUnseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
     const remainingResultSlots = Math.max(0, resultLimit - currentRun.results.length);
     let unseenResults = rawUnseenResults;
+    let excludedByBlacklistedTagCount = 0;
+    const shouldExcludeBlacklistedTags = excludeBlacklistedTagCards
+      && getScraperTagBlacklistEntries(tagBlacklistByScraper, currentRun.scraper.id).length > 0;
+    const isAcceptedByBlacklist = (source: MultiSearchSourceResult): boolean => {
+      if (!shouldExcludeBlacklistedTags) {
+        return true;
+      }
+
+      if (sourceMatchesBlacklistedTags(source, tagBlacklistByScraper)) {
+        excludedByBlacklistedTagCount += 1;
+        return false;
+      }
+
+      return true;
+    };
 
     if (scrapeDetailsWithCards && remainingResultSlots > 0 && rawUnseenResults.length > 0) {
       const enrichedUnseenResults: MultiSearchSourceResult[] = [];
@@ -693,6 +732,7 @@ export default function useScraperLatestRuns() {
         const acceptedBatch = enrichedBatch.filter((source) => (
           sourceMatchesIncludedLanguages(source, includedLanguageCodes)
           && isUnseenSource(source, recordsById)
+          && isAcceptedByBlacklist(source)
         ));
 
         enrichedUnseenResults.push(
@@ -701,6 +741,8 @@ export default function useScraperLatestRuns() {
       }
 
       unseenResults = enrichedUnseenResults;
+    } else if (shouldExcludeBlacklistedTags) {
+      unseenResults = rawUnseenResults.filter(isAcceptedByBlacklist);
     }
 
     const nextResults = [...currentRun.results, ...unseenResults].slice(0, resultLimit);
@@ -737,6 +779,7 @@ export default function useScraperLatestRuns() {
       results: nextResults,
       checkpoint: nextCheckpoint,
       excludedByLanguageCount: currentRun.excludedByLanguageCount + newPageResults.length - includedPageResults.length,
+      excludedByBlacklistedTagCount: currentRun.excludedByBlacklistedTagCount + excludedByBlacklistedTagCount,
       includedByLanguageCount: currentRun.includedByLanguageCount + includedPageResults.length,
       loadedPages: Math.max(currentRun.loadedPages, pageIndex + 1),
       checkedPages: currentRun.checkedPages + 1,
@@ -753,7 +796,9 @@ export default function useScraperLatestRuns() {
       pageResults,
       newPageResults,
       includedPageResults,
+      rawUnseenResults,
       unseenResults,
+      excludedByBlacklistedTagCount,
       hasOnlyDuplicateResults,
     };
   }, [patchRun]);
@@ -768,6 +813,8 @@ export default function useScraperLatestRuns() {
     deepPageLimit: number,
     languageRejectLimit: number,
     scrapeDetailsWithCards = false,
+    excludeBlacklistedTagCards = false,
+    tagBlacklistByScraper?: ScraperTagBlacklistByScraper,
   ): Promise<ScraperLatestRun> => {
     const checkpoint = currentRun.checkpoint;
     if (!checkpoint || token !== tokenRef.current) {
@@ -803,6 +850,8 @@ export default function useScraperLatestRuns() {
         token,
         pageUrl,
         scrapeDetailsWithCards,
+        excludeBlacklistedTagCards,
+        tagBlacklistByScraper,
       );
 
       run = {
@@ -932,6 +981,8 @@ export default function useScraperLatestRuns() {
     deepPageLimit = 0,
     languageRejectLimit = DEFAULT_LANGUAGE_REJECT_LIMIT,
     scrapeDetailsWithCards = false,
+    excludeBlacklistedTagCards = false,
+    tagBlacklistByScraper?: ScraperTagBlacklistByScraper,
   ): Promise<ScraperLatestRun> => {
     let run = initialRun;
     let quickConsecutiveSeenResultCount = 0;
@@ -961,6 +1012,8 @@ export default function useScraperLatestRuns() {
           token,
           undefined,
           scrapeDetailsWithCards,
+          excludeBlacklistedTagCards,
+          tagBlacklistByScraper,
         );
         run = processedPage.run;
 
@@ -972,9 +1025,18 @@ export default function useScraperLatestRuns() {
 
         const pageHasOnlyExcludedLanguageResults = processedPage.newPageResults.length > 0
           && processedPage.includedPageResults.length === 0;
+        const pageHasOnlyExcludedBlacklistedResults = processedPage.rawUnseenResults.length > 0
+          && processedPage.unseenResults.length === 0
+          && processedPage.excludedByBlacklistedTagCount > 0;
         const pageHasNoNewIncludedResult = processedPage.hasOnlyDuplicateResults
-          || (processedPage.includedPageResults.length > 0 && processedPage.unseenResults.length === 0);
-        const deepCheckpointBoundaryReached = pageHasNoNewIncludedResult || pageHasOnlyExcludedLanguageResults;
+          || (
+            processedPage.includedPageResults.length > 0
+            && processedPage.unseenResults.length === 0
+            && !pageHasOnlyExcludedBlacklistedResults
+          );
+        const deepCheckpointBoundaryReached = pageHasNoNewIncludedResult
+          || pageHasOnlyExcludedLanguageResults
+          || pageHasOnlyExcludedBlacklistedResults;
         const firstQuickPageHasUnseenResults = pageIndex === 0 && processedPage.unseenResults.length > 0;
         let quickConsecutiveSeenBoundaryReached = false;
 
@@ -1037,10 +1099,12 @@ export default function useScraperLatestRuns() {
                 loadedSourceKeys,
                 token,
                 deepPageLimit,
-                languageRejectLimit,
-                scrapeDetailsWithCards,
-              );
-              return run;
+              languageRejectLimit,
+              scrapeDetailsWithCards,
+              excludeBlacklistedTagCards,
+              tagBlacklistByScraper,
+            );
+            return run;
             }
 
             if (processedPage.hasOnlyDuplicateResults && getRunUsesTemplatePaging(run)) {
@@ -1054,7 +1118,7 @@ export default function useScraperLatestRuns() {
             continue;
           }
 
-          if (pageHasOnlyExcludedLanguageResults) {
+          if (pageHasOnlyExcludedLanguageResults || pageHasOnlyExcludedBlacklistedResults) {
             continue;
           }
 
@@ -1125,6 +1189,8 @@ export default function useScraperLatestRuns() {
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
     const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
+    const excludeBlacklistedTagCards = options.excludeBlacklistedTagCards === true;
+    const tagBlacklistByScraper = options.tagBlacklistByScraper;
     const quickConsecutiveSeenStopThreshold = normalizeQuickConsecutiveSeenStopThreshold(
       options.quickConsecutiveSeenStopThreshold,
     );
@@ -1225,6 +1291,8 @@ export default function useScraperLatestRuns() {
             deepPageLimit,
             languageRejectLimit,
             scrapeDetailsWithCards,
+            excludeBlacklistedTagCards,
+            tagBlacklistByScraper,
           );
         }),
         concurrency,

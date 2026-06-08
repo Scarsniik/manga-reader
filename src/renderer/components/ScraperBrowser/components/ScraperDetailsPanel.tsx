@@ -19,6 +19,10 @@ import {
   findScraperTagBlacklistEntry,
   type ScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
+import {
+  findScraperTagFavoriteSource,
+  type ScraperTagFavoriteSourceTarget,
+} from '@/renderer/utils/scraperTagFavorites';
 
 const MIDDLE_BUTTON = 1;
 const POTENTIAL_MATCH_WARNING_DETAIL_LIMIT = 4;
@@ -61,6 +65,7 @@ type Props = {
   bookmarkExcludedFields: ScraperBookmarkMetadataField[];
   detailsResult: ScraperRuntimeDetailsResult | null;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
+  tagFavoriteSources?: ScraperTagFavoriteSourceTarget[];
   chapters: ScraperRuntimeChapterResult[];
   hasAuthor: boolean;
   hasTag: boolean;
@@ -101,6 +106,7 @@ export default function ScraperDetailsPanel({
   bookmarkExcludedFields,
   detailsResult,
   tagBlacklistEntries = [],
+  tagFavoriteSources = [],
   chapters,
   hasAuthor,
   hasTag,
@@ -433,18 +439,29 @@ export default function ScraperDetailsPanel({
                   tag,
                   tagUrl,
                 ));
+                const isFavoriteTag = Boolean(findScraperTagFavoriteSource(
+                  tagFavoriteSources,
+                  tag,
+                  tagUrl,
+                ));
                 const tagClassName = [
                   'scraper-card__chip',
                   'is-tag',
+                  isFavoriteTag ? 'is-favorite-tag' : '',
                   isBlacklistedTag ? 'is-blacklisted-tag' : '',
                 ].join(' ').trim();
+                const tagTitle = isBlacklistedTag
+                  ? 'Tag blackliste pour ce scraper'
+                  : isFavoriteTag
+                    ? 'Tag favori pour ce scraper'
+                    : undefined;
 
                 if (!canOpenTag || !tagTarget) {
                   return (
                     <span
                       key={`${tag}-${index}`}
                       className={tagClassName}
-                      title={isBlacklistedTag ? 'Tag blackliste pour ce scraper' : undefined}
+                      title={tagTitle}
                     >
                       {tag}
                     </span>
@@ -476,7 +493,9 @@ export default function ScraperDetailsPanel({
                     } : undefined}
                     title={isBlacklistedTag
                       ? `Tag blackliste pour ce scraper. Ouvrir la page tag pour ${tag}`
-                      : `Ouvrir la page tag pour ${tag}`}
+                      : isFavoriteTag
+                        ? `Tag favori pour ce scraper. Ouvrir la page tag pour ${tag}`
+                        : `Ouvrir la page tag pour ${tag}`}
                     data-prevent-middle-click-autoscroll={onOpenTagInWorkspace ? 'true' : undefined}
                   >
                     {tag}

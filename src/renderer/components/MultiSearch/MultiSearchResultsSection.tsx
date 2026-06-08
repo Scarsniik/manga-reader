@@ -1,5 +1,6 @@
 import React from "react";
 import type {
+  ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -47,6 +48,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   viewHistoryRecordingDisabled?: boolean;
   showUnseenFirst: boolean;
@@ -139,6 +141,7 @@ export default function MultiSearchResultsSection({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   hideBlacklistedCards = false,
   viewHistoryRecordingDisabled = false,
   showUnseenFirst,
@@ -301,6 +304,7 @@ export default function MultiSearchResultsSection({
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newViewHistoryIds}
           tagBlacklistByScraper={tagBlacklistByScraper}
+          tagFavorites={tagFavorites}
           viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
           onOpenSource={onOpenSource}
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
@@ -379,6 +383,7 @@ export default function MultiSearchResultsSection({
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
               tagBlacklistByScraper={tagBlacklistByScraper}
+              tagFavorites={tagFavorites}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}

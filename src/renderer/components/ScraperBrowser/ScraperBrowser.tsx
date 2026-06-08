@@ -53,6 +53,7 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import { useScraperTagFavorites } from '@/renderer/stores/scraperTagFavorites';
 import {
   setScraperCardRead,
   useScraperViewHistory,
@@ -120,6 +121,7 @@ import {
   getScraperTagBlacklistEntries,
   removeScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
+import { getScraperTagFavoriteSources } from '@/renderer/utils/scraperTagFavorites';
 import {
   buildUniqueAuthorSearchNames,
   formatAuthorDisplayName,
@@ -235,9 +237,14 @@ export default function ScraperBrowser({
   const locationState = location.state as ScraperBrowserLocationState | null;
   const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
+  const { favorites: tagFavorites } = useScraperTagFavorites();
   const scraperTagBlacklistEntries = useMemo(
     () => getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, scraper.id),
     [params?.scraperBlacklistedTagsByScraper, scraper.id],
+  );
+  const scraperTagFavoriteSources = useMemo(
+    () => getScraperTagFavoriteSources(tagFavorites, scraper.id),
+    [scraper.id, tagFavorites],
   );
   const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
   const scraperAuthorCombinedViewEnabled = params?.scraperAuthorCombinedView === true;
@@ -2201,6 +2208,7 @@ export default function ScraperBrowser({
           cover={listingResults[0]?.thumbnailUrl}
           templateContext={authorTemplateContext}
           tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+          tagFavorites={tagFavorites}
           hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
           favoriteAction={authorFavoriteAction}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
@@ -2229,6 +2237,7 @@ export default function ScraperBrowser({
           viewHistoryRecordsById={viewHistoryRecordsById}
           newViewHistoryIds={newSearchResultIds}
           tagBlacklistEntries={scraperTagBlacklistEntries}
+          tagFavoriteSources={scraperTagFavoriteSources}
           hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
           renderReadAction={renderSearchResultReadAction}
           renderBookmarkAction={renderSearchResultBookmarkAction}
@@ -2252,6 +2261,7 @@ export default function ScraperBrowser({
         bookmarkExcludedFields={scraper.globalConfig.bookmark.excludedFields}
         detailsResult={detailsResult}
         tagBlacklistEntries={scraperTagBlacklistEntries}
+        tagFavoriteSources={scraperTagFavoriteSources}
         chapters={chaptersResult}
         hasAuthor={hasAuthor}
         hasTag={hasTag}

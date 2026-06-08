@@ -1,5 +1,6 @@
 import React from "react";
 import type {
+  ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -39,6 +40,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -66,6 +68,7 @@ function MeasuredMultiSearchResultCard({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites,
   viewHistoryRecordingDisabled,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -158,6 +161,7 @@ function MeasuredMultiSearchResultCard({
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newViewHistoryIds}
         tagBlacklistByScraper={tagBlacklistByScraper}
+        tagFavorites={tagFavorites}
         viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
@@ -176,6 +180,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -442,6 +447,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
               tagBlacklistByScraper={tagBlacklistByScraper}
+              tagFavorites={tagFavorites}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}

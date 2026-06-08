@@ -2,6 +2,7 @@ import React from "react";
 import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
+  ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -39,6 +40,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   onBack: () => void;
   onReload: () => void;
@@ -88,6 +90,7 @@ export default function ScraperAuthorFavoriteResults({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   hideBlacklistedCards = false,
   onBack,
   onReload,
@@ -129,6 +132,7 @@ export default function ScraperAuthorFavoriteResults({
       viewHistoryRecordsById={viewHistoryRecordsById}
       newViewHistoryIds={newViewHistoryIds}
       tagBlacklistByScraper={tagBlacklistByScraper}
+      tagFavorites={tagFavorites}
       hideBlacklistedCards={hideBlacklistedCards}
       backLabel="Retour aux auteurs favoris"
       onBack={onBack}

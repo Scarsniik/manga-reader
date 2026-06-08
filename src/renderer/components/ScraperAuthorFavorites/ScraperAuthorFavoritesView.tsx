@@ -26,6 +26,7 @@ import {
   removeScraperAuthorFavorite,
   useScraperAuthorFavorites,
 } from "@/renderer/stores/scraperAuthorFavorites";
+import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import {
   readScraperAuthorFavoriteRouteId,
   SCRAPER_MULTI_SEARCH_VIEW_ID,
@@ -58,6 +59,7 @@ export default function ScraperAuthorFavoritesView({
   const { openModal } = useModal();
   const { params } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
+  const { favorites: tagFavorites } = useScraperTagFavorites();
   const {
     location,
     navigate,
@@ -300,6 +302,7 @@ export default function ScraperAuthorFavoritesView({
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         onBack={() => handleSelectFavorite(null)}
         onReload={() => void start()}

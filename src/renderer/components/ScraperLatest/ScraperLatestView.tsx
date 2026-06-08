@@ -130,6 +130,32 @@ const buildLatestTagFavoritesKey = (favorites: ScraperTagFavoriteRecord[]): stri
     .join("|")
 );
 
+const buildLatestTagBlacklistKey = (blacklist: unknown): string => {
+  if (!blacklist || typeof blacklist !== "object" || Array.isArray(blacklist)) {
+    return "";
+  }
+
+  return Object.entries(blacklist as Record<string, unknown>)
+    .sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
+    .map(([scraperId, rawEntries]) => [
+      scraperId,
+      Array.isArray(rawEntries)
+        ? rawEntries
+          .map((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+              return String(entry ?? "");
+            }
+
+            const data = entry as Record<string, unknown>;
+            return `${String(data.value ?? "")}:${String(data.label ?? "")}`;
+          })
+          .sort()
+          .join(",")
+        : "",
+    ].join(":"))
+    .join("|");
+};
+
 const getScraperResultLimit = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 20;
@@ -368,6 +394,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
     )),
     [baseActiveSources, blacklistEnrichedSourcesByKey],
   );
+  const latestTagBlacklistKey = React.useMemo(
+    () => buildLatestTagBlacklistKey(params?.scraperBlacklistedTagsByScraper),
+    [params?.scraperBlacklistedTagsByScraper],
+  );
   const selectedFavoriteId = activeTab === "authors"
     ? [
       combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`,
@@ -379,6 +409,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
       scraperIncludedLanguagesKey || "all-languages",
       scraperIncludedScrapersKey || "all-scrapers",
       scraperIncludedTagFavoritesKey || "no-tag-favorites",
+      params?.scraperHideBlacklistedTagCards === true ? "exclude-blacklisted" : "show-blacklisted",
+      latestTagBlacklistKey || "no-blacklist",
     ].join("-");
 
   React.useEffect(() => {
@@ -542,12 +574,16 @@ export default function ScraperLatestView({ scrapers }: Props) {
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        excludeBlacklistedTagCards: params?.scraperHideBlacklistedTagCards === true,
+        tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
       },
     );
   }, [
     activeTab,
     latestScrapersKey,
     latestTagFavoritesKey,
+    params?.scraperBlacklistedTagsByScraper,
+    params?.scraperHideBlacklistedTagCards,
     params?.scraperScrapeDetailsWithCards,
     scraperIncludedLanguageCodes,
     scraperIncludedLanguagesKey,
@@ -589,6 +625,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
           `${run.results.length}/${run.sourceKind === "tagFavorite" ? tagResultLimit : scraperResultLimit} non vue(s)`,
           run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
           run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
+          run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
           run.languageRejectLimitReached ? "arret langue" : "",
           run.checkpointUsed ? "checkpoint utilise" : "",
           run.deepSearch ? "recherche profonde" : "mode rapide",
@@ -909,7 +946,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         viewHistoryRecordsById={sourceResults.viewHistoryRecordsById}
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
-        hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
+        tagFavorites={tagFavorites}
         languageFilterModes={sourceResults.languageFilterModes}
         onReload={handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}

@@ -3,6 +3,7 @@ import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
   ScraperRecord,
+  ScraperTagFavoriteRecord,
 } from "@/shared/scraper";
 import ScraperAuthorCombinedResults from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorCombinedResults";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
@@ -45,6 +46,7 @@ type Props = {
   cover?: string;
   templateContext?: ScraperTemplateContext | null;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   favoriteAction?: React.ReactNode;
   onOpenMultiSearch: () => void;
@@ -92,6 +94,7 @@ export default function ScraperAuthorCombinedView({
   cover,
   templateContext,
   tagBlacklistByScraper,
+  tagFavorites = [],
   hideBlacklistedCards = false,
   favoriteAction = null,
   onOpenMultiSearch,
@@ -238,6 +241,7 @@ export default function ScraperAuthorCombinedView({
       viewHistoryRecordsById={viewHistoryRecordsById}
       newViewHistoryIds={newSourceHistoryIds}
       tagBlacklistByScraper={tagBlacklistByScraper}
+      tagFavorites={tagFavorites}
       hideBlacklistedCards={hideBlacklistedCards}
       sourceSectionTitle="Page auteur"
       loadingMessage="Chargement de la vue auteur combinee..."

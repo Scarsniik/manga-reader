@@ -9,6 +9,7 @@ import {
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
+import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import {
   setScraperCardRead,
   useScraperViewHistory,
@@ -149,6 +150,7 @@ export default function MultiSearchBrowser({
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { params, loading: paramsLoading, setParams } = useParams();
+  const { favorites: tagFavorites } = useScraperTagFavorites();
   const initializedSelectionRef = useRef(false);
   const restoredStateRef = useRef(false);
   const consumedPrefillLocationKeyRef = useRef<string | null>(null);
@@ -1025,6 +1027,7 @@ export default function MultiSearchBrowser({
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         viewHistoryRecordingDisabled={isSearching}
         showUnseenFirst={showUnseenFirst}

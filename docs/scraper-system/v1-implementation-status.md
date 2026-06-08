@@ -453,7 +453,13 @@ POC : une page `Tag` peut ajouter le tag courant a
 `scraperBlacklistedTagsByScraper` pour le scraper actif. Quand une card a ete
 enrichie avec sa `Fiche`, ses tags sont compares a cette blacklist : la card
 est grisee et les tags blacklistes sont affiches en rouge dans ses metadatas.
-Les chips de tags de la fiche utilisent le meme marquage rouge.
+Les chips de tags de la fiche utilisent le meme marquage rouge. Dans
+`Nouveautes`, l'option de masquage des tags blacklistes agit comme une
+exclusion de selection : la card rejetee n'est pas ajoutee aux resultats non
+vus et ne remplit pas le quota recherche.
+
+Les tags qui correspondent a un tag favori du meme scraper sont affiches en
+rose dans les metadonnees des cards et dans les chips de tags des fiches.
 
 Le mode `Auteur` permet deja :
 

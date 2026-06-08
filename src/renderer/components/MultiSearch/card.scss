@@ -46,6 +46,26 @@
   font-weight: 700;
 }
 
+.multi-search-card__favorite-tags, .multi-search-card__blacklisted-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.multi-search-card__favorite-tag {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid rgba(236, 72, 153, 0.58);
+  border-radius: 8px;
+  background: rgba(236, 72, 153, 0.18);
+  color: #f9a8d4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .multi-search-card__progress-row {
   display: flex;
   width: min(100%, 276px);

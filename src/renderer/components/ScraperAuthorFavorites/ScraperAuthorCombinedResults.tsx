@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   ScraperAuthorFavoriteSource,
+  ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -44,6 +45,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   backLabel?: string | null;
   sourceSectionTitle?: string;
@@ -103,6 +105,7 @@ export default function ScraperAuthorCombinedResults({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   hideBlacklistedCards = false,
   backLabel = null,
   sourceSectionTitle = "Sources",
@@ -286,6 +289,7 @@ export default function ScraperAuthorCombinedResults({
                 viewHistoryRecordsById={viewHistoryRecordsById}
                 newViewHistoryIds={newViewHistoryIds}
                 tagBlacklistByScraper={tagBlacklistByScraper}
+                tagFavorites={tagFavorites}
                 viewHistoryRecordingDisabled={loading}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}

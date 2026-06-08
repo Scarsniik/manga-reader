@@ -10,6 +10,11 @@ import {
   getBlacklistedScraperTags,
   type ScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
+import {
+  getFavoriteScraperTags,
+  normalizeScraperTagFavoriteValue,
+  type ScraperTagFavoriteSourceTarget,
+} from '@/renderer/utils/scraperTagFavorites';
 
 type Props = {
   scraperId: string;
@@ -21,6 +26,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
+  tagFavoriteSources?: ScraperTagFavoriteSourceTarget[];
   viewHistoryRecordingDisabled?: boolean;
   readAction?: ScraperCardAction | null;
   bookmarkAction?: ScraperCardAction | null;
@@ -45,6 +51,7 @@ export default function ScraperSearchResultCard({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistEntries = [],
+  tagFavoriteSources = [],
   viewHistoryRecordingDisabled = false,
   readAction,
   bookmarkAction,
@@ -65,7 +72,21 @@ export default function ScraperSearchResultCard({
     () => getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls),
     [result.tagUrls, result.tags, tagBlacklistEntries],
   );
+  const favoriteTagMatches = React.useMemo(
+    () => getFavoriteScraperTags(tagFavoriteSources, result.tags, result.tagUrls),
+    [result.tagUrls, result.tags, tagFavoriteSources],
+  );
+  const visibleFavoriteTagMatches = React.useMemo(() => {
+    const blacklistedTagKeys = new Set(blacklistedTagMatches.map((match) => (
+      normalizeScraperTagFavoriteValue(match.tagUrl || match.tag)
+    )));
+
+    return favoriteTagMatches.filter((match) => (
+      !blacklistedTagKeys.has(normalizeScraperTagFavoriteValue(match.tagUrl || match.tag))
+    ));
+  }, [blacklistedTagMatches, favoriteTagMatches]);
   const hasBlacklistedTags = blacklistedTagMatches.length > 0;
+  const hasFavoriteTags = visibleFavoriteTagMatches.length > 0;
   const viewHistoryIdentities = React.useMemo(
     () => [buildSearchResultViewHistoryIdentity(scraperId, result)],
     [result, scraperId],
@@ -142,7 +163,7 @@ export default function ScraperSearchResultCard({
           coverUrl={result.thumbnailUrl}
           coverAlt={result.title}
           summary={result.summary}
-          metadata={pageCountLabel || hasLanguageCodes || hasBlacklistedTags ? (
+          metadata={pageCountLabel || hasLanguageCodes || hasBlacklistedTags || hasFavoriteTags ? (
             <div className="scraper-card__metadata">
               {hasLanguageCodes ? (
                 <span>
@@ -150,6 +171,15 @@ export default function ScraperSearchResultCard({
                 </span>
               ) : null}
               {pageCountLabel ? <span>{pageCountLabel}</span> : null}
+              {visibleFavoriteTagMatches.map((match, index) => (
+                <span
+                  key={`${match.source.tagUrl}-${match.tagUrl || match.tag}-${index}`}
+                  className="is-favorite-tag"
+                  title="Tag favori pour ce scraper"
+                >
+                  {match.tag}
+                </span>
+              ))}
               {blacklistedTagMatches.map((match, index) => (
                 <span
                   key={`${match.entry.value}-${match.tagUrl || match.tag}-${index}`}

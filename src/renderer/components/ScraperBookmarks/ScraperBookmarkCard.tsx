@@ -12,6 +12,11 @@ import {
   normalizeScraperTagBlacklistValue,
   type ScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
+import {
+  getFavoriteScraperTags,
+  normalizeScraperTagFavoriteValue,
+  type ScraperTagFavoriteSourceTarget,
+} from '@/renderer/utils/scraperTagFavorites';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
@@ -22,6 +27,7 @@ type Props = {
   addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
+  tagFavoriteSources?: ScraperTagFavoriteSourceTarget[];
   onOpenBookmark: (bookmark: ScraperBookmarkRecord) => void;
   onOpenBookmarkInWorkspace?: (bookmark: ScraperBookmarkRecord) => void;
   onViewed?: (bookmark: ScraperBookmarkRecord) => void;
@@ -31,6 +37,7 @@ const renderChipGroup = (
   values: string[],
   variant: 'author' | 'tag',
   blacklistedTagKeys?: Set<string>,
+  favoriteTagKeys?: Set<string>,
 ) => {
   if (!values.length) {
     return null;
@@ -44,9 +51,14 @@ const renderChipGroup = (
           className={[
             'scraper-card__chip',
             `is-${variant}`,
+            favoriteTagKeys?.has(normalizeScraperTagFavoriteValue(value)) ? 'is-favorite-tag' : '',
             blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value)) ? 'is-blacklisted-tag' : '',
           ].filter(Boolean).join(' ')}
-          title={blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value)) ? 'Tag blackliste' : undefined}
+          title={blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value))
+            ? 'Tag blackliste'
+            : favoriteTagKeys?.has(normalizeScraperTagFavoriteValue(value))
+              ? 'Tag favori'
+              : undefined}
         >
           {value}
         </span>
@@ -86,6 +98,7 @@ export default function ScraperBookmarkCard({
   addToLibraryAction = null,
   downloadAction = null,
   tagBlacklistEntries = [],
+  tagFavoriteSources = [],
   onOpenBookmark,
   onOpenBookmarkInWorkspace,
   onViewed,
@@ -105,6 +118,14 @@ export default function ScraperBookmarkCard({
   const blacklistedTagKeys = React.useMemo(
     () => new Set(blacklistedTagMatches.map((match) => normalizeScraperTagBlacklistValue(match.tag))),
     [blacklistedTagMatches],
+  );
+  const favoriteTagMatches = React.useMemo(
+    () => getFavoriteScraperTags(tagFavoriteSources, bookmark.tags),
+    [bookmark.tags, tagFavoriteSources],
+  );
+  const favoriteTagKeys = React.useMemo(
+    () => new Set(favoriteTagMatches.map((match) => normalizeScraperTagFavoriteValue(match.tag))),
+    [favoriteTagMatches],
   );
   const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const actions: ScraperCardAction[] = [
@@ -177,7 +198,7 @@ export default function ScraperBookmarkCard({
             </div>
           ) : null}
           {renderChipGroup(bookmark.authors, 'author')}
-          {renderChipGroup(bookmark.tags, 'tag', blacklistedTagKeys)}
+          {renderChipGroup(bookmark.tags, 'tag', blacklistedTagKeys, favoriteTagKeys)}
         </>
       )}
       actions={actions}

@@ -46,6 +46,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   showUnseenFirst: boolean;
   onBack: () => void;
@@ -131,6 +132,7 @@ export default function ScraperTagFavoriteResults({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   hideBlacklistedCards = false,
   showUnseenFirst,
   onBack,
@@ -277,6 +279,7 @@ export default function ScraperTagFavoriteResults({
                 viewHistoryRecordsById={viewHistoryRecordsById}
                 newViewHistoryIds={newViewHistoryIds}
                 tagBlacklistByScraper={tagBlacklistByScraper}
+                tagFavorites={tagFavorites}
                 viewHistoryRecordingDisabled={loading}
                 onOpenSource={onOpenSource}
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}

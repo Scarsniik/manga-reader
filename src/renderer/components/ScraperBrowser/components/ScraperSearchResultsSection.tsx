@@ -8,6 +8,7 @@ import {
   getBlacklistedScraperTags,
   type ScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
+import type { ScraperTagFavoriteSourceTarget } from '@/renderer/utils/scraperTagFavorites';
 
 type Props = {
   scraperId: string;
@@ -30,6 +31,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
+  tagFavoriteSources?: ScraperTagFavoriteSourceTarget[];
   hideBlacklistedCards?: boolean;
   renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
@@ -68,6 +70,7 @@ export default function ScraperSearchResultsSection({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistEntries = [],
+  tagFavoriteSources = [],
   hideBlacklistedCards = false,
   renderReadAction,
   renderBookmarkAction,
@@ -201,6 +204,7 @@ export default function ScraperSearchResultsSection({
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
               tagBlacklistEntries={tagBlacklistEntries}
+              tagFavoriteSources={tagFavoriteSources}
               viewHistoryRecordingDisabled={loading}
               readAction={renderReadAction ? renderReadAction(result) : null}
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}

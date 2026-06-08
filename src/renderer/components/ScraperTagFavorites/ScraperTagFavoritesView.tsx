@@ -206,6 +206,7 @@ export default function ScraperTagFavoritesView({
         viewHistoryRecordsById={viewHistoryRecordsById}
         newViewHistoryIds={newSourceHistoryIds}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+        tagFavorites={favorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         showUnseenFirst={showUnseenFirst}
         onBack={() => handleSelectFavorite(null)}

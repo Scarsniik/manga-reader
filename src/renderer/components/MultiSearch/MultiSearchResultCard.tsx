@@ -1,6 +1,7 @@
 import React from "react";
 import {
   buildScraperViewHistoryCardId,
+  type ScraperTagFavoriteRecord,
   type ScraperViewHistoryCardIdentity,
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -28,7 +29,12 @@ import {
   getMultiSearchBlacklistedTagMatches,
   getMultiSearchBlacklistedTagMatchKey,
 } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import {
+  getMultiSearchFavoriteTagMatches,
+  getMultiSearchFavoriteTagMatchKey,
+} from "@/renderer/components/MultiSearch/multiSearchTagFavorites";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import { normalizeScraperTagFavoriteValue } from "@/renderer/utils/scraperTagFavorites";
 import "./card.scss";
 
 type Props = {
@@ -39,6 +45,7 @@ type Props = {
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
+  tagFavorites?: ScraperTagFavoriteRecord[];
   viewHistoryRecordingDisabled?: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -125,6 +132,7 @@ export default function MultiSearchResultCard({
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistByScraper,
+  tagFavorites = [],
   viewHistoryRecordingDisabled = false,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -152,6 +160,19 @@ export default function MultiSearchResultCard({
     () => getMultiSearchBlacklistedTagMatches(result, tagBlacklistByScraper),
     [result, tagBlacklistByScraper],
   );
+  const favoriteTagMatches = React.useMemo(
+    () => getMultiSearchFavoriteTagMatches(result, tagFavorites),
+    [result, tagFavorites],
+  );
+  const visibleFavoriteTagMatches = React.useMemo(() => {
+    const blacklistedTagKeys = new Set(blacklistedTagMatches.map((match) => (
+      normalizeScraperTagFavoriteValue(match.tagUrl || match.tag)
+    )));
+
+    return favoriteTagMatches.filter((match) => (
+      !blacklistedTagKeys.has(normalizeScraperTagFavoriteValue(match.tagUrl || match.tag))
+    ));
+  }, [blacklistedTagMatches, favoriteTagMatches]);
   const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const viewHistoryIdentities = React.useMemo(
     () => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
@@ -256,15 +277,32 @@ export default function MultiSearchResultCard({
       </span>
       <span>Types : {formatValues(result.contentTypes, "Non renseigne")}</span>
       {pageCountLabel ? <span>{pageCountLabel}</span> : null}
-      {blacklistedTagMatches.map((match) => (
-        <span
-          key={getMultiSearchBlacklistedTagMatchKey(match)}
-          className="multi-search-card__blacklisted-tag"
-          title={`${match.scraperName}: tag blackliste`}
-        >
-          {match.tag}
-        </span>
-      ))}
+      {visibleFavoriteTagMatches.length > 0 && (
+        <div className="multi-search-card__favorite-tags" title="Tags favoris">
+          {visibleFavoriteTagMatches.map((match) => (
+            <span
+              key={getMultiSearchFavoriteTagMatchKey(match)}
+              className="multi-search-card__favorite-tag"
+              title={`${match.scraperName}: tag favori`}
+            >
+              {match.tag}
+            </span>
+          ))}
+        </div>
+      )}
+      {blacklistedTagMatches.length > 0 && (
+        <div className="multi-search-card__blacklisted-tags" title="Tags blacklists">
+          {blacklistedTagMatches.map((match) => (
+            <span
+              key={getMultiSearchBlacklistedTagMatchKey(match)}
+              className="multi-search-card__blacklisted-tag"
+              title={`${match.scraperName}: tag blackliste`}
+            >
+              {match.tag}
+            </span>
+          ))}
+        </div>
+      )}
       {librarySourceCount ? (
         <span className="multi-search-card__state-badge is-library">
           Bibliotheque{formatMatchedSourceCount(librarySourceCount)}
