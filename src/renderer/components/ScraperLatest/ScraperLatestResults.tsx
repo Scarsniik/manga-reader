@@ -163,12 +163,20 @@ export default function ScraperLatestResults({
     [languageFilteredResults, newViewHistoryIds, viewHistoryRecordsById],
   );
   const displayedResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      visibleResults,
-      tagBlacklistByScraper,
-      hideBlacklistedCards,
-    ),
-    [hideBlacklistedCards, tagBlacklistByScraper, visibleResults],
+    () => {
+      const noDoublesResults = visibleResults.reduce<MultiSearchMergedResult[]>((accumulator, current) => {
+        if (current.sources.length === 1 && accumulator.some((result) => result.sources.length === 1 && result.sources[0] === current.sources[0])) {
+          return accumulator;
+        }
+
+        return [...accumulator, current];
+      }, []);
+      return filterBlacklistedMultiSearchResults(
+        noDoublesResults,
+        tagBlacklistByScraper,
+        hideBlacklistedCards,
+      );
+    }, [hideBlacklistedCards, tagBlacklistByScraper, visibleResults],
   );
   const hiddenVisibleResultCount = visibleResults.length - displayedResults.length;
   const visibleSourceCount = React.useMemo(
