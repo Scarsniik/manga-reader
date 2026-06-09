@@ -19,6 +19,7 @@ import {
   type ScraperRequestField,
   type ScraperSearchFeatureConfig,
   type ScraperTagFeatureConfig,
+  type ScraperTagListFeatureConfig,
   type ScraperTitleAnalysisConfig,
 } from "@/shared/scraper";
 import { normalizeScraperTitleAnalysisConfig } from "@/renderer/utils/scraperTitleAnalysis";
@@ -247,6 +248,26 @@ export const getScraperTagFeatureConfig = (
   return {
     ...buildListingFeatureConfig(raw),
     tagNameSelector: trimOptionalFieldSelector(raw.tagNameSelector),
+  };
+};
+
+export const getScraperTagListFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperTagListFeatureConfig | null => {
+  const raw = getFeatureConfigRecord(feature);
+  if (!raw) {
+    return null;
+  }
+
+  return {
+    urlTemplate: trimOptional(raw.urlTemplate) ?? "",
+    tagListSelector: trimOptionalBlockSelector(raw.tagListSelector),
+    tagItemSelector: normalizeSelectorInput(String(raw.tagItemSelector ?? "")),
+    tagNameSelector: normalizeRequiredFieldSelector(raw.tagNameSelector),
+    tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
+    tagCountSelector: trimOptionalFieldSelector(raw.tagCountSelector),
+    nextPageSelector: trimOptionalFieldSelector(raw.nextPageSelector),
+    paginationLinkSelector: trimOptionalFieldSelector(raw.paginationLinkSelector),
   };
 };
 

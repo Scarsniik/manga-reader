@@ -10,6 +10,7 @@ import ScraperGlobalSettingsEditor from '@/renderer/components/ScraperConfig/Scr
 import ScraperPagesFeatureEditor from '@/renderer/components/ScraperConfig/ScraperPagesFeatureEditor';
 import ScraperSearchFeatureEditor from '@/renderer/components/ScraperConfig/ScraperSearchFeatureEditor';
 import ScraperTagFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagFeatureEditor';
+import ScraperTagListFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagListFeatureEditor';
 import ScraperTitleAnalysisFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTitleAnalysisFeatureEditor';
 import ScraperFeaturePlaceholderEditor from '@/renderer/components/ScraperConfig/ScraperFeaturePlaceholderEditor';
 import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/ScraperConfigContext';
@@ -116,6 +117,17 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'tag') {
       return (
         <ScraperTagFeatureEditor
+          feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
+          onBack={() => setActiveFeatureKind(null)}
+        />
+      );
+    }
+
+    if (activeFeature.kind === 'tagList') {
+      return (
+        <ScraperTagListFeatureEditor
           feature={activeFeature}
           actionSurface={actionSurface}
           onUnsavedChangesChange={onUnsavedChangesChange}

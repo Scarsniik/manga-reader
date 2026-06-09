@@ -1,10 +1,16 @@
 import type {
+  ScraperBookmarkFilterState,
   ScraperBookmarkRecord,
+  ScraperBookmarkReadingStatus,
   ScraperReaderProgressRecord,
   ScraperRecord,
+  ScraperBookmarkSortKey,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
-import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
+import {
+  DEFAULT_SCRAPER_BOOKMARK_FILTERS as SHARED_DEFAULT_BOOKMARK_FILTERS,
+  normalizeScraperViewHistorySourceUrl,
+} from "@/shared/scraper";
 import type { MultiSearchLanguageFilterModes } from "@/renderer/components/MultiSearch/types";
 import {
   getMultiSearchLanguageFilterMode,
@@ -21,26 +27,11 @@ import {
 } from "@/renderer/utils/scraperViewHistory";
 import { getScraperBookmarkLanguageCodes } from "@/renderer/utils/scraperBookmarkMetadata";
 
-export type ScraperBookmarkReadingStatus = "read" | "inProgress" | "unread";
-
-export type ScraperBookmarkSortKey =
-  | "created-desc"
-  | "created-asc"
-  | "updated-desc"
-  | "title-asc"
-  | "title-desc"
-  | "page-desc"
-  | "page-asc"
-  | "scraper-asc";
-
-export type ScraperBookmarkFilterState = {
-  query: string;
-  languageFilterModes: MultiSearchLanguageFilterModes;
-  minPages: string;
-  maxPages: string;
-  readingStatuses: ScraperBookmarkReadingStatus[];
-  sortBy: ScraperBookmarkSortKey;
-};
+export type {
+  ScraperBookmarkFilterState,
+  ScraperBookmarkReadingStatus,
+  ScraperBookmarkSortKey,
+} from "@/shared/scraper";
 
 type FilterBookmarksOptions = {
   bookmarks: ScraperBookmarkRecord[];
@@ -56,14 +47,7 @@ const READING_STATUS_ORDER: Record<ScraperBookmarkReadingStatus, number> = {
   read: 2,
 };
 
-export const DEFAULT_BOOKMARK_FILTERS: ScraperBookmarkFilterState = {
-  query: "",
-  languageFilterModes: {},
-  minPages: "",
-  maxPages: "",
-  readingStatuses: [],
-  sortBy: "created-desc",
-};
+export const DEFAULT_BOOKMARK_FILTERS: ScraperBookmarkFilterState = SHARED_DEFAULT_BOOKMARK_FILTERS;
 
 const normalizeSearchText = (value: unknown): string => (
   String(value ?? "")

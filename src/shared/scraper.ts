@@ -5,6 +5,7 @@ export type ScraperFeatureKind =
   | 'details'
   | 'author'
   | 'tag'
+  | 'tagList'
   | 'chapters'
   | 'pages'
   | 'titleAnalysis';
@@ -425,6 +426,36 @@ export interface ScraperTagFeatureConfig extends ScraperCardListConfig {
   tagNameSelector?: ScraperFieldSelector;
 }
 
+export interface ScraperTagListFeatureConfig {
+  urlTemplate: string;
+  tagListSelector?: string;
+  tagItemSelector: string;
+  tagNameSelector: ScraperFieldSelector;
+  tagUrlSelector?: ScraperFieldSelector;
+  tagCountSelector?: ScraperFieldSelector;
+  nextPageSelector?: ScraperFieldSelector;
+  paginationLinkSelector?: ScraperFieldSelector;
+}
+
+export interface ScraperTagListItem {
+  name: string;
+  url?: string;
+  count?: string;
+}
+
+export interface ScraperTagListCacheRecord {
+  scraperId: string;
+  sourceUrl?: string;
+  tags: ScraperTagListItem[];
+  savedAt: string;
+}
+
+export interface SaveScraperTagListCacheRequest {
+  scraperId: string;
+  sourceUrl?: string;
+  tags: ScraperTagListItem[];
+}
+
 export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
@@ -632,6 +663,71 @@ export interface ScraperBookmarkRecord {
   languageCodes?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type ScraperBookmarkLanguageFilterMode = "default" | "only" | "without";
+export type ScraperBookmarkLanguageFilterModes = Record<string, ScraperBookmarkLanguageFilterMode>;
+
+export type ScraperBookmarkReadingStatus = "read" | "inProgress" | "unread";
+
+export type ScraperBookmarkSortKey =
+  | "created-desc"
+  | "created-asc"
+  | "updated-desc"
+  | "title-asc"
+  | "title-desc"
+  | "page-desc"
+  | "page-asc"
+  | "scraper-asc";
+
+export type ScraperBookmarkFilterState = {
+  query: string;
+  languageFilterModes: ScraperBookmarkLanguageFilterModes;
+  minPages: string;
+  maxPages: string;
+  readingStatuses: ScraperBookmarkReadingStatus[];
+  sortBy: ScraperBookmarkSortKey;
+};
+
+export const DEFAULT_SCRAPER_BOOKMARK_FILTERS: ScraperBookmarkFilterState = {
+  query: "",
+  languageFilterModes: {},
+  minPages: "",
+  maxPages: "",
+  readingStatuses: [],
+  sortBy: "created-desc",
+};
+
+export type ScraperBookmarkViewState = "new" | "seen" | "read";
+
+export interface ScraperBookmarkViewTagBlacklistEntry {
+  value: string;
+  label?: string;
+  addedAt?: string;
+}
+
+export interface ScraperBookmarkViewRequest {
+  scraperId?: string | null;
+  filters?: Partial<ScraperBookmarkFilterState> | null;
+  hideBlacklistedCards?: boolean;
+  blacklistedTagsByScraper?: Record<string, ScraperBookmarkViewTagBlacklistEntry[]> | null;
+}
+
+export interface ScraperBookmarkViewRecord {
+  bookmark: ScraperBookmarkRecord;
+  languageCodes: string[];
+  viewHistoryId: string;
+  viewState: ScraperBookmarkViewState;
+  readingStatus: ScraperBookmarkReadingStatus;
+}
+
+export interface ScraperBookmarkViewResponse {
+  bookmarks: ScraperBookmarkViewRecord[];
+  allBookmarkCount: number;
+  scopeCount: number;
+  filteredCount: number;
+  hiddenBlacklistedCount: number;
+  languageCodes: string[];
 }
 
 export interface ScraperAuthorFavoriteSource {
@@ -1032,6 +1128,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     description: 'Definir comment ouvrir une page tag et extraire la liste de cards retournee.',
   },
   {
+    kind: 'tagList',
+    label: 'Liste de tags',
+    description: 'Definir comment recuperer la liste complete des tags disponibles sur la source.',
+  },
+  {
     kind: 'chapters',
     label: 'Chapitres',
     description: 'Definir comment recuperer la liste des chapitres depuis une fiche manga.',
@@ -1180,6 +1281,8 @@ const buildScraperSearchTemplateReplacements = (
     ['{{query}}', encodedQuery],
     ['{{search}}', encodedQuery],
     ['{{value}}', encodedQuery],
+    ['{{id}}', encodedQuery],
+    ['{{slug}}', encodedQuery],
     ['{{page}}', String(page)],
     ['{{page2}}', padPageNumber(page, 2)],
     ['{{page3}}', padPageNumber(page, 3)],
@@ -1192,6 +1295,8 @@ const buildScraperSearchTemplateReplacements = (
     ['{{plusQuery}}', trimmedQuery.split(' ').join('+')],
     ['{{rawSearch}}', trimmedQuery],
     ['{{rawValue}}', trimmedQuery],
+    ['{{rawId}}', trimmedQuery],
+    ['{{rawSlug}}', trimmedQuery],
   ];
 };
 

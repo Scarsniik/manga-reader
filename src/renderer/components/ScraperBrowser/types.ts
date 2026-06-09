@@ -7,7 +7,7 @@ import {
 import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 
 export type ScraperListingMode = 'homepage' | 'search' | 'author' | 'tag';
-export type ScraperBrowseMode = ScraperListingMode | 'manga';
+export type ScraperBrowseMode = ScraperListingMode | 'manga' | 'tagList';
 export type ScraperBrowserHistorySourceKind = ScraperBrowseMode | 'bookmarks';
 
 export type ScraperBrowserLocationState = {

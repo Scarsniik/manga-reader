@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react";
-import type { ScraperBookmarkRecord, ScraperRecord } from "@/shared/scraper";
-import { saveScraperBookmark } from "@/renderer/stores/scraperBookmarks";
+import type {
+  SaveScraperBookmarkRequest,
+  ScraperBookmarkRecord,
+  ScraperRecord,
+} from "@/shared/scraper";
 import {
   buildScraperBookmarkRequestFromRecord,
   enrichScraperBookmarkRequestFromDetails,
@@ -8,10 +11,9 @@ import {
 } from "@/renderer/utils/scraperBookmarkMetadata";
 
 type UseScraperBookmarkRefreshOptions = {
-  allBookmarks: ScraperBookmarkRecord[];
+  loadBookmarks: () => Promise<ScraperBookmarkRecord[]>;
   scrapersById: Map<string, ScraperRecord>;
-  reload: () => Promise<ScraperBookmarkRecord[]>;
-  reloadAllBookmarks: () => Promise<ScraperBookmarkRecord[]>;
+  onAfterRefresh?: () => Promise<unknown> | unknown;
   onBeforeRefresh?: () => void;
 };
 
@@ -29,11 +31,30 @@ const INITIAL_PROGRESS: ScraperBookmarkRefreshProgress = {
   failed: 0,
 };
 
+const getApi = (): any => (
+  typeof window !== "undefined" ? (window as any).api : null
+);
+
+const saveScraperBookmarkRequest = async (
+  request: SaveScraperBookmarkRequest,
+): Promise<ScraperBookmarkRecord> => {
+  const api = getApi();
+  if (!api || typeof api.saveScraperBookmark !== "function") {
+    throw new Error("Les bookmarks scraper ne sont pas disponibles dans cette version.");
+  }
+
+  const saved = await api.saveScraperBookmark(request);
+  if (!saved) {
+    throw new Error("Le bookmark scraper n'a pas pu etre enregistre.");
+  }
+
+  return saved as ScraperBookmarkRecord;
+};
+
 export default function useScraperBookmarkRefresh({
-  allBookmarks,
+  loadBookmarks,
   scrapersById,
-  reload,
-  reloadAllBookmarks,
+  onAfterRefresh,
   onBeforeRefresh,
 }: UseScraperBookmarkRefreshOptions) {
   const [refreshingBookmarks, setRefreshingBookmarks] = useState(false);
@@ -46,21 +67,22 @@ export default function useScraperBookmarkRefresh({
       return;
     }
 
-    const bookmarksToRefresh = allBookmarks;
-    if (!bookmarksToRefresh.length) {
-      return;
-    }
-
     setRefreshingBookmarks(true);
     setRefreshMessage(null);
     setRefreshError(null);
     onBeforeRefresh?.();
-    setRefreshProgress({
-      ...INITIAL_PROGRESS,
-      total: bookmarksToRefresh.length,
-    });
 
     try {
+      const bookmarksToRefresh = await loadBookmarks();
+      if (!bookmarksToRefresh.length) {
+        return;
+      }
+
+      setRefreshProgress({
+        ...INITIAL_PROGRESS,
+        total: bookmarksToRefresh.length,
+      });
+
       let updated = 0;
       let failed = 0;
 
@@ -85,7 +107,7 @@ export default function useScraperBookmarkRefresh({
           const enrichedRequest = await enrichScraperBookmarkRequestFromDetails(request, scraper);
 
           if (shouldSyncBookmarkMetadata(bookmark, enrichedRequest)) {
-            await saveScraperBookmark(enrichedRequest);
+            await saveScraperBookmarkRequest(enrichedRequest);
             updated += 1;
           }
         } catch (err) {
@@ -101,8 +123,7 @@ export default function useScraperBookmarkRefresh({
         failed,
       });
 
-      await reloadAllBookmarks();
-      await reload();
+      await onAfterRefresh?.();
 
       if (failed > 0) {
         setRefreshError(`${failed} bookmark(s) n'ont pas pu etre rescannes.`);
@@ -117,11 +138,10 @@ export default function useScraperBookmarkRefresh({
       setRefreshingBookmarks(false);
     }
   }, [
-    allBookmarks,
+    loadBookmarks,
+    onAfterRefresh,
     onBeforeRefresh,
     refreshingBookmarks,
-    reload,
-    reloadAllBookmarks,
     scrapersById,
   ]);
 

@@ -3,6 +3,7 @@ import type {
   ScraperChapterItem,
   ScraperFeatureValidationCheckKey,
   ScraperSearchResultItem,
+  ScraperTagListItem,
 } from "@/shared/scraper";
 
 export type DetailsFieldKey = Extract<
@@ -56,6 +57,13 @@ export type ScraperRuntimeSearchPageResult = {
   listingNames?: string[];
   detailsScrape?: ScraperRuntimeCardDetailsScrapeStats;
   items: ScraperSearchResultItem[];
+};
+
+export type ScraperRuntimeTagListPageResult = {
+  currentPageUrl: string;
+  nextPageUrl?: string;
+  paginationUrls: string[];
+  items: ScraperTagListItem[];
 };
 
 export type ScraperDocumentFetcher = (request: {

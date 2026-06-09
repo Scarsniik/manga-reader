@@ -90,6 +90,7 @@ const sanitizeFeatureValidationCheck = (
     "authors",
     "authorUrl",
     "tags",
+    "tagUrl",
     "status",
     "pageCount",
     "language",

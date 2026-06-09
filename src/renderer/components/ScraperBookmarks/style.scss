@@ -280,6 +280,31 @@
   align-items: stretch;
 }
 
+.scraper-bookmarks-view__virtual-grid {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+}
+
+.scraper-bookmarks-view__virtual-row {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.scraper-bookmarks-view__virtual-item {
+  display: flex;
+  min-width: 0;
+}
+
+.scraper-bookmarks-view__virtual-item > .scraper-bookmarks-view__card {
+  width: 100%;
+}
+
 .scraper-bookmarks-view__card {
   display: flex;
   flex-direction: column;

@@ -1,10 +1,10 @@
 # Configuration des scrapers
 
-Date : 2026-04-16
+Date : 2026-06-08
 
 Ce document explique le fonctionnement technique de la configuration des scrapers. Il decrit le
 modele commun, les regles de selecteurs et de templates, puis chaque module de scraping branche en
-V1 : `Recherche`, `Fiche`, `Auteur`, `Tag`, `Chapitres` et `Pages`.
+V1 : `Recherche`, `Fiche`, `Auteur`, `Tag`, `Liste de tags`, `Chapitres` et `Pages`.
 
 ## Perimetre
 
@@ -154,8 +154,8 @@ Utilisees par `Recherche` et par une partie des templates `Auteur` et `Tag` :
 
 | Variable | Valeur |
 | --- | --- |
-| `{{query}}`, `{{search}}`, `{{value}}` | requete encodee |
-| `{{rawQuery}}`, `{{rawSearch}}`, `{{rawValue}}` | requete brute |
+| `{{query}}`, `{{search}}`, `{{value}}`, `{{id}}`, `{{slug}}` | requete encodee |
+| `{{rawQuery}}`, `{{rawSearch}}`, `{{rawValue}}`, `{{rawId}}`, `{{rawSlug}}` | requete brute |
 | `{{page}}` | numero de page 1-based |
 | `{{page2}}`, `{{page3}}`, `{{page4}}` | page 1-based avec zero-padding |
 | `{{pageIndex}}` | index de page 0-based |
@@ -318,6 +318,48 @@ Pour la pagination, deux modes existent :
 - sinon, `nextPageSelector` est utilise
 
 Si les deux sont presents, la pagination par template est prioritaire.
+
+## Module Liste de tags
+
+`Liste de tags` charge une ou plusieurs pages d'index de tags, extrait les tags disponibles puis
+enregistre le resultat dans un cache local par scraper. Cette liste sert ensuite de raccourci de
+navigation vers le module `Tag`.
+
+### URL et pagination
+
+| Champ | Requis | Description |
+| --- | --- | --- |
+| `urlTemplate` | oui | URL ou chemin de la page de tags ; les variables `{{page}}` et `{{pageIndex}}` permettent une pagination par template |
+| `nextPageSelector` | non | lien HTML vers la page suivante |
+| `paginationLinkSelector` | non | liens HTML de pagination ou de lettres ; chaque URL detectee est parcourue une fois |
+
+Au runtime, le bouton d'actualisation scrape toutes les pages detectees jusqu'a epuisement ou jusqu'a
+la limite de securite de 1000 pages. Si `urlTemplate` contient une variable de page, le runtime teste
+les pages successives et suit aussi les liens trouves dans `nextPageSelector` et `paginationLinkSelector`.
+
+### Selecteurs
+
+| Selecteur | Requis | Zone | Description |
+| --- | --- | --- | --- |
+| `tagListSelector` | non | document | limite la recherche a un ou plusieurs conteneurs de tags |
+| `tagItemSelector` | oui | conteneur ou document | detecte chaque tag |
+| `tagNameSelector` | oui | tag | extrait le nom affiche ; un tag sans nom est ignore |
+| `tagUrlSelector` | non | tag | extrait l'URL ou la valeur source du tag |
+| `tagCountSelector` | non | tag | extrait le compteur affiche par le site |
+
+Les items sont dedoublonnes par URL quand elle existe, sinon par nom. Les URLs relatives sont
+resolues depuis la page courante.
+
+### Runtime
+
+Quand une liste est enregistree, l'ouverture du scraper charge `scraper-tag-list-cache/<scraperId>.json`
+et la recherche de la toolbar filtre localement tous les tags, sans pagination UI. Le clic gauche
+ouvre le tag dans la page scraper courante, le clic molette ouvre un onglet workspace `scraper.tag`.
+Le clic droit ouvre un menu permettant d'ajouter ou retirer le tag des favoris et de la blacklist du
+scraper. Les favoris et la blacklist du scraper courant sont aussi affiches en haut de la liste complete.
+Entre ces raccourcis et la liste globale, la vue expose des options persistantes par scraper pour
+trier alphabetiquement ou par compteur d'occurrences, et pour filtrer par compteur min/max quand un
+compteur exploitable existe.
 
 ## Module Fiche
 
@@ -652,9 +694,10 @@ Pour une source HTML classique :
 2. `Recherche` : ajouter les cards et le lien fiche.
 3. `Auteur` : optionnel, souvent en copiant les selecteurs de `Recherche`.
 4. `Tag` : optionnel, souvent en copiant les selecteurs de `Recherche`.
-5. `Chapitres` : si le site a une lecture par chapitre.
-6. `Pages` : brancher le lecteur et le telechargement.
-7. Reglages globaux : tags, langue, bookmarks, recherche d'accueil.
+5. `Liste de tags` : optionnel, pour naviguer rapidement dans tous les tags disponibles.
+6. `Chapitres` : si le site a une lecture par chapitre.
+7. `Pages` : brancher le lecteur et le telechargement.
+8. Reglages globaux : tags, langue, bookmarks, recherche d'accueil.
 
 Si le site ne propose pas de recherche utile, `Fiche` peut suffire pour ouvrir une URL ou une valeur
 manuelle. Si le site ne propose pas de chapitres, `Pages` peut lire directement depuis la fiche ou

@@ -220,6 +220,9 @@ const getRouteStateForNavigation = (options: {
       query: currentRouteState.tagQuery ?? '',
       page: currentRouteState.tagPage ?? 1,
     };
+  const persistedTagListQuery = sourceMode === 'tagList'
+    ? sourceQuery
+    : currentRouteState.tagListQuery ?? '';
 
   return writeScraperRouteState(routeSearch, {
     scraperId,
@@ -247,6 +250,7 @@ const getRouteStateForNavigation = (options: {
     tagPage: nextMode === 'tag'
       ? 1
       : persistedTagState.page,
+    tagListQuery: nextMode === 'tagList' ? sourceQuery : persistedTagListQuery,
     mangaQuery: '',
     mangaUrl,
   });
@@ -1316,6 +1320,17 @@ export function useScraperBrowserSearch({
       resetListingState();
       setListingReturnState(null);
       setMode('tag');
+      setQuery('');
+      return;
+    }
+
+    if (nextMode === 'tagList') {
+      clearFeedback();
+      resetAsyncState();
+      resetDetailsState();
+      resetListingState();
+      setListingReturnState(null);
+      setMode('tagList');
       setQuery('');
       return;
     }

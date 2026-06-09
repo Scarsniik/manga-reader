@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon, PlusSignIcon } from '@/renderer/components/icons';
+import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon, PlusSignIcon, TrashCanIcon } from '@/renderer/components/icons';
 import { ScraperBrowserLocationState } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import {
-  buildScraperViewHistoryCardId,
   type ScraperBookmarkRecord,
-  type ScraperReaderProgressRecord,
+  type ScraperBookmarkViewRequest,
   type ScraperRecord,
 } from '@/shared/scraper';
 import ScraperBookmarkFilters from '@/renderer/components/ScraperBookmarks/ScraperBookmarkFilters';
 import ScraperBookmarkCard from '@/renderer/components/ScraperBookmarks/ScraperBookmarkCard';
+import VirtualizedScraperBookmarkGrid from '@/renderer/components/ScraperBookmarks/VirtualizedScraperBookmarkGrid';
+import useScraperBookmarkView from '@/renderer/components/ScraperBookmarks/useScraperBookmarkView';
 import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkDuplicateReviewModal';
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
 import {
@@ -18,28 +19,17 @@ import {
   type ScraperBookmarkDuplicateDetectionProgress,
   type ScraperBookmarkDuplicateGroup,
 } from '@/renderer/components/ScraperBookmarks/bookmarkDuplicateDetection';
-import { removeScraperBookmark, useScraperBookmarks } from '@/renderer/stores/scraperBookmarks';
+import { removeScraperBookmark } from '@/renderer/stores/scraperBookmarks';
 import { useScraperTagFavorites } from '@/renderer/stores/scraperTagFavorites';
 import useScraperBookmarkRefresh from '@/renderer/components/ScraperBookmarks/useScraperBookmarkRefresh';
 import {
-  buildBookmarkLanguageFilterCodes,
   DEFAULT_BOOKMARK_FILTERS,
-  filterAndSortScraperBookmarks,
   type ScraperBookmarkFilterState,
 } from '@/renderer/components/ScraperBookmarks/bookmarkFiltering';
-import {
-  recordScraperCardsSeen,
-  setScraperCardRead,
-  useScraperViewHistory,
-} from '@/renderer/stores/scraperViewHistory';
 import type { Manga } from '@/renderer/types';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
-import {
-  buildBookmarkViewHistoryIdentity,
-  getScraperCardViewState,
-  getScraperViewHistoryRecord,
-} from '@/renderer/utils/scraperViewHistory';
+import { buildBookmarkViewHistoryIdentity } from '@/renderer/utils/scraperViewHistory';
 import {
   buildScraperDownloadQueuedMessage,
   canQueueStandaloneScraperDownload,
@@ -53,11 +43,9 @@ import {
   isScraperFeatureConfigured,
 } from '@/renderer/utils/scraperRuntime';
 import {
-  getBlacklistedScraperTags,
   getScraperTagBlacklistEntries,
 } from '@/renderer/utils/scraperTagBlacklist';
 import { getScraperTagFavoriteSources } from '@/renderer/utils/scraperTagFavorites';
-import { getScraperBookmarkLanguageCodes } from '@/renderer/utils/scraperBookmarkMetadata';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import { useModal } from '@/renderer/hooks/useModal';
@@ -112,6 +100,10 @@ const normalizeTitleLineCount = (value: unknown): number => {
   return Math.min(4, Math.max(1, Math.floor(parsed)));
 };
 
+const getBookmarkKey = (bookmark: ScraperBookmarkRecord): string => (
+  `${bookmark.scraperId}::${bookmark.sourceUrl}`
+);
+
 export default function ScraperBookmarksView({
   scrapers,
   filterScraperId = null,
@@ -121,15 +113,8 @@ export default function ScraperBookmarksView({
   const { openModal } = useModal();
   const { params } = useParams();
   const locationState = location.state as ScraperBookmarksLocationState;
-  const { bookmarks, loading, loaded, error, reload } = useScraperBookmarks({ scraperId: filterScraperId });
-  const { bookmarks: allBookmarks, reload: reloadAllBookmarks } = useScraperBookmarks();
   const { favorites: tagFavorites } = useScraperTagFavorites();
-  const {
-    loaded: viewHistoryLoaded,
-    recordsById: viewHistoryRecordsById,
-  } = useScraperViewHistory({ scraperId: filterScraperId });
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
-  const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [bookmarkFilters, setBookmarkFilters] = useState<ScraperBookmarkFilterState>(DEFAULT_BOOKMARK_FILTERS);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -138,14 +123,15 @@ export default function ScraperBookmarksView({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [downloadingSourceUrl, setDownloadingSourceUrl] = useState<string | null>(null);
   const [addingSourceUrl, setAddingSourceUrl] = useState<string | null>(null);
-  const [newBookmarkIds, setNewBookmarkIds] = useState<Set<string>>(() => new Set());
+  const [removingBookmarkKey, setRemovingBookmarkKey] = useState<string | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [duplicateCheckProgress, setDuplicateCheckProgress] = useState<ScraperBookmarkDuplicateDetectionProgress>({
     compared: 0,
     total: 0,
   });
   const [duplicateCheckError, setDuplicateCheckError] = useState<string | null>(null);
-  const viewHistoryRecordsByIdRef = useRef(viewHistoryRecordsById);
+  const seenCardsQueueRef = useRef(new Map<string, ReturnType<typeof buildBookmarkViewHistoryIdentity>>());
+  const seenCardsTimerRef = useRef<number | null>(null);
 
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
@@ -153,50 +139,38 @@ export default function ScraperBookmarksView({
   );
   const filteredScraper = filterScraperId ? scrapersById.get(filterScraperId) ?? null : null;
   const bookmarksReturn = locationState?.bookmarksReturn ?? null;
-  const bookmarksHistoryKey = useMemo(
-    () => bookmarks
-      .map((bookmark) => buildScraperViewHistoryCardId(buildBookmarkViewHistoryIdentity(bookmark)))
-      .join('|'),
-    [bookmarks],
-  );
-  const bookmarkLanguageFilterCodes = useMemo(
-    () => buildBookmarkLanguageFilterCodes(bookmarks, scrapersById),
-    [bookmarks, scrapersById],
-  );
-  const filteredBookmarks = useMemo(
-    () => filterAndSortScraperBookmarks({
-      bookmarks,
-      scrapersById,
-      viewHistoryRecordsById,
-      progressRecords: readerProgressRecords,
-      filters: bookmarkFilters,
-    }),
-    [
-      bookmarkFilters,
-      bookmarks,
-      readerProgressRecords,
-      scrapersById,
-      viewHistoryRecordsById,
-    ],
-  );
   const hideBlacklistedBookmarkCards = params?.scraperHideBlacklistedTagCards === true;
-  const displayedBookmarks = useMemo(() => {
-    if (!hideBlacklistedBookmarkCards) {
-      return filteredBookmarks;
-    }
-
-    return filteredBookmarks.filter((bookmark) => (
-      getBlacklistedScraperTags(
-        getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, bookmark.scraperId),
-        bookmark.tags,
-      ).length === 0
-    ));
-  }, [
-    filteredBookmarks,
+  const bookmarkViewRequest = useMemo((): ScraperBookmarkViewRequest => ({
+    scraperId: filterScraperId ?? null,
+    filters: bookmarkFilters,
+    hideBlacklistedCards: hideBlacklistedBookmarkCards,
+    blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
+  }), [
+    bookmarkFilters,
+    filterScraperId,
     hideBlacklistedBookmarkCards,
     params?.scraperBlacklistedTagsByScraper,
   ]);
-  const hiddenBlacklistedBookmarkCount = filteredBookmarks.length - displayedBookmarks.length;
+  const {
+    loaded,
+    loading,
+    response: bookmarkView,
+    error,
+    reload: reloadBookmarkView,
+  } = useScraperBookmarkView(bookmarkViewRequest);
+  const displayedBookmarks = useMemo(
+    () => bookmarkView.bookmarks.map((record) => record.bookmark),
+    [bookmarkView.bookmarks],
+  );
+  const bookmarkViewRecordsByKey = useMemo(
+    () => new Map(bookmarkView.bookmarks.map((record) => [
+      getBookmarkKey(record.bookmark),
+      record,
+    ])),
+    [bookmarkView.bookmarks],
+  );
+  const bookmarkLanguageFilterCodes = bookmarkView.languageCodes;
+  const hiddenBlacklistedBookmarkCount = bookmarkView.hiddenBlacklistedCount;
   const surpriseBookmarkPool = useMemo(() => (
     displayedBookmarks.filter((bookmark) => (
       Boolean(scrapersById.get(bookmark.scraperId))
@@ -216,6 +190,22 @@ export default function ScraperBookmarksView({
     setLibraryError(null);
     setDuplicateCheckError(null);
   }, []);
+  const loadBookmarksForScope = useCallback(async (): Promise<ScraperBookmarkRecord[]> => {
+    if (!window.api || typeof window.api.getScraperBookmarks !== 'function') {
+      return [];
+    }
+
+    const data = await window.api.getScraperBookmarks(filterScraperId ?? null);
+    return Array.isArray(data) ? data : [];
+  }, [filterScraperId]);
+  const loadAllBookmarks = useCallback(async (): Promise<ScraperBookmarkRecord[]> => {
+    if (!window.api || typeof window.api.getScraperBookmarks !== 'function') {
+      return [];
+    }
+
+    const data = await window.api.getScraperBookmarks();
+    return Array.isArray(data) ? data : [];
+  }, []);
   const {
     refreshAllBookmarks,
     refreshingBookmarks,
@@ -223,10 +213,9 @@ export default function ScraperBookmarksView({
     refreshMessage,
     refreshError,
   } = useScraperBookmarkRefresh({
-    allBookmarks,
+    loadBookmarks: loadAllBookmarks,
     scrapersById,
-    reload,
-    reloadAllBookmarks,
+    onAfterRefresh: reloadBookmarkView,
     onBeforeRefresh: clearRefreshFeedback,
   });
 
@@ -245,24 +234,8 @@ export default function ScraperBookmarksView({
     }
   }, []);
 
-  const loadReaderProgressRecords = useCallback(async () => {
-    if (!window.api || typeof window.api.getScraperReaderProgressRecords !== 'function') {
-      setReaderProgressRecords([]);
-      return;
-    }
-
-    try {
-      const data = await window.api.getScraperReaderProgressRecords(filterScraperId ?? null);
-      setReaderProgressRecords(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.warn('Failed to load scraper reader progress for bookmarks', err);
-      setReaderProgressRecords([]);
-    }
-  }, [filterScraperId]);
-
   useEffect(() => {
     void loadLibraryMangas();
-    void loadReaderProgressRecords();
 
     const onMangasUpdated = () => {
       void loadLibraryMangas();
@@ -270,25 +243,7 @@ export default function ScraperBookmarksView({
 
     window.addEventListener('mangas-updated', onMangasUpdated as EventListener);
     return () => window.removeEventListener('mangas-updated', onMangasUpdated as EventListener);
-  }, [loadLibraryMangas, loadReaderProgressRecords]);
-
-  useEffect(() => {
-    viewHistoryRecordsByIdRef.current = viewHistoryRecordsById;
-  }, [viewHistoryRecordsById]);
-
-  useEffect(() => {
-    if (!viewHistoryLoaded || !bookmarks.length) {
-      setNewBookmarkIds(new Set());
-      return;
-    }
-
-    const historySnapshot = viewHistoryRecordsByIdRef.current;
-    setNewBookmarkIds(new Set(
-      bookmarks
-        .map((bookmark) => buildScraperViewHistoryCardId(buildBookmarkViewHistoryIdentity(bookmark)))
-        .filter((id) => id && !historySnapshot.has(id)),
-    ));
-  }, [bookmarks, bookmarksHistoryKey, viewHistoryLoaded]);
+  }, [loadLibraryMangas]);
 
   const handleBack = useCallback(() => {
     const historyIndex = window.history.state && typeof window.history.state.idx === 'number'
@@ -424,21 +379,32 @@ export default function ScraperBookmarksView({
         sourceUrl: bookmark.sourceUrl,
       })
     )));
-  }, []);
+    await reloadBookmarkView();
+  }, [reloadBookmarkView]);
 
   const handleCheckBookmarkDuplicates = useCallback(async () => {
-    if (checkingDuplicates || bookmarks.length < 2) {
+    if (checkingDuplicates || bookmarkView.scopeCount < 2) {
       return;
     }
 
     setCheckingDuplicates(true);
     setDuplicateCheckError(null);
-    setDuplicateCheckProgress({
-      compared: 0,
-      total: Math.max(0, (bookmarks.length * (bookmarks.length - 1)) / 2),
-    });
 
     try {
+      const bookmarks = await loadBookmarksForScope();
+      if (bookmarks.length < 2) {
+        setDuplicateCheckProgress({
+          compared: 0,
+          total: 0,
+        });
+        return;
+      }
+
+      setDuplicateCheckProgress({
+        compared: 0,
+        total: Math.max(0, (bookmarks.length * (bookmarks.length - 1)) / 2),
+      });
+
       const groups = await findScraperBookmarkDuplicateGroups({
         bookmarks,
         scrapersById,
@@ -460,10 +426,11 @@ export default function ScraperBookmarksView({
     }
   }, [
     bookmarkDuplicateMergeOptions,
-    bookmarks,
+    bookmarkView.scopeCount,
     checkingDuplicates,
     handleKeepOnlyDuplicateBookmark,
     handleOpenBookmarkInWorkspace,
+    loadBookmarksForScope,
     openModal,
     scrapersById,
     titleLineCount,
@@ -485,10 +452,12 @@ export default function ScraperBookmarksView({
 
   const getLanguageCodesForBookmark = useCallback((
     bookmark: ScraperBookmarkRecord,
-    scraper: ScraperRecord | null,
+    _scraper: ScraperRecord | null,
   ): string[] => (
-    getScraperBookmarkLanguageCodes(bookmark, scraper)
-  ), []);
+    bookmarkViewRecordsByKey.get(getBookmarkKey(bookmark))?.languageCodes
+    ?? bookmark.languageCodes
+    ?? []
+  ), [bookmarkViewRecordsByKey]);
 
   const handleDownloadBookmark = useCallback(async (
     bookmark: ScraperBookmarkRecord,
@@ -595,34 +564,70 @@ export default function ScraperBookmarksView({
     setHistoryError(null);
 
     try {
-      await setScraperCardRead({
+      if (!window.api || typeof window.api.setScraperCardRead !== 'function') {
+        throw new Error('L\'historique scraper n\'est pas disponible dans cette version.');
+      }
+
+      await window.api.setScraperCardRead({
         ...buildBookmarkViewHistoryIdentity(bookmark),
         read,
       });
+      await reloadBookmarkView();
     } catch (err) {
       setHistoryError(err instanceof Error ? err.message : 'Impossible de mettre a jour l\'historique de lecture.');
     }
-  }, []);
+  }, [reloadBookmarkView]);
 
-  const handleBookmarkViewed = useCallback((bookmark: ScraperBookmarkRecord) => {
-    void recordScraperCardsSeen([
-      buildBookmarkViewHistoryIdentity(bookmark),
-    ]).catch((err) => {
+  const flushSeenCardsQueue = useCallback(() => {
+    if (seenCardsTimerRef.current !== null) {
+      window.clearTimeout(seenCardsTimerRef.current);
+      seenCardsTimerRef.current = null;
+    }
+
+    const cards = Array.from(seenCardsQueueRef.current.values());
+    seenCardsQueueRef.current.clear();
+
+    if (!cards.length || !window.api || typeof window.api.recordScraperCardsSeenCompact !== 'function') {
+      return;
+    }
+
+    void window.api.recordScraperCardsSeenCompact({ cards }).catch((err: unknown) => {
       console.warn('Failed to record scraper bookmark view', err);
     });
   }, []);
 
-  const getBookmarkViewState = useCallback((bookmark: ScraperBookmarkRecord) => {
+  const handleBookmarkViewed = useCallback((bookmark: ScraperBookmarkRecord) => {
+    if (!window.api || typeof window.api.recordScraperCardsSeenCompact !== 'function') {
+      return;
+    }
+
     const identity = buildBookmarkViewHistoryIdentity(bookmark);
-    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
-    const id = buildScraperViewHistoryCardId(identity);
-    return getScraperCardViewState(record, Boolean(id && newBookmarkIds.has(id)));
-  }, [newBookmarkIds, viewHistoryRecordsById]);
+    seenCardsQueueRef.current.set(getBookmarkKey(bookmark), identity);
+
+    if (seenCardsTimerRef.current !== null) {
+      return;
+    }
+
+    seenCardsTimerRef.current = window.setTimeout(flushSeenCardsQueue, 300);
+  }, [flushSeenCardsQueue]);
+
+  useEffect(() => () => {
+    if (seenCardsTimerRef.current !== null) {
+      window.clearTimeout(seenCardsTimerRef.current);
+      seenCardsTimerRef.current = null;
+    }
+
+    seenCardsQueueRef.current.clear();
+  }, []);
+
+  const getBookmarkViewState = useCallback((bookmark: ScraperBookmarkRecord) => {
+    return bookmarkViewRecordsByKey.get(getBookmarkKey(bookmark))?.viewState ?? 'new';
+  }, [bookmarkViewRecordsByKey]);
 
   const renderBookmarkReadAction = useCallback((bookmark: ScraperBookmarkRecord): ScraperCardAction => {
     const identity = buildBookmarkViewHistoryIdentity(bookmark);
-    const record = getScraperViewHistoryRecord(viewHistoryRecordsById, identity);
-    const isRead = Boolean(record?.readAt);
+    const viewRecord = bookmarkViewRecordsByKey.get(getBookmarkKey(bookmark));
+    const isRead = viewRecord?.viewState === 'read';
     const label = isRead ? 'Lu' : 'Marquer lu';
 
     return {
@@ -639,7 +644,47 @@ export default function ScraperBookmarksView({
         void handleSetBookmarkRead(bookmark, !isRead);
       },
     };
-  }, [handleSetBookmarkRead, viewHistoryRecordsById]);
+  }, [bookmarkViewRecordsByKey, handleSetBookmarkRead]);
+
+  const handleRemoveBookmark = useCallback(async (bookmark: ScraperBookmarkRecord) => {
+    const bookmarkKey = getBookmarkKey(bookmark);
+    if (removingBookmarkKey) {
+      return;
+    }
+
+    setRemovingBookmarkKey(bookmarkKey);
+    setHistoryError(null);
+
+    try {
+      await removeScraperBookmark({
+        scraperId: bookmark.scraperId,
+        sourceUrl: bookmark.sourceUrl,
+      });
+      await reloadBookmarkView();
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Impossible de retirer ce bookmark.');
+    } finally {
+      setRemovingBookmarkKey(null);
+    }
+  }, [reloadBookmarkView, removingBookmarkKey]);
+
+  const renderBookmarkRemoveAction = useCallback((bookmark: ScraperBookmarkRecord): ScraperCardAction => {
+    const bookmarkKey = getBookmarkKey(bookmark);
+    const isRemoving = removingBookmarkKey === bookmarkKey;
+
+    return {
+      id: `remove-bookmark-${bookmark.scraperId}-${bookmark.sourceUrl}`,
+      type: 'icon-secondary',
+      label: isRemoving ? 'Retrait...' : 'Retirer',
+      ariaLabel: `Retirer ${bookmark.title} des bookmarks`,
+      icon: <TrashCanIcon aria-hidden="true" focusable="false" />,
+      className: 'is-remove-bookmark',
+      disabled: Boolean(removingBookmarkKey),
+      onClick: () => {
+        void handleRemoveBookmark(bookmark);
+      },
+    };
+  }, [handleRemoveBookmark, removingBookmarkKey]);
 
   const renderBookmarkDownloadAction = useCallback((
     bookmark: ScraperBookmarkRecord,
@@ -715,6 +760,44 @@ export default function ScraperBookmarksView({
     handleAddBookmarkToLibrary,
   ]);
 
+  const renderDisplayedBookmark = useCallback((bookmark: ScraperBookmarkRecord) => {
+    const scraper = scrapersById.get(bookmark.scraperId) ?? null;
+
+    return (
+      <ScraperBookmarkCard
+        bookmark={bookmark}
+        scraper={scraper}
+        languageCodes={getLanguageCodesForBookmark(bookmark, scraper)}
+        viewState={getBookmarkViewState(bookmark)}
+        bookmarkAction={renderBookmarkRemoveAction(bookmark)}
+        readAction={renderBookmarkReadAction(bookmark)}
+        addToLibraryAction={renderBookmarkAddToLibraryAction(bookmark, scraper)}
+        downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
+        tagBlacklistEntries={getScraperTagBlacklistEntries(
+          params?.scraperBlacklistedTagsByScraper,
+          bookmark.scraperId,
+        )}
+        tagFavoriteSources={getScraperTagFavoriteSources(tagFavorites, bookmark.scraperId)}
+        onOpenBookmark={handleOpenBookmark}
+        onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}
+        onViewed={handleBookmarkViewed}
+      />
+    );
+  }, [
+    getBookmarkViewState,
+    getLanguageCodesForBookmark,
+    handleBookmarkViewed,
+    handleOpenBookmark,
+    handleOpenBookmarkInWorkspace,
+    params?.scraperBlacklistedTagsByScraper,
+    renderBookmarkAddToLibraryAction,
+    renderBookmarkDownloadAction,
+    renderBookmarkRemoveAction,
+    renderBookmarkReadAction,
+    scrapersById,
+    tagFavorites,
+  ]);
+
   return (
     <section className="scraper-bookmarks-view scraper-browser__panel">
       <div className="scraper-bookmarks-view__header">
@@ -766,7 +849,7 @@ export default function ScraperBookmarksView({
             onClick={() => {
               void handleCheckBookmarkDuplicates();
             }}
-            disabled={checkingDuplicates || bookmarks.length < 2}
+            disabled={checkingDuplicates || bookmarkView.scopeCount < 2}
           >
             {checkingDuplicates
               ? `Verification ${duplicateCheckProgress.compared}/${duplicateCheckProgress.total}`
@@ -779,7 +862,7 @@ export default function ScraperBookmarksView({
             onClick={() => {
               void refreshAllBookmarks();
             }}
-            disabled={refreshingBookmarks || allBookmarks.length === 0}
+            disabled={refreshingBookmarks || bookmarkView.allBookmarkCount === 0}
           >
             {refreshingBookmarks
               ? `Rescrape ${refreshProgress.current}/${refreshProgress.total}`
@@ -840,19 +923,19 @@ export default function ScraperBookmarksView({
         <div className="scraper-browser__message is-error">{duplicateCheckError}</div>
       ) : null}
 
-      {bookmarks.length > 0 ? (
+      {bookmarkView.scopeCount > 0 ? (
         <ScraperBookmarkFilters
           filters={bookmarkFilters}
           languageCodes={bookmarkLanguageFilterCodes}
           resultCount={displayedBookmarks.length}
-          totalCount={bookmarks.length}
+          totalCount={bookmarkView.scopeCount}
           onChange={setBookmarkFilters}
         />
       ) : null}
 
       {!loaded && loading ? (
         <div className="scraper-browser__message">Chargement des bookmarks...</div>
-      ) : bookmarks.length === 0 ? (
+      ) : bookmarkView.scopeCount === 0 ? (
         <div className="scraper-browser__message is-warning">
           {filterScraperId
             ? 'Aucun bookmark n\'a encore ete enregistre pour ce scrapper.'
@@ -867,32 +950,10 @@ export default function ScraperBookmarksView({
           Aucun bookmark ne correspond aux filtres actuels.
         </div>
       ) : (
-        <div className="scraper-browser__results-grid">
-          {displayedBookmarks.map((bookmark) => {
-            const scraper = scrapersById.get(bookmark.scraperId) ?? null;
-
-            return (
-              <ScraperBookmarkCard
-                key={`${bookmark.scraperId}-${bookmark.sourceUrl}`}
-                bookmark={bookmark}
-                scraper={scraper}
-                languageCodes={getLanguageCodesForBookmark(bookmark, scraper)}
-                viewState={getBookmarkViewState(bookmark)}
-                readAction={renderBookmarkReadAction(bookmark)}
-                addToLibraryAction={renderBookmarkAddToLibraryAction(bookmark, scraper)}
-                downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
-                tagBlacklistEntries={getScraperTagBlacklistEntries(
-                  params?.scraperBlacklistedTagsByScraper,
-                  bookmark.scraperId,
-                )}
-                tagFavoriteSources={getScraperTagFavoriteSources(tagFavorites, bookmark.scraperId)}
-                onOpenBookmark={handleOpenBookmark}
-                onOpenBookmarkInWorkspace={handleOpenBookmarkInWorkspace}
-                onViewed={handleBookmarkViewed}
-              />
-            );
-          })}
-        </div>
+        <VirtualizedScraperBookmarkGrid
+          bookmarks={displayedBookmarks}
+          renderBookmark={renderDisplayedBookmark}
+        />
       )}
     </section>
   );

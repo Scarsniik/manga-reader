@@ -123,6 +123,39 @@ export async function recordScraperCardsSeen(
   });
 }
 
+export async function recordScraperCardsSeenCompact(
+  _event: IpcMainInvokeEvent,
+  request: RecordScraperCardsSeenRequest | ScraperViewHistoryCardIdentity[],
+): Promise<ScraperViewHistoryRecord[]> {
+  return runScraperViewHistoryMutation(async () => {
+    const cards = normalizeSeenCardsRequest(request);
+    if (!cards.length) {
+      return [];
+    }
+
+    const now = new Date().toISOString();
+    const records = await readScraperViewHistoryFile();
+    const recordsById = new Map(records.map((record) => [record.id, record]));
+    const updatedRecords: ScraperViewHistoryRecord[] = [];
+
+    cards.forEach((card) => {
+      const id = buildScraperViewHistoryCardId(card);
+      if (!id) {
+        return;
+      }
+
+      const record = toSeenRecord(card, recordsById.get(id) ?? null, now);
+      if (record) {
+        recordsById.set(record.id, record);
+        updatedRecords.push(record);
+      }
+    });
+
+    await writeScraperViewHistoryFile(Array.from(recordsById.values()));
+    return updatedRecords;
+  });
+}
+
 export async function setScraperCardRead(
   _event: IpcMainInvokeEvent,
   request: SetScraperCardReadRequest,

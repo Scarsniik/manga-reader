@@ -37,8 +37,10 @@ export default function ScraperBrowserToolbar({
     manga: 'Manga',
     author: 'Auteur',
     tag: 'Tag',
+    tagList: 'Tags',
   };
   const isHomepageMode = mode === 'homepage';
+  const isTagListMode = mode === 'tagList';
 
   return (
     <div className="scraper-browser__panel">
@@ -81,7 +83,7 @@ export default function ScraperBrowserToolbar({
         ) : null}
 
         <button type="submit" className="scraper-browser__submit" disabled={loading}>
-          {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : 'Lancer'}
+          {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : isTagListMode ? 'Filtrer' : 'Lancer'}
         </button>
       </form>
 

@@ -17,6 +17,7 @@ export const scraperBookmarksFilePath = path.join(dataDir, "scraper-bookmarks.js
 export const scraperAuthorFavoritesFilePath = path.join(dataDir, "scraper-author-favorites.json");
 export const scraperTagFavoritesFilePath = path.join(dataDir, "scraper-tag-favorites.json");
 export const scraperAuthorFavoriteCacheDir = path.join(dataDir, "scraper-author-favorite-cache");
+export const scraperTagListCacheDir = path.join(dataDir, "scraper-tag-list-cache");
 export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-progress.json");
 export const scraperViewHistoryFilePath = path.join(dataDir, "scraper-view-history.json");
 export const scraperLatestCheckpointsFilePath = path.join(dataDir, "scraper-latest-checkpoints.json");
@@ -46,6 +47,15 @@ export async function ensureScraperAuthorFavoriteCacheDir() {
         await fs.mkdir(scraperAuthorFavoriteCacheDir, { recursive: true });
     } catch (err) {
         console.warn("Failed to ensure scraper author favorite cache directory exists", err);
+    }
+}
+
+export async function ensureScraperTagListCacheDir() {
+    try {
+        await ensureDataDir();
+        await fs.mkdir(scraperTagListCacheDir, { recursive: true });
+    } catch (err) {
+        console.warn("Failed to ensure scraper tag list cache directory exists", err);
     }
 }
 

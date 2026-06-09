@@ -227,6 +227,9 @@ ipcMain.handle("get-scrapers", async () => scrapers.getScrapers());
 ipcMain.handle("get-scraper-bookmarks", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
     scrapers.getScraperBookmarks(event, scraperId)
 ));
+ipcMain.handle("get-scraper-bookmark-view", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.getScraperBookmarkView(event, request)
+));
 ipcMain.handle("save-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.saveScraperBookmark(event, request);
     notifyScraperBookmarksUpdated();
@@ -276,6 +279,12 @@ ipcMain.handle("remove-scraper-tag-favorite-source", async (event: IpcMainInvoke
     notifyScraperTagFavoritesUpdated();
     return updated;
 });
+ipcMain.handle("get-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent, scraperId: string) => (
+    scrapers.getScraperTagListCache(scraperId)
+));
+ipcMain.handle("save-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent, request: any) => (
+    scrapers.saveScraperTagListCache(request)
+));
 ipcMain.handle("get-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, favoriteId: string) => (
     scrapers.getScraperAuthorFavoriteCache(event, favoriteId)
 ));
@@ -290,6 +299,9 @@ ipcMain.handle("record-scraper-cards-seen", async (event: IpcMainInvokeEvent, re
     notifyScraperViewHistoryUpdated();
     return updated;
 });
+ipcMain.handle("record-scraper-cards-seen-compact", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.recordScraperCardsSeenCompact(event, request)
+));
 ipcMain.handle("set-scraper-card-read", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.setScraperCardRead(event, request);
     notifyScraperViewHistoryUpdated();

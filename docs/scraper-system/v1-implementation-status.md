@@ -142,6 +142,8 @@ L'etape `Composants` expose pour le moment :
 - `Recherche`
 - `Fiche`
 - `Auteur`
+- `Tag`
+- `Liste de tags`
 - `Chapitres`
 - `Pages`
 
@@ -302,6 +304,23 @@ La vue `Tags favoris` est branchee dans le menu principal. Elle liste les tags s
 un favori sous forme de liste unique de cards, sans separation par scraper. La pagination charge la
 meme page sur chaque source rattachee au favori.
 
+## Configuration actuelle de `Liste de tags`
+
+La configuration de `Liste de tags` repose sur :
+
+- une URL de page de tags
+- un selecteur optionnel de conteneur
+- un selecteur d'item tag obligatoire
+- un selecteur de nom de tag obligatoire
+- des selecteurs optionnels pour l'URL, le compteur, la page suivante et les liens de pagination ou de lettres
+
+Le runtime charge automatiquement le cache local de la liste si un fichier existe. Le bouton
+`Scraper` / `Actualiser` parcourt toutes les pages detectees, enregistre les tags dans
+`scraper-tag-list-cache/<scraperId>.json`, puis affiche tous les resultats sans pagination UI. La
+barre de recherche filtre uniquement cette liste enregistree. Les tags sont cliquables vers `Tag`,
+ouvrables au clic molette dans le workspace, et le clic droit permet l'ajout aux favoris ou a la
+blacklist du scraper.
+
 ## Configuration actuelle de `Chapitres`
 
 La configuration de `Chapitres` repose sur :
@@ -411,9 +430,9 @@ Elements conserves hors `Bibliotheque` :
 La vue temporaire du scraper affiche :
 
 - son identite
-- l'etat de `Homepage`, `Recherche`, `Fiche`, `Auteur`, `Chapitres` et `Pages`
+- l'etat de `Homepage`, `Recherche`, `Fiche`, `Auteur`, `Tag`, `Liste de tags`, `Chapitres` et `Pages`
 - une barre de saisie runtime
-- un select `Homepage / Recherche / Manga / Auteur` selon les composants utilisables
+- un select `Homepage / Recherche / Manga / Auteur / Tag / Tags` selon les composants utilisables
 
 Dans la V1 actuelle, le runtime reel branche est surtout :
 
@@ -421,6 +440,8 @@ Dans la V1 actuelle, le runtime reel branche est surtout :
 - `Recherche`
 - `Manga` via `Fiche`
 - `Auteur`
+- `Tag`
+- `Liste de tags`
 - `Nouveautes` via les auteurs favoris et les scrapers actives
 
 Le mode `Homepage` permet deja :

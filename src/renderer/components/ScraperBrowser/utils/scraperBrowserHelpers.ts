@@ -121,9 +121,16 @@ export const buildQueryPlaceholder = (
   authorMode: 'template' | 'result_url' | null,
   hasTag = false,
   tagMode: 'template' | 'result_url' | null = null,
+  hasTagList = false,
 ): string => {
   if (mode === 'homepage') {
     return 'Homepage sans terme de recherche';
+  }
+
+  if (mode === 'tagList') {
+    return hasTagList
+      ? 'Filtrer la liste de tags enregistree'
+      : 'La liste de tags n\'est pas encore configuree.';
   }
 
   if (mode === 'search') {
@@ -187,6 +194,7 @@ export const buildScraperBrowserHelperText = (options: {
   usesSearchTemplatePaging: boolean;
   usesAuthorTemplatePaging: boolean;
   usesTagTemplatePaging?: boolean;
+  usesTagListTemplatePaging?: boolean;
   hasSearchNextPageSelector: boolean;
   hasAuthorNextPageSelector: boolean;
   hasTagNextPageSelector?: boolean;
@@ -195,6 +203,7 @@ export const buildScraperBrowserHelperText = (options: {
   hasDetails: boolean;
   hasAuthor: boolean;
   hasTag?: boolean;
+  hasTagList?: boolean;
 }): string | undefined => {
   const {
     mode,
@@ -202,11 +211,13 @@ export const buildScraperBrowserHelperText = (options: {
     hasSearchNextPageSelector,
     usesAuthorTemplatePaging,
     usesTagTemplatePaging,
+    usesTagListTemplatePaging,
     hasAuthorNextPageSelector,
     hasTagNextPageSelector,
     hasDetails,
     hasAuthor,
     hasTag,
+    hasTagList,
   } = options;
 
   if (mode === 'homepage') {
@@ -267,6 +278,14 @@ export const buildScraperBrowserHelperText = (options: {
     }
   }
 
+  if (mode === 'tagList' && hasTagList) {
+    if (usesTagListTemplatePaging) {
+      return 'Cette vue charge la liste de tags enregistree pour ce scrapper. Le scraping parcourt le template `{{page}}` et les liens de pagination detectes.';
+    }
+
+    return 'Cette vue charge la liste de tags enregistree pour ce scrapper. Le bouton d\'actualisation rescrape toutes les pages detectees.';
+  }
+
   return undefined;
 };
 
@@ -276,6 +295,7 @@ export const buildScraperCapabilities = (options: {
   detailsFeature: ScraperFeatureDefinition | null;
   authorFeature: ScraperFeatureDefinition | null;
   tagFeature?: ScraperFeatureDefinition | null;
+  tagListFeature?: ScraperFeatureDefinition | null;
   chaptersFeature: ScraperFeatureDefinition | null;
   pagesFeature: ScraperFeatureDefinition | null;
   hasHomepage: boolean;
@@ -283,6 +303,7 @@ export const buildScraperCapabilities = (options: {
   hasDetails: boolean;
   hasAuthor: boolean;
   hasTag?: boolean;
+  hasTagList?: boolean;
   hasChapters: boolean;
   hasPages: boolean;
 }): ScraperCapability[] => {
@@ -292,6 +313,7 @@ export const buildScraperCapabilities = (options: {
     detailsFeature,
     authorFeature,
     tagFeature = null,
+    tagListFeature = null,
     chaptersFeature,
     pagesFeature,
     hasHomepage,
@@ -299,6 +321,7 @@ export const buildScraperCapabilities = (options: {
     hasDetails,
     hasAuthor,
     hasTag = false,
+    hasTagList = false,
     hasChapters,
     hasPages,
   } = options;
@@ -309,6 +332,7 @@ export const buildScraperCapabilities = (options: {
     { label: 'Fiche', feature: detailsFeature, enabled: hasDetails },
     { label: 'Auteur', feature: authorFeature, enabled: hasAuthor },
     { label: 'Tag', feature: tagFeature, enabled: hasTag },
+    { label: 'Liste de tags', feature: tagListFeature, enabled: hasTagList },
     { label: 'Chapitres', feature: chaptersFeature, enabled: hasChapters },
     { label: 'Pages', feature: pagesFeature, enabled: hasPages },
   ];

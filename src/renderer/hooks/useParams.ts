@@ -3,6 +3,18 @@ import { useEffect, useState, useCallback } from 'react';
 import type { LibrarySearchFilterState, SavedLibrarySearch, SavedScraperSearch } from '@/renderer/types';
 import type { ScraperTagBlacklistByScraper } from '@/renderer/utils/scraperTagBlacklist';
 
+export type ScraperTagListSortMode = 'alpha' | 'count';
+export type ScraperTagListSortDirection = 'asc' | 'desc';
+
+export type ScraperTagListViewSettings = {
+    sortMode?: ScraperTagListSortMode;
+    sortDirection?: ScraperTagListSortDirection;
+    minCount?: number | null;
+    maxCount?: number | null;
+};
+
+export type ScraperTagListViewSettingsByScraper = Record<string, ScraperTagListViewSettings>;
+
 export type AppParams = {
     libraryPath?: string;
     lastHomeSearch?: string | null;
@@ -52,6 +64,7 @@ export type AppParams = {
     scraperScrapeDetailsWithCards?: boolean;
     scraperHideBlacklistedTagCards?: boolean;
     scraperBlacklistedTagsByScraper?: ScraperTagBlacklistByScraper;
+    scraperTagListViewSettingsByScraper?: ScraperTagListViewSettingsByScraper;
     scraperLatestResultLimit?: number;
     scraperLatestScraperResultLimit?: number;
     scraperLatestTagResultLimit?: number;

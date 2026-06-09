@@ -14,6 +14,9 @@ export {
   saveScraperBookmark,
 } from "./scrapers/bookmarks";
 export {
+  getScraperBookmarkView,
+} from "./scrapers/bookmarkView";
+export {
   getScraperAuthorFavorites,
   removeScraperAuthorFavorite,
   removeScraperAuthorFavoriteSource,
@@ -25,6 +28,10 @@ export {
   removeScraperTagFavoriteSource,
   saveScraperTagFavorite,
 } from "./scrapers/tagFavorites";
+export {
+  getScraperTagListCache,
+  saveScraperTagListCache,
+} from "./scrapers/tagListCache";
 export {
   getScraperAuthorFavoriteCache,
   removeScraperAuthorFavoriteCache,
@@ -38,6 +45,7 @@ export {
 export {
   getScraperViewHistory,
   recordScraperCardsSeen,
+  recordScraperCardsSeenCompact,
   setScraperCardRead,
 } from "./scrapers/viewHistory";
 export {

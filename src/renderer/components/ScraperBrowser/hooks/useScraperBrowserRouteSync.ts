@@ -120,6 +120,7 @@ type UseScraperBrowserRouteSyncOptions = {
   hasSearch: boolean;
   hasAuthor: boolean;
   hasTag: boolean;
+  hasTagList: boolean;
   hasDetails: boolean;
   hasConfiguredHomeSearch: boolean;
   homeSearchQuery: string;
@@ -168,6 +169,7 @@ export function useScraperBrowserRouteSync({
   hasSearch,
   hasAuthor,
   hasTag,
+  hasTagList,
   hasDetails,
   hasConfiguredHomeSearch,
   homeSearchQuery,
@@ -394,6 +396,7 @@ export function useScraperBrowserRouteSync({
         && !routeState.searchActive
         && !routeState.authorActive
         && !routeState.tagActive
+        && routeState.mode !== 'tagList'
         && !routeState.mangaQuery
         && !routeState.mangaUrl
       ) {
@@ -475,6 +478,15 @@ export function useScraperBrowserRouteSync({
       return;
     }
 
+    if (nextMode === 'tagList' && hasTagList) {
+      setQuery(routeState.tagListQuery ?? '');
+      setListingReturnState(null);
+      resetDetailsState();
+      resetListingState();
+      clearFeedback();
+      return;
+    }
+
     setQuery(formatScraperValueForDisplay(routeState.mangaQuery || routeState.mangaUrl || ''));
     setListingReturnState(restoredListingReturnState);
 
@@ -509,6 +521,7 @@ export function useScraperBrowserRouteSync({
     defaultMode,
     hasAuthor,
     hasTag,
+    hasTagList,
     hasHomepage,
     hasConfiguredHomeSearch,
     hasDetails,
@@ -685,6 +698,7 @@ export function useScraperBrowserRouteSync({
       tagActive: persistedTagState.active,
       tagQuery: persistedTagState.query,
       tagPage: persistedTagState.page,
+      tagListQuery: mode === 'tagList' ? query : routeState.tagListQuery ?? '',
       mangaQuery: mode === 'manga' ? query : '',
       mangaUrl: mode === 'manga'
         ? formatScraperValueForDisplay(currentDetailsUrl) || undefined
@@ -723,6 +737,7 @@ export function useScraperBrowserRouteSync({
     mode,
     navigate,
     query,
+    routeState.tagListQuery,
     scraperId,
     urlRestoreReady,
   ]);

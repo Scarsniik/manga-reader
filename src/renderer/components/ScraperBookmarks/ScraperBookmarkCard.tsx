@@ -23,6 +23,7 @@ type Props = {
   scraper?: ScraperRecord | null;
   languageCodes?: string[];
   viewState: ScraperCardViewState;
+  bookmarkAction?: ScraperCardAction | null;
   readAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
@@ -94,6 +95,7 @@ export default function ScraperBookmarkCard({
   scraper = null,
   languageCodes = [],
   viewState,
+  bookmarkAction = null,
   readAction = null,
   addToLibraryAction = null,
   downloadAction = null,
@@ -128,31 +130,32 @@ export default function ScraperBookmarkCard({
     [favoriteTagMatches],
   );
   const hasBlacklistedTags = blacklistedTagMatches.length > 0;
+  const defaultBookmarkAction: ScraperCardAction = {
+    id: 'bookmark-toggle',
+    type: 'custom',
+    label: 'Basculer le bookmark',
+    render: () => (
+      <ScraperBookmarkButton
+        scraperId={bookmark.scraperId}
+        sourceUrl={bookmark.sourceUrl}
+        title={bookmark.title}
+        cover={bookmark.cover}
+        summary={bookmark.summary}
+        description={bookmark.description}
+        authors={bookmark.authors}
+        tags={bookmark.tags}
+        mangaStatus={bookmark.mangaStatus}
+        pageCount={bookmark.pageCount}
+        languageCodes={languageCodes}
+        excludedFields={scraper?.globalConfig.bookmark.excludedFields}
+        size="sm"
+        autoSyncWhenBookmarked={false}
+      />
+    ),
+  };
   const actions: ScraperCardAction[] = [
     ...(readAction ? [readAction] : []),
-    {
-      id: 'bookmark-toggle',
-      type: 'custom',
-      label: 'Basculer le bookmark',
-      render: () => (
-        <ScraperBookmarkButton
-          scraperId={bookmark.scraperId}
-          sourceUrl={bookmark.sourceUrl}
-          title={bookmark.title}
-          cover={bookmark.cover}
-          summary={bookmark.summary}
-          description={bookmark.description}
-          authors={bookmark.authors}
-          tags={bookmark.tags}
-          mangaStatus={bookmark.mangaStatus}
-          pageCount={bookmark.pageCount}
-          languageCodes={languageCodes}
-          excludedFields={scraper?.globalConfig.bookmark.excludedFields}
-          size="sm"
-          autoSyncWhenBookmarked={false}
-        />
-      ),
-    },
+    bookmarkAction ?? defaultBookmarkAction,
     ...(addToLibraryAction ? [addToLibraryAction] : []),
     ...(downloadAction ? [downloadAction] : []),
     canOpenBookmark
