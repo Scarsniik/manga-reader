@@ -61,6 +61,7 @@
     "@vitejs/plugin-react": "^5.0.2",
     "electron": "^38.0.0",
     "electron-builder": "^26.0.12",
+    "react-doctor": "^0.5.1",
     "sass": "^1.92.1",
     "vite": "^7.1.4",
     "vite-plugin-svgr": "^5.2.0"
