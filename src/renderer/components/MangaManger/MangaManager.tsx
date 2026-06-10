@@ -4,6 +4,7 @@ import type { Manga } from '@/renderer/types';
 import type { ScraperRecord } from '@/shared/scraper';
 import CardList from '@/renderer/components/utils/CardList/CardList';
 import './style.scss';
+import '@/renderer/components/ScraperBrowser/style.scss';
 import { useModal } from '@/renderer/hooks/useModal';
 import type { ModalOptions } from '@/renderer/context/ModalContext';
 import useTags from '@/renderer/hooks/useTags';
