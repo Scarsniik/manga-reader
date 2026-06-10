@@ -66,6 +66,7 @@ temp/
 .cache/
 
 # Generated / local artifacts
+.codex-*.json
 jpdb_response.json
 package-lock.json
 node_modules/
