@@ -1,6 +1,7 @@
 import { ScraperPagesFeatureConfig } from '@/shared/scraper';
 
 type ScraperPagesChapterConfig = Pick<ScraperPagesFeatureConfig, 'urlStrategy' | 'linkedToChapters'>;
+type ScraperPagesResolutionConfig = Pick<ScraperPagesFeatureConfig, 'pageResolutionMode'>;
 
 export const usesScraperPagesTemplateChapterContext = (
   config: ScraperPagesChapterConfig | null | undefined,
@@ -21,3 +22,7 @@ export const usesScraperPagesSelectorSource = (
 ): boolean => Boolean(
   config && (config.urlStrategy === 'details_page' || config.urlStrategy === 'chapter_page'),
 );
+
+export const usesScraperPagesLinkedPages = (
+  config: ScraperPagesResolutionConfig | null | undefined,
+): boolean => Boolean(config && config.pageResolutionMode === 'linked_pages');

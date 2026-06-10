@@ -13,6 +13,7 @@ import {
   type ScraperLanguageDetectionConfig,
   type ScraperLanguageValueMapping,
   type ScraperPagesFeatureConfig,
+  type ScraperPagesResolutionMode,
   type ScraperPagesTemplateBase,
   type ScraperRecord,
   type ScraperRequestConfig,
@@ -79,6 +80,9 @@ const normalizeLanguageDetectionConfig = (value: unknown): ScraperLanguageDetect
 
 const normalizePagesTemplateBase = (value: unknown): ScraperPagesTemplateBase =>
   value === "details_page" ? "details_page" : "scraper_base";
+
+const normalizePagesResolutionMode = (value: unknown): ScraperPagesResolutionMode =>
+  value === "linked_pages" ? "linked_pages" : "direct_images";
 
 const buildCardListConfig = (raw: Record<string, unknown>): ScraperCardListConfig => ({
   resultListSelector: trimOptionalBlockSelector(raw.resultListSelector),
@@ -296,6 +300,7 @@ export const getScraperDetailsFeatureConfig = (
     tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
     statusSelector: trimOptionalFieldSelector(raw.statusSelector),
     pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
+    thumbnailsMode: raw.thumbnailsMode === "css_sprite" ? "css_sprite" : "image",
     thumbnailsListSelector: trimOptionalBlockSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalFieldSelector(raw.thumbnailsSelector),
     thumbnailsNextPageSelector: trimOptionalFieldSelector(raw.thumbnailsNextPageSelector),
@@ -347,6 +352,8 @@ export const getScraperPagesFeatureConfig = (
           : "details_page",
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: normalizePagesTemplateBase(raw.templateBase),
+    pageResolutionMode: normalizePagesResolutionMode(raw.pageResolutionMode),
+    pageLinkSelector: trimOptionalFieldSelector(raw.pageLinkSelector),
     pageImageSelector: trimOptionalFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === "template" ? Boolean(raw.linkedToChapters) : false,
   };

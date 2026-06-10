@@ -153,6 +153,28 @@ export const SELECTOR_FIELDS: Field[] = [
     type: 'text',
     placeholder: 'Exemple : .pages-count',
   },
+];
+
+export const THUMBNAILS_MODE_FIELD: Field = {
+  name: 'thumbnailsMode',
+  label: 'Mode des vignettes',
+  type: 'radio',
+  layout: 'cards',
+  options: [
+    {
+      label: 'Images directes',
+      value: 'image',
+      description: 'Le selecteur retourne une URL d\'image utilisable directement.',
+    },
+    {
+      label: 'Sprite CSS',
+      value: 'css_sprite',
+      description: 'Le selecteur retourne un style background avec url(...) et background-position.',
+    },
+  ],
+};
+
+export const THUMBNAIL_FIELDS: Field[] = [
   {
     name: 'thumbnailsListSelector',
     label: 'Selecteur du conteneur vignettes',
@@ -163,7 +185,7 @@ export const SELECTOR_FIELDS: Field[] = [
     name: 'thumbnailsSelector',
     label: 'Selecteur des vignettes',
     type: 'text',
-    placeholder: 'Exemple : img@src ou .thumbnails img@src',
+    placeholder: 'Exemple : img@src, .thumb@style ou .thumb',
   },
   {
     name: 'thumbnailsNextPageSelector',
@@ -219,6 +241,7 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   tagUrlSelector: undefined,
   statusSelector: undefined,
   pageCountSelector: undefined,
+  thumbnailsMode: 'image',
   thumbnailsListSelector: '',
   thumbnailsSelector: undefined,
   thumbnailsNextPageSelector: undefined,
@@ -306,6 +329,7 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   tagUrlSelector: trimOptionalFieldSelector(values.tagUrlSelector),
   statusSelector: trimOptionalFieldSelector(values.statusSelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
+  thumbnailsMode: values.thumbnailsMode === 'css_sprite' ? 'css_sprite' : 'image',
   thumbnailsListSelector: trimOptionalSelector(values.thumbnailsListSelector),
   thumbnailsSelector: trimOptionalFieldSelector(values.thumbnailsSelector),
   thumbnailsNextPageSelector: trimOptionalFieldSelector(values.thumbnailsNextPageSelector),
@@ -336,6 +360,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
     statusSelector: trimOptionalFieldSelector(raw.statusSelector),
     pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
+    thumbnailsMode: raw.thumbnailsMode === 'css_sprite' ? 'css_sprite' : 'image',
     thumbnailsListSelector: trimOptionalSelector(raw.thumbnailsListSelector),
     thumbnailsSelector: trimOptionalFieldSelector(raw.thumbnailsSelector),
     thumbnailsNextPageSelector: trimOptionalFieldSelector(raw.thumbnailsNextPageSelector),

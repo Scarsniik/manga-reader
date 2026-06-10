@@ -23,14 +23,17 @@ import {
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
 import {
   createScraperMangaId,
+  createScraperRuntimeImageThumbnail,
   extractScraperDetailsFromDocumentWithImageFallbacks,
   extractScraperDetailsThumbnailsPageFromDocument,
+  getScraperRuntimeThumbnailKey,
   hasRenderableDetails,
   resolveScraperChapters,
   resolveScraperDetailsTargetUrl,
   resolveScraperPageUrls,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
+  ScraperRuntimeThumbnail,
 } from '@/renderer/utils/scraperRuntime';
 
 type UseScraperBrowserDetailsOptions = {
@@ -81,15 +84,16 @@ const normalizeRequestedReaderPage = (
   return Math.max(1, Math.min(totalPages, Math.floor(value)));
 };
 
-const mergeUniqueValues = (values: string[]): string[] => {
+const mergeUniqueThumbnails = (values: ScraperRuntimeThumbnail[]): ScraperRuntimeThumbnail[] => {
   const seen = new Set<string>();
 
   return values.filter((value) => {
-    if (seen.has(value)) {
+    const key = getScraperRuntimeThumbnailKey(value);
+    if (seen.has(key)) {
       return false;
     }
 
-    seen.add(value);
+    seen.add(key);
     return true;
   });
 };
@@ -399,7 +403,7 @@ export function useScraperBrowserDetails({
           previous
             ? {
               ...previous,
-              thumbnails: pageUrls,
+              thumbnails: pageUrls.map(createScraperRuntimeImageThumbnail),
               thumbnailsNextPageUrl: undefined,
             }
             : previous
@@ -451,7 +455,7 @@ export function useScraperBrowserDetails({
         }
 
         const currentThumbnails = previous.thumbnails ?? [];
-        const nextThumbnails = mergeUniqueValues([
+        const nextThumbnails = mergeUniqueThumbnails([
           ...currentThumbnails,
           ...thumbnailsPage.thumbnails,
         ]);

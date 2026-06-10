@@ -12,6 +12,7 @@ import {
 } from "@/renderer/utils/scraperTemplateContext";
 import {
   usesScraperPagesChapters,
+  usesScraperPagesLinkedPages,
   usesScraperPagesSelectorSource,
   usesScraperPagesTemplateChapterContext,
 } from "@/renderer/utils/scraperPages";
@@ -89,6 +90,7 @@ const usesTemplateSelectorReaderPages = (
   pagesConfig: ScraperPagesFeatureConfig,
 ): boolean => Boolean(
   !usesScraperPagesSelectorSource(pagesConfig)
+  && !(usesScraperPagesLinkedPages(pagesConfig) && hasScraperFieldSelectorValue(pagesConfig.pageLinkSelector))
   && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)
   && pagesConfig.urlTemplate
   && hasPagePlaceholder(pagesConfig.urlTemplate)
@@ -175,14 +177,13 @@ const buildSequentialTemplateReaderPageUrls = (
 };
 
 const buildLazyTemplateSelectorReaderPageUrl = (
-  buildPageUrl: (pageNumber: number) => string,
+  pageUrl: string,
   baseUrl: string,
   pageImageSelector: ScraperFieldSelector,
-  pageNumber: number,
 ): string => {
   const params = new URLSearchParams({
     baseUrl,
-    pageUrl: buildPageUrl(pageNumber),
+    pageUrl,
     selectorKind: pageImageSelector.kind,
     selectorValue: pageImageSelector.value,
   });
@@ -200,15 +201,24 @@ const buildLazyTemplateSelectorReaderPageUrls = (
 
   for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
     pageUrls.push(buildLazyTemplateSelectorReaderPageUrl(
-      buildPageUrl,
+      buildPageUrl(pageNumber),
       baseUrl,
       pageImageSelector,
-      pageNumber,
     ));
   }
 
   return pageUrls;
 };
+
+const buildLazyLinkedReaderPageUrls = (
+  pageUrls: string[],
+  baseUrl: string,
+  pageImageSelector: ScraperFieldSelector,
+): string[] => pageUrls.map((pageUrl) => buildLazyTemplateSelectorReaderPageUrl(
+  pageUrl,
+  baseUrl,
+  pageImageSelector,
+));
 
 const parseLazyTemplateSelectorReaderPageUrl = (
   source: string,
@@ -270,6 +280,47 @@ const resolveTemplateSelectorReaderPageImageUrl = async (
   return extractSelectorValues(doc, pageImageSelector)
     .map((value) => toAbsoluteScraperUrl(value, documentUrl))
     .filter(Boolean)[0] ?? null;
+};
+
+const extractUniqueLinkedReaderPageUrls = (
+  doc: Document,
+  pageLinkSelector: ScraperFieldSelector,
+  documentUrl: string,
+): string[] => {
+  const seen = new Set<string>();
+
+  return extractSelectorValues(doc, pageLinkSelector)
+    .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+    .filter((pageUrl) => {
+      if (!pageUrl || seen.has(pageUrl)) {
+        return false;
+      }
+
+      seen.add(pageUrl);
+      return true;
+    });
+};
+
+const resolveLinkedReaderPageUrlsFromSource = async (
+  fetchDocument: ScraperDocumentFetcher,
+  baseUrl: string,
+  sourceUrl: string,
+  pageLinkSelector: ScraperFieldSelector,
+): Promise<string[]> => {
+  const result = await fetchDocument({
+    baseUrl,
+    targetUrl: sourceUrl,
+  });
+
+  if (!result.ok || !result.html) {
+    return [];
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(result.html, "text/html");
+  const documentUrl = result.finalUrl || result.requestedUrl;
+
+  return extractUniqueLinkedReaderPageUrls(doc, pageLinkSelector, documentUrl);
 };
 
 export const resolveLazyScraperReaderPageUrl = async (
@@ -428,6 +479,60 @@ export async function resolveScraperReaderPageUrls(
       ?? (shouldIgnoreKnownTotalAsLimit ? null : knownTotalPages)
       ?? DEFAULT_MAX_TEMPLATE_PAGES,
   );
+
+  if (
+    usesScraperPagesLinkedPages(pagesConfig)
+    && usesScraperPagesSelectorSource(pagesConfig)
+    && pagesConfig.pageLinkSelector
+    && hasScraperFieldSelectorValue(pagesConfig.pageLinkSelector)
+    && pagesConfig.pageImageSelector
+    && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)
+  ) {
+    if (usesScraperPagesChapters(pagesConfig) && !chapter?.url) {
+      throw new Error("Choisis d'abord un chapitre pour recuperer les pages.");
+    }
+
+    const sourceUrl = pagesConfig.urlStrategy === "chapter_page"
+      ? chapter?.url || ""
+      : details.finalUrl || details.requestedUrl;
+    const linkedPageUrls = await resolveLinkedReaderPageUrlsFromSource(
+      fetchDocument,
+      scraper.baseUrl,
+      sourceUrl,
+      pagesConfig.pageLinkSelector,
+    );
+
+    if (!linkedPageUrls.length) {
+      return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+        chapter,
+        maxTemplatePages,
+      });
+    }
+
+    const totalPages = linkedPageUrls.length;
+    const initialPage = Math.max(
+      1,
+      Math.min(totalPages, normalizePositiveInteger(options?.initialPage) ?? 1),
+    );
+    const pageUrls = buildLazyLinkedReaderPageUrls(
+      linkedPageUrls,
+      scraper.baseUrl,
+      pagesConfig.pageImageSelector,
+    );
+    const initialPageUrl = await resolveTemplateSelectorReaderPageImageUrl(
+      fetchDocument,
+      scraper.baseUrl,
+      linkedPageUrls[initialPage - 1],
+      pagesConfig.pageImageSelector,
+    );
+
+    if (!initialPageUrl) {
+      throw new Error("La page demandee n'a pas pu etre resolue.");
+    }
+
+    pageUrls[initialPage - 1] = initialPageUrl;
+    return pageUrls;
+  }
 
   if (usesTemplateSelectorReaderPages(pagesConfig) && pagesConfig.pageImageSelector) {
     const buildPageUrl = createSequentialTemplateReaderPageUrlFactory(

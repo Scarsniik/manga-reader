@@ -13,6 +13,26 @@ export type DetailsFieldKey = Extract<
 
 export type ScraperRuntimeChapterResult = ScraperChapterItem;
 
+export type ScraperRuntimeImageThumbnail = {
+  kind: "image";
+  url: string;
+};
+
+export type ScraperRuntimeCssSpriteThumbnail = {
+  kind: "css_sprite";
+  url: string;
+  width?: number;
+  height?: number;
+  positionX?: number;
+  positionY?: number;
+  backgroundSize?: string;
+};
+
+export type ScraperRuntimeThumbnail =
+  | string
+  | ScraperRuntimeImageThumbnail
+  | ScraperRuntimeCssSpriteThumbnail;
+
 export type ScraperRuntimeDetailsResult = {
   requestedUrl: string;
   finalUrl?: string;
@@ -25,7 +45,7 @@ export type ScraperRuntimeDetailsResult = {
   authorUrls: string[];
   tags: string[];
   tagUrls: string[];
-  thumbnails?: string[];
+  thumbnails?: ScraperRuntimeThumbnail[];
   thumbnailsNextPageUrl?: string;
   mangaStatus?: string;
   pageCount?: string;

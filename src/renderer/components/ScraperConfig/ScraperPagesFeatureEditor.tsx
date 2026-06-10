@@ -40,7 +40,9 @@ import {
   isImageLikeContentType,
   LINKED_TO_CHAPTERS_FIELD,
   padPageNumber,
+  PAGE_LINK_SELECTOR_FIELD,
   PAGE_IMAGE_SELECTOR_FIELD,
+  PAGE_RESOLUTION_MODE_FIELD,
   resolveTemplateBaseUrl,
   TEMPLATE_BASE_FIELD,
   toAbsoluteUrl,
@@ -341,7 +343,95 @@ export default function ScraperPagesFeatureEditor({
       }
 
       let pagesCheck: ScraperFeatureValidationCheck;
-      if (!hasScraperFieldSelectorValue(config.pageImageSelector)) {
+      if (config.pageResolutionMode === 'linked_pages') {
+        const pageImageSelector = config.pageImageSelector;
+        if (!pageImageSelector) {
+          throw new Error('Le selecteur de l\'image finale est requis.');
+        }
+
+        const imageSelectorLabel = formatScraperFieldSelectorForDisplay(pageImageSelector);
+        const linkSelectorLabel = config.pageLinkSelector
+          ? formatScraperFieldSelectorForDisplay(config.pageLinkSelector)
+          : '';
+        const selectorLabel = linkSelectorLabel
+          ? `${linkSelectorLabel} -> ${imageSelectorLabel}`
+          : imageSelectorLabel;
+
+        if (!typedDocumentResult.html) {
+          pagesCheck = {
+            key: 'pages',
+            selector: selectorLabel,
+            required: true,
+            matchedCount: 0,
+            issueCode: 'no_match',
+          };
+        } else {
+          const parser = new DOMParser();
+          const seenPageUrls = new Set<string>();
+          const resolvedPageUrls: string[] = [];
+          let hasInvalidSelector = false;
+
+          try {
+            const sourceDocumentUrl = typedDocumentResult.finalUrl || typedDocumentResult.requestedUrl;
+            const sourceDoc = parser.parseFromString(typedDocumentResult.html, 'text/html');
+            const intermediatePageUrls = config.pageLinkSelector && hasScraperFieldSelectorValue(config.pageLinkSelector)
+              ? extractSelectorValues(sourceDoc, config.pageLinkSelector)
+                .map((value) => toAbsoluteUrl(value, sourceDocumentUrl))
+              : [sourceDocumentUrl];
+
+            for (const intermediatePageUrl of intermediatePageUrls.slice(0, MAX_TEMPLATE_SELECTOR_VALIDATION_PAGES)) {
+              const pageDocumentResult = await (window as any).api.fetchScraperDocument({
+                baseUrl: scraper.baseUrl,
+                targetUrl: intermediatePageUrl,
+              }) as FetchScraperDocumentResult;
+
+              if (!pageDocumentResult.ok || !pageDocumentResult.html) {
+                continue;
+              }
+
+              const pageDocumentUrl = pageDocumentResult.finalUrl || pageDocumentResult.requestedUrl;
+              const pageDoc = parser.parseFromString(pageDocumentResult.html, 'text/html');
+              extractSelectorValues(pageDoc, pageImageSelector)
+                .map((value) => toAbsoluteUrl(value, pageDocumentUrl))
+                .forEach((pageUrl) => {
+                  if (seenPageUrls.has(pageUrl)) {
+                    return;
+                  }
+
+                  seenPageUrls.add(pageUrl);
+                  resolvedPageUrls.push(pageUrl);
+                });
+            }
+          } catch {
+            hasInvalidSelector = true;
+          }
+
+          pagesCheck = hasInvalidSelector
+            ? {
+              key: 'pages',
+              selector: selectorLabel,
+              required: true,
+              matchedCount: 0,
+              issueCode: 'invalid_selector',
+            }
+            : resolvedPageUrls.length > 0
+              ? {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: resolvedPageUrls.length,
+                sample: resolvedPageUrls[0],
+                samples: resolvedPageUrls.slice(0, 12),
+              }
+              : {
+                key: 'pages',
+                selector: selectorLabel,
+                required: true,
+                matchedCount: 0,
+                issueCode: 'no_match',
+              };
+        }
+      } else if (!hasScraperFieldSelectorValue(config.pageImageSelector)) {
         if (config.urlStrategy === 'template' && hasPagePlaceholder(config.urlTemplate)) {
           const directPageUrls: string[] = [];
           const templateBaseUrl = resolveTemplateBaseUrl(
@@ -706,7 +796,29 @@ export default function ScraperPagesFeatureEditor({
             la ressource repond bien comme une image.
           </div>
 
+          <ScraperConfigField
+            field={PAGE_RESOLUTION_MODE_FIELD}
+            value={formValues.pageResolutionMode || 'direct_images'}
+            error={fieldErrors.pageResolutionMode}
+            onChange={handleFieldChange('pageResolutionMode')}
+          />
+
+          {currentConfig.pageResolutionMode === 'linked_pages' ? (
+            <div className="scraper-config-hint">
+              Ce mode sert aux lecteurs ou la fiche liste des liens de pages, mais ou l&apos;image
+              finale se trouve seulement dans le HTML de chaque page intermediaire.
+            </div>
+          ) : null}
+
           <div className="scraper-config-section__grid">
+            {currentConfig.pageResolutionMode === 'linked_pages' ? (
+              <ScraperFieldSelectorField
+                field={PAGE_LINK_SELECTOR_FIELD}
+                value={formValues.pageLinkSelector}
+                error={fieldErrors.pageLinkSelector}
+                onChange={handleFieldSelectorChange('pageLinkSelector')}
+              />
+            ) : null}
             <ScraperFieldSelectorField
               field={PAGE_IMAGE_SELECTOR_FIELD}
               value={formValues.pageImageSelector}

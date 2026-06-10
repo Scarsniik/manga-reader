@@ -12,6 +12,9 @@ import type {
   DetailsFieldKey,
   ScraperDocumentFetcher,
   ScraperRuntimeDetailsResult,
+  ScraperRuntimeCssSpriteThumbnail,
+  ScraperRuntimeImageThumbnail,
+  ScraperRuntimeThumbnail,
 } from "@/renderer/utils/scraperRuntime/types";
 import { looksLikeScraperDirectUrlInput } from "@/renderer/utils/scraperRuntime/urlResolution";
 import {
@@ -38,8 +41,57 @@ export type ScraperRuntimeDetailsRequestMeta = {
 export type ScraperRuntimeDetailsFieldValues = Partial<Record<DetailsFieldKey, string[]>>;
 
 export type ScraperRuntimeDetailsThumbnailsPageResult = {
-  thumbnails: string[];
+  thumbnails: ScraperRuntimeThumbnail[];
   nextPageUrl?: string;
+};
+
+export const createScraperRuntimeImageThumbnail = (url: string): ScraperRuntimeImageThumbnail => ({
+  kind: "image",
+  url,
+});
+
+export const getScraperRuntimeThumbnailUrl = (thumbnail: ScraperRuntimeThumbnail): string => {
+  if (typeof thumbnail === "string") {
+    return thumbnail;
+  }
+
+  return thumbnail.url;
+};
+
+export const getScraperRuntimeThumbnailKey = (thumbnail: ScraperRuntimeThumbnail): string => {
+  if (typeof thumbnail === "string") {
+    return `image:${thumbnail}`;
+  }
+
+  if (thumbnail.kind === "css_sprite") {
+    return [
+      thumbnail.kind,
+      thumbnail.url,
+      thumbnail.width ?? "",
+      thumbnail.height ?? "",
+      thumbnail.positionX ?? "",
+      thumbnail.positionY ?? "",
+      thumbnail.backgroundSize ?? "",
+    ].join(":");
+  }
+
+  return `${thumbnail.kind}:${thumbnail.url}`;
+};
+
+export const getScraperRuntimeThumbnailDisplayUrl = getScraperRuntimeThumbnailUrl;
+
+const uniqueThumbnails = (thumbnails: ScraperRuntimeThumbnail[]): ScraperRuntimeThumbnail[] => {
+  const seen = new Set<string>();
+
+  return thumbnails.filter((thumbnail) => {
+    const key = getScraperRuntimeThumbnailKey(thumbnail);
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 };
 
 export const extractScraperAuthorUrlsFromDocument = (
@@ -124,16 +176,122 @@ export const extractScraperDetailsThumbnailsFromDocument = (
   doc: Document,
   config: Pick<
     ScraperDetailsFeatureConfig,
-    "thumbnailsListSelector" | "thumbnailsSelector" | "thumbnailsNextPageSelector"
+    "thumbnailsMode" | "thumbnailsListSelector" | "thumbnailsSelector" | "thumbnailsNextPageSelector"
   >,
   requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, "requestedUrl" | "finalUrl">,
-): string[] => extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta).thumbnails;
+): ScraperRuntimeThumbnail[] => extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta).thumbnails;
+
+const parseCssPixelValue = (value: string | undefined): number | undefined => {
+  const match = String(value ?? "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(match[0]);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const getCssDeclarationValue = (style: string, property: string): string | undefined => {
+  const propertyPattern = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = style.match(new RegExp(`(?:^|;)\\s*${propertyPattern}\\s*:\\s*([^;]+)`, "i"));
+  return match?.[1]?.trim();
+};
+
+const parseCssSpritePosition = (style: string): Pick<ScraperRuntimeCssSpriteThumbnail, "positionX" | "positionY"> => {
+  const explicitPosition = getCssDeclarationValue(style, "background-position");
+  const explicitMatch = explicitPosition?.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)(?:px)?/i);
+  if (explicitMatch) {
+    return {
+      positionX: Number.parseFloat(explicitMatch[1]),
+      positionY: Number.parseFloat(explicitMatch[2]),
+    };
+  }
+
+  const positionX = parseCssPixelValue(getCssDeclarationValue(style, "background-position-x"));
+  const positionY = parseCssPixelValue(getCssDeclarationValue(style, "background-position-y"));
+  if (typeof positionX === "number" || typeof positionY === "number") {
+    return {
+      positionX,
+      positionY,
+    };
+  }
+
+  const urlMatch = /url\(\s*(['"]?)(.*?)\1\s*\)/i.exec(style);
+  if (!urlMatch) {
+    return {};
+  }
+
+  const afterUrl = style.slice(urlMatch.index + urlMatch[0].length);
+  const shorthandMatch = afterUrl.match(/(?:^|\s)(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)(?:px)?(?:\s|;|$)/i);
+  if (!shorthandMatch) {
+    return {};
+  }
+
+  return {
+    positionX: Number.parseFloat(shorthandMatch[1]),
+    positionY: Number.parseFloat(shorthandMatch[2]),
+  };
+};
+
+const parseCssSpriteThumbnail = (
+  value: string,
+  documentUrl: string,
+): ScraperRuntimeCssSpriteThumbnail | null => {
+  const style = value.trim();
+  const urlMatch = /url\(\s*(['"]?)(.*?)\1\s*\)/i.exec(style);
+  const rawUrl = urlMatch?.[2]?.trim();
+  if (!rawUrl) {
+    return null;
+  }
+
+  const width = parseCssPixelValue(getCssDeclarationValue(style, "width"));
+  const height = parseCssPixelValue(getCssDeclarationValue(style, "height"));
+  const backgroundSize = getCssDeclarationValue(style, "background-size");
+
+  return {
+    kind: "css_sprite",
+    url: toAbsoluteScraperUrl(rawUrl, documentUrl),
+    ...(typeof width === "number" && width > 0 ? { width } : {}),
+    ...(typeof height === "number" && height > 0 ? { height } : {}),
+    ...parseCssSpritePosition(style),
+    ...(backgroundSize ? { backgroundSize } : {}),
+  };
+};
+
+const extractCssSpriteThumbnailValuesFromRoot = (
+  root: ParentNode,
+  selector: ScraperFieldSelector,
+): string[] => {
+  const normalizedSelector = normalizeScraperFieldSelector(selector);
+  if (!normalizedSelector || !hasScraperFieldSelectorValue(normalizedSelector)) {
+    return [];
+  }
+
+  if (normalizedSelector.kind === "regex") {
+    return extractRegexValuesFromRoot(root, normalizedSelector.value);
+  }
+
+  const { selector: cssSelector, attribute } = parseSelectorExpression(normalizedSelector.value);
+  if (!cssSelector) {
+    return [];
+  }
+
+  return Array.from(root.querySelectorAll(cssSelector))
+    .map((element) => {
+      if (attribute) {
+        return element.getAttribute(attribute)?.trim() || "";
+      }
+
+      return element.getAttribute("style")?.trim() || "";
+    })
+    .filter(Boolean);
+};
 
 export const extractScraperDetailsThumbnailsPageFromDocument = (
   doc: Document,
   config: Pick<
     ScraperDetailsFeatureConfig,
-    "thumbnailsListSelector" | "thumbnailsSelector" | "thumbnailsNextPageSelector"
+    "thumbnailsMode" | "thumbnailsListSelector" | "thumbnailsSelector" | "thumbnailsNextPageSelector"
   >,
   requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, "requestedUrl" | "finalUrl">,
 ): ScraperRuntimeDetailsThumbnailsPageResult => {
@@ -151,16 +309,24 @@ export const extractScraperDetailsThumbnailsPageFromDocument = (
   }
 
   const thumbnailsSelector = config.thumbnailsSelector;
-  const thumbnailRoots = config.thumbnailsListSelector
+  const thumbnailRoots: ParentNode[] = config.thumbnailsListSelector
     ? Array.from(doc.querySelectorAll(config.thumbnailsListSelector))
     : [doc];
+  const thumbnailsMode = config.thumbnailsMode === "css_sprite" ? "css_sprite" : "image";
+  const thumbnails = thumbnailRoots.flatMap((root): ScraperRuntimeThumbnail[] => {
+    if (thumbnailsMode === "css_sprite") {
+      return extractCssSpriteThumbnailValuesFromRoot(root, thumbnailsSelector)
+        .map((value) => parseCssSpriteThumbnail(value, documentUrl))
+        .filter((thumbnail): thumbnail is ScraperRuntimeCssSpriteThumbnail => Boolean(thumbnail));
+    }
+
+    return extractFieldSelectorValuesFromRoot(root, thumbnailsSelector).map((value) =>
+      createScraperRuntimeImageThumbnail(toAbsoluteScraperUrl(value, documentUrl)),
+    );
+  });
 
   return {
-    thumbnails: thumbnailRoots.flatMap((root) =>
-      extractFieldSelectorValuesFromRoot(root, thumbnailsSelector).map((value) =>
-        toAbsoluteScraperUrl(value, documentUrl),
-      ),
-    ),
+    thumbnails: uniqueThumbnails(thumbnails),
     nextPageUrl,
   };
 };

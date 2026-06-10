@@ -11,6 +11,7 @@ import {
 import {
   usesScraperPagesChapterSource,
   usesScraperPagesChapters,
+  usesScraperPagesLinkedPages,
   usesScraperPagesSelectorSource,
   usesScraperPagesTemplateChapterContext,
 } from "@/renderer/utils/scraperPages";
@@ -88,6 +89,44 @@ const extractUniquePageUrlsFromDocument = (
 ): string[] =>
   uniqueValues(extractSelectorValues(doc, pageImageSelector).map((value) => toAbsoluteScraperUrl(value, documentUrl)));
 
+const extractUniquePageLinkUrlsFromDocument = (
+  doc: Document,
+  pageLinkSelector: NonNullable<ScraperPagesFeatureConfig["pageLinkSelector"]>,
+  documentUrl: string,
+): string[] =>
+  uniqueValues(extractSelectorValues(doc, pageLinkSelector).map((value) => toAbsoluteScraperUrl(value, documentUrl)));
+
+const resolvePageImageUrlsFromLinkedPages = async (
+  fetchDocument: ScraperDocumentFetcher,
+  scraperBaseUrl: string,
+  pageLinkUrls: string[],
+  pageImageSelector: NonNullable<ScraperPagesFeatureConfig["pageImageSelector"]>,
+): Promise<string[]> => {
+  const resolvedPageUrls: string[] = [];
+  const seenPageUrls = new Set<string>();
+
+  for (const pageLinkUrl of pageLinkUrls) {
+    const { doc, documentUrl } = await fetchScraperHtmlPage(
+      fetchDocument,
+      scraperBaseUrl,
+      pageLinkUrl,
+      "Impossible de recuperer une page intermediaire du lecteur.",
+    );
+    const pageUrls = extractUniquePageUrlsFromDocument(doc, pageImageSelector, documentUrl);
+
+    pageUrls.forEach((pageUrl) => {
+      if (seenPageUrls.has(pageUrl)) {
+        return;
+      }
+
+      seenPageUrls.add(pageUrl);
+      resolvedPageUrls.push(pageUrl);
+    });
+  }
+
+  return resolvedPageUrls;
+};
+
 const assertPageUrlsFound = (pageUrls: string[], message: string): void => {
   if (!pageUrls.length) {
     throw new Error(message);
@@ -110,6 +149,7 @@ export async function resolveScraperPageUrls(
   const usesChapterSource = usesScraperPagesChapterSource(pagesConfig);
   const usesChapterContext = usesScraperPagesChapters(pagesConfig);
   const usesTemplateChapterContext = usesScraperPagesTemplateChapterContext(pagesConfig);
+  const usesLinkedPages = usesScraperPagesLinkedPages(pagesConfig);
   const targetUrl = usesChapterSource ? chapter?.url || "" : detailsUrl;
   const templateBaseUrl = resolveScraperTemplateBaseUrl(
     scraper.baseUrl,
@@ -132,6 +172,26 @@ export async function resolveScraperPageUrls(
       targetUrl,
       "Impossible de recuperer la source des pages pour extraire les pages.",
     );
+
+    if (usesLinkedPages) {
+      if (!pagesConfig.pageLinkSelector || !hasScraperFieldSelectorValue(pagesConfig.pageLinkSelector)) {
+        throw new Error("Le mode pages intermediaires requiert un selecteur de liens de pages.");
+      }
+
+      const pageLinkUrls = extractUniquePageLinkUrlsFromDocument(doc, pagesConfig.pageLinkSelector, documentUrl);
+      assertPageUrlsFound(pageLinkUrls, "Aucun lien de page intermediaire n'a ete trouve avec la configuration actuelle.");
+
+      const resolvedPageUrls = await resolvePageImageUrlsFromLinkedPages(
+        fetchDocument,
+        scraper.baseUrl,
+        pageLinkUrls,
+        pagesConfig.pageImageSelector,
+      );
+      assertPageUrlsFound(resolvedPageUrls, "Aucune image n'a ete trouvee dans les pages intermediaires.");
+
+      return resolvedPageUrls;
+    }
+
     const uniquePageUrls = extractUniquePageUrlsFromDocument(doc, pagesConfig.pageImageSelector, documentUrl);
 
     assertPageUrlsFound(uniquePageUrls, "Aucune page n'a ete trouvee avec la configuration actuelle.");
@@ -146,6 +206,113 @@ export async function resolveScraperPageUrls(
   const templateContext = buildScraperTemplateContextFromDetails(details, chapter);
 
   if (pagesConfig.pageImageSelector && hasScraperFieldSelectorValue(pagesConfig.pageImageSelector)) {
+    const pageImageSelector = pagesConfig.pageImageSelector;
+
+    if (usesLinkedPages) {
+      if (hasPagePlaceholder(pagesConfig.urlTemplate)) {
+        const pageUrls: string[] = [];
+        const seenPageUrls = new Set<string>();
+        const { isKnownTotal, pageLimit } = inferTemplateSelectorPageLimit(
+          details,
+          pagesConfig,
+          chapter,
+          maxTemplatePages,
+        );
+
+        for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
+          const targetUrl = buildScraperPageTemplateUrl(
+            scraper.baseUrl,
+            pagesConfig,
+            templateContext,
+            templateBaseUrl,
+            pageIndex,
+          );
+          let nextPageUrls: string[] = [];
+
+          try {
+            const pageLinkSelector = pagesConfig.pageLinkSelector;
+            const pageLinkUrls = pageLinkSelector && hasScraperFieldSelectorValue(pageLinkSelector)
+              ? await (async () => {
+                const { doc, documentUrl } = await fetchScraperHtmlPage(
+                  fetchDocument,
+                  scraper.baseUrl,
+                  targetUrl,
+                  "Impossible de recuperer la source des liens de pages intermediaires.",
+                );
+
+                return extractUniquePageLinkUrlsFromDocument(doc, pageLinkSelector, documentUrl);
+              })()
+              : [targetUrl];
+
+            if (!pageLinkUrls.length) {
+              throw new Error("Aucun lien de page intermediaire n'a ete trouve avec la configuration actuelle.");
+            }
+
+            nextPageUrls = (await resolvePageImageUrlsFromLinkedPages(
+              fetchDocument,
+              scraper.baseUrl,
+              pageLinkUrls,
+              pageImageSelector,
+            )).filter((pageUrl) => {
+              if (seenPageUrls.has(pageUrl)) {
+                return false;
+              }
+
+              seenPageUrls.add(pageUrl);
+              return true;
+            });
+          } catch (error) {
+            if (pageIndex === 0 || isKnownTotal) {
+              throw error;
+            }
+
+            break;
+          }
+
+          if (!nextPageUrls.length) {
+            if (pageIndex === 0 || isKnownTotal) {
+              throw new Error("Aucune image n'a ete trouvee dans les pages intermediaires.");
+            }
+
+            break;
+          }
+
+          pageUrls.push(...nextPageUrls);
+        }
+
+        assertPageUrlsFound(pageUrls, "Aucune image n'a ete trouvee dans les pages intermediaires.");
+
+        return pageUrls;
+      }
+
+      const targetUrl = buildScraperPageTemplateUrl(scraper.baseUrl, pagesConfig, templateContext, templateBaseUrl, 0);
+      const pageLinkSelector = pagesConfig.pageLinkSelector;
+      const pageLinkUrls = pageLinkSelector && hasScraperFieldSelectorValue(pageLinkSelector)
+        ? await (async () => {
+          const { doc, documentUrl } = await fetchScraperHtmlPage(
+            fetchDocument,
+            scraper.baseUrl,
+            targetUrl,
+            "Impossible de recuperer la source des liens de pages intermediaires.",
+          );
+
+          return extractUniquePageLinkUrlsFromDocument(doc, pageLinkSelector, documentUrl);
+        })()
+        : [targetUrl];
+
+      assertPageUrlsFound(pageLinkUrls, "Aucun lien de page intermediaire n'a ete trouve avec la configuration actuelle.");
+
+      const resolvedPageUrls = await resolvePageImageUrlsFromLinkedPages(
+        fetchDocument,
+        scraper.baseUrl,
+        pageLinkUrls,
+        pageImageSelector,
+      );
+      assertPageUrlsFound(resolvedPageUrls, "Aucune image n'a ete trouvee dans les pages intermediaires.");
+
+      return resolvedPageUrls;
+    }
+
     if (hasPagePlaceholder(pagesConfig.urlTemplate)) {
       const pageUrls: string[] = [];
       const seenPageUrls = new Set<string>();

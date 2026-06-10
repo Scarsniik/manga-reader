@@ -331,6 +331,8 @@ export type ScraperDetailsUrlStrategy = 'result_url' | 'template';
 export type ScraperChaptersUrlStrategy = 'details_page' | 'template';
 export type ScraperPagesUrlStrategy = 'details_page' | 'chapter_page' | 'template';
 export type ScraperPagesTemplateBase = 'scraper_base' | 'details_page';
+export type ScraperDetailsThumbnailsMode = 'image' | 'css_sprite';
+export type ScraperPagesResolutionMode = 'direct_images' | 'linked_pages';
 export type ScraperDetailsDerivedValueSourceType = 'requested_url' | 'final_url' | 'field' | 'selector' | 'html';
 export type ScraperDetailsDerivedValueIssueCode =
   | 'missing_source'
@@ -484,6 +486,7 @@ export interface ScraperDetailsFeatureConfig {
   tagUrlSelector?: ScraperFieldSelector;
   statusSelector?: ScraperFieldSelector;
   pageCountSelector?: ScraperFieldSelector;
+  thumbnailsMode?: ScraperDetailsThumbnailsMode;
   thumbnailsListSelector?: string;
   thumbnailsSelector?: ScraperFieldSelector;
   thumbnailsNextPageSelector?: ScraperFieldSelector;
@@ -507,6 +510,8 @@ export interface ScraperPagesFeatureConfig {
   urlStrategy: ScraperPagesUrlStrategy;
   urlTemplate?: string;
   templateBase?: ScraperPagesTemplateBase;
+  pageResolutionMode?: ScraperPagesResolutionMode;
+  pageLinkSelector?: ScraperFieldSelector;
   pageImageSelector?: ScraperFieldSelector;
   linkedToChapters?: boolean;
 }

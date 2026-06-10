@@ -306,6 +306,7 @@ function getDetailsConfig(feature) {
     tagUrlSelector: normalizeFieldSelector(raw.tagUrlSelector),
     statusSelector: normalizeFieldSelector(raw.statusSelector),
     pageCountSelector: normalizeFieldSelector(raw.pageCountSelector),
+    thumbnailsMode: raw.thumbnailsMode === "css_sprite" ? "css_sprite" : "image",
     thumbnailsListSelector: trimOptional(normalizeSelectorInput(raw.thumbnailsListSelector)),
     thumbnailsSelector: normalizeFieldSelector(raw.thumbnailsSelector),
     thumbnailsNextPageSelector: normalizeFieldSelector(raw.thumbnailsNextPageSelector),
@@ -341,6 +342,8 @@ function getPagesConfig(feature) {
         : "details_page",
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: raw.templateBase === "details_page" ? "details_page" : "scraper_base",
+    pageResolutionMode: raw.pageResolutionMode === "linked_pages" ? "linked_pages" : "direct_images",
+    pageLinkSelector: normalizeFieldSelector(raw.pageLinkSelector),
     pageImageSelector: normalizeFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === "template" ? Boolean(raw.linkedToChapters) : false,
   };
@@ -1101,12 +1104,96 @@ function extractDetails(doc, config, requestMeta) {
   };
 }
 
+function parseCssPixelValue(value) {
+  const match = String(value || "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return undefined;
+  const parsed = Number.parseFloat(match[0]);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getCssDeclarationValue(style, property) {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = String(style || "").match(new RegExp(`(?:^|;)\\s*${escaped}\\s*:\\s*([^;]+)`, "i"));
+  return match?.[1]?.trim();
+}
+
+function parseCssSpriteThumbnail(value, documentUrl) {
+  const style = String(value || "").trim();
+  const urlMatch = /url\(\s*(['"]?)(.*?)\1\s*\)/i.exec(style);
+  const rawUrl = urlMatch?.[2]?.trim();
+  if (!rawUrl) return null;
+  const explicitPosition = getCssDeclarationValue(style, "background-position");
+  const explicitMatch = explicitPosition?.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)(?:px)?/i);
+  const afterUrl = urlMatch ? style.slice(urlMatch.index + urlMatch[0].length) : "";
+  const shorthandMatch = explicitMatch
+    ? null
+    : afterUrl.match(/(?:^|\s)(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)(?:px)?(?:\s|;|$)/i);
+  const positionMatch = explicitMatch || shorthandMatch;
+  return {
+    kind: "css_sprite",
+    url: toAbsoluteScraperUrl(rawUrl, documentUrl),
+    width: parseCssPixelValue(getCssDeclarationValue(style, "width")),
+    height: parseCssPixelValue(getCssDeclarationValue(style, "height")),
+    positionX: positionMatch ? Number.parseFloat(positionMatch[1]) : undefined,
+    positionY: positionMatch ? Number.parseFloat(positionMatch[2]) : undefined,
+  };
+}
+
+function extractCssSpriteThumbnailValues(root, selector) {
+  const normalized = normalizeFieldSelector(selector);
+  if (!normalized) return [];
+  if (normalized.kind === "regex") return extractRegexValues(root, normalized.value);
+  const { selector: cssSelector, attribute } = parseSelectorExpression(normalized.value);
+  if (!cssSelector) return [];
+  return Array.from(root.querySelectorAll(cssSelector))
+    .map((element) => (attribute ? element.getAttribute(attribute) : element.getAttribute("style"))?.trim() || "")
+    .filter(Boolean);
+}
+
+function getThumbnailResourceUrl(thumbnail) {
+  return typeof thumbnail === "string" ? thumbnail : thumbnail?.url;
+}
+
+function getThumbnailKey(thumbnail) {
+  if (typeof thumbnail === "string") return `image:${thumbnail}`;
+  if (thumbnail?.kind === "css_sprite") {
+    return [
+      thumbnail.kind,
+      thumbnail.url,
+      thumbnail.width ?? "",
+      thumbnail.height ?? "",
+      thumbnail.positionX ?? "",
+      thumbnail.positionY ?? "",
+    ].join(":");
+  }
+  return `${thumbnail?.kind || "image"}:${thumbnail?.url || ""}`;
+}
+
+function uniqueThumbnails(thumbnails) {
+  const seen = new Set();
+  return thumbnails.filter((thumbnail) => {
+    const key = getThumbnailKey(thumbnail);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function extractDetailsThumbnails(doc, config, requestMeta) {
   if (!hasFieldSelectorValue(config.thumbnailsSelector)) return [];
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   const roots = config.thumbnailsListSelector ? Array.from(doc.querySelectorAll(config.thumbnailsListSelector)) : [doc];
-  return uniqueValues(roots.flatMap((root) =>
-    extractValues(root, config.thumbnailsSelector).map((value) => toAbsoluteScraperUrl(value, documentUrl)),
+  if (config.thumbnailsMode === "css_sprite") {
+    return uniqueThumbnails(roots.flatMap((root) =>
+      extractCssSpriteThumbnailValues(root, config.thumbnailsSelector)
+        .map((value) => parseCssSpriteThumbnail(value, documentUrl))
+        .filter(Boolean),
+    ));
+  }
+
+  return uniqueThumbnails(roots.flatMap((root) =>
+    extractValues(root, config.thumbnailsSelector)
+      .map((value) => ({ kind: "image", url: toAbsoluteScraperUrl(value, documentUrl) })),
   ));
 }
 
@@ -1216,6 +1303,10 @@ function usesPagesChapters(config) {
 
 function usesPagesSelectorSource(config) {
   return config && (config.urlStrategy === "details_page" || config.urlStrategy === "chapter_page");
+}
+
+function usesPagesLinkedPages(config) {
+  return config?.pageResolutionMode === "linked_pages";
 }
 
 function extractTagListPage(doc, config, requestMeta) {
@@ -1470,7 +1561,9 @@ class ScraperTestRunner {
     if (config.tagUrlSelector) addCheck("tagUrl", config.tagUrlSelector, false, details.tagUrls || []);
     if (config.statusSelector) addCheck("status", config.statusSelector, false, details.fieldValues.status || []);
     if (config.pageCountSelector) addCheck("pageCount", config.pageCountSelector, false, details.fieldValues.pageCount || []);
-    if (config.thumbnailsSelector) addCheck("thumbnails", config.thumbnailsSelector, false, details.thumbnails || []);
+    if (config.thumbnailsSelector) {
+      addCheck("thumbnails", config.thumbnailsSelector, false, (details.thumbnails || []).map(getThumbnailResourceUrl).filter(Boolean));
+    }
     if (config.thumbnailsNextPageSelector) {
       addCheck("thumbnailsNextPage", config.thumbnailsNextPageSelector, false, details.thumbnailsNextPageUrl ? [details.thumbnailsNextPageUrl] : []);
     }
@@ -1482,7 +1575,7 @@ class ScraperTestRunner {
     }
     const resourceChecks = await this.validateResources(scraper, [
       { type: "image", label: "cover", url: details.cover },
-      ...(details.thumbnails || []).map((url) => ({ type: "image", label: "thumbnail", url })),
+      ...(details.thumbnails || []).map((thumbnail) => ({ type: "image", label: "thumbnail", url: getThumbnailResourceUrl(thumbnail) })),
       ...(details.authorUrls || []).map((url) => ({ type: "link", label: "authorUrl", url })),
       ...(details.tagUrls || [])
         .filter(looksLikeHttpResourceUrl)
@@ -1687,6 +1780,46 @@ class ScraperTestRunner {
   }
 
   async buildPagesCheck(scraper, config, details, chapter, firstResult) {
+    if (usesPagesLinkedPages(config)) {
+      if (!hasFieldSelectorValue(config.pageImageSelector)) {
+        return buildSelectorCheck("pages", "", true, []);
+      }
+
+      const imageSelector = config.pageImageSelector;
+      const linkSelector = config.pageLinkSelector;
+      const selectorLabel = hasFieldSelectorValue(linkSelector)
+        ? `${formatFieldSelector(linkSelector)} -> ${formatFieldSelector(imageSelector)}`
+        : formatFieldSelector(imageSelector);
+
+      if (!firstResult.html) {
+        return buildSelectorCheck("pages", selectorLabel, true, []);
+      }
+
+      const sourceDocumentUrl = firstResult.finalUrl || firstResult.requestedUrl;
+      const sourceDoc = parseDocument(firstResult.html);
+      const intermediatePageUrls = hasFieldSelectorValue(linkSelector)
+        ? uniqueValues(extractValues(sourceDoc, linkSelector).map((value) => toAbsoluteScraperUrl(value, sourceDocumentUrl)))
+        : [sourceDocumentUrl];
+      const urls = [];
+      const seen = new Set();
+
+      for (const intermediatePageUrl of intermediatePageUrls.slice(0, this.options.maxUrlChecks)) {
+        const result = await this.fetch({ baseUrl: scraper.baseUrl, targetUrl: intermediatePageUrl });
+        if (!result.ok || !result.html) continue;
+        const doc = parseDocument(result.html);
+        const documentUrl = result.finalUrl || result.requestedUrl;
+        extractValues(doc, imageSelector)
+          .map((value) => toAbsoluteScraperUrl(value, documentUrl))
+          .forEach((url) => {
+            if (seen.has(url)) return;
+            seen.add(url);
+            urls.push(url);
+          });
+      }
+
+      return buildSelectorCheck("pages", selectorLabel, true, urls);
+    }
+
     if (!hasFieldSelectorValue(config.pageImageSelector)) {
       if (config.urlStrategy === "template" && hasPagePlaceholder(config.urlTemplate)) {
         const urls = [];

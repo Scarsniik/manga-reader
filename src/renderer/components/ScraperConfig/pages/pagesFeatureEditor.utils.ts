@@ -3,6 +3,7 @@ import {
   ScraperFeatureDefinition,
   ScraperFeatureValidationResult,
   ScraperPagesFeatureConfig,
+  ScraperPagesResolutionMode,
   ScraperPagesTemplateBase,
 } from '@/shared/scraper';
 import { Field } from '@/renderer/components/utils/Form/types';
@@ -87,9 +88,36 @@ export const TEMPLATE_BASE_FIELD: Field = {
 
 export const PAGE_IMAGE_SELECTOR_FIELD: Field = {
   name: 'pageImageSelector',
-  label: 'Selecteur des pages',
+  label: 'Selecteur des images finales',
   type: 'text',
-  placeholder: 'Exemple : #cif .iw img@src',
+  placeholder: 'Exemple : #cif .iw img@src ou img#img',
+};
+
+export const PAGE_RESOLUTION_MODE_FIELD: Field = {
+  name: 'pageResolutionMode',
+  label: 'Mode de resolution',
+  type: 'radio',
+  layout: 'cards',
+  required: true,
+  options: [
+    {
+      label: 'Images directes',
+      value: 'direct_images',
+      description: 'La source retourne directement les URLs des images a lire.',
+    },
+    {
+      label: 'Pages intermediaires',
+      value: 'linked_pages',
+      description: 'La source retourne des liens de lecteur, puis chaque page contient l\'image finale.',
+    },
+  ],
+};
+
+export const PAGE_LINK_SELECTOR_FIELD: Field = {
+  name: 'pageLinkSelector',
+  label: 'Selecteur des liens intermediaires',
+  type: 'text',
+  placeholder: 'Exemple : .reader-pages a@href',
 };
 
 export const LINKED_TO_CHAPTERS_FIELD: Field = {
@@ -102,6 +130,8 @@ export const DEFAULT_PAGES_CONFIG: ScraperPagesFeatureConfig = {
   urlStrategy: 'details_page',
   urlTemplate: '',
   templateBase: 'scraper_base',
+  pageResolutionMode: 'direct_images',
+  pageLinkSelector: undefined,
   pageImageSelector: undefined,
   linkedToChapters: false,
 };
@@ -122,6 +152,10 @@ const normalizePagesUrlStrategy = (value: unknown): ScraperPagesFeatureConfig['u
   return 'details_page';
 };
 
+const normalizePagesResolutionMode = (value: unknown): ScraperPagesResolutionMode => (
+  value === 'linked_pages' ? 'linked_pages' : 'direct_images'
+);
+
 const getInitialPagesUrlStrategy = (raw: Record<string, unknown>): ScraperPagesFeatureConfig['urlStrategy'] => {
   const normalizedStrategy = normalizePagesUrlStrategy(raw.urlStrategy);
 
@@ -139,6 +173,8 @@ export const buildPagesConfig = (values: Partial<ScraperPagesFeatureConfig>): Sc
     urlStrategy,
     urlTemplate: trimOptional(values.urlTemplate),
     templateBase: normalizeTemplateBase(values.templateBase),
+    pageResolutionMode: normalizePagesResolutionMode(values.pageResolutionMode),
+    pageLinkSelector: trimOptionalFieldSelector(values.pageLinkSelector),
     pageImageSelector: trimOptionalFieldSelector(values.pageImageSelector),
     linkedToChapters: urlStrategy === 'template'
       ? Boolean(values.linkedToChapters)
@@ -153,6 +189,8 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperPage
     urlStrategy: getInitialPagesUrlStrategy(raw),
     urlTemplate: trimOptional(raw.urlTemplate),
     templateBase: normalizeTemplateBase(raw.templateBase),
+    pageResolutionMode: normalizePagesResolutionMode(raw.pageResolutionMode),
+    pageLinkSelector: trimOptionalFieldSelector(raw.pageLinkSelector),
     pageImageSelector: trimOptionalFieldSelector(raw.pageImageSelector),
     linkedToChapters: raw.urlStrategy === 'template'
       ? Boolean(raw.linkedToChapters)
@@ -171,8 +209,21 @@ export const toAbsoluteUrl = (value: string, baseUrl: string): string => {
 export const getSaveFieldErrors = (config: ScraperPagesFeatureConfig): Record<string, string> => {
   const errors: Record<string, string> = {};
 
-  if (usesScraperPagesSelectorSource(config) && !hasScraperFieldSelectorValue(config.pageImageSelector)) {
+  if (config.pageResolutionMode === 'linked_pages') {
+    if (usesScraperPagesSelectorSource(config) && !hasScraperFieldSelectorValue(config.pageLinkSelector)) {
+      errors.pageLinkSelector = 'Le selecteur des liens intermediaires est requis dans ce mode.';
+    }
+
+    if (!hasScraperFieldSelectorValue(config.pageImageSelector)) {
+      errors.pageImageSelector = 'Le selecteur de l\'image finale est requis dans ce mode.';
+    }
+  } else if (usesScraperPagesSelectorSource(config) && !hasScraperFieldSelectorValue(config.pageImageSelector)) {
     errors.pageImageSelector = 'Le selecteur des pages est requis.';
+  }
+
+  const pageLinkSelectorError = getInvalidRegexFieldSelectorError(config.pageLinkSelector);
+  if (pageLinkSelectorError) {
+    errors.pageLinkSelector = pageLinkSelectorError;
   }
 
   const pageImageSelectorError = getInvalidRegexFieldSelectorError(config.pageImageSelector);

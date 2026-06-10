@@ -48,6 +48,8 @@ import {
   SELECTOR_FIELDS,
   TEST_URL_FIELD,
   TEST_VALUE_FIELD,
+  THUMBNAIL_FIELDS,
+  THUMBNAILS_MODE_FIELD,
   URL_STRATEGY_FIELD,
   URL_TEMPLATE_FIELD,
 } from '@/renderer/components/ScraperConfig/details/detailsFeatureEditor.utils';
@@ -57,6 +59,7 @@ import {
   extractScraperDetailsFieldValues,
   extractScraperDetailsThumbnailsFromDocument,
   extractScraperDetailsThumbnailsPageFromDocument,
+  getScraperRuntimeThumbnailDisplayUrl,
   extractScraperTagUrlsFromDocument,
   extractScraperLanguageCodesFromRoot,
 } from '@/renderer/utils/scraperRuntime';
@@ -491,20 +494,24 @@ export default function ScraperDetailsFeatureEditor({
 
         try {
           const thumbnails = extractScraperDetailsThumbnailsFromDocument(doc, {
+            thumbnailsMode: config.thumbnailsMode,
             thumbnailsListSelector: config.thumbnailsListSelector,
             thumbnailsSelector: config.thumbnailsSelector,
           }, {
             requestedUrl: typedDocumentResult.requestedUrl,
             finalUrl: typedDocumentResult.finalUrl,
           });
+          const thumbnailSamples = thumbnails
+            .map((thumbnail) => getScraperRuntimeThumbnailDisplayUrl(thumbnail))
+            .filter(Boolean);
 
           checks.push({
             key: 'thumbnails',
             selector: selectorLabel,
             required: false,
             matchedCount: thumbnails.length,
-            sample: thumbnails[0],
-            samples: thumbnails.slice(0, 12),
+            sample: thumbnailSamples[0],
+            samples: thumbnailSamples.slice(0, 12),
             issueCode: thumbnails.length > 0 ? undefined : 'no_match',
           });
         } catch {
@@ -520,6 +527,7 @@ export default function ScraperDetailsFeatureEditor({
       if (config.thumbnailsNextPageSelector) {
         try {
           const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, {
+            thumbnailsMode: config.thumbnailsMode,
             thumbnailsNextPageSelector: config.thumbnailsNextPageSelector,
           }, {
             requestedUrl: typedDocumentResult.requestedUrl,
@@ -663,6 +671,45 @@ export default function ScraperDetailsFeatureEditor({
 
           <ScraperConfigFieldGrid
             fields={SELECTOR_FIELDS}
+            fieldSelectorNames={FIELD_SELECTOR_FIELD_NAMES}
+            getValue={(fieldName) => (
+              formValues[fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>] ?? ''
+            )}
+            getError={(fieldName) => fieldErrors[fieldName]}
+            onFieldChange={(fieldName) => (
+              handleFieldChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>)
+            )}
+            onFieldSelectorChange={(fieldName) => (
+              handleFieldSelectorChange(fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>)
+            )}
+          />
+        </div>
+
+        <div className="scraper-config-section">
+          <div className="scraper-config-section__header">
+            <h4>Vignettes</h4>
+            <p>
+              Configure les apercus de pages affiches sur la fiche. Utilise `Sprite CSS` quand
+              le site affiche ses miniatures avec un background et des positions dans une image unique.
+            </p>
+          </div>
+
+          <ScraperConfigField
+            field={THUMBNAILS_MODE_FIELD}
+            value={formValues.thumbnailsMode || 'image'}
+            error={fieldErrors.thumbnailsMode}
+            onChange={handleFieldChange('thumbnailsMode')}
+          />
+
+          <div className="scraper-config-hint">
+            En mode `Images directes`, le selecteur doit retourner une URL d&apos;image, par exemple
+            <code>{' img@src'}</code>. En mode `Sprite CSS`, vise l&apos;attribut
+            <code>{' @style'}</code> ou l&apos;element qui porte le style
+            <code>{' background: url(...) -xpx -ypx'}</code>.
+          </div>
+
+          <ScraperConfigFieldGrid
+            fields={THUMBNAIL_FIELDS}
             fieldSelectorNames={FIELD_SELECTOR_FIELD_NAMES}
             getValue={(fieldName) => (
               formValues[fieldName as Exclude<keyof DetailsFormState, 'derivedValues' | 'languageDetection'>] ?? ''

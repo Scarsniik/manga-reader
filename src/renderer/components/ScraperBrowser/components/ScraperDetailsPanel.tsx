@@ -12,8 +12,10 @@ import { useModal } from '@/renderer/hooks/useModal';
 import {
   formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
+  getScraperRuntimeThumbnailKey,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
+  ScraperRuntimeThumbnail,
 } from '@/renderer/utils/scraperRuntime';
 import {
   findScraperTagBlacklistEntry,
@@ -57,6 +59,69 @@ const buildPotentialMatchWarningDetails = (
         <p>{hiddenCount} autre{hiddenCount > 1 ? "s" : ""} correspondance{hiddenCount > 1 ? "s" : ""}.</p>
       ) : null}
     </>
+  );
+};
+
+type ThumbnailFrameStyle = React.CSSProperties & {
+  '--scraper-thumbnail-width'?: string;
+  '--scraper-thumbnail-height'?: string;
+};
+
+const buildCssUrl = (url: string): string => `url("${url.replace(/"/g, '\\"')}")`;
+
+const isCssSpriteThumbnail = (
+  thumbnail: ScraperRuntimeThumbnail,
+): thumbnail is Extract<ScraperRuntimeThumbnail, { kind: 'css_sprite' }> => (
+  typeof thumbnail !== 'string' && thumbnail.kind === 'css_sprite'
+);
+
+const getThumbnailUrl = (thumbnail: ScraperRuntimeThumbnail): string => (
+  typeof thumbnail === 'string' ? thumbnail : thumbnail.url
+);
+
+const buildThumbnailFrameStyle = (thumbnail: ScraperRuntimeThumbnail): ThumbnailFrameStyle | undefined => {
+  if (!isCssSpriteThumbnail(thumbnail)) {
+    return undefined;
+  }
+
+  const style: ThumbnailFrameStyle = {};
+  if (thumbnail.width && thumbnail.width > 0) {
+    style['--scraper-thumbnail-width'] = `${thumbnail.width}px`;
+  }
+
+  if (thumbnail.height && thumbnail.height > 0) {
+    style['--scraper-thumbnail-height'] = `${thumbnail.height}px`;
+  }
+
+  return Object.keys(style).length ? style : undefined;
+};
+
+const renderThumbnail = (
+  thumbnail: ScraperRuntimeThumbnail,
+  alt: string,
+): React.ReactNode => {
+  if (isCssSpriteThumbnail(thumbnail)) {
+    return (
+      <span
+        role="img"
+        aria-label={alt}
+        className="scraper-browser__thumbnail scraper-browser__thumbnail-sprite"
+        style={{
+          backgroundImage: buildCssUrl(thumbnail.url),
+          backgroundPosition: `${thumbnail.positionX ?? 0}px ${thumbnail.positionY ?? 0}px`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: thumbnail.backgroundSize,
+        }}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={getThumbnailUrl(thumbnail)}
+      alt={alt}
+      className="scraper-browser__thumbnail"
+    />
   );
 };
 
@@ -184,7 +249,7 @@ export default function ScraperDetailsPanel({
     return null;
   }
 
-  const thumbnailUrls = detailsResult.thumbnails ?? [];
+  const thumbnails = detailsResult.thumbnails ?? [];
   const shouldDisplayThumbnails = !usesChapters
     && displaysThumbnails
     && Array.isArray(detailsResult.thumbnails);
@@ -193,7 +258,7 @@ export default function ScraperDetailsPanel({
   const totalPageCount = Number.parseInt(String(detailsResult.pageCount ?? '').match(/\d+/)?.[0] ?? '', 10);
   const canLoadMoreFromPages = canOpenThumbnailReader
     && Number.isFinite(totalPageCount)
-    && totalPageCount > thumbnailUrls.length;
+    && totalPageCount > thumbnails.length;
   const canLoadMoreThumbnails = Boolean(detailsResult.thumbnailsNextPageUrl) || canLoadMoreFromPages;
   const loadMoreThumbnailsLabel = detailsResult.thumbnailsNextPageUrl
     ? 'Voir plus'
@@ -642,23 +707,30 @@ export default function ScraperDetailsPanel({
             <div className="scraper-browser__thumbnails">
               <div className="scraper-browser__thumbnails-head">
                 <strong>Pages</strong>
-                <span>{thumbnailUrls.length}</span>
+                <span>{thumbnails.length}</span>
               </div>
               <div className="scraper-browser__thumbnails-list">
-                {thumbnailUrls.length ? (
-                  thumbnailUrls.map((thumbnailUrl, index) => {
+                {thumbnails.length ? (
+                  thumbnails.map((thumbnail, index) => {
                     const page = index + 1;
-                    const image = (
-                      <img
-                        src={thumbnailUrl}
-                        alt={`${detailsResult.title || 'Manga'} - Page ${page}`}
-                        className="scraper-browser__thumbnail"
-                      />
-                    );
+                    const alt = `${detailsResult.title || 'Manga'} - Page ${page}`;
+                    const image = renderThumbnail(thumbnail, alt);
+                    const thumbnailKey = `${getScraperRuntimeThumbnailKey(thumbnail)}-${index}`;
+                    const thumbnailClassName = [
+                      isCssSpriteThumbnail(thumbnail) ? 'is-sprite' : '',
+                    ].join(' ').trim();
+                    const frameStyle = buildThumbnailFrameStyle(thumbnail);
 
                     if (!canOpenThumbnailReader) {
                       return (
-                        <div key={`${thumbnailUrl}-${index}`} className="scraper-browser__thumbnail-frame">
+                        <div
+                          key={thumbnailKey}
+                          className={[
+                            'scraper-browser__thumbnail-frame',
+                            thumbnailClassName,
+                          ].join(' ').trim()}
+                          style={frameStyle}
+                        >
                           {image}
                         </div>
                       );
@@ -666,9 +738,13 @@ export default function ScraperDetailsPanel({
 
                     return (
                       <button
-                        key={`${thumbnailUrl}-${index}`}
+                        key={thumbnailKey}
                         type="button"
-                        className="scraper-browser__thumbnail-button"
+                        className={[
+                          'scraper-browser__thumbnail-button',
+                          thumbnailClassName,
+                        ].join(' ').trim()}
+                        style={frameStyle}
                         onClick={() => onOpenReader({ page })}
                         onMouseDown={(event) => {
                           if (event.button === MIDDLE_BUTTON) {
