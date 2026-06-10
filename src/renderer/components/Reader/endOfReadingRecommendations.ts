@@ -13,7 +13,9 @@ export type EndOfReadingRecommendationOptions = {
     hiddenTagIds?: string[];
     showHiddenContent?: boolean;
     excludeStartedWithoutPageCount?: boolean;
+    excludeStarted?: boolean;
     requireSameLanguage?: boolean;
+    excludedMangas?: Array<Manga | null | undefined>;
 };
 
 const normalizeText = (value?: string | null): string => (
@@ -89,11 +91,28 @@ const hasUnknownReadingCompletion = (manga: Manga): boolean => {
         && (totalPages === null || totalPages <= 0);
 };
 
+const isMangaStarted = (manga: Manga): boolean => {
+    const currentPage = typeof manga.currentPage === "number" && Number.isFinite(manga.currentPage)
+        ? manga.currentPage
+        : null;
+
+    return currentPage !== null && currentPage > 0;
+};
+
 const hasHiddenTag = (manga: Manga, hiddenTagIdSet: Set<string>): boolean => (
     getMangaTagIds(manga).some((tagId) => hiddenTagIdSet.has(tagId))
 );
 
 const getSeriesId = (manga: Manga): string => normalizeText(manga.seriesId);
+
+const isExcludedManga = (
+    candidate: Manga,
+    currentManga: Manga,
+    options: EndOfReadingRecommendationOptions,
+): boolean => (
+    isSameManga(candidate, currentManga)
+    || (options.excludedMangas ?? []).some((excludedManga) => isSameManga(candidate, excludedManga))
+);
 
 const getCandidateLanguageCodes = (manga: EndOfReadingRecommendation): string[] => {
     const explicitLanguageCodes = Array.isArray(manga.recommendationLanguageCodes)
@@ -155,6 +174,7 @@ const getDirectUnreadPool = (
     );
     const canRecommendManga = (candidate: Manga): boolean => (
         !isMangaCompleted(candidate)
+        && (!options.excludeStarted || !isMangaStarted(candidate))
         && (!options.excludeStartedWithoutPageCount || !hasUnknownReadingCompletion(candidate))
         && canShowManga(candidate)
     );
@@ -163,7 +183,7 @@ const getDirectUnreadPool = (
         const seriesId = getSeriesId(candidate);
         if (!seriesId) {
             if (
-                !isSameManga(candidate, currentManga)
+                !isExcludedManga(candidate, currentManga, options)
                 && canRecommendManga(candidate)
             ) {
                 standaloneMangas.push(candidate);
@@ -191,7 +211,11 @@ const getDirectUnreadPool = (
             && !isMangaCompleted(candidate)
         ));
 
-        if (nextUnreadManga && canRecommendManga(nextUnreadManga)) {
+        if (
+            nextUnreadManga
+            && !isExcludedManga(nextUnreadManga, currentManga, options)
+            && canRecommendManga(nextUnreadManga)
+        ) {
             pool.push(nextUnreadManga);
         }
 
@@ -269,6 +293,7 @@ export const getRandomStandaloneEndOfReadingRecommendation = (
         !getSeriesId(candidate)
         && !isSameManga(candidate, currentManga)
         && !isMangaCompleted(candidate)
+        && (!options.excludeStarted || !isMangaStarted(candidate))
         && (!options.excludeStartedWithoutPageCount || !hasUnknownReadingCompletion(candidate))
         && (showHiddenContent || !hasHiddenTag(candidate, hiddenTagIdSet))
         && hasSameLanguage(currentLanguage, candidate)
@@ -276,3 +301,14 @@ export const getRandomStandaloneEndOfReadingRecommendation = (
 
     return shuffleMangas(randomPool)[0] ?? null;
 };
+
+export const getSurpriseEndOfReadingRecommendation = (
+    currentManga: Manga | null,
+    libraryMangas: EndOfReadingRecommendation[],
+    options: EndOfReadingRecommendationOptions = {},
+): EndOfReadingRecommendation | null => (
+    getEndOfReadingRecommendations(currentManga, libraryMangas, 1, {
+        ...options,
+        excludeStarted: true,
+    })[0] ?? null
+);

@@ -181,6 +181,11 @@ const readerSettingsFields: FormItem[] = [
         label: 'Inclure les bookmarks dans les recommandations et le manga aléatoire',
         type: 'checkbox',
       },
+      {
+        name: 'readerSurpriseNextOnCompletion',
+        label: 'En fin de lecture, Suivant ouvre un manga surprise non commencé',
+        type: 'checkbox',
+      },
     ],
   },
 ]
@@ -206,6 +211,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
       readerOcrNavigationStrictDirection: DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
       readerOcrNavigationLooseFallback: DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK,
       readerRecommendBookmarks: false,
+      readerSurpriseNextOnCompletion: false,
       ...sourceParams,
       readerOcrPreloadPageCount: sourceParams.readerOcrPreloadPageCount
         ?? sourceParams.readerPreloadPageCount
@@ -230,6 +236,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
       readerScrollStartBoost: normalizeReaderScrollStartBoost(values.readerScrollStartBoost),
       readerOpenOcrPanelForJapaneseManga: !!values.readerOpenOcrPanelForJapaneseManga,
       readerRecommendBookmarks: !!values.readerRecommendBookmarks,
+      readerSurpriseNextOnCompletion: !!values.readerSurpriseNextOnCompletion,
     }, {
       remount: false,
     })

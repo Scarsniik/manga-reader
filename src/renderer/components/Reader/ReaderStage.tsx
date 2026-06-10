@@ -1,7 +1,7 @@
 import React from 'react';
 import ImageViewer from './ImageViewer';
 import ReaderChapterTransition from './ReaderChapterTransition';
-import ReaderCompletion from './ReaderCompletion';
+import ReaderCompletion, { type ReaderCompletionBookmarkTarget } from './ReaderCompletion';
 import ReaderEmptyState from './ReaderEmptyState';
 import type { EndOfReadingRecommendation } from '@/renderer/components/Reader/endOfReadingRecommendations';
 import {
@@ -24,6 +24,7 @@ type Props = {
     completionRecommendations: EndOfReadingRecommendation[];
     completionRandomRecommendation: EndOfReadingRecommendation | null;
     completionSourceUrl: string | null;
+    completionBookmarkTarget: ReaderCompletionBookmarkTarget | null;
     continuationCoverSrc: string | null;
     continuationLoading: boolean;
     continuationError: string | null;
@@ -71,6 +72,7 @@ const ReaderStage: React.FC<Props> = ({
     completionRecommendations,
     completionRandomRecommendation,
     completionSourceUrl,
+    completionBookmarkTarget,
     continuationCoverSrc,
     continuationLoading,
     continuationError,
@@ -122,6 +124,7 @@ const ReaderStage: React.FC<Props> = ({
                             recommendations={completionRecommendations}
                             randomRecommendation={completionRandomRecommendation}
                             sourceUrl={completionSourceUrl}
+                            bookmarkTarget={completionBookmarkTarget}
                             onReturnToLibrary={onReturnToLibrary}
                             onOpenSource={onOpenSource}
                             onOpenRecommendation={onOpenRecommendation}

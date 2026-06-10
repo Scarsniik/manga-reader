@@ -167,6 +167,7 @@ const Reader: React.FC<ReaderProps> = ({
     const showProgressIndicator = normalizeBooleanSetting(params?.readerShowProgressIndicator, true);
     const openOcrPanelForJapaneseManga = normalizeBooleanSetting(params?.readerOpenOcrPanelForJapaneseManga, false);
     const recommendBookmarks = normalizeBooleanSetting(params?.readerRecommendBookmarks, false);
+    const surpriseNextOnCompletion = normalizeBooleanSetting(params?.readerSurpriseNextOnCompletion, false);
     const readerOcrAutoAnalyzeBubbles = settingsLoading
         ? DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES
         : normalizeReaderOcrAutoAnalyzeBubbles(params?.readerOcrAutoAnalyzeBubbles);
@@ -298,6 +299,7 @@ const Reader: React.FC<ReaderProps> = ({
         libraryMangas,
         hiddenTagIds,
         showHiddenContent: Boolean(params?.showHiddens),
+        surpriseNextOnCompletion,
         bookmarkRecommendationMangas,
         bookmarkRecommendationScrapersById: scrapersById,
         images,
@@ -389,6 +391,20 @@ const Reader: React.FC<ReaderProps> = ({
         ...ocrPanelLayoutStyle,
         '--reader-image-max-width': `${readerImageMaxWidth}px`,
     } as React.CSSProperties), [ocrPanelLayoutStyle, readerImageMaxWidth]);
+    const completionBookmarkTarget = React.useMemo(() => {
+        const scraperId = String(manga?.scraperId ?? '').trim();
+        const sourceUrl = String(manga?.sourceUrl ?? '').trim();
+
+        if (!scraperId || !sourceUrl) {
+            return null;
+        }
+
+        return {
+            scraperId,
+            sourceUrl,
+            title: manga?.title || "ce manga",
+        };
+    }, [manga?.scraperId, manga?.sourceUrl, manga?.title]);
 
     return (
         <div className="reader" style={readerStyle}>
@@ -445,6 +461,7 @@ const Reader: React.FC<ReaderProps> = ({
                     completionRecommendations={navigation.completionRecommendations}
                     completionRandomRecommendation={navigation.completionRandomRecommendation}
                     completionSourceUrl={navigation.completionSourceUrl}
+                    completionBookmarkTarget={completionBookmarkTarget}
                     continuationCoverSrc={navigation.continuationCoverSrc}
                     continuationLoading={navigation.continuationLoading}
                     continuationError={navigation.continuationError}

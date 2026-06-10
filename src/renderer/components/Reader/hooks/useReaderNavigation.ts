@@ -22,6 +22,7 @@ import {
     type EndOfReadingRecommendation,
     getEndOfReadingRecommendations,
     getRandomStandaloneEndOfReadingRecommendation,
+    getSurpriseEndOfReadingRecommendation,
 } from '@/renderer/components/Reader/endOfReadingRecommendations';
 import {
     findLinkedLibraryMangaForRecommendation,
@@ -47,6 +48,7 @@ type Args = {
     libraryMangas: Manga[];
     hiddenTagIds: string[];
     showHiddenContent: boolean;
+    surpriseNextOnCompletion: boolean;
     bookmarkRecommendationMangas: EndOfReadingRecommendation[];
     bookmarkRecommendationScrapersById: Map<string, ScraperRecord>;
     images: string[];
@@ -66,6 +68,7 @@ const useReaderNavigation = ({
     libraryMangas,
     hiddenTagIds,
     showHiddenContent,
+    surpriseNextOnCompletion,
     bookmarkRecommendationMangas,
     bookmarkRecommendationScrapersById,
     images,
@@ -238,6 +241,26 @@ const useReaderNavigation = ({
             : null,
         [hiddenTagIds, isCompletionPage, manga, recommendationCandidates, showHiddenContent],
     );
+    const completionSurpriseRecommendation = React.useMemo(
+        () => isCompletionPage && surpriseNextOnCompletion
+            ? getSurpriseEndOfReadingRecommendation(manga, recommendationCandidates, {
+                excludeStartedWithoutPageCount: true,
+                excludedMangas: completionRecommendations,
+                hiddenTagIds,
+                requireSameLanguage: true,
+                showHiddenContent,
+            })
+            : null,
+        [
+            completionRecommendations,
+            hiddenTagIds,
+            isCompletionPage,
+            manga,
+            recommendationCandidates,
+            showHiddenContent,
+            surpriseNextOnCompletion,
+        ],
+    );
     const completionSourceUrl = React.useMemo(
         () => manga ? getMangaSourceUrl(manga) || null : null,
         [manga],
@@ -280,11 +303,15 @@ const useReaderNavigation = ({
         || currentIndex > 0
         || Boolean(previousTarget)
     );
-    const canGoNext = images.length > 0 && !continuationLoading && !isCompletionPage && (
-        isTransitionPage
-        || currentIndex < images.length - 1
-        || Boolean(nextTarget)
-        || currentIndex >= images.length - 1
+    const canGoNext = images.length > 0 && !continuationLoading && (
+        isCompletionPage
+            ? Boolean(completionSurpriseRecommendation)
+            : (
+                isTransitionPage
+                || currentIndex < images.length - 1
+                || Boolean(nextTarget)
+                || currentIndex >= images.length - 1
+            )
     );
 
     const scrollToTopImmediate = React.useCallback(() => {
@@ -706,6 +733,10 @@ const useReaderNavigation = ({
         }
 
         if (isCompletionPage) {
+            if (completionSurpriseRecommendation) {
+                void openRecommendation(completionSurpriseRecommendation);
+            }
+
             return;
         }
 
@@ -737,7 +768,20 @@ const useReaderNavigation = ({
         }
 
         goTo(currentIndex + 1);
-    }, [continuationLoading, continueToAdjacentChapter, currentIndex, goTo, images.length, isCompletionPage, isTransitionPage, nextTarget, scrollToTopImmediate, transitionDirection]);
+    }, [
+        completionSurpriseRecommendation,
+        continuationLoading,
+        continueToAdjacentChapter,
+        currentIndex,
+        goTo,
+        images.length,
+        isCompletionPage,
+        isTransitionPage,
+        nextTarget,
+        openRecommendation,
+        scrollToTopImmediate,
+        transitionDirection,
+    ]);
 
     const prev = React.useCallback(() => {
         if (isCompletionPage) {

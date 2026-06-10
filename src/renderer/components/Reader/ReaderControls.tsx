@@ -22,7 +22,7 @@ const ReaderControls: React.FC<Props> = ({
     onNext,
 }) => {
     const nextButtonLabel = isCompletionPage
-        ? 'Fin de lecture'
+        ? (canGoNext ? 'Suivant' : 'Fin de lecture')
         : isTransitionPage
             ? (
                 continuationLoading

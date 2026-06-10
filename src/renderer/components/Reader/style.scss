@@ -482,6 +482,10 @@
 
 .reader-completion__button,
 .reader-completion__recommendation button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
 	background: rgba(48, 118, 199, 0.86);
 	color: #fff;
 	border: 1px solid rgba(126, 182, 255, 0.35);
@@ -492,15 +496,49 @@
 	transition: transform 120ms ease, background 160ms ease;
 }
 
+.reader-completion__button svg {
+	width: 16px;
+	height: 16px;
+	flex: 0 0 auto;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
 .reader-completion__button.secondary {
 	background: rgba(255,255,255,0.08);
 	border-color: rgba(255,255,255,0.12);
 }
 
-.reader-completion__button:hover,
-.reader-completion__recommendation button:hover {
+.reader-completion__button.danger {
+	background: rgba(184, 65, 65, 0.18);
+	border-color: rgba(255, 126, 126, 0.38);
+	color: #ffe0e0;
+}
+
+.reader-completion__button:hover:not(:disabled),
+.reader-completion__recommendation button:hover:not(:disabled) {
 	transform: translateY(-1px);
 	background: rgba(64, 136, 219, 0.94);
+}
+
+.reader-completion__button.danger:hover:not(:disabled) {
+	background: rgba(205, 75, 75, 0.28);
+}
+
+.reader-completion__button:disabled,
+.reader-completion__recommendation button:disabled {
+	opacity: 0.62;
+	cursor: default;
+	transform: none;
+}
+
+.reader-completion__error {
+	margin: -4px 0 0;
+	color: #ffaaa8;
+	font-size: 0.92rem;
 }
 
 .reader-completion__recommendations {
