@@ -351,6 +351,7 @@ export const normalizeReaderAssetSrc = (value?: string | null): string | null =>
         || src.startsWith('blob:')
         || src.startsWith('local://')
         || src.startsWith('scraper-thumb://')
+        || src.startsWith('scraper-image://')
     ) {
         return src;
     }

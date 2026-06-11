@@ -83,23 +83,31 @@ export const getFavoriteScraperTags = (
   tags: readonly string[] | null | undefined,
   tagUrls?: readonly string[] | null,
 ): ScraperFavoriteTagMatch[] => {
-  if (!Array.isArray(tags) || !tags.length || !sources.length) {
+  const tagValues = Array.isArray(tags) ? tags : [];
+  const tagUrlValues = Array.isArray(tagUrls) ? tagUrls : [];
+  if ((!tagValues.length && !tagUrlValues.length) || !sources.length) {
     return [];
   }
 
-  return tags.reduce<ScraperFavoriteTagMatch[]>((matches, tag, index) => {
-    const tagUrl = tagUrls?.[index];
-    const favoriteSource = findScraperTagFavoriteSource(sources, tag, tagUrl);
-    if (!favoriteSource) {
-      return matches;
-    }
+  return Array.from({ length: Math.max(tagValues.length, tagUrlValues.length) })
+    .reduce<ScraperFavoriteTagMatch[]>((matches, _item, index) => {
+      const tagUrl = tagUrlValues[index];
+      const tag = tagValues[index] || tagUrl || "";
+      if (!tag && !tagUrl) {
+        return matches;
+      }
 
-    matches.push({
-      tag,
-      tagUrl,
-      favorite: favoriteSource.favorite,
-      source: favoriteSource.source,
-    });
-    return matches;
-  }, []);
+      const favoriteSource = findScraperTagFavoriteSource(sources, tag, tagUrl);
+      if (!favoriteSource) {
+        return matches;
+      }
+
+      matches.push({
+        tag,
+        tagUrl,
+        favorite: favoriteSource.favorite,
+        source: favoriteSource.source,
+      });
+      return matches;
+    }, []);
 };

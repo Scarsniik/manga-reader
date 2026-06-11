@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { buildRemoteReaderImageUrl } from '@/renderer/utils/remoteImages';
 import {
     ManualSelection,
     ReaderOcrBox,
@@ -9,6 +10,7 @@ const MIN_SELECTION_SIZE_PX = 12;
 
 type Props = {
     src: string;
+    imageRefererUrl?: string | null;
     currentIndex?: number;
     imgRef: React.RefObject<HTMLImageElement> | React.MutableRefObject<HTMLImageElement | null>;
     ocrEnabled: boolean;
@@ -27,6 +29,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 const ImageViewer: React.FC<Props> = ({
     src,
+    imageRefererUrl = null,
     imgRef,
     ocrEnabled,
     showBoxes = true,
@@ -40,6 +43,10 @@ const ImageViewer: React.FC<Props> = ({
     onManualSelectionComplete,
 }) => {
     const [draftSelection, setDraftSelection] = useState<ManualSelection | null>(null);
+    const displaySrc = useMemo(
+        () => buildRemoteReaderImageUrl(src, imageRefererUrl) ?? src,
+        [imageRefererUrl, src],
+    );
     const dragStateRef = useRef<{
         pointerId: number;
         startX: number;
@@ -98,7 +105,7 @@ const ImageViewer: React.FC<Props> = ({
 
     return (
         <div className="image-wrap">
-            <img ref={imgRef} src={src} alt="page" className="reader-image" />
+            <img ref={imgRef} src={displaySrc} alt="page" className="reader-image" />
 
             {ocrEnabled && (showBoxes || orderSelectionEnabled) && detectedBoxes.map(b => {
                 const left = `calc(${b.bbox.x * 100}% - ${BOX_VISUAL_PADDING_PX}px)`;

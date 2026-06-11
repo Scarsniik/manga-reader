@@ -16,6 +16,7 @@ import {
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
+import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
 
 export type TagFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -161,7 +162,14 @@ export default function useTagFavoriteRuns(
         },
       );
       const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(run.scraper, page, nextPageIndex, run.favoriteSource.name),
+        buildSourceResults(run.scraper, {
+          ...page,
+          items: appendScraperSearchResultTagToItems(
+            page.items,
+            run.favoriteSource.name,
+            run.favoriteSource.tagUrl,
+          ),
+        }, nextPageIndex, run.favoriteSource.name),
       );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;

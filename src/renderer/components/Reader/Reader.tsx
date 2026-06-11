@@ -479,6 +479,7 @@ const Reader: React.FC<ReaderProps> = ({
                         void navigation.openRecommendation(targetManga);
                     }}
                     currentImageSrc={navigation.currentImageSrc}
+                    currentImageRefererUrl={manga?.sourceUrl ?? locationState?.scraperReader?.sourceUrl ?? null}
                     activeOcrEnabled={activeOcrEnabled}
                     showBoxes={ocr.showBoxes}
                     allOcrBoxes={ocr.allOcrBoxes}

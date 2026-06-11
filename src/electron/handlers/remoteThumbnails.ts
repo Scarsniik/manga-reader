@@ -11,7 +11,9 @@ const MIN_THUMBNAIL_WIDTH = 120;
 const MAX_THUMBNAIL_WIDTH = 720;
 const DEFAULT_THUMBNAIL_QUALITY = 78;
 const MAX_REMOTE_IMAGE_BYTES = 16 * 1024 * 1024;
-const REMOTE_THUMBNAIL_USER_AGENT = "Manga Helper Remote Thumbnail/1.0";
+const MAX_REMOTE_READER_IMAGE_BYTES = 64 * 1024 * 1024;
+const REMOTE_IMAGE_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
 const clampInteger = (value: unknown, fallback: number, min: number, max: number): number => {
   const parsed = Number(value);
@@ -53,33 +55,49 @@ const readCachedThumbnail = async (cachePath: string): Promise<Buffer | null> =>
   }
 };
 
-const fetchRemoteImage = async (sourceUrl: string, refererUrl: string): Promise<Buffer> => {
+const fetchRemoteImage = async (
+  sourceUrl: string,
+  refererUrl: string,
+  maxBytes: number,
+): Promise<{
+  data: Buffer;
+  contentType: string;
+}> => {
   const response = await fetch(sourceUrl, {
     method: "GET",
     redirect: "follow",
     headers: {
-      "User-Agent": REMOTE_THUMBNAIL_USER_AGENT,
+      "User-Agent": REMOTE_IMAGE_USER_AGENT,
       Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+      "Sec-Fetch-Dest": "image",
+      "Sec-Fetch-Mode": "no-cors",
+      "Sec-Fetch-Site": refererUrl ? "same-site" : "none",
       ...(refererUrl ? { Referer: refererUrl } : {}),
     },
   });
 
   const contentLength = Number(response.headers.get("content-length") || 0);
-  if (contentLength > MAX_REMOTE_IMAGE_BYTES) {
+  if (contentLength > maxBytes) {
     throw new Error("Remote image is too large.");
   }
 
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (!response.ok || (contentType && !contentType.startsWith("image/"))) {
+  const contentType = String(response.headers.get("content-type") || "");
+  if (!response.ok || (contentType && !contentType.toLowerCase().startsWith("image/"))) {
     throw new Error("Remote URL did not return an image.");
   }
 
   const sourceBuffer = Buffer.from(await response.arrayBuffer());
-  if (sourceBuffer.length > MAX_REMOTE_IMAGE_BYTES) {
+  if (sourceBuffer.length > maxBytes) {
     throw new Error("Remote image is too large.");
   }
 
-  return sourceBuffer;
+  return {
+    data: sourceBuffer,
+    contentType: contentType || "image/jpeg",
+  };
 };
 
 const buildRemoteThumbnail = async (
@@ -97,7 +115,7 @@ const buildRemoteThumbnail = async (
     return cachedThumbnail;
   }
 
-  const sourceBuffer = await fetchRemoteImage(sourceUrl, refererUrl);
+  const { data: sourceBuffer } = await fetchRemoteImage(sourceUrl, refererUrl, MAX_REMOTE_IMAGE_BYTES);
   const thumbnailBuffer = await sharp(sourceBuffer)
     .rotate()
     .resize({
@@ -111,6 +129,14 @@ const buildRemoteThumbnail = async (
   await fs.writeFile(cachePath, thumbnailBuffer);
   return thumbnailBuffer;
 };
+
+const fetchRemoteReaderImage = async (
+  sourceUrl: string,
+  refererUrl: string,
+): Promise<{
+  data: Buffer;
+  contentType: string;
+}> => fetchRemoteImage(sourceUrl, refererUrl, MAX_REMOTE_READER_IMAGE_BYTES);
 
 export const registerRemoteThumbnailProtocol = (): void => {
   protocol.registerBufferProtocol("scraper-thumb", (request, callback) => {
@@ -144,6 +170,32 @@ export const registerRemoteThumbnailProtocol = (): void => {
         });
       } catch (error) {
         console.warn("Failed to build remote thumbnail", error);
+        callback({ error: -2 });
+      }
+    })();
+  });
+};
+
+export const registerRemoteReaderImageProtocol = (): void => {
+  protocol.registerBufferProtocol("scraper-image", (request, callback) => {
+    void (async () => {
+      try {
+        const parsedRequest = new URL(request.url);
+        const sourceUrl = normalizeHttpUrl(parsedRequest.searchParams.get("url"));
+        const refererUrl = normalizeHttpUrl(parsedRequest.searchParams.get("referer"));
+
+        if (!sourceUrl) {
+          callback({ error: -300 });
+          return;
+        }
+
+        const image = await fetchRemoteReaderImage(sourceUrl, refererUrl);
+        callback({
+          data: image.data,
+          mimeType: image.contentType,
+        });
+      } catch (error) {
+        console.warn("Failed to fetch remote reader image", error);
         callback({ error: -2 });
       }
     })();

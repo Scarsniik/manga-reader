@@ -564,6 +564,9 @@ Le runtime peut ouvrir `Tag` :
 - depuis un tag favori sauvegarde
 
 Quand `tagNameSelector` extrait un nom, ce nom remplace le titre generique `Resultats tag`.
+Les cards extraites depuis une page tag heritent aussi du tag courant comme contexte. Ce tag est
+utilise pour le marquage favori/blacklist et pour masquer les cards quand l'option de masquage des
+tags blacklistes est active, meme si la card elle-meme n'expose pas encore ses tags de fiche.
 
 ## Module Chapitres
 

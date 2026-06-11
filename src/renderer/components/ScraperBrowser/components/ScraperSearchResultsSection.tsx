@@ -9,6 +9,7 @@ import {
   type ScraperTagBlacklistEntry,
 } from '@/renderer/utils/scraperTagBlacklist';
 import type { ScraperTagFavoriteSourceTarget } from '@/renderer/utils/scraperTagFavorites';
+import { appendScraperSearchResultTag } from '@/renderer/utils/scraperSearchResultTags';
 
 type Props = {
   scraperId: string;
@@ -87,15 +88,31 @@ export default function ScraperSearchResultsSection({
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
 }: Props) {
-  const displayedSearchResults = React.useMemo(() => {
-    if (!hideBlacklistedCards) {
+  const resultsWithTagContext = React.useMemo(() => {
+    if (mode !== 'tag') {
       return visibleSearchResults;
     }
 
-    return visibleSearchResults.filter((result) => (
+    const tagValue = query.trim();
+    const tagLabel = (authorTitle || tagValue).trim();
+    if (!tagLabel && !tagValue) {
+      return visibleSearchResults;
+    }
+
+    return visibleSearchResults.map((result) => (
+      appendScraperSearchResultTag(result, tagLabel, tagValue)
+    ));
+  }, [authorTitle, mode, query, visibleSearchResults]);
+
+  const displayedSearchResults = React.useMemo(() => {
+    if (!hideBlacklistedCards) {
+      return resultsWithTagContext;
+    }
+
+    return resultsWithTagContext.filter((result) => (
       getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length === 0
     ));
-  }, [hideBlacklistedCards, tagBlacklistEntries, visibleSearchResults]);
+  }, [hideBlacklistedCards, resultsWithTagContext, tagBlacklistEntries]);
 
   if (!visibleSearchResults.length && !backLabel) {
     return null;

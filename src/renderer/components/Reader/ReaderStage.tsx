@@ -34,6 +34,7 @@ type Props = {
     onOpenRecommendation: (manga: EndOfReadingRecommendation) => void;
     onOpenRandomRecommendation: (manga: EndOfReadingRecommendation) => void;
     currentImageSrc: string | null;
+    currentImageRefererUrl?: string | null;
     activeOcrEnabled: boolean;
     showBoxes: boolean;
     allOcrBoxes: ReaderOcrBox[];
@@ -82,6 +83,7 @@ const ReaderStage: React.FC<Props> = ({
     onOpenRecommendation,
     onOpenRandomRecommendation,
     currentImageSrc,
+    currentImageRefererUrl = null,
     activeOcrEnabled,
     showBoxes,
     allOcrBoxes,
@@ -145,6 +147,7 @@ const ReaderStage: React.FC<Props> = ({
                     ) : currentImageSrc ? (
                         <ImageViewer
                             src={currentImageSrc}
+                            imageRefererUrl={currentImageRefererUrl}
                             imgRef={imgRef}
                             ocrEnabled={activeOcrEnabled}
                             showBoxes={showBoxes}

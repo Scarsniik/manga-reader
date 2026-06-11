@@ -208,6 +208,7 @@ app.whenReady()
         });
         const remoteThumbnails = require("./handlers/remoteThumbnails") as typeof import("./handlers/remoteThumbnails");
         remoteThumbnails.registerRemoteThumbnailProtocol();
+        remoteThumbnails.registerRemoteReaderImageProtocol();
 
         require("./ipc");
         void appUpdate.initializeAppUpdate();

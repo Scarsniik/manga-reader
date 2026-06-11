@@ -76,24 +76,32 @@ export const getBlacklistedScraperTags = (
   tags: readonly string[] | null | undefined,
   tagUrls?: readonly string[] | null,
 ): ScraperBlacklistedTagMatch[] => {
-  if (!Array.isArray(tags) || !tags.length || !entries.length) {
+  const tagValues = Array.isArray(tags) ? tags : [];
+  const tagUrlValues = Array.isArray(tagUrls) ? tagUrls : [];
+  if ((!tagValues.length && !tagUrlValues.length) || !entries.length) {
     return [];
   }
 
-  return tags.reduce<ScraperBlacklistedTagMatch[]>((matches, tag, index) => {
-    const tagUrl = tagUrls?.[index];
-    const entry = findScraperTagBlacklistEntry(entries, tag, tagUrl);
-    if (!entry) {
-      return matches;
-    }
+  return Array.from({ length: Math.max(tagValues.length, tagUrlValues.length) })
+    .reduce<ScraperBlacklistedTagMatch[]>((matches, _item, index) => {
+      const tagUrl = tagUrlValues[index];
+      const tag = tagValues[index] || tagUrl || "";
+      if (!tag && !tagUrl) {
+        return matches;
+      }
 
-    matches.push({
-      tag,
-      tagUrl,
-      entry,
-    });
-    return matches;
-  }, []);
+      const entry = findScraperTagBlacklistEntry(entries, tag, tagUrl);
+      if (!entry) {
+        return matches;
+      }
+
+      matches.push({
+        tag,
+        tagUrl,
+        entry,
+      });
+      return matches;
+    }, []);
 };
 
 export const removeScraperTagBlacklistEntry = (

@@ -54,6 +54,7 @@ import {
   getScraperTagBlacklistEntries,
   type ScraperTagBlacklistByScraper,
 } from "@/renderer/utils/scraperTagBlacklist";
+import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
@@ -593,10 +594,15 @@ const fetchLatestPage = async (
       },
     );
 
+    const searchTerm = run.favoriteSource?.name ?? run.favorite?.name ?? run.query;
+
     return {
-      page,
+      page: {
+        ...page,
+        items: appendScraperSearchResultTagToItems(page.items, searchTerm, run.query),
+      },
       hasNextPage: resolveHasNextTagPage(tagConfig, page),
-      searchTerm: run.favoriteSource?.name ?? run.favorite?.name ?? run.query,
+      searchTerm,
     };
   }
 

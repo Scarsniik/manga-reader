@@ -24,6 +24,7 @@ import {
   ScraperRuntimeDetailsResult,
   toAbsoluteScraperUrl,
 } from "@/renderer/utils/scraperRuntime";
+import { buildRemoteReaderImageUrl } from "@/renderer/utils/remoteImages";
 
 type ResolveScraperReaderPageUrlsOptions = {
   chapter?: ScraperRuntimeChapterResult | null;
@@ -259,6 +260,16 @@ export const isLazyScraperReaderPageUrl = (source: string | null | undefined): b
   typeof source === "string" && source.startsWith(LAZY_TEMPLATE_SELECTOR_PAGE_URL)
 );
 
+const buildReaderImageUrl = (pageUrl: string, refererUrl: string): string =>
+  buildRemoteReaderImageUrl(pageUrl, refererUrl) ?? pageUrl;
+
+const buildReaderImageUrls = (pageUrls: string[], refererUrl: string): string[] =>
+  pageUrls.map((pageUrl) => (
+    isLazyScraperReaderPageUrl(pageUrl)
+      ? pageUrl
+      : buildReaderImageUrl(pageUrl, refererUrl)
+  ));
+
 const resolveTemplateSelectorReaderPageImageUrl = async (
   fetchDocument: ScraperDocumentFetcher,
   baseUrl: string,
@@ -332,12 +343,14 @@ export const resolveLazyScraperReaderPageUrl = async (
     return null;
   }
 
-  return resolveTemplateSelectorReaderPageImageUrl(
+  const resolvedImageUrl = await resolveTemplateSelectorReaderPageImageUrl(
     fetchDocument,
     lazyPage.baseUrl,
     lazyPage.pageUrl,
     lazyPage.pageImageSelector,
   );
+
+  return resolvedImageUrl ? buildReaderImageUrl(resolvedImageUrl, lazyPage.pageUrl) : null;
 };
 
 const detectSequentialTemplateReaderPageCount = async (
@@ -479,6 +492,7 @@ export async function resolveScraperReaderPageUrls(
       ?? (shouldIgnoreKnownTotalAsLimit ? null : knownTotalPages)
       ?? DEFAULT_MAX_TEMPLATE_PAGES,
   );
+  const readerImageRefererUrl = chapter?.url || details.finalUrl || details.requestedUrl;
 
   if (
     usesScraperPagesLinkedPages(pagesConfig)
@@ -503,10 +517,11 @@ export async function resolveScraperReaderPageUrls(
     );
 
     if (!linkedPageUrls.length) {
-      return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+      const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
         chapter,
         maxTemplatePages,
       });
+      return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
     }
 
     const totalPages = linkedPageUrls.length;
@@ -530,7 +545,7 @@ export async function resolveScraperReaderPageUrls(
       throw new Error("La page demandee n'a pas pu etre resolue.");
     }
 
-    pageUrls[initialPage - 1] = initialPageUrl;
+    pageUrls[initialPage - 1] = buildReaderImageUrl(initialPageUrl, linkedPageUrls[initialPage - 1]);
     return pageUrls;
   }
 
@@ -553,10 +568,11 @@ export async function resolveScraperReaderPageUrls(
       );
 
     if (!totalPages) {
-      return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+      const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
         chapter,
         maxTemplatePages,
       });
+      return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
     }
 
     const pageUrls = buildLazyTemplateSelectorReaderPageUrls(
@@ -580,15 +596,16 @@ export async function resolveScraperReaderPageUrls(
       throw new Error("La page demandee n'a pas pu etre resolue.");
     }
 
-    pageUrls[initialPage - 1] = initialPageUrl;
+    pageUrls[initialPage - 1] = buildReaderImageUrl(initialPageUrl, buildPageUrl(initialPage));
     return pageUrls;
   }
 
   if (!canBuildSequentialTemplateReaderPages(pagesConfig)) {
-    return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+    const pageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
       chapter,
       maxTemplatePages,
     });
+    return buildReaderImageUrls(pageUrls, readerImageRefererUrl);
   }
 
   const buildPageUrl = createSequentialTemplateReaderPageUrlFactory(
@@ -606,11 +623,12 @@ export async function resolveScraperReaderPageUrls(
     );
 
   if (!totalPages) {
-    return resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
+    const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
       chapter,
       maxTemplatePages,
     });
+    return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
   }
 
-  return buildSequentialTemplateReaderPageUrls(buildPageUrl, totalPages);
+  return buildReaderImageUrls(buildSequentialTemplateReaderPageUrls(buildPageUrl, totalPages), readerImageRefererUrl);
 }
