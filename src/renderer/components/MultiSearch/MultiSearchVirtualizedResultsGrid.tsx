@@ -203,7 +203,18 @@ export default function MultiSearchVirtualizedResultsGrid({
   });
   const [stickyResultIds, setStickyResultIds] = React.useState<Set<string>>(() => new Set());
 
-  resultsRef.current = results;
+  // On évite les doublons de résultats lors du rendu
+  const usedResults = React.useMemo(() => {
+    return results.reduce<MultiSearchMergedResult[]>((acc, result) => {
+      if (acc.some((r) => r.id === result.id)) {
+        return acc;
+      }
+
+      return [...acc, result];
+    }, []);
+  }, [results]);
+
+  resultsRef.current = usedResults;
 
   const columnCount = React.useMemo(
     () => getColumnCount(containerWidth),
@@ -231,8 +242,8 @@ export default function MultiSearchVirtualizedResultsGrid({
       };
   }, []);
   const rows = React.useMemo(
-    () => buildVirtualRows(results, columnCount, estimatedRowHeight, getItemHeight),
-    [columnCount, estimatedRowHeight, getItemHeight, heightVersion, results],
+    () => buildVirtualRows(usedResults, columnCount, estimatedRowHeight, getItemHeight),
+    [columnCount, estimatedRowHeight, getItemHeight, heightVersion, usedResults],
   );
   const totalHeight = React.useMemo(() => getRowsTotalHeight(rows), [rows]);
 
@@ -382,7 +393,7 @@ export default function MultiSearchVirtualizedResultsGrid({
     if (didPruneHeights) {
       setHeightVersion((currentVersion) => currentVersion + 1);
     }
-  }, [results]);
+  }, [usedResults]);
 
   React.useLayoutEffect(() => {
     const anchor = pendingAnchorRef.current;
@@ -393,7 +404,7 @@ export default function MultiSearchVirtualizedResultsGrid({
     }
 
     pendingAnchorRef.current = null;
-    const nextResultIndex = results.findIndex((result) => result.id === anchor.resultId);
+    const nextResultIndex = usedResults.findIndex((result) => result.id === anchor.resultId);
     const resultIndex = nextResultIndex === -1 ? anchor.resultIndex : nextResultIndex;
     const rowIndex = Math.floor(resultIndex / columnCount);
     const row = rows[rowIndex];
@@ -404,7 +415,7 @@ export default function MultiSearchVirtualizedResultsGrid({
     const currentRange = getViewportRange(container, target);
     scrollBy(target, row.top - anchor.offset - currentRange.start);
     updateViewportRange();
-  }, [columnCount, results, rows, updateViewportRange]);
+  }, [columnCount, usedResults, rows, updateViewportRange]);
 
   const overscan = Math.max(
     MIN_OVERSCAN_PX,

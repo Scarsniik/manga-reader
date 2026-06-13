@@ -14,6 +14,12 @@ import {
   DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS,
   sanitizeRequestConfig,
 } from "./shared";
+import {
+  fetchWithRedirectCookies,
+  findSameOriginContentWarningBypassUrl,
+  isImageContentType,
+  SCRAPER_DOCUMENT_ACCEPT,
+} from "./documentFetch";
 
 const MAX_VALIDATED_IMAGE_BYTES = 16 * 1024 * 1024;
 
@@ -136,19 +142,14 @@ export async function fetchScraperDocument(
   try {
     const fetchInit = buildScraperFetchInit(
       requestConfig,
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      SCRAPER_DOCUMENT_ACCEPT,
     );
-    const response = await fetch(requestedUrl, {
-      method: fetchInit.method,
-      redirect: "follow",
-      signal: controller.signal,
-      headers: fetchInit.headers,
-      body: fetchInit.body,
-    });
-    const contentType = response.headers.get("content-type") ?? undefined;
+    let fetchResult = await fetchWithRedirectCookies(requestedUrl, fetchInit, controller.signal);
+    let response = fetchResult.response;
+    let contentType = response.headers.get("content-type") ?? undefined;
     let html: string | undefined;
 
-    if (response.ok && contentType && contentType.toLowerCase().startsWith("image/")) {
+    if (response.ok && isImageContentType(contentType)) {
       if (request.validateImage) {
         const contentLength = Number(response.headers.get("content-length") || 0);
         if (contentLength > MAX_VALIDATED_IMAGE_BYTES) {
@@ -200,10 +201,35 @@ export async function fetchScraperDocument(
       html = await response.text();
     }
 
+    if (response.ok && !request.validateImage && html) {
+      const bypassUrl = findSameOriginContentWarningBypassUrl(html, response.url || requestedUrl);
+      if (bypassUrl) {
+        fetchResult = await fetchWithRedirectCookies(
+          bypassUrl,
+          buildScraperFetchInit(undefined, SCRAPER_DOCUMENT_ACCEPT),
+          controller.signal,
+          fetchResult.cookies,
+        );
+        response = fetchResult.response;
+        contentType = response.headers.get("content-type") ?? undefined;
+
+        if (response.ok && isImageContentType(contentType)) {
+          try {
+            await response.body?.cancel();
+          } catch {
+            // no-op
+          }
+          html = undefined;
+        } else {
+          html = await response.text();
+        }
+      }
+    }
+
     if (
       response.ok
       && request.validateImage
-      && (!contentType || !contentType.toLowerCase().startsWith("image/"))
+      && !isImageContentType(contentType)
     ) {
       try {
         await response.body?.cancel();

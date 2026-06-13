@@ -108,6 +108,7 @@ type ProcessedLatestPage = {
   includedPageResults: MultiSearchSourceResult[];
   rawUnseenResults: MultiSearchSourceResult[];
   unseenResults: MultiSearchSourceResult[];
+  excludedByEnrichedLanguageCount: number;
   excludedByBlacklistedTagCount: number;
   hasOnlyDuplicateResults: boolean;
 };
@@ -702,7 +703,16 @@ export default function useScraperLatestRuns() {
     const rawUnseenResults = includedPageResults.filter((source) => isUnseenSource(source, recordsById));
     const remainingResultSlots = Math.max(0, resultLimit - currentRun.results.length);
     let unseenResults = rawUnseenResults;
+    let excludedByEnrichedLanguageCount = 0;
     let excludedByBlacklistedTagCount = 0;
+    const isAcceptedByEnrichedLanguage = (source: MultiSearchSourceResult): boolean => {
+      if (sourceMatchesIncludedLanguages(source, includedLanguageCodes)) {
+        return true;
+      }
+
+      excludedByEnrichedLanguageCount += 1;
+      return false;
+    };
     const shouldExcludeBlacklistedTags = excludeBlacklistedTagCards
       && getScraperTagBlacklistEntries(tagBlacklistByScraper, currentRun.scraper.id).length > 0;
     const isAcceptedByBlacklist = (source: MultiSearchSourceResult): boolean => {
@@ -736,7 +746,7 @@ export default function useScraperLatestRuns() {
           }),
         );
         const acceptedBatch = enrichedBatch.filter((source) => (
-          sourceMatchesIncludedLanguages(source, includedLanguageCodes)
+          isAcceptedByEnrichedLanguage(source)
           && isUnseenSource(source, recordsById)
           && isAcceptedByBlacklist(source)
         ));
@@ -784,9 +794,14 @@ export default function useScraperLatestRuns() {
       status: "done" as const,
       results: nextResults,
       checkpoint: nextCheckpoint,
-      excludedByLanguageCount: currentRun.excludedByLanguageCount + newPageResults.length - includedPageResults.length,
+      excludedByLanguageCount: currentRun.excludedByLanguageCount
+        + newPageResults.length
+        - includedPageResults.length
+        + excludedByEnrichedLanguageCount,
       excludedByBlacklistedTagCount: currentRun.excludedByBlacklistedTagCount + excludedByBlacklistedTagCount,
-      includedByLanguageCount: currentRun.includedByLanguageCount + includedPageResults.length,
+      includedByLanguageCount: currentRun.includedByLanguageCount
+        + includedPageResults.length
+        - excludedByEnrichedLanguageCount,
       loadedPages: Math.max(currentRun.loadedPages, pageIndex + 1),
       checkedPages: currentRun.checkedPages + 1,
       hasNextPage: !hasOnlyDuplicateResults && latestPage.hasNextPage,
@@ -804,6 +819,7 @@ export default function useScraperLatestRuns() {
       includedPageResults,
       rawUnseenResults,
       unseenResults,
+      excludedByEnrichedLanguageCount,
       excludedByBlacklistedTagCount,
       hasOnlyDuplicateResults,
     };
@@ -1030,7 +1046,14 @@ export default function useScraperLatestRuns() {
         }
 
         const pageHasOnlyExcludedLanguageResults = processedPage.newPageResults.length > 0
-          && processedPage.includedPageResults.length === 0;
+          && (
+            processedPage.includedPageResults.length === 0
+            || (
+              processedPage.rawUnseenResults.length > 0
+              && processedPage.unseenResults.length === 0
+              && processedPage.excludedByEnrichedLanguageCount > 0
+            )
+          );
         const pageHasOnlyExcludedBlacklistedResults = processedPage.rawUnseenResults.length > 0
           && processedPage.unseenResults.length === 0
           && processedPage.excludedByBlacklistedTagCount > 0;

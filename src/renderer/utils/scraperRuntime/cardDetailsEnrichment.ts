@@ -57,9 +57,10 @@ const mergeCardWithDetails = (
     ...details.authors,
   ]);
   const languageCodes = uniqueTextValues([
-    ...(item.languageCodes ?? []),
     ...details.languageCodes,
   ]);
+  const fallbackLanguageCodes = uniqueTextValues(item.languageCodes ?? []);
+  const nextLanguageCodes = languageCodes.length ? languageCodes : fallbackLanguageCodes;
   const tags = uniqueTextValues([
     ...(item.tags ?? []),
     ...details.tags,
@@ -80,7 +81,7 @@ const mergeCardWithDetails = (
     thumbnailUrl: optionalText(item.thumbnailUrl) || optionalText(details.cover),
     summary: optionalText(item.summary) || optionalText(details.description),
     pageCount: optionalText(item.pageCount) || optionalText(details.pageCount),
-    languageCodes: languageCodes.length ? languageCodes : item.languageCodes,
+    languageCodes: nextLanguageCodes.length ? nextLanguageCodes : item.languageCodes,
   };
 };
 
