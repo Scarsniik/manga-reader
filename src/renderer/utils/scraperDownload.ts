@@ -161,6 +161,9 @@ export async function queueStandaloneScraperCardDownload({
     details,
     pagesConfig as ScraperPagesFeatureConfig,
     async (request) => fetchScraperDocument(request),
+    {
+      thumbnailsNextPageSelector: detailsConfig?.thumbnailsNextPageSelector,
+    },
   );
   const resolvedSourceUrl = details.finalUrl || details.requestedUrl || sourceUrl;
   const linkedManga = replaceMangaId

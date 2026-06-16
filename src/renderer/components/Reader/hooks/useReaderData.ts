@@ -218,6 +218,7 @@ const useReaderData = ({
                         chapter,
                         initialPage: startPage,
                         knownTotalPages: remoteManga.pages,
+                        thumbnailsNextPageSelector: detailsConfig.thumbnailsNextPageSelector,
                     },
                 );
                 const totalPages = pageImages.length;

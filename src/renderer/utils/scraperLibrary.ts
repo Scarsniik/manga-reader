@@ -230,6 +230,9 @@ export async function saveStandaloneScraperCardToLibrary({
     details,
     pagesConfig,
     async (request) => fetchScraperDocument(request),
+    {
+      thumbnailsNextPageSelector: detailsConfig.thumbnailsNextPageSelector,
+    },
   );
   const normalizedDetails = details.title
     ? details

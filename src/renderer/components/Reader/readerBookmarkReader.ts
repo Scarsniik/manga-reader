@@ -140,9 +140,10 @@ export const resolveBookmarkRecommendationForReader = async (
     throw new Error("Ce bookmark ne peut pas etre ouvert directement dans le lecteur.");
   }
 
+  const detailsConfig = getScraperDetailsFeatureConfig(getScraperFeature(scraper, "details"));
   const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, "pages"));
-  if (!pagesConfig) {
-    throw new Error("Le composant Pages n'est pas configure pour ce scrapper.");
+  if (!detailsConfig || !pagesConfig) {
+    throw new Error("Les composants Fiche et Pages doivent etre configures pour ce scrapper.");
   }
 
   const fallbackLanguageCodes = targetManga.recommendationLanguageCodes?.length
@@ -172,6 +173,7 @@ export const resolveBookmarkRecommendationForReader = async (
     {
       initialPage: savedPage,
       knownTotalPages: toPositiveInteger(savedProgress?.totalPages) ?? toPositiveInteger(targetManga.pages),
+      thumbnailsNextPageSelector: detailsConfig.thumbnailsNextPageSelector,
     },
   );
   if (!pageUrls.length) {

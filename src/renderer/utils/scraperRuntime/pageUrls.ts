@@ -1,6 +1,7 @@
 import {
   buildScraperContextTemplateUrl,
   hasScraperFieldSelectorValue,
+  type ScraperFieldSelector,
   type ScraperPagesFeatureConfig,
   type ScraperRecord,
 } from "@/shared/scraper";
@@ -28,10 +29,26 @@ import {
 } from "@/renderer/utils/scraperRuntime/pageTemplates";
 import {
   extractSelectorValues,
+  extractUrlFieldSelectorValuesFromRoot,
   isImageLikeContentType,
   toAbsoluteScraperUrl,
   uniqueValues,
 } from "@/renderer/utils/scraperRuntime/selectorExtraction";
+
+const DEFAULT_MAX_LINKED_PAGE_SOURCE_PAGES = 100;
+
+type ResolveScraperPageUrlsOptions = {
+  maxTemplatePages?: number;
+  chapter?: ScraperRuntimeChapterResult | null;
+  thumbnailsNextPageSelector?: ScraperFieldSelector | null;
+};
+
+type LinkedPageSourcePaginationOptions = {
+  initialNextPageUrl?: string | null;
+  nextPageSelector?: ScraperFieldSelector | null;
+  expectedPageCount?: unknown;
+  maxSourcePages?: number;
+};
 
 const buildScraperPageTemplateUrl = (
   scraperBaseUrl: string,
@@ -96,6 +113,86 @@ const extractUniquePageLinkUrlsFromDocument = (
 ): string[] =>
   uniqueValues(extractSelectorValues(doc, pageLinkSelector).map((value) => toAbsoluteScraperUrl(value, documentUrl)));
 
+const normalizePositiveInteger = (value: unknown): number | null => {
+  const parsed = typeof value === "number"
+    ? value
+    : Number.parseInt(String(value ?? ""), 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+};
+
+const extractNextLinkedPageSourceUrl = (
+  doc: Document,
+  nextPageSelector: ScraperFieldSelector | null | undefined,
+  documentUrl: string,
+): string | null => {
+  if (!nextPageSelector || !hasScraperFieldSelectorValue(nextPageSelector)) {
+    return null;
+  }
+
+  const nextPageValue = extractUrlFieldSelectorValuesFromRoot(doc, nextPageSelector)[0];
+  return nextPageValue ? toAbsoluteScraperUrl(nextPageValue, documentUrl) : null;
+};
+
+export const resolvePageLinkUrlsFromPaginatedSource = async (
+  fetchDocument: ScraperDocumentFetcher,
+  scraperBaseUrl: string,
+  sourceUrl: string,
+  pageLinkSelector: NonNullable<ScraperPagesFeatureConfig["pageLinkSelector"]>,
+  options: LinkedPageSourcePaginationOptions = {},
+): Promise<string[]> => {
+  const pageLinkUrls: string[] = [];
+  const seenPageLinkUrls = new Set<string>();
+  const visitedSourceUrls = new Set<string>();
+  const expectedPageCount = normalizePositiveInteger(options.expectedPageCount);
+  const maxSourcePages = Math.max(
+    1,
+    normalizePositiveInteger(options.maxSourcePages) ?? DEFAULT_MAX_LINKED_PAGE_SOURCE_PAGES,
+  );
+  let nextSourceUrl = sourceUrl;
+
+  for (let sourcePageIndex = 0; nextSourceUrl && sourcePageIndex < maxSourcePages; sourcePageIndex += 1) {
+    const currentSourceUrl = nextSourceUrl;
+    if (visitedSourceUrls.has(currentSourceUrl)) {
+      break;
+    }
+
+    visitedSourceUrls.add(currentSourceUrl);
+
+    const { doc, documentUrl } = await fetchScraperHtmlPage(
+      fetchDocument,
+      scraperBaseUrl,
+      currentSourceUrl,
+      "Impossible de recuperer la source des liens de pages intermediaires.",
+    );
+
+    extractUniquePageLinkUrlsFromDocument(doc, pageLinkSelector, documentUrl).forEach((pageLinkUrl) => {
+      if (seenPageLinkUrls.has(pageLinkUrl)) {
+        return;
+      }
+
+      seenPageLinkUrls.add(pageLinkUrl);
+      pageLinkUrls.push(pageLinkUrl);
+    });
+
+    if (expectedPageCount && pageLinkUrls.length >= expectedPageCount) {
+      break;
+    }
+
+    const extractedNextPageUrl = extractNextLinkedPageSourceUrl(doc, options.nextPageSelector, documentUrl);
+    const initialNextPageUrl = sourcePageIndex === 0
+      ? String(options.initialNextPageUrl ?? "").trim()
+      : "";
+    nextSourceUrl = extractedNextPageUrl || initialNextPageUrl;
+  }
+
+  return pageLinkUrls;
+};
+
 const resolvePageImageUrlsFromLinkedPages = async (
   fetchDocument: ScraperDocumentFetcher,
   scraperBaseUrl: string,
@@ -138,10 +235,7 @@ export async function resolveScraperPageUrls(
   details: ScraperRuntimeDetailsResult,
   pagesConfig: ScraperPagesFeatureConfig,
   fetchDocument: ScraperDocumentFetcher,
-  options?: {
-    maxTemplatePages?: number;
-    chapter?: ScraperRuntimeChapterResult | null;
-  },
+  options?: ResolveScraperPageUrlsOptions,
 ): Promise<string[]> {
   const maxTemplatePages = Math.max(1, options?.maxTemplatePages ?? 2000);
   const chapter = options?.chapter ?? null;
@@ -166,19 +260,22 @@ export async function resolveScraperPageUrls(
       throw new Error("Le composant Pages doit avoir un selecteur pour lire les pages depuis la fiche ou un chapitre.");
     }
 
-    const { doc, documentUrl } = await fetchScraperHtmlPage(
-      fetchDocument,
-      scraper.baseUrl,
-      targetUrl,
-      "Impossible de recuperer la source des pages pour extraire les pages.",
-    );
-
     if (usesLinkedPages) {
       if (!pagesConfig.pageLinkSelector || !hasScraperFieldSelectorValue(pagesConfig.pageLinkSelector)) {
         throw new Error("Le mode pages intermediaires requiert un selecteur de liens de pages.");
       }
 
-      const pageLinkUrls = extractUniquePageLinkUrlsFromDocument(doc, pagesConfig.pageLinkSelector, documentUrl);
+      const pageLinkUrls = await resolvePageLinkUrlsFromPaginatedSource(
+        fetchDocument,
+        scraper.baseUrl,
+        targetUrl,
+        pagesConfig.pageLinkSelector,
+        {
+          initialNextPageUrl: details.thumbnailsNextPageUrl,
+          nextPageSelector: options?.thumbnailsNextPageSelector,
+          expectedPageCount: details.pageCount,
+        },
+      );
       assertPageUrlsFound(pageLinkUrls, "Aucun lien de page intermediaire n'a ete trouve avec la configuration actuelle.");
 
       const resolvedPageUrls = await resolvePageImageUrlsFromLinkedPages(
@@ -192,6 +289,12 @@ export async function resolveScraperPageUrls(
       return resolvedPageUrls;
     }
 
+    const { doc, documentUrl } = await fetchScraperHtmlPage(
+      fetchDocument,
+      scraper.baseUrl,
+      targetUrl,
+      "Impossible de recuperer la source des pages pour extraire les pages.",
+    );
     const uniquePageUrls = extractUniquePageUrlsFromDocument(doc, pagesConfig.pageImageSelector, documentUrl);
 
     assertPageUrlsFound(uniquePageUrls, "Aucune page n'a ete trouvee avec la configuration actuelle.");

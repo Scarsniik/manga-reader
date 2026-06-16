@@ -7,6 +7,7 @@ import {
 } from '@/shared/scraper';
 import {
     createScraperMangaId,
+    getScraperDetailsFeatureConfig,
     getScraperFeature,
     getScraperPagesFeatureConfig,
 } from '@/renderer/utils/scraperRuntime';
@@ -656,7 +657,9 @@ const useReaderNavigation = ({
             }
 
             const pagesFeature = getScraperFeature(scraper, 'pages');
+            const detailsFeature = getScraperFeature(scraper, 'details');
             const pagesConfig = getScraperPagesFeatureConfig(pagesFeature);
+            const detailsConfig = getScraperDetailsFeatureConfig(detailsFeature);
             if (!pagesConfig) {
                 throw new Error('La configuration Pages du scrapper est introuvable.');
             }
@@ -687,6 +690,7 @@ const useReaderNavigation = ({
                         ? savedProgress?.totalPages
                         : savedProgress?.currentPage ?? 1,
                     knownTotalPages: savedProgress?.totalPages,
+                    thumbnailsNextPageSelector: detailsConfig?.thumbnailsNextPageSelector,
                 },
             );
 

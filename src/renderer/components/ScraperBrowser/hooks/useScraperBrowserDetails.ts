@@ -302,9 +302,10 @@ export function useScraperBrowserDetails({
       async (request) => fetchScraperDocument(request),
       {
         chapter: chapter ?? null,
+        thumbnailsNextPageSelector: detailsConfig?.thumbnailsNextPageSelector,
       },
     );
-  }, [detailsResult, pagesConfig, scraper]);
+  }, [detailsConfig?.thumbnailsNextPageSelector, detailsResult, pagesConfig, scraper]);
 
   const handleDownload = useCallback(async (
     chapter?: ScraperRuntimeChapterResult,
@@ -529,6 +530,7 @@ export function useScraperBrowserDetails({
           chapter: normalizedChapter ?? null,
           initialPage: preferredInitialPage,
           knownTotalPages: savedProgress?.totalPages,
+          thumbnailsNextPageSelector: detailsConfig?.thumbnailsNextPageSelector,
         },
       );
       const requestedPage = normalizeRequestedReaderPage(options?.page, pageUrls.length);
@@ -606,6 +608,7 @@ export function useScraperBrowserDetails({
   }, [
     chaptersResult,
     clearFeedback,
+    detailsConfig?.thumbnailsNextPageSelector,
     detailsResult,
     locationPathname,
     locationSearch,

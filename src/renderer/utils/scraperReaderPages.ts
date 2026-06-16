@@ -18,6 +18,7 @@ import {
 } from "@/renderer/utils/scraperPages";
 import {
   extractSelectorValues,
+  resolvePageLinkUrlsFromPaginatedSource,
   resolveScraperPageUrls,
   ScraperDocumentFetcher,
   ScraperRuntimeChapterResult,
@@ -31,6 +32,7 @@ type ResolveScraperReaderPageUrlsOptions = {
   initialPage?: number | null;
   knownTotalPages?: number | null;
   maxTemplatePages?: number;
+  thumbnailsNextPageSelector?: ScraperFieldSelector | null;
 };
 
 const DEFAULT_MAX_TEMPLATE_PAGES = 2000;
@@ -293,47 +295,6 @@ const resolveTemplateSelectorReaderPageImageUrl = async (
     .filter(Boolean)[0] ?? null;
 };
 
-const extractUniqueLinkedReaderPageUrls = (
-  doc: Document,
-  pageLinkSelector: ScraperFieldSelector,
-  documentUrl: string,
-): string[] => {
-  const seen = new Set<string>();
-
-  return extractSelectorValues(doc, pageLinkSelector)
-    .map((value) => toAbsoluteScraperUrl(value, documentUrl))
-    .filter((pageUrl) => {
-      if (!pageUrl || seen.has(pageUrl)) {
-        return false;
-      }
-
-      seen.add(pageUrl);
-      return true;
-    });
-};
-
-const resolveLinkedReaderPageUrlsFromSource = async (
-  fetchDocument: ScraperDocumentFetcher,
-  baseUrl: string,
-  sourceUrl: string,
-  pageLinkSelector: ScraperFieldSelector,
-): Promise<string[]> => {
-  const result = await fetchDocument({
-    baseUrl,
-    targetUrl: sourceUrl,
-  });
-
-  if (!result.ok || !result.html) {
-    return [];
-  }
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(result.html, "text/html");
-  const documentUrl = result.finalUrl || result.requestedUrl;
-
-  return extractUniqueLinkedReaderPageUrls(doc, pageLinkSelector, documentUrl);
-};
-
 export const resolveLazyScraperReaderPageUrl = async (
   source: string,
   fetchDocument: ScraperDocumentFetcher,
@@ -509,17 +470,23 @@ export async function resolveScraperReaderPageUrls(
     const sourceUrl = pagesConfig.urlStrategy === "chapter_page"
       ? chapter?.url || ""
       : details.finalUrl || details.requestedUrl;
-    const linkedPageUrls = await resolveLinkedReaderPageUrlsFromSource(
+    const linkedPageUrls = await resolvePageLinkUrlsFromPaginatedSource(
       fetchDocument,
       scraper.baseUrl,
       sourceUrl,
       pagesConfig.pageLinkSelector,
+      {
+        initialNextPageUrl: details.thumbnailsNextPageUrl,
+        nextPageSelector: options?.thumbnailsNextPageSelector,
+        expectedPageCount: details.pageCount,
+      },
     );
 
     if (!linkedPageUrls.length) {
       const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
         chapter,
         maxTemplatePages,
+        thumbnailsNextPageSelector: options?.thumbnailsNextPageSelector,
       });
       return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
     }
@@ -571,6 +538,7 @@ export async function resolveScraperReaderPageUrls(
       const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
         chapter,
         maxTemplatePages,
+        thumbnailsNextPageSelector: options?.thumbnailsNextPageSelector,
       });
       return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
     }
@@ -604,6 +572,7 @@ export async function resolveScraperReaderPageUrls(
     const pageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
       chapter,
       maxTemplatePages,
+      thumbnailsNextPageSelector: options?.thumbnailsNextPageSelector,
     });
     return buildReaderImageUrls(pageUrls, readerImageRefererUrl);
   }
@@ -626,6 +595,7 @@ export async function resolveScraperReaderPageUrls(
     const fallbackPageUrls = await resolveScraperPageUrls(scraper, details, pagesConfig, fetchDocument, {
       chapter,
       maxTemplatePages,
+      thumbnailsNextPageSelector: options?.thumbnailsNextPageSelector,
     });
     return buildReaderImageUrls(fallbackPageUrls, readerImageRefererUrl);
   }

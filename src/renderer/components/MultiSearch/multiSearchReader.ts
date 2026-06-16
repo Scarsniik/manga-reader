@@ -192,6 +192,7 @@ export const openMultiSearchSourceReader = async ({
       chapter: targetChapter,
       initialPage: preferredInitialPage,
       knownTotalPages: knownTotalPages ?? savedProgress?.totalPages,
+      thumbnailsNextPageSelector: detailsConfig.thumbnailsNextPageSelector,
     },
   );
 

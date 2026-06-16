@@ -148,6 +148,7 @@ export const resolveScraperReader = async (
       initialPage: savedPage,
       knownTotalPages: toPositiveInteger(savedProgress?.totalPages)
         ?? toPositiveInteger(readingRecord?.totalPages),
+      thumbnailsNextPageSelector: detailsConfig.thumbnailsNextPageSelector,
     },
   );
 
