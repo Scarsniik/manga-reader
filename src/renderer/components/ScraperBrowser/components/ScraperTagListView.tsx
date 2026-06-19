@@ -416,6 +416,14 @@ export default function ScraperTagListView({
   );
   const cacheSavedAtLabel = formatSavedAt(cacheRecord?.savedAt);
   const runnable = isConfigRunnable(config);
+  const collectFromDetails = config.collectFromDetails === true;
+  const refreshButtonLabel = collectFromDetails
+    ? "Auto actif"
+    : scraping
+      ? "Scraping..."
+      : tags.length
+        ? "Actualiser"
+        : "Scraper";
   const customTagListViewSettings = hasCustomTagListViewSettings(tagListViewSettings);
 
   const saveTagListViewSettings = useCallback((nextSettings: Required<ScraperTagListViewSettings>) => {
@@ -498,6 +506,22 @@ export default function ScraperTagListView({
   }, [loadCache]);
 
   useEffect(() => {
+    const handleCacheUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ scraperId?: string }>).detail;
+      if (detail?.scraperId && detail.scraperId !== scraper.id) {
+        return;
+      }
+
+      void loadCache();
+    };
+
+    window.addEventListener("scraper-tag-list-cache-updated", handleCacheUpdated);
+    return () => {
+      window.removeEventListener("scraper-tag-list-cache-updated", handleCacheUpdated);
+    };
+  }, [loadCache, scraper.id]);
+
+  useEffect(() => {
     if (!contextMenu) {
       return undefined;
     }
@@ -548,6 +572,11 @@ export default function ScraperTagListView({
   }, [config, scraper.baseUrl]);
 
   const scrapeAndSaveTags = useCallback(async () => {
+    if (collectFromDetails) {
+      onRuntimeError("L'alimentation automatique depuis les fiches est activee pour cette liste de tags.");
+      return;
+    }
+
     if (!runnable) {
       onRuntimeError("Le composant Liste de tags n'est pas encore suffisamment configure.");
       return;
@@ -687,7 +716,16 @@ export default function ScraperTagListView({
         setScraping(false);
       }
     }
-  }, [config, fetchTagListPage, onRuntimeError, onRuntimeMessage, runnable, scraper.baseUrl, scraper.id]);
+  }, [
+    collectFromDetails,
+    config,
+    fetchTagListPage,
+    onRuntimeError,
+    onRuntimeMessage,
+    runnable,
+    scraper.baseUrl,
+    scraper.id,
+  ]);
 
   const openTag = useCallback((tag: ScraperTagListItem) => {
     const targetValue = getTagTargetValue(tag);
@@ -897,11 +935,13 @@ export default function ScraperTagListView({
             type="button"
             className="scraper-tag-list__refresh"
             onClick={() => void scrapeAndSaveTags()}
-            disabled={scraping || cacheLoading || !runnable}
-            title="Scraper et enregistrer la liste de tags"
+            disabled={scraping || cacheLoading || !runnable || collectFromDetails}
+            title={collectFromDetails
+              ? "Alimentation automatique activee depuis les fiches"
+              : "Scraper et enregistrer la liste de tags"}
           >
             <DownloadArrowIcon aria-hidden="true" focusable="false" />
-            <span>{scraping ? "Scraping..." : tags.length ? "Actualiser" : "Scraper"}</span>
+            <span>{refreshButtonLabel}</span>
           </button>
         </div>
       </div>
@@ -994,7 +1034,13 @@ export default function ScraperTagListView({
         </div>
       ) : null}
 
-      {!runnable ? (
+      {collectFromDetails ? (
+        <div className="scraper-browser__message is-info">
+          Alimentation automatique activee : les tags extraits des fiches ouvertes sont ajoutes a cette liste.
+        </div>
+      ) : null}
+
+      {!runnable && !collectFromDetails ? (
         <div className="scraper-browser__message is-warning">
           La liste de tags n&apos;est pas assez configuree pour etre scrapee.
         </div>
@@ -1011,7 +1057,9 @@ export default function ScraperTagListView({
         <div className="scraper-browser__message is-info">Aucun tag ne correspond au filtre actuel.</div>
       ) : (
         <div className="scraper-browser__message is-info">
-          Scrape la liste une premiere fois pour l&apos;enregistrer et pouvoir rechercher dedans sans relancer le scraping.
+          {collectFromDetails
+            ? "Ouvre des fiches de ce scrapper pour alimenter automatiquement cette liste de tags."
+            : "Scrape la liste une premiere fois pour l'enregistrer et pouvoir rechercher dedans sans relancer le scraping."}
         </div>
       )}
 

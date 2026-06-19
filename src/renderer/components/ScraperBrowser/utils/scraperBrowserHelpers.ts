@@ -195,6 +195,7 @@ export const buildScraperBrowserHelperText = (options: {
   usesAuthorTemplatePaging: boolean;
   usesTagTemplatePaging?: boolean;
   usesTagListTemplatePaging?: boolean;
+  tagListCollectFromDetails?: boolean;
   hasSearchNextPageSelector: boolean;
   hasAuthorNextPageSelector: boolean;
   hasTagNextPageSelector?: boolean;
@@ -212,6 +213,7 @@ export const buildScraperBrowserHelperText = (options: {
     usesAuthorTemplatePaging,
     usesTagTemplatePaging,
     usesTagListTemplatePaging,
+    tagListCollectFromDetails,
     hasAuthorNextPageSelector,
     hasTagNextPageSelector,
     hasDetails,
@@ -279,6 +281,10 @@ export const buildScraperBrowserHelperText = (options: {
   }
 
   if (mode === 'tagList' && hasTagList) {
+    if (tagListCollectFromDetails) {
+      return 'Cette vue charge la liste de tags enregistree pour ce scrapper. Elle est alimentee automatiquement par les tags rencontres quand des fiches sont ouvertes.';
+    }
+
     if (usesTagListTemplatePaging) {
       return 'Cette vue charge la liste de tags enregistree pour ce scrapper. Le scraping parcourt le template `{{page}}` et les liens de pagination detectes.';
     }

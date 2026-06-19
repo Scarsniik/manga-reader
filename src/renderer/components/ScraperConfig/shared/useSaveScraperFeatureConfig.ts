@@ -17,6 +17,7 @@ type Options<TConfig> = {
   validationResult: ScraperFeatureValidationResult | null;
   lastValidatedSignature: string | null;
   buildSaveConfig: () => SaveConfigSnapshot<TConfig>;
+  getValidationForSave?: (snapshot: SaveConfigSnapshot<TConfig>) => ScraperFeatureValidationResult | null | undefined;
   setFieldErrors: Dispatch<SetStateAction<Record<string, string>>>;
   setSaving: Dispatch<SetStateAction<boolean>>;
   setSaveError: Dispatch<SetStateAction<string | null>>;
@@ -28,6 +29,7 @@ export default function useSaveScraperFeatureConfig<TConfig>({
   validationResult,
   lastValidatedSignature,
   buildSaveConfig,
+  getValidationForSave,
   setFieldErrors,
   setSaving,
   setSaveError,
@@ -48,9 +50,10 @@ export default function useSaveScraperFeatureConfig<TConfig>({
       return false;
     }
 
-    const matchingValidation = validationResult?.ok && lastValidatedSignature === signature
-      ? validationResult
-      : null;
+    const matchingValidation = getValidationForSave?.({ config, errors, signature })
+      ?? (validationResult?.ok && lastValidatedSignature === signature
+        ? validationResult
+        : null);
 
     if (!(window as any).api || typeof (window as any).api.saveScraperFeatureConfig !== 'function') {
       setSaveError('L\'enregistrement du composant n\'est pas disponible dans cette version.');
@@ -85,6 +88,7 @@ export default function useSaveScraperFeatureConfig<TConfig>({
   }, [
     buildSaveConfig,
     featureKind,
+    getValidationForSave,
     lastValidatedSignature,
     scraper.id,
     setFieldErrors,

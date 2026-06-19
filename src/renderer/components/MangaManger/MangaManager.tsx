@@ -410,6 +410,10 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const forcedLibrarySearchQuery = typeof forcedLocationState?.librarySearchQuery === 'string'
         ? forcedLocationState.librarySearchQuery.trim()
         : '';
+    const forcedBookmarkFilters = forcedLocationState?.bookmarkFilters ?? null;
+    const forcedBookmarksFilterScraperId = typeof forcedLocationState?.bookmarksFilterScraperId === 'string'
+        ? forcedLocationState.bookmarksFilterScraperId
+        : null;
     const downloadQueueButtonLabel = activeDownloadJobCount > 0
         ? `Telechargements (${activeDownloadJobCount})`
         : 'Telechargements';
@@ -833,7 +837,10 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                         ) : isBookmarksView ? (
                             <ScraperBookmarksView
                                 scrapers={sortedScrapers}
-                                filterScraperId={routeScraperState.bookmarksFilterScraperId ?? null}
+                                filterScraperId={forcedViewId
+                                    ? forcedBookmarksFilterScraperId
+                                    : routeScraperState.bookmarksFilterScraperId ?? null}
+                                initialFilters={forcedBookmarkFilters}
                             />
                         ) : activeScraper ? (
                             <ScraperBrowser

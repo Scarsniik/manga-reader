@@ -14,6 +14,7 @@ import type {
 import { isScraperRuntimeChapterResult } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraperTemplateContext';
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
+import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
 import {
   buildReaderWorkspaceTarget,
@@ -221,6 +222,7 @@ export function useScraperBrowserDetails({
 
       setDetailsResult(extractedDetails);
       setChaptersResult(extractedChapters);
+      collectScraperDetailsTagsForTagListCacheSafe(scraper, extractedDetails);
       void recordDetailsHistorySafe({
         scraperId: scraper.id,
         sourceUrl: extractedDetails.finalUrl || extractedDetails.requestedUrl || targetUrl,
@@ -242,6 +244,7 @@ export function useScraperBrowserDetails({
     detailsConfig,
     resetDetailsState,
     resetListingState,
+    scraper,
     scraper.baseUrl,
     scraper.id,
     setChaptersResult,

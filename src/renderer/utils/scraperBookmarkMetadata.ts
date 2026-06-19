@@ -13,6 +13,7 @@ import {
   isScraperFeatureConfigured,
   resolveScraperDetailsTargetUrl,
 } from "@/renderer/utils/scraperRuntime";
+import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import { uniqueLanguageCodes } from "@/renderer/utils/languageDetection";
 
 const BOOKMARK_METADATA_FIELDS = new Set<ScraperBookmarkMetadataField>([
@@ -312,6 +313,7 @@ export const enrichScraperBookmarkRequestFromDetails = async (
       return requestWithLanguageFallback;
     }
 
+    collectScraperDetailsTagsForTagListCacheSafe(scraper, extractedDetails);
     const authors = normalizeBookmarkStringList(extractedDetails.authors);
     const tags = normalizeBookmarkStringList(extractedDetails.tags);
     const languageCodes = normalizeBookmarkLanguageCodes(extractedDetails.languageCodes);

@@ -13,7 +13,10 @@ type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
     locationState?: {
+        librarySearchQuery?: string;
         multiSearchPrefillQuery?: string;
+        bookmarkFilters?: Record<string, unknown>;
+        bookmarksFilterScraperId?: string | null;
     };
     title?: string;
 };
@@ -54,13 +57,21 @@ type ScraperTagWorkspaceTarget = {
     title?: string;
 };
 
+type ScraperBookmarkTagsWorkspaceTarget = {
+    kind: "scraper.bookmarkTags";
+    filterScraperId?: string | null;
+    filters?: Record<string, unknown> | null;
+    title?: string;
+};
+
 export type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
-    | ScraperTagWorkspaceTarget;
+    | ScraperTagWorkspaceTarget
+    | ScraperBookmarkTagsWorkspaceTarget;
 
 let workspaceWindow: BrowserWindow | null = null;
 type WorkspaceTargetRequest = {
@@ -116,6 +127,12 @@ const isOptionalObject = (value: unknown): boolean => (
     || (typeof value === "object" && !Array.isArray(value))
 );
 
+const isOptionalStringOrNull = (value: unknown): boolean => (
+    value === undefined
+    || value === null
+    || typeof value === "string"
+);
+
 const isMangaManagerLocationState = (value: unknown): boolean => {
     if (value === undefined || value === null) {
         return true;
@@ -125,11 +142,22 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
         return false;
     }
 
-    const candidate = value as { multiSearchPrefillQuery?: unknown };
+    const candidate = value as {
+        bookmarkFilters?: unknown;
+        bookmarksFilterScraperId?: unknown;
+        librarySearchQuery?: unknown;
+        multiSearchPrefillQuery?: unknown;
+    };
     return (
         candidate.multiSearchPrefillQuery === undefined
         || typeof candidate.multiSearchPrefillQuery === "string"
-    );
+    )
+    && (
+        candidate.librarySearchQuery === undefined
+        || typeof candidate.librarySearchQuery === "string"
+    )
+    && isOptionalObject(candidate.bookmarkFilters)
+    && isOptionalStringOrNull(candidate.bookmarksFilterScraperId);
 };
 
 const isOptionalPositivePage = (value: unknown): boolean => (
@@ -194,6 +222,14 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
             && candidate.scraperId.trim().length > 0
             && typeof candidate.query === "string"
             && candidate.query.trim().length > 0
+        );
+    }
+
+    if (candidate.kind === "scraper.bookmarkTags") {
+        const bookmarkTagsTarget = candidate as Partial<ScraperBookmarkTagsWorkspaceTarget>;
+        return (
+            isOptionalStringOrNull(bookmarkTagsTarget.filterScraperId)
+            && isOptionalObject(bookmarkTagsTarget.filters)
         );
     }
 

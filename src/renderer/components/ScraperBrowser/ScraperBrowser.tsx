@@ -973,6 +973,7 @@ export default function ScraperBrowser({
     usesAuthorTemplatePaging,
     usesTagTemplatePaging,
     usesTagListTemplatePaging,
+    tagListCollectFromDetails: tagListConfig?.collectFromDetails === true,
     hasSearchNextPageSelector: hasScraperFieldSelectorValue(
       mode === 'homepage' ? homepageConfig?.nextPageSelector : searchConfig?.nextPageSelector,
     ),
@@ -996,6 +997,7 @@ export default function ScraperBrowser({
     mode,
     searchConfig?.nextPageSelector,
     tagConfig?.nextPageSelector,
+    tagListConfig?.collectFromDetails,
     usesAuthorTemplatePaging,
     usesHomepageTemplatePaging,
     usesSearchTemplatePaging,

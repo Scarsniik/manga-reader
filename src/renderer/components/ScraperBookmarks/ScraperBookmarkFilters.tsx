@@ -129,7 +129,7 @@ export default function ScraperBookmarkFilters({
             type="search"
             value={filters.query}
             onChange={(event) => updateFilters({ query: event.target.value })}
-            placeholder="Titre, auteur, tag..."
+            placeholder="Titre, tag, auteur..."
           />
         </label>
 

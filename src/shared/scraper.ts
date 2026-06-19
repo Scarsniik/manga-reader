@@ -429,6 +429,7 @@ export interface ScraperTagFeatureConfig extends ScraperCardListConfig {
 }
 
 export interface ScraperTagListFeatureConfig {
+  collectFromDetails?: boolean;
   urlTemplate: string;
   tagListSelector?: string;
   tagItemSelector: string;
@@ -453,6 +454,12 @@ export interface ScraperTagListCacheRecord {
 }
 
 export interface SaveScraperTagListCacheRequest {
+  scraperId: string;
+  sourceUrl?: string;
+  tags: ScraperTagListItem[];
+}
+
+export interface AddScraperTagListCacheItemsRequest {
   scraperId: string;
   sourceUrl?: string;
   tags: ScraperTagListItem[];

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from "electron";
 import type {
+    AddScraperTagListCacheItemsRequest,
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
     RecordScraperCardsSeenRequest,
@@ -19,6 +20,7 @@ import type {
     SaveScraperReaderProgressRequest,
     SaveScraperDraftRequest,
     SaveScraperFeatureRequest,
+    ScraperBookmarkFilterState,
     ScraperBookmarkViewRequest,
     ScraperAccessValidationRequest,
     SetScraperCardReadRequest,
@@ -44,7 +46,10 @@ type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
     locationState?: {
+        librarySearchQuery?: string;
         multiSearchPrefillQuery?: string;
+        bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
+        bookmarksFilterScraperId?: string | null;
     };
     title?: string;
 };
@@ -85,13 +90,21 @@ type ScraperTagWorkspaceTarget = {
     title?: string;
 };
 
+type ScraperBookmarkTagsWorkspaceTarget = {
+    kind: "scraper.bookmarkTags";
+    filterScraperId?: string | null;
+    filters?: Partial<ScraperBookmarkFilterState> | null;
+    title?: string;
+};
+
 type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
     | ScraperConfigWorkspaceTarget
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
-    | ScraperTagWorkspaceTarget;
+    | ScraperTagWorkspaceTarget
+    | ScraperBookmarkTagsWorkspaceTarget;
 
 type WorkspaceOpenTargetOptions = {
     activate?: boolean;
@@ -191,6 +204,16 @@ ipcRenderer.on('scraper-tag-favorites-updated', () => {
         window.dispatchEvent(new CustomEvent('scraper-tag-favorites-updated'));
     } catch (error) {
         console.warn('preload: failed to dispatch scraper-tag-favorites-updated event', error);
+    }
+});
+
+ipcRenderer.on('scraper-tag-list-cache-updated', (_event: IpcRendererEvent, scraperId: string) => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-tag-list-cache-updated', {
+            detail: { scraperId },
+        }));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-tag-list-cache-updated event', error);
     }
 });
 
@@ -327,6 +350,7 @@ contextBridge.exposeInMainWorld('api', {
     removeScraperTagFavoriteSource: (request: RemoveScraperTagFavoriteSourceRequest) => ipcRenderer.invoke('remove-scraper-tag-favorite-source', request),
     getScraperTagListCache: (scraperId: string) => ipcRenderer.invoke('get-scraper-tag-list-cache', scraperId),
     saveScraperTagListCache: (request: SaveScraperTagListCacheRequest) => ipcRenderer.invoke('save-scraper-tag-list-cache', request),
+    addScraperTagListCacheItems: (request: AddScraperTagListCacheItemsRequest) => ipcRenderer.invoke('add-scraper-tag-list-cache-items', request),
     getScraperAuthorFavoriteCache: (favoriteId: string) => ipcRenderer.invoke('get-scraper-author-favorite-cache', favoriteId),
     saveScraperAuthorFavoriteCache: (request: SaveScraperAuthorFavoriteCacheRequest) => ipcRenderer.invoke('save-scraper-author-favorite-cache', request),
     getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),

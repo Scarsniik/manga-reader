@@ -264,6 +264,7 @@ export const getScraperTagListFeatureConfig = (
   }
 
   return {
+    collectFromDetails: Boolean(raw.collectFromDetails),
     urlTemplate: trimOptional(raw.urlTemplate) ?? "",
     tagListSelector: trimOptionalBlockSelector(raw.tagListSelector),
     tagItemSelector: normalizeSelectorInput(String(raw.tagItemSelector ?? "")),

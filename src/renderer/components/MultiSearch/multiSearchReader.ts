@@ -9,6 +9,7 @@ import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/
 import { resolveScraperReaderPageUrls } from "@/renderer/utils/scraperReaderPages";
 import { usesScraperPagesChapters } from "@/renderer/utils/scraperPages";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
+import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import {
   buildReaderPath,
   openReaderWorkspaceTarget,
@@ -135,6 +136,7 @@ export const openMultiSearchSourceReader = async ({
     throw new Error("La fiche a ete chargee, mais aucun contenu exploitable n'a ete extrait.");
   }
 
+  collectScraperDetailsTagsForTagListCacheSafe(source.scraper, detailsResult);
   const detailsSourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl || detailUrl;
   let savedProgress = await getSavedProgress(api, progressReaderMangaId);
   let sourceUrl = savedProgress?.sourceUrl || detailsSourceUrl;

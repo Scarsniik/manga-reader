@@ -50,6 +50,12 @@ const notifyScraperTagFavoritesUpdated = () => {
     }
 };
 
+const notifyScraperTagListCacheUpdated = (scraperId: string) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-tag-list-cache-updated", scraperId);
+    }
+};
+
 const notifyScraperViewHistoryUpdated = () => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("scraper-view-history-updated");
@@ -282,9 +288,16 @@ ipcMain.handle("remove-scraper-tag-favorite-source", async (event: IpcMainInvoke
 ipcMain.handle("get-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent, scraperId: string) => (
     scrapers.getScraperTagListCache(scraperId)
 ));
-ipcMain.handle("save-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent, request: any) => (
-    scrapers.saveScraperTagListCache(request)
-));
+ipcMain.handle("save-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperTagListCache(request);
+    notifyScraperTagListCacheUpdated(updated.scraperId);
+    return updated;
+});
+ipcMain.handle("add-scraper-tag-list-cache-items", async (_event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.addScraperTagListCacheItems(request);
+    notifyScraperTagListCacheUpdated(updated.scraperId);
+    return updated;
+});
 ipcMain.handle("get-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, favoriteId: string) => (
     scrapers.getScraperAuthorFavoriteCache(event, favoriteId)
 ));

@@ -11,6 +11,7 @@ import {
 import type { Manga } from '@/renderer/types';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { usesScraperPagesChapters } from '@/renderer/utils/scraperPages';
+import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import {
   extractScraperDetailsFromDocumentWithImageFallbacks,
   hasRenderableDetails,
@@ -156,6 +157,7 @@ export async function queueStandaloneScraperCardDownload({
     throw new Error('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');
   }
 
+  collectScraperDetailsTagsForTagListCacheSafe(scraper, details);
   const pageUrls = await resolveScraperPageUrls(
     scraper,
     details,

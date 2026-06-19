@@ -14,6 +14,7 @@ type ScraperFeatureActionsProps = {
   validating: boolean;
   saving: boolean;
   validateLabel: string;
+  showValidate?: boolean;
   actionSurface?: ScraperFeatureActionSurface;
   hasUnsavedChanges?: boolean;
   onBack: () => void;
@@ -30,6 +31,7 @@ export function ScraperFeatureActions({
   validating,
   saving,
   validateLabel,
+  showValidate = true,
   actionSurface = 'inline',
   hasUnsavedChanges = false,
   onBack,
@@ -76,13 +78,13 @@ export function ScraperFeatureActions({
         closeOnClick: false,
         disabled: validating || saving,
       },
-      {
+      ...(showValidate ? [{
         label: validating ? 'Validation en cours...' : validateLabel,
-        variant: 'secondary',
+        variant: 'secondary' as const,
         onClick: handleValidate,
         closeOnClick: false,
         disabled: validating || saving,
-      },
+      }] : []),
       {
         label: saving ? 'Enregistrement...' : 'Enregistrer la configuration',
         variant: 'primary',
@@ -105,6 +107,7 @@ export function ScraperFeatureActions({
     requestClose,
     saving,
     setModalActions,
+    showValidate,
     validateLabel,
     validating,
   ]);
@@ -130,9 +133,11 @@ export function ScraperFeatureActions({
       <button type="button" className="secondary" onClick={handleBack} disabled={validating || saving}>
         Retour
       </button>
-      <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
-        {validating ? 'Validation en cours...' : validateLabel}
-      </button>
+      {showValidate ? (
+        <button type="button" className="secondary" onClick={handleValidate} disabled={validating || saving}>
+          {validating ? 'Validation en cours...' : validateLabel}
+        </button>
+      ) : null}
       <button type="button" className="primary" onClick={handleSave} disabled={validating || saving}>
         {saving ? 'Enregistrement...' : 'Enregistrer la configuration'}
       </button>

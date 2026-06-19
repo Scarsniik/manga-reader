@@ -7,6 +7,7 @@ import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser"
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
 import WorkspaceScraperAuthorPanel from "@/renderer/components/Workspace/WorkspaceScraperAuthorPanel";
 import WorkspaceScraperTagPanel from "@/renderer/components/Workspace/WorkspaceScraperTagPanel";
+import { ScraperBookmarkTagStatsPanel } from "@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog";
 import {
   readWorkspaceBrowserTabCache,
   writeWorkspaceBrowserTabCache,
@@ -24,7 +25,11 @@ import {
 } from "@/renderer/utils/scraperRuntime";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import { recordDetailsHistorySafe } from "@/renderer/utils/history";
-import { buildReaderSearch } from "@/renderer/utils/workspaceTargets";
+import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
+import {
+  buildReaderSearch,
+  openWorkspaceTarget as openWorkspaceTargetInNewTab,
+} from "@/renderer/utils/workspaceTargets";
 
 type Props = {
   returnTarget?: WorkspaceTarget;
@@ -286,6 +291,7 @@ function ScraperDetailsPanel({
 
       setScraper(nextScraper);
       setInitialState(nextInitialState);
+      collectScraperDetailsTagsForTagListCacheSafe(nextScraper, detailsResult);
       writeWorkspaceBrowserTabCache(tabId, {
         targetKey,
         scraper: nextScraper,
@@ -467,6 +473,34 @@ export default function WorkspaceTargetPanel({
         onOpenReaderTarget={handleOpenReaderTarget}
         onOpenWorkspaceTarget={handleOpenWorkspaceTarget}
         onTitleChange={handleTitleChange}
+      />
+    );
+  }
+
+  if (target.kind === "scraper.bookmarkTags") {
+    const buildBookmarkTagSearchTarget = (tag: string): WorkspaceTarget => ({
+      kind: "manga-manager.view",
+      viewId: "bookmarks",
+      title: `Bookmarks - ${tag}`,
+      locationState: {
+        bookmarksFilterScraperId: target.filterScraperId ?? null,
+        bookmarkFilters: {
+          ...(target.filters ?? {}),
+          query: tag,
+        },
+      },
+    });
+
+    return (
+      <ScraperBookmarkTagStatsPanel
+        filterScraperId={target.filterScraperId ?? null}
+        filters={target.filters ?? null}
+        onOpenTag={(tag) => {
+          onReplaceTarget(tabId, buildBookmarkTagSearchTarget(tag));
+        }}
+        onOpenTagInWorkspace={(tag) => {
+          void openWorkspaceTargetInNewTab(buildBookmarkTagSearchTarget(tag));
+        }}
       />
     );
   }

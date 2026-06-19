@@ -15,6 +15,7 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import type {
   MultiSearchPaceMode,
   MultiSearchSourceResult,
@@ -189,6 +190,7 @@ const fetchDetailsAuthors = async (
     contentType: documentResult.contentType,
     html: documentResult.html,
   }, async (request) => api.fetchScraperDocument(request));
+  collectScraperDetailsTagsForTagListCacheSafe(source.scraper, details);
 
   return details.authorUrls.reduce((hasAuthor, authorUrl, index) => (
     addAuthorResult(

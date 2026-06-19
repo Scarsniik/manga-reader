@@ -15,6 +15,7 @@ import {
   ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import generateId from '@/utils/id';
 
 type SaveScraperMangaToLibraryOptions = {
@@ -225,6 +226,7 @@ export async function saveStandaloneScraperCardToLibrary({
     throw new Error('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');
   }
 
+  collectScraperDetailsTagsForTagListCacheSafe(scraper, details);
   const pageUrls = await resolveScraperPageUrls(
     scraper,
     details,

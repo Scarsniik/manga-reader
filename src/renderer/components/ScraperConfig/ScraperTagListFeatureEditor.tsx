@@ -35,6 +35,8 @@ import {
   getValidationFieldErrors,
   SCRAPING_FIELDS,
   TAG_LIST_FIELD_SELECTOR_NAMES,
+  TAG_LIST_SOURCE_MODE_FIELD,
+  TagListSourceMode,
   TagListFeatureFormState,
   URL_TEMPLATE_FIELD,
 } from "@/renderer/components/ScraperConfig/tagList/tagListFeatureEditor.utils";
@@ -52,7 +54,7 @@ type Props = {
   onBack: () => void;
 };
 
-type FormValueRecord = Record<string, string | ScraperFieldSelector | undefined>;
+type FormValueRecord = Record<string, string | boolean | ScraperFieldSelector | undefined>;
 
 const getFormValueRecord = (values: TagListFeatureFormState): FormValueRecord => (
   values as unknown as FormValueRecord
@@ -90,6 +92,13 @@ const getNextPaginationPreviewUrl = (
   || page.paginationUrls.find((url) => !visitedPageUrls.includes(url))
 );
 
+const buildAutoCollectionValidation = (): ScraperFeatureValidationResult => ({
+  ok: true,
+  checkedAt: new Date().toISOString(),
+  checks: [],
+  derivedValues: [],
+});
+
 export default function ScraperTagListFeatureEditor({
   feature,
   actionSurface = "inline",
@@ -121,7 +130,6 @@ export default function ScraperTagListFeatureEditor({
     setSaveError,
     saveMessage,
     setSaveMessage,
-    clearFeedback,
     clearFieldFeedback,
     createTextFieldChangeHandler,
     resetEditorState,
@@ -152,6 +160,8 @@ export default function ScraperTagListFeatureEditor({
   const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
   const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
   const usesTemplatePaging = hasTagListPagePlaceholder(currentConfig);
+  const tagListSourceMode: TagListSourceMode = formValues.collectFromDetails === true ? "collect" : "scrape";
+  const isAutoCollectionMode = tagListSourceMode === "collect";
 
   useEffect(() => {
     onUnsavedChangesChange?.(hasUnsavedChanges);
@@ -162,6 +172,10 @@ export default function ScraperTagListFeatureEditor({
   }, [hasUnsavedChanges, onUnsavedChangesChange]);
 
   const resolvedTestUrl = useMemo(() => {
+    if (!currentConfig.urlTemplate.trim()) {
+      return null;
+    }
+
     try {
       return resolveScraperTagListTargetUrl(scraper.baseUrl, currentConfig, {
         pageIndex: 0,
@@ -215,6 +229,35 @@ export default function ScraperTagListFeatureEditor({
     createTextFieldChangeHandler(fieldName)
   ), [createTextFieldChangeHandler]);
 
+  const handleSourceModeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const collectFromDetails = event.currentTarget.value === "collect";
+
+    setFormValues((previous) => ({
+      ...previous,
+      collectFromDetails,
+    }));
+    setFieldErrors({});
+    setValidationUiError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    if (collectFromDetails) {
+      setPreviewPage(null);
+      setPreviewVisitedPageUrls([]);
+      setPreviewPageIndex(0);
+      setPreviewTags([]);
+    }
+  }, [
+    setFieldErrors,
+    setFormValues,
+    setPreviewPage,
+    setPreviewTags,
+    setPreviewVisitedPageUrls,
+    setSaveError,
+    setSaveMessage,
+    setValidationUiError,
+  ]);
+
   const handleFieldSelectorChange = useCallback((fieldName: keyof TagListFeatureFormState & string) => (
     nextValue: ScraperFieldSelector,
   ) => {
@@ -227,6 +270,12 @@ export default function ScraperTagListFeatureEditor({
 
   const handleValidate = useCallback(async () => {
     const config = buildTagListConfig(formValues);
+
+    if (config.collectFromDetails === true) {
+      setValidationUiError("Le mode auto n'a pas de test manuel.");
+      return;
+    }
+
     const errors = getValidationFieldErrors(config);
     setFieldErrors(errors);
 
@@ -439,11 +488,22 @@ export default function ScraperTagListFeatureEditor({
     };
   }, [formValues]);
 
+  const getValidationForSave = useCallback(({
+    config,
+  }: {
+    config: ReturnType<typeof buildTagListConfig>;
+  }): ScraperFeatureValidationResult | null | undefined => (
+    config.collectFromDetails === true
+      ? buildAutoCollectionValidation()
+      : undefined
+  ), []);
+
   const handleSave = useSaveScraperFeatureConfig({
     featureKind: feature.kind,
     validationResult,
     lastValidatedSignature,
     buildSaveConfig,
+    getValidationForSave,
     setFieldErrors,
     setSaving,
     setSaveError,
@@ -454,9 +514,11 @@ export default function ScraperTagListFeatureEditor({
     <section className="scraper-config-step">
       <ScraperFeatureEditorHeader
         title="Configurer la liste de tags"
-        description="Definis comment charger une page qui expose les tags disponibles sur la source, puis comment extraire chaque tag."
-        noteTitle="Pagination complete"
-        noteText="La sauvegarde runtime parcourt toutes les pages detectables via le template, le lien suivant et les liens de pagination ou de lettres."
+        description="Choisis si les tags viennent d'une page de liste scrapee ou des tags rencontres automatiquement dans les fiches."
+        noteTitle={isAutoCollectionMode ? "Alimentation depuis les fiches" : "Pagination complete"}
+        noteText={isAutoCollectionMode
+          ? "Quand une fiche est ouverte, ses tags sont ajoutes au cache sans doublons. Le bouton de scraping manuel est masque cote navigateur."
+          : "La sauvegarde runtime parcourt toutes les pages detectables via le template, le lien suivant et les liens de pagination ou de lettres."}
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
         showBackButton={actionSurface !== "modal"}
@@ -466,88 +528,120 @@ export default function ScraperTagListFeatureEditor({
       <div className="mh-form">
         <div className="scraper-config-section">
           <div className="scraper-config-section__header">
-            <h4>URL de liste</h4>
+            <h4>Mode d'alimentation</h4>
             <p>
-              Indique la page d&apos;entree de la liste de tags. Si la pagination est numerique,
-              ajoute un placeholder comme <code>{"{{page}}"}</code>.
+              Selectionne comment le cache de tags de ce scrapper doit etre rempli.
             </p>
           </div>
 
-          <div className="scraper-config-section__grid">
-            <ScraperConfigField
-              field={URL_TEMPLATE_FIELD}
-              value={formValues.urlTemplate}
-              error={fieldErrors.urlTemplate}
-              onChange={handleFieldChange("urlTemplate")}
-            />
-          </div>
-
-          <div className="scraper-config-hint">
-            Placeholders supportes : <code>{"{{page}}"}</code>, <code>{"{{page3}}"}</code>,
-            <code>{" {{pageIndex}}"}</code>. Les placeholders de recherche sont aussi acceptes,
-            mais resolus avec une valeur vide.
-          </div>
-        </div>
-
-        <div className="scraper-config-section">
-          <div className="scraper-config-section__header">
-            <h4>Scraping</h4>
-            <p>
-              Definis les selecteurs pour extraire le nom, le lien et le compteur de chaque tag.
-            </p>
-          </div>
-
-          <ScraperConfigFieldGrid
-            fields={SCRAPING_FIELDS}
-            fieldSelectorNames={TAG_LIST_FIELD_SELECTOR_NAMES}
-            getValue={(fieldName) => getFormValueRecord(formValues)[fieldName]}
-            getError={(fieldName) => fieldErrors[fieldName]}
-            onFieldChange={(fieldName) => handleFieldChange(fieldName as keyof TagListFeatureFormState & string)}
-            onFieldSelectorChange={(fieldName) => (
-              handleFieldSelectorChange(fieldName as keyof TagListFeatureFormState & string)
-            )}
+          <ScraperConfigField
+            field={TAG_LIST_SOURCE_MODE_FIELD}
+            value={tagListSourceMode}
+            error={fieldErrors.tagListSourceMode}
+            onChange={handleSourceModeChange}
           />
         </div>
 
-        <div className="scraper-config-section">
-          <div className="scraper-config-section__header">
-            <h4>Test</h4>
-            <p>
-              Charge la premiere page de liste puis verifie les tags et les liens de pagination detectes.
-            </p>
-          </div>
-
-          <ScraperResolvedUrlPreview
-            url={resolvedTestUrl}
-            emptyMessage="Complete l'URL de liste pour voir l'apercu."
-          />
-
+        {isAutoCollectionMode ? (
           <ScraperFeatureActions
             validating={validating}
             saving={saving}
             validateLabel="Valider la liste de tags"
+            showValidate={false}
             actionSurface={actionSurface}
             hasUnsavedChanges={hasUnsavedChanges}
             onBack={onBack}
-            onValidate={() => void handleValidate()}
+            onValidate={() => undefined}
             onSave={handleSave}
           />
+        ) : (
+          <>
+            <div className="scraper-config-section">
+              <div className="scraper-config-section__header">
+                <h4>URL de liste</h4>
+                <p>
+                  Indique la page d&apos;entree de la liste de tags. Si la pagination est numerique,
+                  ajoute un placeholder comme <code>{"{{page}}"}</code>.
+                </p>
+              </div>
 
-          <ScraperValidationSummary
-            validationResult={validationResult}
-            presentation={validationPresentation}
-          />
+              <div className="scraper-config-section__grid">
+                <ScraperConfigField
+                  field={URL_TEMPLATE_FIELD}
+                  value={formValues.urlTemplate}
+                  error={fieldErrors.urlTemplate}
+                  onChange={handleFieldChange("urlTemplate")}
+                />
+              </div>
 
-          <TagListFeaturePreview
-            previewTags={previewItems}
-            previewPage={previewPage}
-            previewPageIndex={previewPageIndex}
-            usesTemplatePaging={usesTemplatePaging}
-            validating={validating}
-            onPreviousPage={() => void handlePreviewPreviousPage()}
-            onNextPage={() => void handlePreviewNextPage()}
-          />
-        </div>
+              <div className="scraper-config-hint">
+                Placeholders supportes : <code>{"{{page}}"}</code>, <code>{"{{page3}}"}</code>,
+                <code>{" {{pageIndex}}"}</code>. Les placeholders de recherche sont aussi acceptes,
+                mais resolus avec une valeur vide.
+              </div>
+            </div>
+
+            <div className="scraper-config-section">
+              <div className="scraper-config-section__header">
+                <h4>Scraping</h4>
+                <p>
+                  Definis les selecteurs pour extraire le nom, le lien et le compteur de chaque tag.
+                </p>
+              </div>
+
+              <ScraperConfigFieldGrid
+                fields={SCRAPING_FIELDS}
+                fieldSelectorNames={TAG_LIST_FIELD_SELECTOR_NAMES}
+                getValue={(fieldName) => getFormValueRecord(formValues)[fieldName]}
+                getError={(fieldName) => fieldErrors[fieldName]}
+                onFieldChange={(fieldName) => handleFieldChange(fieldName as keyof TagListFeatureFormState & string)}
+                onFieldSelectorChange={(fieldName) => (
+                  handleFieldSelectorChange(fieldName as keyof TagListFeatureFormState & string)
+                )}
+              />
+            </div>
+
+            <div className="scraper-config-section">
+              <div className="scraper-config-section__header">
+                <h4>Test</h4>
+                <p>
+                  Charge la premiere page de liste puis verifie les tags et les liens de pagination detectes.
+                </p>
+              </div>
+
+              <ScraperResolvedUrlPreview
+                url={resolvedTestUrl}
+                emptyMessage="Complete l'URL de liste pour voir l'apercu."
+              />
+
+              <ScraperFeatureActions
+                validating={validating}
+                saving={saving}
+                validateLabel="Valider la liste de tags"
+                actionSurface={actionSurface}
+                hasUnsavedChanges={hasUnsavedChanges}
+                onBack={onBack}
+                onValidate={() => void handleValidate()}
+                onSave={handleSave}
+              />
+
+              <ScraperValidationSummary
+                validationResult={validationResult}
+                presentation={validationPresentation}
+              />
+
+              <TagListFeaturePreview
+                previewTags={previewItems}
+                previewPage={previewPage}
+                previewPageIndex={previewPageIndex}
+                usesTemplatePaging={usesTemplatePaging}
+                validating={validating}
+                onPreviousPage={() => void handlePreviewPreviousPage()}
+                onNextPage={() => void handlePreviewNextPage()}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <ScraperFeatureMessages

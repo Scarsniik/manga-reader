@@ -14,6 +14,7 @@ import VirtualizedScraperBookmarkGrid from '@/renderer/components/ScraperBookmar
 import useScraperBookmarkView from '@/renderer/components/ScraperBookmarks/useScraperBookmarkView';
 import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkDuplicateReviewModal';
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
+import buildScraperBookmarkTagStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
 import {
   findScraperBookmarkDuplicateGroups,
   type ScraperBookmarkDuplicateDetectionProgress,
@@ -36,6 +37,7 @@ import {
   queueStandaloneScraperCardDownload,
 } from '@/renderer/utils/scraperDownload';
 import { findLocalMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import {
   getScraperDetailsFeatureConfig,
   getScraperFeature,
@@ -56,6 +58,7 @@ import './style.scss';
 type Props = {
   scrapers: ScraperRecord[];
   filterScraperId?: string | null;
+  initialFilters?: Partial<ScraperBookmarkFilterState> | null;
 };
 
 type ScraperBookmarksLocationState = ScraperBrowserLocationState & {
@@ -104,9 +107,24 @@ const getBookmarkKey = (bookmark: ScraperBookmarkRecord): string => (
   `${bookmark.scraperId}::${bookmark.sourceUrl}`
 );
 
+const MIDDLE_BUTTON = 1;
+
+const normalizeInitialBookmarkFilters = (
+  filters: Partial<ScraperBookmarkFilterState> | null | undefined,
+): ScraperBookmarkFilterState => ({
+  ...DEFAULT_BOOKMARK_FILTERS,
+  ...filters,
+  languageFilterModes: filters?.languageFilterModes ?? DEFAULT_BOOKMARK_FILTERS.languageFilterModes,
+  readingStatuses: Array.isArray(filters?.readingStatuses)
+    ? filters.readingStatuses
+    : DEFAULT_BOOKMARK_FILTERS.readingStatuses,
+  sortBy: filters?.sortBy ?? DEFAULT_BOOKMARK_FILTERS.sortBy,
+});
+
 export default function ScraperBookmarksView({
   scrapers,
   filterScraperId = null,
+  initialFilters = null,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -115,7 +133,9 @@ export default function ScraperBookmarksView({
   const locationState = location.state as ScraperBookmarksLocationState;
   const { favorites: tagFavorites } = useScraperTagFavorites();
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
-  const [bookmarkFilters, setBookmarkFilters] = useState<ScraperBookmarkFilterState>(DEFAULT_BOOKMARK_FILTERS);
+  const [bookmarkFilters, setBookmarkFilters] = useState<ScraperBookmarkFilterState>(() => (
+    normalizeInitialBookmarkFilters(initialFilters)
+  ));
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
@@ -132,6 +152,7 @@ export default function ScraperBookmarksView({
   const [duplicateCheckError, setDuplicateCheckError] = useState<string | null>(null);
   const seenCardsQueueRef = useRef(new Map<string, ReturnType<typeof buildBookmarkViewHistoryIdentity>>());
   const seenCardsTimerRef = useRef<number | null>(null);
+  const initialFiltersKey = useMemo(() => JSON.stringify(initialFilters ?? null), [initialFilters]);
 
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
@@ -190,6 +211,72 @@ export default function ScraperBookmarksView({
     setLibraryError(null);
     setDuplicateCheckError(null);
   }, []);
+
+  useEffect(() => {
+    if (!initialFilters) {
+      return;
+    }
+
+    setBookmarkFilters(normalizeInitialBookmarkFilters(initialFilters));
+  }, [initialFilters, initialFiltersKey]);
+
+  const handleOpenBookmarkTag = useCallback((tag: string) => {
+    setBookmarkFilters((currentFilters) => ({
+      ...currentFilters,
+      query: tag,
+    }));
+  }, []);
+
+  const handleOpenBookmarkTagInWorkspace = useCallback((tag: string) => {
+    void openWorkspaceTarget({
+      kind: 'manga-manager.view',
+      viewId: 'bookmarks',
+      title: `Bookmarks - ${tag}`,
+      locationState: {
+        bookmarksFilterScraperId: filterScraperId ?? null,
+        bookmarkFilters: {
+          ...bookmarkFilters,
+          query: tag,
+        },
+      },
+    }).then((opened) => {
+      if (!opened) {
+        setHistoryError('Impossible d\'ouvrir ce tag dans un onglet workspace.');
+      }
+    }).catch((error: unknown) => {
+      setHistoryError(error instanceof Error ? error.message : 'Impossible d\'ouvrir ce tag dans un onglet workspace.');
+    });
+  }, [bookmarkFilters, filterScraperId]);
+
+  const handleOpenBookmarkTagStats = useCallback(() => {
+    openModal(buildScraperBookmarkTagStatsModal({
+      filterScraperId,
+      filters: bookmarkFilters,
+      onOpenTag: handleOpenBookmarkTag,
+      onOpenTagInWorkspace: handleOpenBookmarkTagInWorkspace,
+    }));
+  }, [
+    bookmarkFilters,
+    filterScraperId,
+    handleOpenBookmarkTag,
+    handleOpenBookmarkTagInWorkspace,
+    openModal,
+  ]);
+
+  const handleOpenBookmarkTagStatsInWorkspace = useCallback(() => {
+    void openWorkspaceTarget({
+      kind: 'scraper.bookmarkTags',
+      filterScraperId: filterScraperId ?? null,
+      filters: bookmarkFilters,
+      title: 'Tags bookmarks',
+    }).then((opened) => {
+      if (!opened) {
+        setHistoryError('Impossible d\'ouvrir les tags dans un onglet workspace.');
+      }
+    }).catch((error: unknown) => {
+      setHistoryError(error instanceof Error ? error.message : 'Impossible d\'ouvrir les tags dans un onglet workspace.');
+    });
+  }, [bookmarkFilters, filterScraperId]);
   const loadBookmarksForScope = useCallback(async (): Promise<ScraperBookmarkRecord[]> => {
     if (!window.api || typeof window.api.getScraperBookmarks !== 'function') {
       return [];
@@ -831,6 +918,32 @@ export default function ScraperBookmarksView({
         </div>
 
         <div className="scraper-bookmarks-view__header-actions">
+          <button
+            type="button"
+            className="scraper-bookmarks-view__clear"
+            onClick={handleOpenBookmarkTagStats}
+            onMouseDown={(event) => {
+              if (event.button === MIDDLE_BUTTON) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
+            onAuxClick={(event) => {
+              if (event.button !== MIDDLE_BUTTON) {
+                return;
+              }
+
+              event.preventDefault();
+              event.stopPropagation();
+              handleOpenBookmarkTagStatsInWorkspace();
+            }}
+            disabled={bookmarkView.scopeCount === 0}
+            title="Voir les tags les plus presents. Clic molette : nouvel onglet workspace"
+            data-prevent-middle-click-autoscroll="true"
+          >
+            Tags frequents
+          </button>
+
           <button
             type="button"
             className="scraper-bookmarks-view__clear"

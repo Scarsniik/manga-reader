@@ -117,6 +117,33 @@ const normalizeSearchText = (value: unknown): string => (
     .trim()
 );
 
+const normalizeSearchTokenText = (value: unknown): string => (
+  normalizeSearchText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+);
+
+const getSearchTokens = (value: unknown): string[] => (
+  Array.from(new Set(normalizeSearchTokenText(value).split(" ").filter(Boolean)))
+);
+
+const matchesSearchText = (haystack: string, query: string): boolean => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const normalizedHaystack = normalizeSearchText(haystack);
+  if (normalizedHaystack.includes(normalizedQuery)) {
+    return true;
+  }
+
+  const haystackTokens = normalizeSearchTokenText(haystack);
+  const queryTokens = getSearchTokens(query);
+  return queryTokens.length > 0 && queryTokens.every((token) => haystackTokens.includes(token));
+};
+
 const normalizeLanguageToken = (value: string): string => (
   value
     .normalize("NFD")
@@ -408,11 +435,6 @@ const matchesQuery = (
   scraper: ScraperRecord | null | undefined,
   query: string,
 ): boolean => {
-  const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
   const haystack = normalizeSearchText([
     bookmark.title,
     bookmark.sourceUrl,
@@ -424,7 +446,7 @@ const matchesQuery = (
     ...(bookmark.tags ?? []),
   ].filter(Boolean).join(" "));
 
-  return haystack.includes(normalizedQuery);
+  return matchesSearchText(haystack, query);
 };
 
 const compareDates = (left: string | undefined, right: string | undefined): number => (

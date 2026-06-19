@@ -7,6 +7,7 @@ import {
 import { extractScraperDetailsFromDocumentWithImageFallbacks } from "@/renderer/utils/scraperRuntime/detailsExtraction";
 import { hasRenderableDetails } from "@/renderer/utils/scraperRuntime/detailsRenderable";
 import { resolveScraperDetailsTargetUrl } from "@/renderer/utils/scraperRuntime/urlResolution";
+import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import type {
   ScraperDocumentFetcher,
   ScraperRuntimeDetailsResult,
@@ -17,7 +18,7 @@ const SCRAPER_CARD_DETAILS_CONCURRENCY = 3;
 
 type CardDetailsEnrichmentOptions = {
   enabled: boolean;
-  scraper: Pick<ScraperRecord, "baseUrl">;
+  scraper: ScraperRecord;
   detailsConfig: ScraperDetailsFeatureConfig | null | undefined;
   fetchDocument: ScraperDocumentFetcher | undefined;
 };
@@ -167,6 +168,7 @@ export const enrichScraperSearchPageWithDetails = async (
         return;
       }
 
+      collectScraperDetailsTagsForTagListCacheSafe(options.scraper, details);
       enrichedItems[index] = mergeCardWithDetails(item, details);
       succeeded += 1;
     } catch {

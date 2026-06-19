@@ -29,6 +29,7 @@ export {
   saveScraperTagFavorite,
 } from "./scrapers/tagFavorites";
 export {
+  addScraperTagListCacheItems,
   getScraperTagListCache,
   saveScraperTagListCache,
 } from "./scrapers/tagListCache";

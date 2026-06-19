@@ -1,4 +1,5 @@
 import type { ReaderLocationState } from "@/renderer/components/Reader/types";
+import type { ScraperBookmarkFilterState } from "@/shared/scraper";
 
 export type MangaManagerViewWorkspaceTarget = {
   kind: "manga-manager.view";
@@ -6,6 +7,8 @@ export type MangaManagerViewWorkspaceTarget = {
   locationState?: {
     librarySearchQuery?: string;
     multiSearchPrefillQuery?: string;
+    bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
+    bookmarksFilterScraperId?: string | null;
   };
   title?: string;
 };
@@ -46,13 +49,21 @@ export type ScraperTagWorkspaceTarget = {
   title?: string;
 };
 
+export type ScraperBookmarkTagsWorkspaceTarget = {
+  kind: "scraper.bookmarkTags";
+  filterScraperId?: string | null;
+  filters?: Partial<ScraperBookmarkFilterState> | null;
+  title?: string;
+};
+
 export type WorkspaceTarget =
   | MangaManagerViewWorkspaceTarget
   | ReaderWorkspaceTarget
   | ScraperConfigWorkspaceTarget
   | ScraperDetailsWorkspaceTarget
   | ScraperAuthorWorkspaceTarget
-  | ScraperTagWorkspaceTarget;
+  | ScraperTagWorkspaceTarget
+  | ScraperBookmarkTagsWorkspaceTarget;
 
 export type WorkspaceTab = {
   id: string;

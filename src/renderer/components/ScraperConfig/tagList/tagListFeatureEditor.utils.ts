@@ -29,6 +29,7 @@ export {
 export type TagListFeatureFormState = ScraperTagListFeatureConfig;
 
 export const TAG_LIST_FIELD_NAMES = [
+  "collectFromDetails",
   "urlTemplate",
   "tagListSelector",
   "tagItemSelector",
@@ -46,6 +47,28 @@ export const TAG_LIST_FIELD_SELECTOR_NAMES = [
   "nextPageSelector",
   "paginationLinkSelector",
 ] as const;
+
+export type TagListSourceMode = "scrape" | "collect";
+
+export const TAG_LIST_SOURCE_MODE_FIELD: Field = {
+  name: "tagListSourceMode",
+  label: "Mode d'alimentation",
+  type: "radio",
+  layout: "cards",
+  required: true,
+  options: [
+    {
+      label: "Scraping",
+      value: "scrape",
+      description: "Scrape une page de liste de tags avec une URL et des selecteurs dedies.",
+    },
+    {
+      label: "Auto",
+      value: "collect",
+      description: "Ajoute au cache les tags rencontres quand les fiches du scrapper sont ouvertes.",
+    },
+  ],
+};
 
 export const URL_TEMPLATE_FIELD: Field = {
   name: "urlTemplate",
@@ -103,6 +126,7 @@ export const SCRAPING_FIELDS: Field[] = [
 ];
 
 export const DEFAULT_TAG_LIST_CONFIG: TagListFeatureFormState = {
+  collectFromDetails: false,
   urlTemplate: "",
   tagListSelector: "",
   tagItemSelector: "",
@@ -116,6 +140,7 @@ export const DEFAULT_TAG_LIST_CONFIG: TagListFeatureFormState = {
 export const buildTagListConfig = (
   values: Partial<TagListFeatureFormState>,
 ): ScraperTagListFeatureConfig => ({
+  collectFromDetails: Boolean(values.collectFromDetails),
   urlTemplate: trimOptional(values.urlTemplate) ?? "",
   tagListSelector: trimOptionalSelector(values.tagListSelector),
   tagItemSelector: trimOptionalSelector(values.tagItemSelector) ?? "",
@@ -130,6 +155,7 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): TagListFeat
   const raw = (feature.config ?? {}) as Record<string, unknown>;
 
   return {
+    collectFromDetails: raw.collectFromDetails === true,
     urlTemplate: trimOptional(raw.urlTemplate) ?? "",
     tagListSelector: trimOptionalSelector(raw.tagListSelector),
     tagItemSelector: trimOptionalSelector(raw.tagItemSelector) ?? "",
@@ -145,16 +171,17 @@ export const getSaveFieldErrors = (
   config: ScraperTagListFeatureConfig,
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
+  const requireManualScrapingConfig = config.collectFromDetails !== true;
 
-  if (!config.urlTemplate) {
+  if (requireManualScrapingConfig && !config.urlTemplate) {
     errors.urlTemplate = "L'URL de liste de tags est requise.";
   }
 
-  if (!config.tagItemSelector) {
+  if (requireManualScrapingConfig && !config.tagItemSelector) {
     errors.tagItemSelector = "Le bloc tag est requis.";
   }
 
-  if (!hasScraperFieldSelectorValue(config.tagNameSelector)) {
+  if (requireManualScrapingConfig && !hasScraperFieldSelectorValue(config.tagNameSelector)) {
     errors.tagNameSelector = "Le selecteur du nom est requis.";
   }
 
@@ -170,7 +197,14 @@ export const getSaveFieldErrors = (
 
 export const getValidationFieldErrors = (
   config: ScraperTagListFeatureConfig,
-): Record<string, string> => getSaveFieldErrors(config);
+): Record<string, string> => {
+  const configForManualValidation: ScraperTagListFeatureConfig = {
+    ...config,
+    collectFromDetails: false,
+  };
+
+  return getSaveFieldErrors(configForManualValidation);
+};
 
 export const buildValidationPresentation = (
   validationResult: ScraperFeatureValidationResult,

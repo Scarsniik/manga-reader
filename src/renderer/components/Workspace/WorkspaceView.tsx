@@ -56,6 +56,10 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
     return "Page tag";
   }
 
+  if (target.kind === "scraper.bookmarkTags") {
+    return "Tags bookmarks";
+  }
+
   return "Onglet";
 };
 

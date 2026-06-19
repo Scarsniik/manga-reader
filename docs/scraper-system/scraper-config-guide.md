@@ -321,15 +321,27 @@ Si les deux sont presents, la pagination par template est prioritaire.
 
 ## Module Liste de tags
 
-`Liste de tags` charge une ou plusieurs pages d'index de tags, extrait les tags disponibles puis
-enregistre le resultat dans un cache local par scraper. Cette liste sert ensuite de raccourci de
-navigation vers le module `Tag`.
+`Liste de tags` peut soit charger une ou plusieurs pages d'index de tags, soit alimenter le cache
+progressivement depuis les tags rencontres dans les fiches. Dans les deux cas, le resultat est
+enregistre dans un cache local par scraper. Cette liste sert ensuite de raccourci de navigation vers
+le module `Tag`.
+
+### Mode d'alimentation
+
+| Champ | Description |
+| --- | --- |
+| `collectFromDetails` | quand `true`, les tags extraits par le module `Fiche` sont ajoutes au cache au fur et a mesure, sans doublons. Dans l'editeur, le mode auto masque le formulaire de scraping manuel. |
+
+Ce mode est utile pour les sites qui n'exposent pas de page de liste de tags. Quand il est actif, le
+bouton d'actualisation manuelle de la vue `Liste de tags` est desactive : la liste affiche le cache
+comme une liste scrapee, mais elle se remplit en ouvrant des fiches du scraper. Comme il n'y a pas
+de validation manuelle dans ce mode, l'enregistrement marque le module comme valide.
 
 ### URL et pagination
 
 | Champ | Requis | Description |
 | --- | --- | --- |
-| `urlTemplate` | oui | URL ou chemin de la page de tags ; les variables `{{page}}` et `{{pageIndex}}` permettent une pagination par template |
+| `urlTemplate` | oui, sauf `collectFromDetails` | URL ou chemin de la page de tags ; les variables `{{page}}` et `{{pageIndex}}` permettent une pagination par template |
 | `nextPageSelector` | non | lien HTML vers la page suivante |
 | `paginationLinkSelector` | non | liens HTML de pagination ou de lettres ; chaque URL detectee est parcourue une fois |
 
@@ -342,8 +354,8 @@ les pages successives et suit aussi les liens trouves dans `nextPageSelector` et
 | Selecteur | Requis | Zone | Description |
 | --- | --- | --- | --- |
 | `tagListSelector` | non | document | limite la recherche a un ou plusieurs conteneurs de tags |
-| `tagItemSelector` | oui | conteneur ou document | detecte chaque tag |
-| `tagNameSelector` | oui | tag | extrait le nom affiche ; un tag sans nom est ignore |
+| `tagItemSelector` | oui, sauf `collectFromDetails` | conteneur ou document | detecte chaque tag |
+| `tagNameSelector` | oui, sauf `collectFromDetails` | tag | extrait le nom affiche ; un tag sans nom est ignore |
 | `tagUrlSelector` | non | tag | extrait l'URL ou la valeur source du tag |
 | `tagCountSelector` | non | tag | extrait le compteur affiche par le site |
 
@@ -360,6 +372,10 @@ scraper. Les favoris et la blacklist du scraper courant sont aussi affiches en h
 Entre ces raccourcis et la liste globale, la vue expose des options persistantes par scraper pour
 trier alphabetiquement ou par compteur d'occurrences, et pour filtrer par compteur min/max quand un
 compteur exploitable existe.
+
+En mode `collectFromDetails`, le cache est mis a jour quand une fiche chargee par le navigateur
+scraper, par un onglet workspace ou par un enrichissement de card extrait des tags. Les doublons
+sont evites par URL quand elle existe, sinon par nom de tag.
 
 ## Module Fiche
 
