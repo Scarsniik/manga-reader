@@ -52,6 +52,7 @@
 - incrementer la version dans `package.json`
 - rediger un patchnote utilisateur dans `docs/release-notes/vX.Y.Z.md` avant la publication. Le patchnote ne doit pas parler de sites en particulier mais expliquer les changements directements. On ne met pas les corrections internes (refactoring de code ou fix de bugs pendant le dev d'une fonctionalité que l'utilisateur n'a jamais vu)
 - le patchnote doit etre pense pour l'utilisateur final : structure claire, phrases courtes, explication des changements visibles, pas un copier-coller du message de commit
+- utiliser `npm run release:status` pour verifier rapidement si le dernier patchnote est deja publie, si `package.json` correspond et si le repo est pret pour la publication
 - utiliser `npm run release:app` pour publier (`npm run release:app:dry-run` pour verifier la release mais on fait plus ça)
 - une release applicative publie un tag `vX.Y.Z` et les assets GitHub associes
 

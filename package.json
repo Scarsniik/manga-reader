@@ -39,6 +39,7 @@
     "clean:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-package.ps1",
     "release:app": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -Publish",
     "release:app:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -DryRun",
+    "release:status": "node scripts/check-release-status.cjs",
     "prepackage": "npm run clean:package",
     "package": "npm run package:app",
     "dist": "npm run package:app"
