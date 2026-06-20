@@ -6,15 +6,15 @@ import type {
 } from "@/shared/scraper";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
-import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
-  MultiSearchMergedResult,
+  MultiSearchMergeProgress,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
@@ -52,6 +52,7 @@ type Props = {
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
   languageFilterModes: MultiSearchLanguageFilterModes;
+  enableRomajiPhoneticMerge?: boolean;
   onReload: () => void;
   onSecondaryAction?: () => void;
   onContinue?: () => void;
@@ -71,27 +72,20 @@ type Props = {
   ) => void;
 };
 
-const buildSingleSourceLatestResult = (
-  source: MultiSearchSourceResult,
-  index: number,
-): MultiSearchMergedResult => ({
-  id: [
-    source.scraper.id,
-    source.pageIndex,
-    source.result.detailUrl || source.result.authorUrl || source.result.title,
-    index,
-  ].join("::"),
-  title: source.result.title,
-  coverUrl: source.result.thumbnailUrl,
-  summary: source.result.summary,
-  pageCount: source.result.pageCount,
-  sources: [source],
-  sourceLanguageCodes: source.sourceLanguageCodes.length
-    ? source.sourceLanguageCodes
-    : [UNKNOWN_MULTI_SEARCH_VALUE],
-  tentativeAuthorNames: source.tentativeAuthorNames,
-  contentTypes: source.contentTypes,
-});
+const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
+  if (progress.phase === "queued") {
+    return `Fusion en attente : ${progress.totalSourceCount} source(s) a analyser.`;
+  }
+
+  if (progress.phase === "sorting") {
+    return `Fusion en cours : tri de ${progress.mergedGroupCount} carte(s).`;
+  }
+
+  return [
+    `Fusion en cours : ${progress.processedSourceCount}/${progress.totalSourceCount} source(s) analysee(s)`,
+    `${progress.mergedGroupCount} carte(s) provisoire(s)`,
+  ].join(", ");
+};
 
 const buildStatusSummary = (items: StatusItem[]): string => {
   const counts = items.reduce<Record<string, number>>((result, item) => {
@@ -130,6 +124,7 @@ export default function ScraperLatestResults({
   tagBlacklistByScraper,
   tagFavorites = [],
   languageFilterModes,
+  enableRomajiPhoneticMerge = false,
   onReload,
   onSecondaryAction,
   onContinue,
@@ -139,18 +134,20 @@ export default function ScraperLatestResults({
   onSetSourcesRead,
   onToggleLanguageFilterMode,
 }: Props) {
+  const [mergeRefreshKey, setMergeRefreshKey] = React.useState(0);
   const [isStatusPanelOpen, setIsStatusPanelOpen] = React.useState(false);
-  const sourceResults = React.useMemo(
-    () => sources.map((source, index) => buildSingleSourceLatestResult(source, index)),
-    [sources],
+  const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
+    sources,
+    mergeRefreshKey,
+    { enableRomajiPhoneticMerge },
   );
   const resultLanguageCodes = React.useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(sources),
     [sources],
   );
   const languageFilteredResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(sourceResults, languageFilterModes),
-    [languageFilterModes, sourceResults],
+    () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
+    [languageFilterModes, mergedResults],
   );
   const visibleResults = React.useMemo(
     () => languageFilteredResults.filter((result) => (
@@ -162,22 +159,15 @@ export default function ScraperLatestResults({
     )),
     [languageFilteredResults, newViewHistoryIds, viewHistoryRecordsById],
   );
-  const displayedResults = React.useMemo(
-    () => {
-      const noDoublesResults = visibleResults.reduce<MultiSearchMergedResult[]>((accumulator, current) => {
-        if (current.sources.length === 1 && accumulator.some((result) => result.sources.length === 1 && result.sources[0] === current.sources[0])) {
-          return accumulator;
-        }
-
-        return [...accumulator, current];
-      }, []);
-      return noDoublesResults;
-    }, [visibleResults],
-  );
   const visibleSourceCount = React.useMemo(
-    () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
-    [displayedResults],
+    () => visibleResults.reduce((count, result) => count + result.sources.length, 0),
+    [visibleResults],
   );
+  const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
+  const mergeProgressClassName = [
+    "multi-search__merge-progress",
+    mergeProgress.isActive ? "is-visible" : "",
+  ].filter(Boolean).join(" ");
   const feedback = error || openError || message;
   const statusPanelId = React.useId();
   const statusSummary = React.useMemo(
@@ -196,8 +186,20 @@ export default function ScraperLatestResults({
           <h3>{title}</h3>
           <p>{summary}</p>
           <p>
-            {displayedResults.length} carte(s), {visibleSourceCount} source(s) non vue(s).
+            {visibleResults.length} carte(s), {visibleSourceCount} source(s) non vue(s).
           </p>
+          <div
+            className={mergeProgressClassName}
+            role={mergeProgress.isActive ? "status" : undefined}
+            aria-live={mergeProgress.isActive ? "polite" : undefined}
+            aria-hidden={!mergeProgress.isActive}
+          >
+            <span>{getMergeProgressLabel(mergeProgress)}</span>
+            <progress
+              max={mergeProgressMax}
+              value={Math.min(mergeProgress.processedSourceCount, mergeProgressMax)}
+            />
+          </div>
           <div className="multi-search__result-filter-stack">
             <MultiSearchLanguageFilterBar
               languageCodes={resultLanguageCodes}
@@ -211,6 +213,7 @@ export default function ScraperLatestResults({
             type="button"
             className="secondary"
             onClick={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
               onReload();
             }}
             disabled={loading || actionsDisabled}
@@ -222,6 +225,7 @@ export default function ScraperLatestResults({
               type="button"
               className="secondary"
               onClick={() => {
+                setMergeRefreshKey((currentKey) => currentKey + 1);
                 onSecondaryAction();
               }}
               disabled={loading || actionsDisabled}
@@ -270,9 +274,9 @@ export default function ScraperLatestResults({
         </div>
       ) : null}
 
-      {displayedResults.length ? (
+      {visibleResults.length ? (
         <MultiSearchVirtualizedResultsGrid
-          results={displayedResults}
+          results={visibleResults}
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
           sourceProgressIndex={sourceProgressIndex}
@@ -290,12 +294,13 @@ export default function ScraperLatestResults({
         <div className="multi-search__message is-info">{emptyLabel}</div>
       ) : null}
 
-      {displayedResults.length > 0 && continueActionLabel && onContinue ? (
+      {visibleResults.length > 0 && continueActionLabel && onContinue ? (
         <div className="scraper-latest-results__continue">
           <button
             type="button"
             className="secondary"
             onClick={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
               onContinue();
             }}
             disabled={loading || actionsDisabled}

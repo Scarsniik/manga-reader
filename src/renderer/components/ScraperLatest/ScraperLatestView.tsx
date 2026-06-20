@@ -948,6 +948,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
         languageFilterModes={sourceResults.languageFilterModes}
+        enableRomajiPhoneticMerge={params?.multiSearchEnableRomajiPhoneticMerge === true}
         onReload={handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
