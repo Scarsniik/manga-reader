@@ -34,6 +34,7 @@ import {
     ReaderCopyFeedback,
     ReaderLocationState,
     ReaderMangaSourceRequest,
+    ReaderReadingListNavigation,
 } from '../types';
 import {
     copyImageViaBrowserClipboard,
@@ -60,6 +61,7 @@ type Args = {
     containerRef: React.RefObject<HTMLDivElement | null>;
     navigate: NavigateFunction;
     onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
+    readingListNavigation?: ReaderReadingListNavigation;
 };
 
 const useReaderNavigation = ({
@@ -80,6 +82,7 @@ const useReaderNavigation = ({
     containerRef,
     navigate,
     onOpenMangaSource,
+    readingListNavigation,
 }: Args) => {
     const [transitionDirection, setTransitionDirection] = React.useState<'previous' | 'next' | null>(null);
     const [isCompletionPage, setIsCompletionPage] = React.useState<boolean>(false);
@@ -87,6 +90,7 @@ const useReaderNavigation = ({
     const [continuationError, setContinuationError] = React.useState<string | null>(null);
     const [copyFeedback, setCopyFeedback] = React.useState<ReaderCopyFeedback | null>(null);
     const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
+    const readingListCompletionNotifiedRef = React.useRef(false);
 
     const ocrAvailable = !isRemoteScraperManga(manga);
     const previousSeriesManga = React.useMemo(
@@ -99,6 +103,10 @@ const useReaderNavigation = ({
     );
 
     const previousTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
+        if (readingListNavigation) {
+            return null;
+        }
+
         if (previousSeriesManga) {
             return {
                 kind: 'library',
@@ -137,9 +145,25 @@ const useReaderNavigation = ({
             detailsResult: scraperBrowserReturn.detailsResult,
             scraperId: scraperReaderState.scraperId,
         };
-    }, [locationState, manga, previousSeriesManga]);
+    }, [locationState, manga, previousSeriesManga, readingListNavigation]);
 
     const nextTarget = React.useMemo<ReaderAdjacentTarget | null>(() => {
+        if (readingListNavigation) {
+            return readingListNavigation.nextItem
+                ? {
+                    kind: 'reading-list',
+                    title: readingListNavigation.nextItem.title,
+                    cover: readingListNavigation.nextItem.cover,
+                    chapterLabel: `${readingListNavigation.currentPosition + 1} / ${readingListNavigation.totalItems} dans la liste`,
+                }
+                : {
+                    kind: 'reading-list',
+                    title: 'Résumé de la liste',
+                    chapterLabel: `${readingListNavigation.totalItems} manga(s) parcouru(s)`,
+                    isReadingListCompletion: true,
+                };
+        }
+
         if (nextSeriesManga) {
             return {
                 kind: 'library',
@@ -178,7 +202,7 @@ const useReaderNavigation = ({
             detailsResult: scraperBrowserReturn.detailsResult,
             scraperId: scraperReaderState.scraperId,
         };
-    }, [locationState, manga, nextSeriesManga]);
+    }, [locationState, manga, nextSeriesManga, readingListNavigation]);
 
     const activeTransitionTarget = transitionDirection === 'previous'
         ? previousTarget
@@ -605,6 +629,11 @@ const useReaderNavigation = ({
         setIsCompletionPage(false);
 
         try {
+            if (target.kind === 'reading-list') {
+                await readingListNavigation?.onContinue();
+                return;
+            }
+
             const targetPageForLocalManga = async (adjacentManga: Manga): Promise<number> => {
                 if (direction === 'next') {
                     return 1;
@@ -729,7 +758,16 @@ const useReaderNavigation = ({
         } finally {
             setContinuationLoading(false);
         }
-    }, [bookmarkExcludedFields, continuationLoading, locationState, navigate, nextTarget, previousTarget, resolveLocalMangaPageCount]);
+    }, [bookmarkExcludedFields, continuationLoading, locationState, navigate, nextTarget, previousTarget, readingListNavigation, resolveLocalMangaPageCount]);
+
+    const notifyReadingListItemCompleted = React.useCallback(() => {
+        if (!readingListNavigation || readingListCompletionNotifiedRef.current) {
+            return;
+        }
+
+        readingListCompletionNotifiedRef.current = true;
+        void readingListNavigation.onCurrentItemCompleted();
+    }, [readingListNavigation]);
 
     const next = React.useCallback(() => {
         if (continuationLoading) {
@@ -758,6 +796,7 @@ const useReaderNavigation = ({
 
         if (images.length > 0 && currentIndex >= images.length - 1) {
             scrollToTopImmediate();
+            notifyReadingListItemCompleted();
             if (nextTarget) {
                 setTransitionDirection('next');
                 setIsCompletionPage(false);
@@ -782,7 +821,9 @@ const useReaderNavigation = ({
         isCompletionPage,
         isTransitionPage,
         nextTarget,
+        notifyReadingListItemCompleted,
         openRecommendation,
+        readingListNavigation,
         scrollToTopImmediate,
         transitionDirection,
     ]);
@@ -862,6 +903,7 @@ const useReaderNavigation = ({
     }, [currentIndex, images, imgRef, isCompletionPage, isTransitionPage, showCopyFeedback]);
 
     React.useEffect(() => {
+        readingListCompletionNotifiedRef.current = false;
         setTransitionDirection(null);
         setIsCompletionPage(false);
         setContinuationLoading(false);

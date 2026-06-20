@@ -5,6 +5,7 @@ import {
     ScraperRuntimeDetailsResult,
 } from '@/renderer/utils/scraperRuntime';
 import { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
+import type { ReadingListItemMetadata } from '@/renderer/types/readingList';
 
 export type ReaderLocationState = {
     from?: {
@@ -60,7 +61,7 @@ export type ManualSelection = {
 export type OcrNavigationDirection = 'up' | 'left' | 'down' | 'right';
 
 export type ReaderAdjacentTarget = {
-    kind: 'library' | 'scraper';
+    kind: 'library' | 'scraper' | 'reading-list';
     title: string;
     chapterLabel?: string | null;
     cover?: string | null;
@@ -68,6 +69,17 @@ export type ReaderAdjacentTarget = {
     adjacentChapter?: ScraperRuntimeChapterResult;
     detailsResult?: ScraperRuntimeDetailsResult;
     scraperId?: string;
+    isReadingListCompletion?: boolean;
+};
+
+export type ReaderReadingListNavigation = {
+    currentPosition: number;
+    totalItems: number;
+    nextItem: ReadingListItemMetadata | null;
+    onContinue: () => void | Promise<void>;
+    onCurrentItemCompleted: () => void | Promise<void>;
+    onFinished: () => void | Promise<void>;
+    onOpenCurrentDetails: () => void | Promise<void>;
 };
 
 export type ReaderCopyFeedback = {

@@ -97,6 +97,22 @@ type ScraperBookmarkTagsWorkspaceTarget = {
     title?: string;
 };
 
+type ReadingListWorkspaceTarget = {
+    kind: "reading-list";
+    items: Array<{
+        id: string;
+        metadata: {
+            title: string;
+            cover?: string | null;
+            authors?: string[];
+            tags?: string[];
+            languageCodes?: string[];
+        };
+        sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
+    }>;
+    title?: string;
+};
+
 type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
@@ -104,7 +120,8 @@ type WorkspaceTarget =
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
     | ScraperTagWorkspaceTarget
-    | ScraperBookmarkTagsWorkspaceTarget;
+    | ScraperBookmarkTagsWorkspaceTarget
+    | ReadingListWorkspaceTarget;
 
 type WorkspaceOpenTargetOptions = {
     activate?: boolean;
@@ -271,7 +288,9 @@ contextBridge.exposeInMainWorld('api', {
     closeWindow: () => ipcRenderer.invoke("window-close"),
     toggleDevTools: () => ipcRenderer.invoke("window-toggle-devtools"),
     onWindowStateChanged,
-    openWorkspaceTarget: (target: WorkspaceTarget) => ipcRenderer.invoke("workspace-open-target", target),
+    openWorkspaceTarget: (target: WorkspaceTarget, options?: WorkspaceOpenTargetOptions) => (
+        ipcRenderer.invoke("workspace-open-target", target, options)
+    ),
     onWorkspaceOpenTarget,
     getHistoryRecords: () => ipcRenderer.invoke("get-history-records"),
     recordReadingHistory: (request: RecordReadingHistoryRequest) => ipcRenderer.invoke("record-reading-history", request),

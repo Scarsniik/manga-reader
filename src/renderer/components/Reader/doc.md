@@ -50,6 +50,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Le reader lit les paramètres d'URL `id` et `page`.
 - Il supporte la lecture locale et la lecture issue d'un scraper.
 - Il gère la navigation clavier/souris, la progression et le passage au chapitre précédent/suivant.
+- En mode liste de lecture, la cible suivante de la liste remplace les transitions de série. La fin intermédiaire affiche
+  le prochain manga, tandis que la fin du dernier élément rend le résumé de la liste.
 - Le bouton plein écran et le raccourci configurable `F` affichent seulement l'image et le panneau OCR en plein écran. `Échap`, `F` ou le bouton flottant à gauche permettent d'en sortir.
 - Les dialogues ouverts depuis le panneau OCR, dont les fiches d'aide grammaticale, restent affichables en plein écran.
 - Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.

@@ -1,4 +1,5 @@
 import type { ReaderLocationState } from "@/renderer/components/Reader/types";
+import type { ReadingListItem } from "@/renderer/types/readingList";
 import type { ScraperBookmarkFilterState } from "@/shared/scraper";
 
 export type MangaManagerViewWorkspaceTarget = {
@@ -56,6 +57,12 @@ export type ScraperBookmarkTagsWorkspaceTarget = {
   title?: string;
 };
 
+export type ReadingListWorkspaceTarget = {
+  kind: "reading-list";
+  items: ReadingListItem[];
+  title?: string;
+};
+
 export type WorkspaceTarget =
   | MangaManagerViewWorkspaceTarget
   | ReaderWorkspaceTarget
@@ -63,7 +70,8 @@ export type WorkspaceTarget =
   | ScraperDetailsWorkspaceTarget
   | ScraperAuthorWorkspaceTarget
   | ScraperTagWorkspaceTarget
-  | ScraperBookmarkTagsWorkspaceTarget;
+  | ScraperBookmarkTagsWorkspaceTarget
+  | ReadingListWorkspaceTarget;
 
 export type WorkspaceTab = {
   id: string;

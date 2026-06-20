@@ -436,6 +436,21 @@
 	background: rgba(64, 136, 219, 0.94);
 }
 
+.reader-transition__actions {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.reader-transition__button.secondary {
+	border-color: #4b5563;
+	background: #2b3038;
+}
+
+.reader-transition__button.secondary:hover:not(:disabled) {
+	background: #393f49;
+}
+
 .reader-transition__button:disabled {
 	opacity: 0.6;
 	cursor: default;

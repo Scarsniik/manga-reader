@@ -122,6 +122,18 @@ export default function SettingsModalContent() {
     },
     {
       type: 'section',
+      id: 'workspace',
+      title: 'Workspace',
+      fields: [
+        {
+          name: 'readingListKeepSourceTabs',
+          label: 'Conserver les onglets manga après la création d\'une liste de lecture',
+          type: 'checkbox',
+        },
+      ],
+    },
+    {
+      type: 'section',
       id: 'scraping',
       title: 'Scraping',
       fields: [
@@ -337,6 +349,7 @@ export default function SettingsModalContent() {
       persistMangaFilters,
       showSavedLibrarySearches,
       showSavedScraperSearches,
+      readingListKeepSourceTabs: !!values.readingListKeepSourceTabs,
       multiSearchEnableRomajiPhoneticMerge: !!values.multiSearchEnableRomajiPhoneticMerge,
       multiSearchScrapeDetailsWithCards: !!values.multiSearchScrapeDetailsWithCards,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,

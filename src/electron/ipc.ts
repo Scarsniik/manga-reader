@@ -96,8 +96,12 @@ ipcMain.handle("window-toggle-maximize", async (event: IpcMainInvokeEvent) => wi
 ipcMain.handle("window-close", async (event: IpcMainInvokeEvent) => windowControls.closeWindow(event));
 ipcMain.handle("window-toggle-devtools", async (event: IpcMainInvokeEvent) => windowControls.toggleDevTools(event));
 ipcMain.handle("app-runtime-info", async () => windowControls.getAppRuntimeInfo());
-ipcMain.handle("workspace-open-target", async (event: IpcMainInvokeEvent, target: unknown) => (
-    workspaceWindow.openWorkspaceTarget(event, target)
+ipcMain.handle("workspace-open-target", async (
+    event: IpcMainInvokeEvent,
+    target: unknown,
+    options?: unknown,
+) => (
+    workspaceWindow.openWorkspaceTarget(event, target, options)
 ));
 
 // History

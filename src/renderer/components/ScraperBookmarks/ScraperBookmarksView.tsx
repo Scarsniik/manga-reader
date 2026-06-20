@@ -15,6 +15,7 @@ import useScraperBookmarkView from '@/renderer/components/ScraperBookmarks/useSc
 import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkDuplicateReviewModal';
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
 import buildScraperBookmarkTagStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
+import buildScraperBookmarkReadingListModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkReadingListModal';
 import {
   findScraperBookmarkDuplicateGroups,
   type ScraperBookmarkDuplicateDetectionProgress,
@@ -50,6 +51,7 @@ import {
 import { getScraperTagFavoriteSources } from '@/renderer/utils/scraperTagFavorites';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
+import type { ReadingListItem } from '@/renderer/types/readingList';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useParams } from '@/renderer/hooks/useParams';
 import '@/renderer/components/ScraperBrowser/style.scss';
@@ -450,6 +452,28 @@ export default function ScraperBookmarksView({
     surpriseBookmarkPool,
     titleLineCount,
   ]);
+
+  const handleCreateBookmarkReadingList = useCallback(async (items: ReadingListItem[]) => {
+    const opened = await openWorkspaceTarget(
+      {
+        kind: 'reading-list',
+        items,
+        title: 'Liste de lecture - Bookmarks',
+      },
+      { activate: true },
+    );
+
+    if (!opened) {
+      throw new Error('Impossible d\'ouvrir la liste de lecture dans le workspace.');
+    }
+  }, []);
+
+  const handleOpenReadingListModal = useCallback(() => {
+    openModal(buildScraperBookmarkReadingListModal({
+      bookmarks: displayedBookmarks,
+      onCreate: handleCreateBookmarkReadingList,
+    }));
+  }, [displayedBookmarks, handleCreateBookmarkReadingList, openModal]);
 
   const handleKeepOnlyDuplicateBookmark = useCallback(async (
     group: ScraperBookmarkDuplicateGroup,
@@ -918,6 +942,17 @@ export default function ScraperBookmarksView({
         </div>
 
         <div className="scraper-bookmarks-view__header-actions">
+          <button
+            type="button"
+            className="scraper-bookmarks-view__clear"
+            onClick={handleOpenReadingListModal}
+            disabled={displayedBookmarks.length === 0}
+            title="Créer une liste avec les bookmarks affichés et leur ordre actuel"
+          >
+            <OpenBookIcon aria-hidden="true" focusable="false" />
+            Créer une liste de lecture
+          </button>
+
           <button
             type="button"
             className="scraper-bookmarks-view__clear"

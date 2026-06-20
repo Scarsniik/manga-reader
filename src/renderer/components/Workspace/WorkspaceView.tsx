@@ -1,7 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
+import {
+  APP_TITLE_BAR_CONTEXT_EVENT,
+  CREATE_READING_LIST_EVENT,
+} from "@/renderer/components/AppTitleBar/titleBarMenu";
+import {
+  buildReadingListItemFromTab,
+  isReadingListSourceTab,
+} from "@/renderer/components/ReadingList/readingListItems";
 import WorkspaceTargetPanel from "@/renderer/components/Workspace/WorkspaceTargetPanel";
 import { clearWorkspaceBrowserTabCache } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTab, WorkspaceTarget } from "@/renderer/types/workspace";
+import useParams from "@/renderer/hooks/useParams";
 import "@/renderer/components/Workspace/style.scss";
 
 type WorkspaceApi = {
@@ -60,6 +69,10 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
     return "Tags bookmarks";
   }
 
+  if (target.kind === "reading-list") {
+    return "Liste de lecture";
+  }
+
   return "Onglet";
 };
 
@@ -82,6 +95,7 @@ const preventMiddleClickDefault = (event: React.MouseEvent<HTMLElement>) => {
 };
 
 export default function WorkspaceView() {
+  const { params } = useParams();
   const [tabs, setTabsState] = useState<WorkspaceTab[]>(storedTabs);
   const [activeTabId, setActiveTabIdState] = useState<string | null>(storedActiveTabId);
 
@@ -111,6 +125,34 @@ export default function WorkspaceView() {
     }
   }, [updateActiveTabId, updateTabs]);
 
+  const createReadingList = useCallback(() => {
+    const sourceTabs = storedTabs.filter(isReadingListSourceTab);
+    const items = sourceTabs
+      .map(buildReadingListItemFromTab)
+      .filter((item) => item !== null);
+
+    if (items.length === 0) {
+      return;
+    }
+
+    const readingListTab = createWorkspaceTab({
+      kind: "reading-list",
+      items,
+      title: "Liste de lecture",
+    }, false);
+    const keepSourceTabs = params?.readingListKeepSourceTabs === true;
+
+    if (!keepSourceTabs) {
+      sourceTabs.forEach((tab) => clearWorkspaceBrowserTabCache(tab.id));
+    }
+
+    const remainingTabs = keepSourceTabs
+      ? storedTabs
+      : storedTabs.filter((tab) => !isReadingListSourceTab(tab));
+    updateTabs([...remainingTabs, readingListTab]);
+    updateActiveTabId(readingListTab.id);
+  }, [params?.readingListKeepSourceTabs, updateActiveTabId, updateTabs]);
+
   const replaceTabTarget = useCallback((
     tabId: string,
     target: WorkspaceTarget,
@@ -139,6 +181,32 @@ export default function WorkspaceView() {
     const api = getWorkspaceApi();
     return api.onWorkspaceOpenTarget?.(openTarget);
   }, [openTarget]);
+
+  useEffect(() => {
+    const handleCreateReadingList = () => createReadingList();
+    window.addEventListener(CREATE_READING_LIST_EVENT, handleCreateReadingList);
+    return () => window.removeEventListener(CREATE_READING_LIST_EVENT, handleCreateReadingList);
+  }, [createReadingList]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(APP_TITLE_BAR_CONTEXT_EVENT, {
+      detail: {
+        mangaTabCount: tabs.filter(isReadingListSourceTab).length,
+        surface: "workspace",
+      },
+    }));
+  }, [tabs]);
+
+  useEffect(() => {
+    return () => {
+      window.dispatchEvent(new CustomEvent(APP_TITLE_BAR_CONTEXT_EVENT, {
+        detail: {
+          mangaTabCount: 0,
+          surface: "main",
+        },
+      }));
+    };
+  }, []);
 
   const handleCloseTab = useCallback((tabId: string) => {
     const closingIndex = storedTabs.findIndex((tab) => tab.id === tabId);

@@ -47,6 +47,7 @@ import {
 import {
     ReaderLocationState,
     ReaderMangaSourceRequest,
+    ReaderReadingListNavigation,
 } from './types';
 import {
     normalizeBooleanSetting,
@@ -66,6 +67,7 @@ type ReaderProps = {
     onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
     showBackButton?: boolean;
     syncWindowPageParam?: boolean;
+    readingListNavigation?: ReaderReadingListNavigation;
 };
 
 type LocalReaderLocation = {
@@ -89,6 +91,7 @@ const Reader: React.FC<ReaderProps> = ({
     onOpenMangaSource,
     showBackButton = true,
     syncWindowPageParam = true,
+    readingListNavigation,
 }) => {
     const [ocrEnabled, setOcrEnabled] = React.useState<boolean>(false);
     const readerHeaderRef = React.useRef<HTMLDivElement | null>(null);
@@ -310,6 +313,7 @@ const Reader: React.FC<ReaderProps> = ({
         containerRef,
         navigate,
         onOpenMangaSource,
+        readingListNavigation,
     });
     const handleBack = onBack ?? navigation.handleBack;
 
@@ -468,6 +472,16 @@ const Reader: React.FC<ReaderProps> = ({
                     onContinue={(direction) => {
                         void navigation.continueToAdjacentChapter(direction);
                     }}
+                    onOpenReadingListDetails={readingListNavigation
+                        ? () => {
+                            void readingListNavigation.onOpenCurrentDetails();
+                        }
+                        : undefined}
+                    onFinishReadingList={readingListNavigation
+                        ? () => {
+                            void readingListNavigation.onFinished();
+                        }
+                        : undefined}
                     onReturnToLibrary={navigation.returnToLibrary}
                     onOpenSource={() => {
                         void navigation.openMangaSource();

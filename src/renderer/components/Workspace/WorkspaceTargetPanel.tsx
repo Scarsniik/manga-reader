@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import MangaManager from "@/renderer/components/MangaManger/MangaManager";
 import Reader from "@/renderer/components/Reader/Reader";
+import ReadingListView from "@/renderer/components/ReadingList/ReadingListView";
 import type { ReaderMangaSourceRequest } from "@/renderer/components/Reader/types";
 import ScraperConfigWizard from "@/renderer/components/ScraperConfig/ScraperConfigWizard";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
@@ -423,6 +424,10 @@ export default function WorkspaceTargetPanel({
         syncWindowPageParam={false}
       />
     );
+  }
+
+  if (target.kind === "reading-list") {
+    return <ReadingListView initialItems={target.items} />;
   }
 
   if (target.kind === "scraper.config") {

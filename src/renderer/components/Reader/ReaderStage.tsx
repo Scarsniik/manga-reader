@@ -29,6 +29,8 @@ type Props = {
     continuationLoading: boolean;
     continuationError: string | null;
     onContinue: (direction: 'previous' | 'next') => void;
+    onFinishReadingList?: () => void;
+    onOpenReadingListDetails?: () => void;
     onReturnToLibrary: () => void;
     onOpenSource: () => void;
     onOpenRecommendation: (manga: EndOfReadingRecommendation) => void;
@@ -78,6 +80,8 @@ const ReaderStage: React.FC<Props> = ({
     continuationLoading,
     continuationError,
     onContinue,
+    onFinishReadingList,
+    onOpenReadingListDetails,
     onReturnToLibrary,
     onOpenSource,
     onOpenRecommendation,
@@ -140,6 +144,10 @@ const ReaderStage: React.FC<Props> = ({
                             coverSrc={continuationCoverSrc}
                             loading={continuationLoading}
                             error={continuationError}
+                            targetKind={activeTransitionTarget.kind}
+                            isReadingListCompletion={activeTransitionTarget.isReadingListCompletion}
+                            onOpenDetails={onOpenReadingListDetails}
+                            onFinishReadingList={onFinishReadingList}
                             onContinue={() => {
                                 onContinue(transitionDirection === 'previous' ? 'previous' : 'next');
                             }}

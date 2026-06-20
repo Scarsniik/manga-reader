@@ -64,6 +64,22 @@ type ScraperBookmarkTagsWorkspaceTarget = {
     title?: string;
 };
 
+type ReadingListWorkspaceTarget = {
+    kind: "reading-list";
+    items: Array<{
+        id: string;
+        metadata: {
+            title: string;
+            cover?: string | null;
+            authors?: string[];
+            tags?: string[];
+            languageCodes?: string[];
+        };
+        sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
+    }>;
+    title?: string;
+};
+
 export type WorkspaceTarget =
     | MangaManagerViewWorkspaceTarget
     | ReaderWorkspaceTarget
@@ -71,7 +87,8 @@ export type WorkspaceTarget =
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
     | ScraperTagWorkspaceTarget
-    | ScraperBookmarkTagsWorkspaceTarget;
+    | ScraperBookmarkTagsWorkspaceTarget
+    | ReadingListWorkspaceTarget;
 
 let workspaceWindow: BrowserWindow | null = null;
 type WorkspaceTargetRequest = {
@@ -169,6 +186,52 @@ const isOptionalPositivePage = (value: unknown): boolean => (
     )
 );
 
+const isOptionalStringList = (value: unknown): boolean => (
+    value === undefined
+    || (Array.isArray(value) && value.every((entry) => typeof entry === "string"))
+);
+
+const isReadingListItem = (value: unknown): boolean => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+    }
+
+    const item = value as ReadingListWorkspaceTarget["items"][number];
+    const metadata = item.metadata;
+    const sourceTarget = item.sourceTarget;
+    if (
+        typeof item.id !== "string"
+        || !item.id.trim()
+        || !metadata
+        || typeof metadata !== "object"
+        || typeof metadata.title !== "string"
+        || !metadata.title.trim()
+        || !isOptionalStringOrNull(metadata.cover)
+        || !isOptionalStringList(metadata.authors)
+        || !isOptionalStringList(metadata.tags)
+        || !isOptionalStringList(metadata.languageCodes)
+        || !sourceTarget
+        || typeof sourceTarget !== "object"
+    ) {
+        return false;
+    }
+
+    if (sourceTarget.kind === "reader") {
+        return (
+            typeof sourceTarget.mangaId === "string"
+            && sourceTarget.mangaId.trim().length > 0
+            && isOptionalPositivePage(sourceTarget.page)
+            && isOptionalObject(sourceTarget.locationState)
+        );
+    }
+
+    return sourceTarget.kind === "scraper.details"
+        && typeof sourceTarget.scraperId === "string"
+        && sourceTarget.scraperId.trim().length > 0
+        && typeof sourceTarget.sourceUrl === "string"
+        && sourceTarget.sourceUrl.trim().length > 0;
+};
+
 const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
     if (!value || typeof value !== "object") {
         return false;
@@ -230,6 +293,15 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
         return (
             isOptionalStringOrNull(bookmarkTagsTarget.filterScraperId)
             && isOptionalObject(bookmarkTagsTarget.filters)
+        );
+    }
+
+    if (candidate.kind === "reading-list") {
+        const readingListTarget = candidate as Partial<ReadingListWorkspaceTarget>;
+        return (
+            Array.isArray(readingListTarget.items)
+            && readingListTarget.items.length > 0
+            && readingListTarget.items.every(isReadingListItem)
         );
     }
 
@@ -333,12 +405,19 @@ const createWorkspaceWindow = (): BrowserWindow => {
 export const openWorkspaceTarget = async (
     _event: IpcMainInvokeEvent,
     target: unknown,
+    options?: unknown,
 ): Promise<boolean> => {
     if (!isWorkspaceTarget(target)) {
         return false;
     }
 
-    const request = createWorkspaceTargetRequest(target, { activate: false });
+    const shouldActivate = Boolean(
+        options
+        && typeof options === "object"
+        && !Array.isArray(options)
+        && (options as { activate?: unknown }).activate === true,
+    );
+    const request = createWorkspaceTargetRequest(target, { activate: shouldActivate });
 
     if (!workspaceWindow || workspaceWindow.isDestroyed()) {
         pendingTargets.push(request);

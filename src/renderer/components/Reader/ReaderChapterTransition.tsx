@@ -8,6 +8,10 @@ type Props = {
     loading: boolean;
     error?: string | null;
     onContinue: () => void;
+    onFinishReadingList?: () => void;
+    onOpenDetails?: () => void;
+    targetKind?: 'library' | 'scraper' | 'reading-list';
+    isReadingListCompletion?: boolean;
 };
 
 const ReaderChapterTransition: React.FC<Props> = ({
@@ -18,19 +22,34 @@ const ReaderChapterTransition: React.FC<Props> = ({
     loading,
     error,
     onContinue,
+    onFinishReadingList,
+    onOpenDetails,
+    targetKind,
+    isReadingListCompletion = false,
 }) => {
     const isPrevious = direction === 'previous';
-    const eyebrow = isPrevious ? 'Début du chapitre' : 'Fin du chapitre';
-    const titleText = isPrevious ? 'Le chapitre précédent est disponible' : 'La suite est prête';
+    const isReadingList = targetKind === 'reading-list';
+    const eyebrow = isReadingList ? 'Manga terminé' : isPrevious ? 'Début du chapitre' : 'Fin du chapitre';
+    const titleText = isReadingList
+        ? isReadingListCompletion ? 'La liste de lecture est terminée' : 'La liste de lecture continue'
+        : isPrevious ? 'Le chapitre précédent est disponible' : 'La suite est prête';
     const message = isPrevious
         ? 'Le chapitre précédent sera ouvert si tu continues avec la page précédente.'
+        : isReadingList
+        ? isReadingListCompletion
+            ? 'Continue avec la page suivante pour afficher le résumé de la lecture.'
+            : 'Le manga suivant de la liste sera ouvert si tu continues avec la page suivante.'
         : 'Le prochain chapitre sera ouvert si tu continues avec la page suivante.';
     const metaLabel = isPrevious ? 'Lecture précédente' : 'Prochaine lecture';
     const hint = isPrevious
         ? 'Utilise Précédent, la touche ← ou le bouton ci-dessous.'
         : 'Utilise Suivant, la touche → ou le bouton ci-dessous.';
-    const buttonLabel = isPrevious ? 'Ouvrir le précédent' : 'Lancer la suite';
-    const loadingLabel = isPrevious ? 'Chargement du précédent...' : 'Chargement du chapitre...';
+    const buttonLabel = isPrevious
+        ? 'Ouvrir le précédent'
+        : isReadingListCompletion ? 'Voir le résumé' : isReadingList ? 'Lire le manga suivant' : 'Lancer la suite';
+    const loadingLabel = isPrevious
+        ? 'Chargement du précédent...'
+        : isReadingListCompletion ? 'Ouverture du résumé...' : isReadingList ? 'Chargement du manga...' : 'Chargement du chapitre...';
 
     return (
         <section
@@ -58,14 +77,34 @@ const ReaderChapterTransition: React.FC<Props> = ({
                     ) : null}
                     <p className="reader-transition__hint">{hint}</p>
                     {error ? <p className="reader-transition__error">{error}</p> : null}
-                    <button
-                        type="button"
-                        className="reader-transition__button"
-                        onClick={onContinue}
-                        disabled={loading}
-                    >
-                        {loading ? loadingLabel : buttonLabel}
-                    </button>
+                    <div className="reader-transition__actions">
+                        {isReadingList && onOpenDetails ? (
+                            <button
+                                type="button"
+                                className="reader-transition__button secondary"
+                                onClick={onOpenDetails}
+                            >
+                                Ouvrir la fiche du manga lu
+                            </button>
+                        ) : null}
+                        {isReadingList && !isReadingListCompletion && onFinishReadingList ? (
+                            <button
+                                type="button"
+                                className="reader-transition__button secondary"
+                                onClick={onFinishReadingList}
+                            >
+                                Terminer la liste
+                            </button>
+                        ) : null}
+                        <button
+                            type="button"
+                            className="reader-transition__button"
+                            onClick={onContinue}
+                            disabled={loading}
+                        >
+                            {loading ? loadingLabel : buttonLabel}
+                        </button>
+                    </div>
                 </div>
             </div>
 
