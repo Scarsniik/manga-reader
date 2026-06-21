@@ -1,4 +1,5 @@
 import React from "react";
+import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import type {
   ScraperTagFavoriteRecord,
   ScraperTagFavoriteSource,
@@ -51,6 +52,7 @@ type Props = {
   showUnseenFirst: boolean;
   onBack: () => void;
   onReload: () => void;
+  onFindSimilarTags: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onToggleLanguageFilterMode: (
@@ -137,6 +139,7 @@ export default function ScraperTagFavoriteResults({
   showUnseenFirst,
   onBack,
   onReload,
+  onFindSimilarTags,
   onPreviousPage,
   onNextPage,
   onToggleLanguageFilterMode,
@@ -187,6 +190,14 @@ export default function ScraperTagFavoriteResults({
           <p>{favorite.sources.length} source(s) tag associee(s).</p>
         </div>
         <div className="scraper-author-favorites-view__header-actions">
+          <button
+            type="button"
+            className="scraper-author-favorites-view__multi-search"
+            onClick={onFindSimilarTags}
+          >
+            <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+            <span>Tags similaires</span>
+          </button>
           <button
             type="button"
             className="scraper-author-favorites-view__clear"

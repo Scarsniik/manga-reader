@@ -30,6 +30,7 @@ import ScraperSourceFavoritesList from "@/renderer/components/ScraperSourceFavor
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import useScraperSourceFavoriteSelection from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteSelection";
 import ScraperTagFavoriteResults from "@/renderer/components/ScraperTagFavorites/ScraperTagFavoriteResults";
+import ScraperSimilarTagsDialog from "@/renderer/components/ScraperTagFavorites/ScraperSimilarTagsDialog";
 import useTagFavoriteRuns from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
@@ -182,6 +183,26 @@ export default function ScraperTagFavoritesView({
     });
   }, [location.pathname, location.search, navigate]);
 
+  const handleFindSimilarTags = useCallback((favorite: ScraperTagFavoriteRecord) => {
+    openModal({
+      title: `Tags similaires a ${favorite.name}`,
+      content: (
+        <ScraperSimilarTagsDialog
+          favoriteId={favorite.id}
+          searchTerms={[
+            favorite.name,
+            ...favorite.sources.map((source) => source.name),
+          ]}
+          scrapers={scrapers}
+        />
+      ),
+      actions: [{
+        label: "Fermer",
+      }],
+      className: "scraper-similar-tags-modal",
+    });
+  }, [openModal, scrapers]);
+
   if (selectedFavorite) {
     return (
       <ScraperTagFavoriteResults
@@ -211,6 +232,7 @@ export default function ScraperTagFavoritesView({
         showUnseenFirst={showUnseenFirst}
         onBack={() => handleSelectFavorite(null)}
         onReload={() => void reload()}
+        onFindSimilarTags={() => handleFindSimilarTags(selectedFavorite)}
         onPreviousPage={() => void goToPreviousPage()}
         onNextPage={() => void goToNextPage()}
         onToggleLanguageFilterMode={handleToggleLanguageFilterMode}

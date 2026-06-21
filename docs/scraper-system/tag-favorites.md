@@ -48,6 +48,13 @@ peuvent etre filtres par texte et par langue avec les memes controles que la rec
 multi-sources. Le filtre texte ne relance pas les scrapers et agit seulement sur les resultats
 charges de la page courante.
 
+L'action `Tags similaires` recherche les noms proches du favori et de ses sources dans le cache de
+chaque scraper dont le module `Liste de tags` est configure. La modale classe les correspondances
+fuzzy par pertinence et affiche le nom du tag avec son scraper. Une etoile jaune pleine indique que
+la source appartient deja au favori ouvert. L'etoile permet de rattacher directement une nouvelle
+source a ce favori ou de l'en retirer. Les scrapers sans cache de tags sont signales et doivent avoir
+alimente leur liste avant de pouvoir participer a cette recherche.
+
 Par defaut, les cards non vues sont affichees en premier sur une page de tag favori. Ce tri utilise
 le meme etat que le liseret vert des cards. L'option peut etre desactivee dans les parametres.
 

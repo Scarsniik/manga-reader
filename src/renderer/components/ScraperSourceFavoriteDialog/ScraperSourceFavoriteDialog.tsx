@@ -1,4 +1,8 @@
 import React, { useMemo, useState } from "react";
+import {
+  getFuzzyTextMatchScore,
+  normalizeFuzzyText,
+} from "@/renderer/utils/fuzzyText";
 
 export type ScraperSourceFavoriteDialogRecord = {
   id: string;
@@ -46,78 +50,6 @@ const getInitialMode = <TFavorite extends ScraperSourceFavoriteDialogRecord>(
   favorites.length ? "existing" : "new"
 );
 
-const normalizeMatchText = (value: string): string => (
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
-);
-
-const getMatchTokens = (value: string): string[] => (
-  normalizeMatchText(value)
-    .split(" ")
-    .filter(Boolean)
-);
-
-const getLevenshteinDistance = (leftValue: string, rightValue: string): number => {
-  const left = Array.from(leftValue);
-  const right = Array.from(rightValue);
-
-  if (!left.length) {
-    return right.length;
-  }
-
-  if (!right.length) {
-    return left.length;
-  }
-
-  let previousRow = Array.from({ length: right.length + 1 }, (_, index) => index);
-
-  left.forEach((leftChar, leftIndex) => {
-    const currentRow = [leftIndex + 1];
-
-    right.forEach((rightChar, rightIndex) => {
-      const insertion = currentRow[rightIndex] + 1;
-      const deletion = previousRow[rightIndex + 1] + 1;
-      const substitution = previousRow[rightIndex] + (leftChar === rightChar ? 0 : 1);
-      currentRow.push(Math.min(insertion, deletion, substitution));
-    });
-
-    previousRow = currentRow;
-  });
-
-  return previousRow[right.length];
-};
-
-const getTextMatchScore = (sourceValue: string, candidateValue: string): number => {
-  const source = normalizeMatchText(sourceValue);
-  const candidate = normalizeMatchText(candidateValue);
-
-  if (!source || !candidate) {
-    return 0;
-  }
-
-  if (source === candidate) {
-    return 1000;
-  }
-
-  const sourceTokens = new Set(getMatchTokens(source));
-  const candidateTokens = new Set(getMatchTokens(candidate));
-  const sharedTokenCount = Array.from(sourceTokens).filter((token) => candidateTokens.has(token)).length;
-  const tokenScore = sharedTokenCount
-    ? (sharedTokenCount / Math.max(sourceTokens.size, candidateTokens.size)) * 600
-    : 0;
-  const containsScore = source.includes(candidate) || candidate.includes(source)
-    ? (Math.min(source.length, candidate.length) / Math.max(source.length, candidate.length)) * 800
-    : 0;
-  const distance = getLevenshteinDistance(source, candidate);
-  const distanceScore = (1 - (distance / Math.max(source.length, candidate.length))) * 500;
-
-  return Math.max(tokenScore, containsScore, distanceScore);
-};
-
 const getFavoriteMatchValues = <TFavorite extends ScraperSourceFavoriteDialogRecord>(
   favorite: TFavorite,
 ): string[] => {
@@ -128,7 +60,7 @@ const getFavoriteMatchValues = <TFavorite extends ScraperSourceFavoriteDialogRec
   const seenValues = new Set<string>();
 
   return values.filter((value) => {
-    const normalizedValue = normalizeMatchText(value);
+    const normalizedValue = normalizeFuzzyText(value);
     if (!normalizedValue || seenValues.has(normalizedValue)) {
       return false;
     }
@@ -143,7 +75,7 @@ const findClosestFavorite = <TFavorite extends ScraperSourceFavoriteDialogRecord
   sourceNames: string[],
 ): TFavorite | null => {
   const normalizedSourceNames = sourceNames
-    .map((name) => normalizeMatchText(name))
+    .map((name) => normalizeFuzzyText(name))
     .filter(Boolean);
 
   if (!favorites.length || !normalizedSourceNames.length) {
@@ -154,7 +86,7 @@ const findClosestFavorite = <TFavorite extends ScraperSourceFavoriteDialogRecord
     const favoriteScore = getFavoriteMatchValues(favorite).reduce((bestScore, favoriteName) => (
       Math.max(
         bestScore,
-        ...normalizedSourceNames.map((sourceName) => getTextMatchScore(sourceName, favoriteName)),
+        ...normalizedSourceNames.map((sourceName) => getFuzzyTextMatchScore(sourceName, favoriteName)),
       )
     ), 0);
 
