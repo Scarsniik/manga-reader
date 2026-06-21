@@ -53,6 +53,11 @@ const openExternalNavigation = async (url: string) => {
 };
 
 const startOcrPrewarmInBackground = () => {
+    if (!app.isPackaged) {
+        console.info("[ocr] Engine prewarm skipped in development");
+        return;
+    }
+
     setTimeout(() => {
         const { prewarmOcrEngine } = require("./handlers/ocr/index") as typeof import("./handlers/ocr/index");
 
@@ -83,6 +88,8 @@ const createWindow = () => {
             contextIsolation: true,
             webSecurity: false,
             sandbox: false,
+            // Keep the hidden startup renderer responsive while waiting for ready-to-show.
+            backgroundThrottling: app.isPackaged,
         },
         autoHideMenuBar: app.isPackaged, // Cache la barre de menu en prod
     });

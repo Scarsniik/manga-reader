@@ -7,7 +7,7 @@ export const normalizeFuzzyText = (value: string): string => (
     .trim()
 );
 
-const getMatchTokens = (value: string): string[] => (
+export const getFuzzyTextTokens = (value: string): string[] => (
   normalizeFuzzyText(value)
     .split(" ")
     .filter(Boolean)
@@ -43,7 +43,15 @@ const getLevenshteinDistance = (leftValue: string, rightValue: string): number =
   return previousRow[right.length];
 };
 
-export const getFuzzyTextMatchScore = (sourceValue: string, candidateValue: string): number => {
+type FuzzyTextMatchOptions = {
+  ignoredTokens?: ReadonlySet<string>;
+};
+
+export const getFuzzyTextMatchScore = (
+  sourceValue: string,
+  candidateValue: string,
+  options: FuzzyTextMatchOptions = {},
+): number => {
   const source = normalizeFuzzyText(sourceValue);
   const candidate = normalizeFuzzyText(candidateValue);
 
@@ -55,17 +63,33 @@ export const getFuzzyTextMatchScore = (sourceValue: string, candidateValue: stri
     return 1000;
   }
 
-  const sourceTokens = new Set(getMatchTokens(source));
-  const candidateTokens = new Set(getMatchTokens(candidate));
+  const sourceTokenValues = getFuzzyTextTokens(source)
+    .filter((token) => !options.ignoredTokens?.has(token));
+  const candidateTokenValues = getFuzzyTextTokens(candidate)
+    .filter((token) => !options.ignoredTokens?.has(token));
+  const comparableSource = sourceTokenValues.join(" ");
+  const comparableCandidate = candidateTokenValues.join(" ");
+  if (!comparableSource || !comparableCandidate) {
+    return 0;
+  }
+
+  const sourceTokens = new Set(sourceTokenValues);
+  const candidateTokens = new Set(candidateTokenValues);
   const sharedTokenCount = Array.from(sourceTokens).filter((token) => candidateTokens.has(token)).length;
   const tokenScore = sharedTokenCount
     ? (sharedTokenCount / Math.max(sourceTokens.size, candidateTokens.size)) * 600
     : 0;
-  const containsScore = source.includes(candidate) || candidate.includes(source)
-    ? (Math.min(source.length, candidate.length) / Math.max(source.length, candidate.length)) * 800
+  const containsScore = comparableSource.includes(comparableCandidate)
+    || comparableCandidate.includes(comparableSource)
+    ? (
+      Math.min(comparableSource.length, comparableCandidate.length)
+      / Math.max(comparableSource.length, comparableCandidate.length)
+    ) * 800
     : 0;
-  const distance = getLevenshteinDistance(source, candidate);
-  const distanceScore = (1 - (distance / Math.max(source.length, candidate.length))) * 500;
+  const distance = getLevenshteinDistance(comparableSource, comparableCandidate);
+  const distanceScore = (
+    1 - (distance / Math.max(comparableSource.length, comparableCandidate.length))
+  ) * 500;
 
   return Math.max(tokenScore, containsScore, distanceScore);
 };

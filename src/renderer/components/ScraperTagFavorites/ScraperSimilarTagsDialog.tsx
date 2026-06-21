@@ -1,18 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ScraperRecord, ScraperTagFavoriteRecord } from "@/shared/scraper";
-import { StarIcon } from "@/renderer/components/icons";
+import { CloseXIcon, MagnifyingGlassIcon, StarIcon } from "@/renderer/components/icons";
 import { useModal } from "@/renderer/hooks/useModal";
 import {
-  getScraperTagFavoriteSourceKey,
   removeScraperTagFavoriteSource,
   saveScraperTagFavorite,
   useScraperTagFavorites,
 } from "@/renderer/stores/scraperTagFavorites";
+import { findScraperTagFavoriteSource } from "@/renderer/utils/scraperTagFavorites";
 import {
   searchSimilarScraperTags,
   type ScraperSimilarTagResult,
   type ScraperSimilarTagSearchResult,
 } from "@/renderer/utils/scraperSimilarTags";
+import { normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
 import "@/renderer/components/ScraperTagFavorites/similar-tags.scss";
 
 type Props = {
@@ -30,11 +31,22 @@ const EMPTY_SEARCH_RESULT: ScraperSimilarTagSearchResult = {
   failedScraperCount: 0,
 };
 
-const buildFavoriteSourceKeySet = (favorite: ScraperTagFavoriteRecord | null): Set<string> => (
-  new Set((favorite?.sources ?? []).map((source) => (
-    getScraperTagFavoriteSourceKey(source.scraperId, source.tagUrl)
-  )).filter(Boolean))
-);
+const findFavoriteSourceForResult = (
+  favorite: ScraperTagFavoriteRecord | null,
+  result: ScraperSimilarTagResult,
+) => {
+  if (!favorite) {
+    return null;
+  }
+
+  return findScraperTagFavoriteSource(
+    favorite.sources
+      .filter((source) => source.scraperId === result.scraperId)
+      .map((source) => ({ favorite, source })),
+    result.tagName,
+    result.tagUrl,
+  );
+};
 
 export default function ScraperSimilarTagsDialog({
   favoriteId,
@@ -46,15 +58,25 @@ export default function ScraperSimilarTagsDialog({
   const [searchResult, setSearchResult] = useState(EMPTY_SEARCH_RESULT);
   const [loading, setLoading] = useState(true);
   const [pendingResultKeys, setPendingResultKeys] = useState<Set<string>>(new Set());
+  const [filterQuery, setFilterQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const favorite = useMemo(
     () => favorites.find((candidate) => candidate.id === favoriteId) ?? null,
     [favoriteId, favorites],
   );
-  const favoriteSourceKeys = useMemo(
-    () => buildFavoriteSourceKeySet(favorite),
-    [favorite],
+  const normalizedFilterQuery = useMemo(
+    () => normalizeFuzzyText(filterQuery),
+    [filterQuery],
   );
+  const visibleResults = useMemo(() => {
+    if (!normalizedFilterQuery) {
+      return searchResult.results;
+    }
+
+    return searchResult.results.filter((result) => (
+      normalizeFuzzyText(`${result.tagName} ${result.scraperName}`).includes(normalizedFilterQuery)
+    ));
+  }, [normalizedFilterQuery, searchResult.results]);
   const searchTermsKey = searchTerms.join("\u0000");
 
   useEffect(() => {
@@ -104,17 +126,16 @@ export default function ScraperSimilarTagsDialog({
       return;
     }
 
-    const sourceKey = getScraperTagFavoriteSourceKey(result.scraperId, result.tagUrl);
-    const isFavorite = favoriteSourceKeys.has(sourceKey);
+    const favoriteSource = findFavoriteSourceForResult(favorite, result);
     setResultPending(result.key, true);
     setError(null);
 
     try {
-      if (isFavorite) {
+      if (favoriteSource) {
         await removeScraperTagFavoriteSource({
           favoriteId: favorite.id,
           scraperId: result.scraperId,
-          tagUrl: result.tagUrl,
+          tagUrl: favoriteSource.source.tagUrl,
         });
       } else {
         await saveScraperTagFavorite({
@@ -135,12 +156,14 @@ export default function ScraperSimilarTagsDialog({
     } finally {
       setResultPending(result.key, false);
     }
-  }, [favorite, favoriteSourceKeys, pendingResultKeys, setResultPending]);
+  }, [favorite, pendingResultKeys, setResultPending]);
 
   const cacheSummary = `${searchResult.cachedScraperCount}/${searchResult.configuredScraperCount} liste(s) chargee(s)`;
-  const resultSummary = searchResult.totalMatchCount > searchResult.results.length
-    ? `${searchResult.results.length} premier(s) tag(s) sur ${searchResult.totalMatchCount}`
-    : `${searchResult.results.length} tag(s) similaire(s)`;
+  const resultSummary = normalizedFilterQuery
+    ? `${visibleResults.length}/${searchResult.results.length} tag(s) visible(s)`
+    : searchResult.totalMatchCount > searchResult.results.length
+      ? `${searchResult.results.length} premier(s) tag(s) sur ${searchResult.totalMatchCount}`
+      : `${searchResult.results.length} tag(s) similaire(s)`;
 
   return (
     <div className="scraper-similar-tags-dialog">
@@ -166,13 +189,36 @@ export default function ScraperSimilarTagsDialog({
       ) : null}
       {error ? <div className="scraper-similar-tags-dialog__notice is-error">{error}</div> : null}
 
+      {!loading && searchResult.results.length ? (
+        <label className="scraper-similar-tags-dialog__filter">
+          <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+          <input
+            type="search"
+            value={filterQuery}
+            onChange={(event) => setFilterQuery(event.currentTarget.value)}
+            placeholder="Filtrer par tag ou scrapper"
+            aria-label="Filtrer les tags similaires"
+          />
+          {filterQuery ? (
+            <button
+              type="button"
+              onClick={() => setFilterQuery("")}
+              aria-label="Effacer le filtre"
+              title="Effacer le filtre"
+            >
+              <CloseXIcon aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
+        </label>
+      ) : null}
+
       {loading ? (
         <div className="scraper-similar-tags-dialog__empty">Recherche dans les caches de tags...</div>
-      ) : searchResult.results.length ? (
+      ) : visibleResults.length ? (
         <div className="scraper-similar-tags-dialog__list">
-          {searchResult.results.map((result) => {
-            const sourceKey = getScraperTagFavoriteSourceKey(result.scraperId, result.tagUrl);
-            const isFavorite = favoriteSourceKeys.has(sourceKey);
+          {visibleResults.map((result) => {
+            const favoriteSource = findFavoriteSourceForResult(favorite, result);
+            const isFavorite = Boolean(favoriteSource);
             const pending = pendingResultKeys.has(result.key);
             const actionLabel = isFavorite
               ? `Retirer ${result.tagName} de ce favori`
@@ -198,6 +244,10 @@ export default function ScraperSimilarTagsDialog({
               </div>
             );
           })}
+        </div>
+      ) : searchResult.results.length ? (
+        <div className="scraper-similar-tags-dialog__empty">
+          Aucun tag ne correspond au filtre actuel.
         </div>
       ) : (
         <div className="scraper-similar-tags-dialog__empty">

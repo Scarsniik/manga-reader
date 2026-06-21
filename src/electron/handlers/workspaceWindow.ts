@@ -374,6 +374,7 @@ const createWorkspaceWindow = (): BrowserWindow => {
             contextIsolation: true,
             webSecurity: false,
             sandbox: false,
+            backgroundThrottling: app.isPackaged,
         },
         autoHideMenuBar: app.isPackaged,
     });

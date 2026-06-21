@@ -44,6 +44,70 @@
   color: #ffc2c2;
 }
 
+.scraper-similar-tags-dialog__filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  background: #0d1420;
+  color: #9ca3af;
+}
+
+.scraper-similar-tags-dialog__filter:focus-within {
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}
+
+.scraper-similar-tags-dialog__filter > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.scraper-similar-tags-dialog__filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f3f4f6;
+  font: inherit;
+}
+
+.scraper-similar-tags-dialog__filter input::placeholder {
+  color: #7f8998;
+}
+
+.scraper-similar-tags-dialog__filter button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.scraper-similar-tags-dialog__filter button:hover,
+.scraper-similar-tags-dialog__filter button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f4f6;
+  outline: none;
+}
+
+.scraper-similar-tags-dialog__filter button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .scraper-similar-tags-dialog__list {
   display: flex;
   flex-direction: column;

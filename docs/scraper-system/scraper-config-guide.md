@@ -348,6 +348,8 @@ de validation manuelle dans ce mode, l'enregistrement marque le module comme val
 Au runtime, le bouton d'actualisation scrape toutes les pages detectees jusqu'a epuisement ou jusqu'a
 la limite de securite de 1000 pages. Si `urlTemplate` contient une variable de page, le runtime teste
 les pages successives et suit aussi les liens trouves dans `nextPageSelector` et `paginationLinkSelector`.
+Apres au moins une page extraite, une reponse HTTP 404 sur une page suivante est consideree comme une
+fin normale de pagination : les tags deja recuperes sont conserves et enregistres dans le cache.
 
 ### Selecteurs
 

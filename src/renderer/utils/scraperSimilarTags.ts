@@ -3,7 +3,11 @@ import type {
   ScraperTagListCacheRecord,
   ScraperTagListItem,
 } from "@/shared/scraper";
-import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
+import {
+  getFuzzyTextMatchScore,
+  getFuzzyTextTokens,
+  normalizeFuzzyText,
+} from "@/renderer/utils/fuzzyText";
 import {
   getScraperFeature,
   isScraperFeatureConfigured,
@@ -31,19 +35,48 @@ type ScraperTagListCacheApi = {
   getScraperTagListCache?: (scraperId: string) => Promise<ScraperTagListCacheRecord | null>;
 };
 
-const MINIMUM_MATCH_SCORE = 250;
+const MINIMUM_MATCH_SCORE = 300;
 const MAXIMUM_RESULT_COUNT = 100;
+const MAXIMUM_RESULTS_PER_SCRAPER = 10;
 
 const getTagTarget = (tag: ScraperTagListItem): string => (
   String(tag.url ?? "").trim() || String(tag.name ?? "").trim()
 );
 
-const getBestMatchScore = (searchTerms: string[], tagName: string): number => (
+const getBestMatchScore = (
+  searchTerms: string[],
+  tagName: string,
+  ignoredTokens: ReadonlySet<string>,
+): number => (
   searchTerms.reduce(
-    (bestScore, searchTerm) => Math.max(bestScore, getFuzzyTextMatchScore(searchTerm, tagName)),
+    (bestScore, searchTerm) => Math.max(
+      bestScore,
+      getFuzzyTextMatchScore(searchTerm, tagName, { ignoredTokens }),
+    ),
     0,
   )
 );
+
+const getIgnoredSearchTokens = (
+  cache: ScraperTagListCacheRecord,
+  searchTerms: string[],
+): Set<string> => {
+  const searchTokens = new Set(searchTerms.flatMap(getFuzzyTextTokens));
+  const matchCounts = new Map<string, number>();
+
+  cache.tags.forEach((tag) => {
+    const tagTokens = new Set(getFuzzyTextTokens(tag.name));
+    searchTokens.forEach((token) => {
+      if (tagTokens.has(token)) {
+        matchCounts.set(token, (matchCounts.get(token) ?? 0) + 1);
+      }
+    });
+  });
+
+  return new Set(Array.from(matchCounts.entries())
+    .filter(([, matchCount]) => matchCount >= MAXIMUM_RESULTS_PER_SCRAPER)
+    .map(([token]) => token));
+};
 
 const buildScraperResults = (
   scraper: ScraperRecord,
@@ -51,22 +84,23 @@ const buildScraperResults = (
   searchTerms: string[],
 ): ScraperSimilarTagResult[] => {
   const seenTargets = new Set<string>();
+  const ignoredTokens = getIgnoredSearchTokens(cache, searchTerms);
 
-  return cache.tags.reduce<ScraperSimilarTagResult[]>((results, tag) => {
+  const results = cache.tags.reduce<ScraperSimilarTagResult[]>((nextResults, tag) => {
     const tagName = String(tag.name ?? "").trim();
     const tagUrl = getTagTarget(tag);
     const normalizedTarget = tagUrl.toLowerCase();
     if (!tagName || !tagUrl || !normalizedTarget || seenTargets.has(normalizedTarget)) {
-      return results;
+      return nextResults;
     }
 
     seenTargets.add(normalizedTarget);
-    const score = getBestMatchScore(searchTerms, tagName);
+    const score = getBestMatchScore(searchTerms, tagName, ignoredTokens);
     if (score < MINIMUM_MATCH_SCORE) {
-      return results;
+      return nextResults;
     }
 
-    results.push({
+    nextResults.push({
       key: `${scraper.id}::${normalizedTarget}`,
       scraperId: scraper.id,
       scraperName: scraper.name,
@@ -74,8 +108,10 @@ const buildScraperResults = (
       tagUrl,
       score,
     });
-    return results;
+    return nextResults;
   }, []);
+
+  return sortSimilarTagResults(results).slice(0, MAXIMUM_RESULTS_PER_SCRAPER);
 };
 
 const sortSimilarTagResults = (results: ScraperSimilarTagResult[]): ScraperSimilarTagResult[] => (

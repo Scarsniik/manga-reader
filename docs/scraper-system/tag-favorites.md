@@ -52,8 +52,13 @@ L'action `Tags similaires` recherche les noms proches du favori et de ses source
 chaque scraper dont le module `Liste de tags` est configure. La modale classe les correspondances
 fuzzy par pertinence et affiche le nom du tag avec son scraper. Une etoile jaune pleine indique que
 la source appartient deja au favori ouvert. L'etoile permet de rattacher directement une nouvelle
-source a ce favori ou de l'en retirer. Les scrapers sans cache de tags sont signales et doivent avoir
-alimente leur liste avant de pouvoir participer a cette recherche.
+source a ce favori ou de l'en retirer. Un champ au-dessus des resultats permet de filtrer localement
+la liste par nom de tag ou de scraper. Les scrapers sans cache de tags sont signales et doivent avoir
+alimente leur liste avant de pouvoir participer a cette recherche. Pour eviter les correspondances
+trop larges, un mot present dans au moins 10 tags d'un meme scraper est retire du calcul fuzzy,
+et seuls les 10 meilleurs resultats de chaque scraper sont conserves. Les noms identiques et les
+correspondances exactes sur le nom complet restent prioritaires, et les rapprochements
+orthographiques trop faibles sont ecartes par un seuil minimal.
 
 Par defaut, les cards non vues sont affichees en premier sur une page de tag favori. Ce tri utilise
 le meme etat que le liseret vert des cards. L'option peut etre desactivee dans les parametres.

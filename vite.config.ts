@@ -25,6 +25,10 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  optimizeDeps: {
+    // Do not block initial module responses while Vite crawls the full renderer graph.
+    holdUntilCrawlEnd: false,
+  },
   build: {
     outDir: 'dist/renderer',
     emptyOutDir: false,

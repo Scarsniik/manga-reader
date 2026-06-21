@@ -69,12 +69,26 @@ type ContextMenuState = {
 type TagListSortOption = "alpha-asc" | "alpha-desc" | "count-desc" | "count-asc";
 
 const MAX_TAG_LIST_PAGES = 1000;
+const TAG_LIST_PAGINATION_END_STATUS = 404;
 const DEFAULT_TAG_LIST_VIEW_SETTINGS: Required<ScraperTagListViewSettings> = {
   sortMode: "alpha",
   sortDirection: "asc",
   minCount: null,
   maxCount: null,
 };
+
+class ScraperTagListPageNotFoundError extends Error {
+  readonly status = TAG_LIST_PAGINATION_END_STATUS;
+
+  constructor() {
+    super(`La liste de tags a repondu avec le code HTTP ${TAG_LIST_PAGINATION_END_STATUS}.`);
+    this.name = "ScraperTagListPageNotFoundError";
+  }
+}
+
+const isScraperTagListPageNotFoundError = (
+  error: unknown,
+): error is ScraperTagListPageNotFoundError => error instanceof ScraperTagListPageNotFoundError;
 
 const getTagListApi = (): TagListApi => (
   (window.api ?? {}) as TagListApi
@@ -554,6 +568,10 @@ export default function ScraperTagListView({
       targetUrl,
     });
 
+    if (documentResult?.status === TAG_LIST_PAGINATION_END_STATUS) {
+      throw new ScraperTagListPageNotFoundError();
+    }
+
     if (!documentResult?.ok || !documentResult.html) {
       throw new Error(
         documentResult?.error
@@ -597,6 +615,8 @@ export default function ScraperTagListView({
     const usesTemplatePaging = hasTagListPagePlaceholder(config);
     let firstSourceUrl = "";
     let pageLimitReached = false;
+    let paginationEndedWithNotFound = false;
+    let successfulPageCount = 0;
 
     const enqueueUrl = (url: string | undefined) => {
       const normalizedUrl = normalizeVisitedUrl(url ?? "");
@@ -624,6 +644,7 @@ export default function ScraperTagListView({
       onRuntimeMessage(`Scraping des tags : ${visitedUrls.size} page(s), ${tagsByKey.size} tag(s).`);
 
       const page = await fetchTagListPage(normalizedUrl);
+      successfulPageCount += 1;
       firstSourceUrl = firstSourceUrl || page.currentPageUrl;
       const newCount = mergeTagItems(tagsByKey, page.items);
       enqueueUrl(page.nextPageUrl);
@@ -654,6 +675,14 @@ export default function ScraperTagListView({
               throw error;
             }
 
+            if (isScraperTagListPageNotFoundError(error)) {
+              if (tagsByKey.size === 0) {
+                throw error;
+              }
+
+              paginationEndedWithNotFound = true;
+              queuedUrls.length = 0;
+            }
             break;
           }
 
@@ -665,13 +694,27 @@ export default function ScraperTagListView({
         enqueueUrl(resolveScraperTagListTargetUrl(scraper.baseUrl, config, { pageIndex: 0 }));
       }
 
-      while (queuedUrls.length > 0 && visitedUrls.size < MAX_TAG_LIST_PAGES) {
+      while (
+        !paginationEndedWithNotFound
+        && queuedUrls.length > 0
+        && visitedUrls.size < MAX_TAG_LIST_PAGES
+      ) {
         const nextUrl = queuedUrls.shift();
         if (!nextUrl) {
           continue;
         }
 
-        await processTargetUrl(nextUrl);
+        try {
+          await processTargetUrl(nextUrl);
+        } catch (error) {
+          if (!isScraperTagListPageNotFoundError(error) || tagsByKey.size === 0) {
+            throw error;
+          }
+
+          paginationEndedWithNotFound = true;
+          queuedUrls.length = 0;
+          break;
+        }
         if (requestId !== requestIdRef.current) {
           return;
         }
@@ -703,7 +746,8 @@ export default function ScraperTagListView({
       setCacheRecord(savedRecord);
       setTags(sortTagsByName(savedRecord.tags));
       onRuntimeMessage([
-        `Liste de tags enregistree : ${savedRecord.tags.length} tag(s) depuis ${visitedUrls.size} page(s).`,
+        `Liste de tags enregistree : ${savedRecord.tags.length} tag(s) depuis ${successfulPageCount} page(s).`,
+        paginationEndedWithNotFound ? "Fin de pagination detectee (HTTP 404)." : "",
         pageLimitReached ? `Limite de ${MAX_TAG_LIST_PAGES} pages atteinte.` : "",
       ].filter(Boolean).join(" "));
     } catch (error) {

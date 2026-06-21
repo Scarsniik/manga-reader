@@ -12,24 +12,32 @@ function Test-ViteReady {
         [string]$Url
     )
 
-    $client = $null
+    $request = $null
+    $response = $null
+    $reader = $null
     try {
-        $uri = [Uri]$Url
-        $port = if ($uri.Port -gt 0) { $uri.Port } elseif ($uri.Scheme -eq 'https') { 443 } else { 80 }
-        $client = [System.Net.Sockets.TcpClient]::new()
-        $connectTask = $client.ConnectAsync($uri.Host, $port)
-        if (-not $connectTask.Wait(1000)) {
+        $request = [System.Net.HttpWebRequest]::Create($Url)
+        $request.Timeout = 2000
+        $request.ReadWriteTimeout = 2000
+        $request.Proxy = $null
+        $response = $request.GetResponse()
+        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) {
             return $false
         }
 
-        return $client.Connected -and -not $connectTask.IsFaulted -and -not $connectTask.IsCanceled
+        $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+        $content = $reader.ReadToEnd()
+        return $content.Contains('/src/renderer/index.tsx')
     }
     catch {
         return $false
     }
     finally {
-        if ($client) {
-            $client.Dispose()
+        if ($reader) {
+            $reader.Dispose()
+        }
+        if ($response) {
+            $response.Dispose()
         }
     }
 }
