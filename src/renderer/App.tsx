@@ -19,6 +19,9 @@ const loadDefaultComponent = async (loader: () => Promise<unknown>): Promise<Def
 
 const Reader = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Reader/Reader.js')));
 const WorkspaceView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Workspace/WorkspaceView.js')));
+const SelectorAssistantView = React.lazy(() => (
+    loadDefaultComponent(() => import('@/renderer/components/SelectorAssistant/SelectorAssistantView.js'))
+));
 
 const RouteLoadingFallback = () => (
     <div className="app-route-loading" aria-label="Chargement de la vue" aria-busy="true" />
@@ -38,6 +41,7 @@ const App: React.FC = () => {
                             <Route path="/" element={<Home />} />
                             <Route path="/reader" element={<Reader />} />
                             <Route path="/workspace" element={<WorkspaceView />} />
+                            <Route path="/selector-assistant" element={<SelectorAssistantView />} />
                         </Routes>
                     </React.Suspense>
                 </HashRouter>

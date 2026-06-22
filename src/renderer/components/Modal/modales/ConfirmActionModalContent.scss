@@ -21,3 +21,85 @@
   font-size: 13px;
   line-height: 1.45;
 }
+
+.confirm-action-modal__checkbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border: 1px solid #343d49;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #141a21, #10151b);
+  color: #d6dee8;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  user-select: none;
+}
+
+.confirm-action-modal__checkbox input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.confirm-action-modal__checkbox-control {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border: 1px solid #596777;
+  border-radius: 6px;
+  background: #0b0f14;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.confirm-action-modal__checkbox-control::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  opacity: 0;
+  transform: rotate(45deg) scale(0.6);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.confirm-action-modal__checkbox:hover {
+  border-color: #526477;
+  background: linear-gradient(135deg, #18222d, #121920);
+}
+
+.confirm-action-modal__checkbox:has(input:checked) {
+  border-color: rgba(77, 163, 255, 0.65);
+  background: linear-gradient(135deg, rgba(32, 72, 110, 0.72), rgba(20, 42, 64, 0.78));
+  box-shadow: inset 0 0 0 1px rgba(77, 163, 255, 0.08);
+}
+
+.confirm-action-modal__checkbox input:checked + .confirm-action-modal__checkbox-control {
+  border-color: #4da3ff;
+  background: linear-gradient(135deg, #4da3ff, #2878c6);
+  transform: scale(1.04);
+}
+
+.confirm-action-modal__checkbox input:checked + .confirm-action-modal__checkbox-control::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.confirm-action-modal__checkbox input:focus-visible + .confirm-action-modal__checkbox-control {
+  outline: 2px solid #8ac5ff;
+  outline-offset: 3px;
+}
+
+.confirm-action-modal__checkbox-label {
+  flex: 1;
+}

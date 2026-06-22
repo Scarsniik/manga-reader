@@ -32,6 +32,19 @@ import type {
 } from './history';
 import type { JapaneseRomanizationRequest } from "../shared/japaneseRomanization";
 import type { JapaneseInflectionRequest } from "../shared/japaneseInflection";
+import type {
+    OpenSelectorAssistantRequest,
+    SelectorAssistantAppliedValue,
+    SelectorAssistantEvaluationRequest,
+    SelectorAssistantNavigationCommand,
+    SelectorAssistantNavigationRequest,
+    SelectorAssistantNavigationResponse,
+    SelectorAssistantNavigationState,
+    SelectorAssistantPageCommand,
+    SelectorAssistantPageEvent,
+    SelectorAssistantPreviewMode,
+    SelectorAssistantSessionSnapshot,
+} from "../shared/selectorAssistant";
 
 type WindowState = {
     isFocused: boolean;
@@ -136,6 +149,8 @@ type WorkspaceTargetListener = (target: WorkspaceTarget, options?: WorkspaceOpen
 
 const workspaceTargetListeners = new Set<WorkspaceTargetListener>();
 const queuedWorkspaceTargets: WorkspaceOpenTargetPayload[] = [];
+const selectorAssistantNavigationListeners = new Set<(request: SelectorAssistantNavigationRequest) => void>();
+const queuedSelectorAssistantNavigationRequests: SelectorAssistantNavigationRequest[] = [];
 
 const onWindowStateChanged = (callback: WindowStateChangeListener) => {
     const handler = (_event: IpcRendererEvent, state: WindowState) => {
@@ -160,6 +175,22 @@ const onWorkspaceOpenTarget = (callback: WorkspaceTargetListener) => {
     };
 };
 
+const createIpcSubscription = <T>(channel: string, callback: (payload: T) => void) => {
+    const handler = (_event: IpcRendererEvent, payload: T) => callback(payload);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+};
+
+const onSelectorAssistantNavigationRequest = (
+    callback: (request: SelectorAssistantNavigationRequest) => void,
+) => {
+    selectorAssistantNavigationListeners.add(callback);
+    queuedSelectorAssistantNavigationRequests
+        .splice(0, queuedSelectorAssistantNavigationRequests.length)
+        .forEach(callback);
+    return () => selectorAssistantNavigationListeners.delete(callback);
+};
+
 const normalizeWorkspaceOpenTargetPayload = (payload: WorkspaceTarget | WorkspaceOpenTargetPayload): WorkspaceOpenTargetPayload => {
     if (payload && typeof payload === "object" && "target" in payload) {
         return payload as WorkspaceOpenTargetPayload;
@@ -182,6 +213,17 @@ ipcRenderer.on("workspace-open-target", (_event: IpcRendererEvent, payload: Work
     }
 
     workspaceTargetListeners.forEach((listener) => listener(normalizedPayload.target, normalizedPayload.options));
+});
+
+ipcRenderer.on("selector-assistant-navigation-request", (
+    _event: IpcRendererEvent,
+    request: SelectorAssistantNavigationRequest,
+) => {
+    if (selectorAssistantNavigationListeners.size === 0) {
+        queuedSelectorAssistantNavigationRequests.push(request);
+        return;
+    }
+    selectorAssistantNavigationListeners.forEach((listener) => listener(request));
 });
 
 ipcRenderer.on('mangas-updated', () => {
@@ -292,6 +334,49 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke("workspace-open-target", target, options)
     ),
     onWorkspaceOpenTarget,
+    openSelectorAssistant: (request: OpenSelectorAssistantRequest) => (
+        ipcRenderer.invoke("selector-assistant-open", request)
+    ),
+    closeSelectorAssistant: (formSessionId: string) => (
+        ipcRenderer.invoke("selector-assistant-close", formSessionId)
+    ),
+    getSelectorAssistantSession: () => ipcRenderer.invoke("selector-assistant-get-session"),
+    setSelectorAssistantBounds: (bounds: { x: number; y: number; width: number; height: number }) => (
+        ipcRenderer.invoke("selector-assistant-set-bounds", bounds)
+    ),
+    setSelectorAssistantMode: (mode: SelectorAssistantPreviewMode) => (
+        ipcRenderer.invoke("selector-assistant-set-mode", mode)
+    ),
+    respondSelectorAssistantNavigation: (response: SelectorAssistantNavigationResponse) => (
+        ipcRenderer.invoke("selector-assistant-navigation-response", response)
+    ),
+    getSelectorAssistantNavigationState: () => ipcRenderer.invoke("selector-assistant-navigation-state"),
+    navigateSelectorAssistant: (command: SelectorAssistantNavigationCommand) => (
+        ipcRenderer.invoke("selector-assistant-navigate", command)
+    ),
+    sendSelectorAssistantPageCommand: (
+        mode: SelectorAssistantPreviewMode,
+        command: SelectorAssistantPageCommand,
+    ) => ipcRenderer.invoke("selector-assistant-page-command", mode, command),
+    evaluateSelectorAssistant: (request: SelectorAssistantEvaluationRequest) => (
+        ipcRenderer.invoke("selector-assistant-evaluate", request)
+    ),
+    applySelectorAssistantValue: (value: SelectorAssistantAppliedValue) => (
+        ipcRenderer.invoke("selector-assistant-apply", value)
+    ),
+    onSelectorAssistantSessionUpdated: (callback: (snapshot: SelectorAssistantSessionSnapshot) => void) => (
+        createIpcSubscription("selector-assistant-session-updated", callback)
+    ),
+    onSelectorAssistantPageEvent: (callback: (event: SelectorAssistantPageEvent) => void) => (
+        createIpcSubscription("selector-assistant-page-event", callback)
+    ),
+    onSelectorAssistantNavigationRequest,
+    onSelectorAssistantNavigationState: (callback: (state: SelectorAssistantNavigationState) => void) => (
+        createIpcSubscription("selector-assistant-navigation-state", callback)
+    ),
+    onSelectorAssistantValueApplied: (callback: (value: SelectorAssistantAppliedValue) => void) => (
+        createIpcSubscription("selector-assistant-value-applied", callback)
+    ),
     getHistoryRecords: () => ipcRenderer.invoke("get-history-records"),
     recordReadingHistory: (request: RecordReadingHistoryRequest) => ipcRenderer.invoke("record-reading-history", request),
     recordDetailsHistory: (request: RecordDetailsHistoryRequest) => ipcRenderer.invoke("record-details-history", request),

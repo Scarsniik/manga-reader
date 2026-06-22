@@ -38,6 +38,11 @@ cas, son statut reste `configured`. Il passe en `validated` uniquement si la der
 reussie correspond exactement a la configuration sauvegardee. Si la config change apres un test, il
 faut relancer la validation avant d'enregistrer pour garder le statut valide.
 
+Les sections de scraping proposent aussi un assistant visuel. Il utilise la configuration non
+enregistree et la valeur de test courante pour afficher la page, construire les selecteurs CSS a
+partir d'exemples positifs et negatifs, puis renvoyer chaque selecteur valide vers son champ. Son
+fonctionnement detaille est documente dans [`selector-assistant.md`](./selector-assistant.md).
+
 ## Acces HTTP
 
 La validation de source fait un `GET` sur le `baseUrl`, suit les redirections et garde le code HTTP,

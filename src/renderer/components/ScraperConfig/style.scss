@@ -1532,3 +1532,31 @@
     flex-direction: column;
   }
 }
+.selector-assistant-launcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(86, 145, 201, 0.45);
+  border-radius: 9px;
+  background: rgba(35, 67, 96, 0.25);
+
+  > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  span {
+    color: #aab8c7;
+    font-size: 0.82rem;
+  }
+
+  small {
+    grid-column: 1 / -1;
+    color: #ffabab;
+  }
+}

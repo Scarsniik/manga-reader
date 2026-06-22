@@ -7,6 +7,7 @@ import {
 import { extractScraperDetailsFromDocumentWithImageFallbacks } from "@/renderer/utils/scraperRuntime/detailsExtraction";
 import { hasRenderableDetails } from "@/renderer/utils/scraperRuntime/detailsRenderable";
 import { resolveScraperDetailsTargetUrl } from "@/renderer/utils/scraperRuntime/urlResolution";
+import { mergeScraperTagValuePairs } from "@/renderer/utils/scraperRuntime/tagValuePairs";
 import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import type {
   ScraperDocumentFetcher,
@@ -62,14 +63,10 @@ const mergeCardWithDetails = (
   ]);
   const fallbackLanguageCodes = uniqueTextValues(item.languageCodes ?? []);
   const nextLanguageCodes = languageCodes.length ? languageCodes : fallbackLanguageCodes;
-  const tags = uniqueTextValues([
-    ...(item.tags ?? []),
-    ...details.tags,
-  ]);
-  const tagUrls = uniqueTextValues([
-    ...(item.tagUrls ?? []),
-    ...details.tagUrls,
-  ]);
+  const tagValues = mergeScraperTagValuePairs(
+    { tags: item.tags, tagUrls: item.tagUrls },
+    { tags: details.tags, tagUrls: details.tagUrls },
+  );
 
   return {
     ...item,
@@ -77,8 +74,8 @@ const mergeCardWithDetails = (
     authorUrl: optionalText(item.authorUrl) || authorUrls[0],
     authorUrls: authorUrls.length ? authorUrls : item.authorUrls,
     authorNames: authorNames.length ? authorNames : item.authorNames,
-    tags: tags.length ? tags : item.tags,
-    tagUrls: tagUrls.length ? tagUrls : item.tagUrls,
+    tags: tagValues.tags.length ? tagValues.tags : item.tags,
+    tagUrls: tagValues.tagUrls.length ? tagValues.tagUrls : item.tagUrls,
     thumbnailUrl: optionalText(item.thumbnailUrl) || optionalText(details.cover),
     summary: optionalText(item.summary) || optionalText(details.description),
     pageCount: optionalText(item.pageCount) || optionalText(details.pageCount),

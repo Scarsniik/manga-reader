@@ -37,6 +37,12 @@ import {
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+import SelectorAssistantLauncher from '@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher';
+import useSelectorAssistant from '@/renderer/components/ScraperConfig/shared/useSelectorAssistant';
+import {
+  buildSelectorAssistantFields,
+  LANGUAGE_ASSISTANT_FIELDS,
+} from '@/renderer/components/ScraperConfig/shared/selectorAssistantFields';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import {
   extractScraperSearchPageFromDocument,
@@ -390,6 +396,81 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
     clearFeedback();
     clearFieldErrorsByPrefix('languageDetection.valueMappings.');
   }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
+
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: [listingNameSelectorField, ...scrapingFields, ...LANGUAGE_ASSISTANT_FIELDS],
+    valueFieldNames: [
+      listingNameSelectorFieldName,
+      ...scrapingFieldSelectorNames,
+      "languageSelector",
+      "processedLanguageSelector",
+    ],
+    values: {
+      ...getFormValueRecord(formValues),
+      languageSelector: formValues.languageDetection.languageSelector,
+      processedLanguageSelector: formValues.languageDetection.processedLanguageSelector,
+    },
+    scopeByFieldName: {
+      resultItemSelector: "resultListSelector",
+      titleSelector: "resultItemSelector",
+      detailUrlSelector: "resultItemSelector",
+      authorUrlSelector: "resultItemSelector",
+      thumbnailSelector: "resultItemSelector",
+      summarySelector: "resultItemSelector",
+      pageCountSelector: "resultItemSelector",
+      languageSelector: "resultItemSelector",
+      processedLanguageSelector: "resultItemSelector",
+    },
+    valueModeByFieldName: {
+      detailUrlSelector: "url",
+      authorUrlSelector: "url",
+      thumbnailSelector: "url",
+      nextPageSelector: "url",
+    },
+  }), [
+    formValues,
+    listingNameSelectorField,
+    listingNameSelectorFieldName,
+    scrapingFieldSelectorNames,
+    scrapingFields,
+  ]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if (fieldName === "languageSelector" || fieldName === "processedLanguageSelector") {
+      handleLanguageFieldSelectorChange(fieldName)({ kind: "css", value: selector });
+      return;
+    }
+    if (fieldName === listingNameSelectorFieldName || scrapingFieldSelectorNames.includes(fieldName)) {
+      handleFieldSelectorChange(fieldName as keyof TConfig & string)({ kind: "css", value: selector });
+      return;
+    }
+    setFormValues((previous) => ({ ...previous, [fieldName]: selector }) as TConfig);
+    clearFieldFeedback(fieldName);
+  }, [
+    clearFieldFeedback,
+    handleFieldSelectorChange,
+    handleLanguageFieldSelectorChange,
+    listingNameSelectorFieldName,
+    scrapingFieldSelectorNames,
+    setFormValues,
+  ]);
+  const selectorAssistant = useSelectorAssistant({
+    request: {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: texts.headerTitle,
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: currentConfig.urlStrategy === "template" ? {
+          fieldName: "urlTemplate",
+          label: urlTemplateField.label || "Pattern d'URL",
+          value: formValues.urlTemplate ?? "",
+        } : undefined,
+      },
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleCopySearchSelectors = useCallback(() => {
     if (!copiedSearchScrapingFields) {
@@ -757,6 +838,13 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
             <h4>Scraping</h4>
             <p>{texts.scrapingDescription}</p>
           </div>
+
+          <SelectorAssistantLauncher
+            opening={selectorAssistant.opening}
+            error={selectorAssistant.error}
+            disabled={validating || saving}
+            onOpen={() => void selectorAssistant.open()}
+          />
 
           <ScraperFieldSelectorField
             field={listingNameSelectorField}

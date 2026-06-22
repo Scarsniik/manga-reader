@@ -23,6 +23,9 @@ import { useScraperConfig } from "@/renderer/components/ScraperConfig/shared/Scr
 import useSaveScraperFeatureConfig from "@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig";
 import useScraperFeatureEditorState from "@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState";
 import useScraperUnsavedChangesGuard from "@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard";
+import SelectorAssistantLauncher from "@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher";
+import useSelectorAssistant from "@/renderer/components/ScraperConfig/shared/useSelectorAssistant";
+import { buildSelectorAssistantFields } from "@/renderer/components/ScraperConfig/shared/selectorAssistantFields";
 import TagListFeaturePreview from "@/renderer/components/ScraperConfig/tagList/TagListFeaturePreview";
 import {
   buildDocumentFailure,
@@ -267,6 +270,53 @@ export default function ScraperTagListFeatureEditor({
     }));
     clearFieldFeedback(fieldName);
   }, [clearFieldFeedback, setFormValues]);
+
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: SCRAPING_FIELDS,
+    valueFieldNames: TAG_LIST_FIELD_SELECTOR_NAMES,
+    values: getFormValueRecord(formValues),
+    scopeByFieldName: {
+      tagItemSelector: "tagListSelector",
+      tagNameSelector: "tagItemSelector",
+      tagUrlSelector: "tagItemSelector",
+      tagCountSelector: "tagItemSelector",
+    },
+    valueModeByFieldName: {
+      tagUrlSelector: "url",
+      nextPageSelector: "url",
+      paginationLinkSelector: "url",
+    },
+  }), [formValues]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if ((TAG_LIST_FIELD_SELECTOR_NAMES as readonly string[]).includes(fieldName)) {
+      handleFieldSelectorChange(fieldName as keyof TagListFeatureFormState & string)(
+        { kind: "css", value: selector },
+      );
+      return;
+    }
+    setFormValues((previous) => ({ ...previous, [fieldName]: selector }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, handleFieldSelectorChange, setFormValues]);
+  const selectorAssistant = useSelectorAssistant({
+    request: !isAutoCollectionMode
+      ? {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: "Configurer la liste de tags",
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: {
+          fieldName: "urlTemplate",
+          label: "Pattern d'URL de la liste de tags",
+          value: formValues.urlTemplate,
+        },
+      }
+      : null,
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleValidate = useCallback(async () => {
     const config = buildTagListConfig(formValues);
@@ -588,6 +638,13 @@ export default function ScraperTagListFeatureEditor({
                   Definis les selecteurs pour extraire le nom, le lien et le compteur de chaque tag.
                 </p>
               </div>
+
+              <SelectorAssistantLauncher
+                opening={selectorAssistant.opening}
+                error={selectorAssistant.error}
+                disabled={validating || saving}
+                onOpen={() => void selectorAssistant.open()}
+              />
 
               <ScraperConfigFieldGrid
                 fields={SCRAPING_FIELDS}

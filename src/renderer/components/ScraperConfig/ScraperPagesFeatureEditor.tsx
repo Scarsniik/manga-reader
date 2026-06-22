@@ -25,6 +25,9 @@ import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/Scr
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+import SelectorAssistantLauncher from '@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher';
+import useSelectorAssistant from '@/renderer/components/ScraperConfig/shared/useSelectorAssistant';
+import { buildSelectorAssistantFields } from '@/renderer/components/ScraperConfig/shared/selectorAssistantFields';
 import FakeReaderPreview from '@/renderer/components/ScraperConfig/pages/FakeReaderPreview';
 import {
   buildDocumentFailure,
@@ -261,6 +264,43 @@ export default function ScraperPagesFeatureEditor({
   const handleCheckboxChange = useCallback((fieldName: keyof ScraperPagesFeatureConfig) => (
     createCheckboxChangeHandler(fieldName)
   ), [createCheckboxChangeHandler]);
+
+  const pageSelectorFields = useMemo(() => [PAGE_LINK_SELECTOR_FIELD, PAGE_IMAGE_SELECTOR_FIELD], []);
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: pageSelectorFields,
+    valueFieldNames: ["pageLinkSelector", "pageImageSelector"],
+    values: { ...formValues },
+    valueModeByFieldName: {
+      pageLinkSelector: "url",
+      pageImageSelector: "url",
+    },
+  }), [formValues, pageSelectorFields]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if (fieldName === "urlTemplate") {
+      setFormValues((previous) => ({ ...previous, urlTemplate: selector }));
+      clearFieldFeedback(fieldName);
+      return;
+    }
+    handleFieldSelectorChange(fieldName as keyof ScraperPagesFeatureConfig)({ kind: "css", value: selector });
+  }, [clearFieldFeedback, handleFieldSelectorChange, setFormValues]);
+  const selectorAssistant = useSelectorAssistant({
+    request: {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: "Configurer les pages",
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: currentConfig.urlStrategy === "template" ? {
+          fieldName: "urlTemplate",
+          label: "Pattern d'URL des pages",
+          value: formValues.urlTemplate ?? "",
+        } : undefined,
+      },
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleValidate = useCallback(async () => {
     const config = buildPagesConfig(formValues);
@@ -757,6 +797,13 @@ export default function ScraperPagesFeatureEditor({
               vers une image.
             </p>
           </div>
+
+          <SelectorAssistantLauncher
+            opening={selectorAssistant.opening}
+            error={selectorAssistant.error}
+            disabled={validating || saving}
+            onOpen={() => void selectorAssistant.open()}
+          />
 
           {currentConfig.urlStrategy === 'template' ? (
             <>

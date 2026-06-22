@@ -32,6 +32,12 @@ import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/Scr
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+import SelectorAssistantLauncher from '@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher';
+import useSelectorAssistant from '@/renderer/components/ScraperConfig/shared/useSelectorAssistant';
+import {
+  buildSelectorAssistantFields,
+  LANGUAGE_ASSISTANT_FIELDS,
+} from '@/renderer/components/ScraperConfig/shared/selectorAssistantFields';
 import SearchFeaturePreview from '@/renderer/components/ScraperConfig/search/SearchFeaturePreview';
 import SearchRequestSection from '@/renderer/components/ScraperConfig/search/SearchRequestSection';
 import {
@@ -350,6 +356,66 @@ export default function ScraperSearchFeatureEditor({
     clearFeedback();
     clearFieldErrorsByPrefix('languageDetection.valueMappings.');
   }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
+
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: [...SCRAPING_FIELDS, ...LANGUAGE_ASSISTANT_FIELDS],
+    valueFieldNames: [...SCRAPING_FIELD_SELECTOR_NAMES, "languageSelector", "processedLanguageSelector"],
+    values: {
+      ...formValues,
+      languageSelector: formValues.languageDetection.languageSelector,
+      processedLanguageSelector: formValues.languageDetection.processedLanguageSelector,
+    },
+    scopeByFieldName: {
+      resultItemSelector: "resultListSelector",
+      titleSelector: "resultItemSelector",
+      detailUrlSelector: "resultItemSelector",
+      authorUrlSelector: "resultItemSelector",
+      thumbnailSelector: "resultItemSelector",
+      summarySelector: "resultItemSelector",
+      pageCountSelector: "resultItemSelector",
+      languageSelector: "resultItemSelector",
+      processedLanguageSelector: "resultItemSelector",
+    },
+    valueModeByFieldName: {
+      detailUrlSelector: "url",
+      authorUrlSelector: "url",
+      thumbnailSelector: "url",
+      nextPageSelector: "url",
+    },
+  }), [formValues]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if (fieldName === "languageSelector" || fieldName === "processedLanguageSelector") {
+      handleLanguageFieldSelectorChange(fieldName)({ kind: "css", value: selector });
+      return;
+    }
+    if ((SCRAPING_FIELD_SELECTOR_NAMES as readonly string[]).includes(fieldName)) {
+      handleFieldSelectorChange(fieldName as Exclude<keyof SearchFeatureFormState, "request" | "languageDetection">)(
+        { kind: "css", value: selector },
+      );
+      return;
+    }
+    setFormValues((previous) => ({ ...previous, [fieldName]: selector }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, handleFieldSelectorChange, handleLanguageFieldSelectorChange, setFormValues]);
+  const selectorAssistant = useSelectorAssistant({
+    request: {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: editorCopy.title,
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+          requestConfig: resolvedTestUrl ? resolvedTestRequestConfig ?? undefined : undefined,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: {
+          fieldName: "urlTemplate",
+          label: isHomepage ? "Pattern d'URL de la homepage" : "Pattern d'URL de recherche",
+          value: formValues.urlTemplate,
+        },
+      },
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleRequestMethodChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMethod = event.target.value === 'POST' ? 'POST' : 'GET';
@@ -890,6 +956,13 @@ export default function ScraperSearchFeatureEditor({
             <h4>Scraping</h4>
             <p>{editorCopy.scrapingSectionDescription}</p>
           </div>
+
+          <SelectorAssistantLauncher
+            opening={selectorAssistant.opening}
+            error={selectorAssistant.error}
+            disabled={validating || saving}
+            onOpen={() => void selectorAssistant.open()}
+          />
 
           <div className="scraper-config-hint">
             {isHomepage ? (

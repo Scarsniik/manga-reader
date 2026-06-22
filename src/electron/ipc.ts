@@ -16,6 +16,7 @@ import * as series from "./handlers/series";
 import * as scrapers from "./handlers/scrapers";
 import * as windowControls from "./handlers/windowControls";
 import * as workspaceWindow from "./handlers/workspaceWindow";
+import * as selectorAssistantWindow from "./handlers/selectorAssistantWindow";
 import * as appUpdate from "./handlers/appUpdate";
 import * as jsonDocuments from "./handlers/jsonDocuments";
 import * as history from "./handlers/history";
@@ -103,6 +104,44 @@ ipcMain.handle("workspace-open-target", async (
 ) => (
     workspaceWindow.openWorkspaceTarget(event, target, options)
 ));
+ipcMain.handle("selector-assistant-open", async (event: IpcMainInvokeEvent, request: unknown) => (
+    selectorAssistantWindow.openSelectorAssistant(event, request)
+));
+ipcMain.handle("selector-assistant-close", async (event: IpcMainInvokeEvent, formSessionId: unknown) => (
+    selectorAssistantWindow.closeSelectorAssistant(event, formSessionId)
+));
+ipcMain.handle("selector-assistant-get-session", async (event: IpcMainInvokeEvent) => (
+    selectorAssistantWindow.getSelectorAssistantSession(event)
+));
+ipcMain.handle("selector-assistant-set-bounds", async (event: IpcMainInvokeEvent, bounds: unknown) => (
+    selectorAssistantWindow.setSelectorAssistantBounds(event, bounds)
+));
+ipcMain.handle("selector-assistant-set-mode", async (event: IpcMainInvokeEvent, mode: unknown) => (
+    selectorAssistantWindow.setSelectorAssistantMode(event, mode)
+));
+ipcMain.handle("selector-assistant-navigation-response", async (event: IpcMainInvokeEvent, response: unknown) => (
+    selectorAssistantWindow.resolveSelectorAssistantNavigation(event, response)
+));
+ipcMain.handle("selector-assistant-navigation-state", async (event: IpcMainInvokeEvent) => (
+    selectorAssistantWindow.getSelectorAssistantNavigationState(event)
+));
+ipcMain.handle("selector-assistant-navigate", async (event: IpcMainInvokeEvent, command: unknown) => (
+    selectorAssistantWindow.navigateSelectorAssistant(event, command)
+));
+ipcMain.handle("selector-assistant-page-command", async (
+    event: IpcMainInvokeEvent,
+    mode: unknown,
+    command: unknown,
+) => selectorAssistantWindow.sendSelectorAssistantPageCommand(event, mode, command));
+ipcMain.handle("selector-assistant-evaluate", async (event: IpcMainInvokeEvent, request: unknown) => (
+    selectorAssistantWindow.evaluateSelectorAssistant(event, request)
+));
+ipcMain.handle("selector-assistant-apply", async (event: IpcMainInvokeEvent, value: unknown) => (
+    selectorAssistantWindow.applySelectorAssistantValue(event, value)
+));
+ipcMain.on("selector-assistant-page-event", (event, value: unknown) => {
+    selectorAssistantWindow.forwardSelectorAssistantPageEvent(event, value);
+});
 
 // History
 ipcMain.handle("get-history-records", async () => history.getHistoryRecords());

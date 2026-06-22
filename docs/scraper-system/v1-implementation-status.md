@@ -570,6 +570,14 @@ Pour garder la progression :
 - rouvrir la meme fiche reprend a la derniere page connue
 - le bouton `Retour` renvoie a la fiche scraper precedemment ouverte
 
+## Assistant visuel de selecteurs
+
+Les formulaires des modules HTML disposent d'une fenetre dediee pour construire leurs selecteurs
+CSS. Elle compare le HTML HTTP du runtime et la page Chromium interactive, accepte des echantillons
+positifs et negatifs, propose une valeur d'extraction, genere un CSS peu specifique et teste les
+correspondances avant de renvoyer le resultat au formulaire. Voir
+[`selector-assistant.md`](./selector-assistant.md).
+
 ## Limites volontaires de cette V1
 
 La V1 n'essaie pas encore de :

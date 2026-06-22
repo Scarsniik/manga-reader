@@ -24,6 +24,9 @@ import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/Scr
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+import SelectorAssistantLauncher from '@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher';
+import useSelectorAssistant from '@/renderer/components/ScraperConfig/shared/useSelectorAssistant';
+import { buildSelectorAssistantFields } from '@/renderer/components/ScraperConfig/shared/selectorAssistantFields';
 import FakeChaptersPreview from '@/renderer/components/ScraperConfig/chapters/FakeChaptersPreview';
 import {
   buildDocumentFailure,
@@ -173,6 +176,55 @@ export default function ScraperChaptersFeatureEditor({
   const handleCheckboxChange = useCallback((fieldName: keyof typeof initialConfig) => (
     createCheckboxChangeHandler(fieldName)
   ), [createCheckboxChangeHandler]);
+
+  const chapterSelectorFields = useMemo(() => [
+    CHAPTER_LIST_SELECTOR_FIELD,
+    CHAPTER_ITEM_SELECTOR_FIELD,
+    CHAPTER_URL_SELECTOR_FIELD,
+    CHAPTER_IMAGE_SELECTOR_FIELD,
+    CHAPTER_LABEL_SELECTOR_FIELD,
+  ], []);
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: chapterSelectorFields,
+    valueFieldNames: CHAPTER_FIELD_SELECTOR_NAMES,
+    values: { ...formValues },
+    scopeByFieldName: {
+      chapterItemSelector: "chapterListSelector",
+      chapterUrlSelector: "chapterItemSelector",
+      chapterImageSelector: "chapterItemSelector",
+      chapterLabelSelector: "chapterItemSelector",
+    },
+    valueModeByFieldName: {
+      chapterUrlSelector: "url",
+      chapterImageSelector: "url",
+    },
+  }), [chapterSelectorFields, formValues]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if ((CHAPTER_FIELD_SELECTOR_NAMES as readonly string[]).includes(fieldName)) {
+      handleFieldSelectorChange(fieldName as keyof typeof initialConfig)({ kind: "css", value: selector });
+      return;
+    }
+    setFormValues((previous) => ({ ...previous, [fieldName]: selector }));
+    clearFieldFeedback(fieldName);
+  }, [clearFieldFeedback, handleFieldSelectorChange, setFormValues]);
+  const selectorAssistant = useSelectorAssistant({
+    request: {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: "Configurer les chapitres",
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: currentConfig.urlStrategy === "template" ? {
+          fieldName: "urlTemplate",
+          label: "Pattern d'URL des chapitres",
+          value: formValues.urlTemplate ?? "",
+        } : undefined,
+      },
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleValidate = useCallback(async () => {
     const config = buildChaptersConfig(formValues);
@@ -371,6 +423,13 @@ export default function ScraperChaptersFeatureEditor({
             <h4>Scraping</h4>
             <p>Definis ici comment recuperer chaque chapitre et ses informations principales.</p>
           </div>
+
+          <SelectorAssistantLauncher
+            opening={selectorAssistant.opening}
+            error={selectorAssistant.error}
+            disabled={validating || saving}
+            onOpen={() => void selectorAssistant.open()}
+          />
 
           <ScraperConfigFieldGrid
             fields={[

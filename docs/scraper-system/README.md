@@ -9,6 +9,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - [`product-overview.md`](./product-overview.md) : vision produit, perimetre, parcours user, vision UI et phasage
 - [`technical-design.md`](./technical-design.md) : structure des donnees, configuration site/API, validation et points techniques
 - [`scraper-config-guide.md`](./scraper-config-guide.md) : guide technique de configuration des scrapers, des selecteurs et des modules V1
+- [`selector-assistant.md`](./selector-assistant.md) : assistant visuel pour generer et tester les selecteurs CSS
 - [`source-linking.md`](./source-linking.md) : liaison entre une fiche scraper, un manga local et sa source externe
 - [`author-favorites.md`](./author-favorites.md) : favoris auteur scraper, rattachement multi-source et vue combinee
 - [`tag-favorites.md`](./tag-favorites.md) : favoris tag scraper, rattachement multi-source et vue de resultats paginee

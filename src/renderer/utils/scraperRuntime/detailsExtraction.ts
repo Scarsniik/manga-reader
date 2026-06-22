@@ -17,6 +17,7 @@ import type {
   ScraperRuntimeThumbnail,
 } from "@/renderer/utils/scraperRuntime/types";
 import { looksLikeScraperDirectUrlInput } from "@/renderer/utils/scraperRuntime/urlResolution";
+import { mergeScraperTagValuePairs } from "@/renderer/utils/scraperRuntime/tagValuePairs";
 import {
   extractFieldSelectorValuesFromRoot,
   extractLanguageCodesFromRoot,
@@ -122,7 +123,7 @@ const shouldResolveTagTargetAsUrl = (attribute: string | undefined, value: strin
   );
 };
 
-export const extractScraperTagUrlsFromDocument = (
+const extractScraperTagUrlValuesFromDocument = (
   doc: Document,
   selector: ScraperFieldSelector | undefined,
   requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, "requestedUrl" | "finalUrl">,
@@ -135,10 +136,8 @@ export const extractScraperTagUrlsFromDocument = (
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
 
   if (normalizedSelector.kind === "regex") {
-    return uniqueValues(
-      extractRegexValuesFromRoot(doc, normalizedSelector.value).map((value) =>
-        shouldResolveTagTargetAsUrl(undefined, value) ? toAbsoluteScraperUrl(value, documentUrl) : value,
-      ),
+    return extractRegexValuesFromRoot(doc, normalizedSelector.value).map((value) =>
+      shouldResolveTagTargetAsUrl(undefined, value) ? toAbsoluteScraperUrl(value, documentUrl) : value,
     );
   }
 
@@ -147,30 +146,35 @@ export const extractScraperTagUrlsFromDocument = (
     return [];
   }
 
-  return uniqueValues(
-    Array.from(doc.querySelectorAll(cssSelector))
-      .map((element) => {
-        const value = attribute
-          ? element.getAttribute(attribute)?.trim() || ""
-          : element.tagName === "A"
-            ? element.getAttribute("href")?.trim() || ""
-            : element.tagName === "IMG"
-              ? element.getAttribute("src")?.trim() || ""
-              : element.textContent?.trim() || "";
+  return Array.from(doc.querySelectorAll(cssSelector))
+    .map((element) => {
+      const value = attribute
+        ? element.getAttribute(attribute)?.trim() || ""
+        : element.tagName === "A"
+          ? element.getAttribute("href")?.trim() || ""
+          : element.tagName === "IMG"
+            ? element.getAttribute("src")?.trim() || ""
+            : element.textContent?.trim() || "";
 
-        if (!value) {
-          return "";
-        }
+      if (!value) {
+        return "";
+      }
 
-        const shouldResolveAsUrl = attribute
-          ? shouldResolveTagTargetAsUrl(attribute, value)
-          : element.tagName === "A" || element.tagName === "IMG" || shouldResolveTagTargetAsUrl(undefined, value);
+      const shouldResolveAsUrl = attribute
+        ? shouldResolveTagTargetAsUrl(attribute, value)
+        : element.tagName === "A" || element.tagName === "IMG" || shouldResolveTagTargetAsUrl(undefined, value);
 
-        return shouldResolveAsUrl ? toAbsoluteScraperUrl(value, documentUrl) : value;
-      })
-      .filter(Boolean),
-  );
+      return shouldResolveAsUrl ? toAbsoluteScraperUrl(value, documentUrl) : value;
+    });
 };
+
+export const extractScraperTagUrlsFromDocument = (
+  doc: Document,
+  selector: ScraperFieldSelector | undefined,
+  requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, "requestedUrl" | "finalUrl">,
+): string[] => uniqueValues(
+  extractScraperTagUrlValuesFromDocument(doc, selector, requestMeta).filter(Boolean),
+);
 
 export const extractScraperDetailsThumbnailsFromDocument = (
   doc: Document,
@@ -483,6 +487,10 @@ const buildScraperDetailsResult = (
   const derivedValueResults = extractScraperDetailsDerivedValueResults(doc, config, requestMeta, fieldValuesByKey);
   const title = fieldValuesByKey.title?.[0];
   const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(doc, config, requestMeta);
+  const tagValues = mergeScraperTagValuePairs({
+    tags: fieldValuesByKey.tags ?? [],
+    tagUrls: extractScraperTagUrlValuesFromDocument(doc, config.tagUrlSelector, requestMeta),
+  });
 
   return {
     requestedUrl: requestMeta.requestedUrl,
@@ -494,8 +502,8 @@ const buildScraperDetailsResult = (
     description: fieldValuesByKey.description?.[0],
     authors: uniqueValues(fieldValuesByKey.authors ?? []),
     authorUrls: extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta),
-    tags: uniqueValues(fieldValuesByKey.tags ?? []),
-    tagUrls: extractScraperTagUrlsFromDocument(doc, config.tagUrlSelector, requestMeta),
+    tags: tagValues.tags,
+    tagUrls: tagValues.tagUrls,
     thumbnails:
       config.thumbnailsSelector && hasScraperFieldSelectorValue(config.thumbnailsSelector)
         ? thumbnailsPage.thumbnails

@@ -25,6 +25,13 @@ import { useScraperConfig } from '@/renderer/components/ScraperConfig/shared/Scr
 import useSaveScraperFeatureConfig from '@/renderer/components/ScraperConfig/shared/useSaveScraperFeatureConfig';
 import useScraperFeatureEditorState from '@/renderer/components/ScraperConfig/shared/useScraperFeatureEditorState';
 import useScraperUnsavedChangesGuard from '@/renderer/components/ScraperConfig/shared/useScraperUnsavedChangesGuard';
+import SelectorAssistantLauncher from '@/renderer/components/ScraperConfig/shared/SelectorAssistantLauncher';
+import useSelectorAssistant from '@/renderer/components/ScraperConfig/shared/useSelectorAssistant';
+import {
+  buildSelectorAssistantFields,
+  LANGUAGE_ASSISTANT_FIELDS,
+} from '@/renderer/components/ScraperConfig/shared/selectorAssistantFields';
+import type { Field } from '@/renderer/components/utils/Form/types';
 import DetailsDerivedValuesSection from '@/renderer/components/ScraperConfig/details/DetailsDerivedValuesSection';
 import FakeDetailsPreview from '@/renderer/components/ScraperConfig/details/FakeDetailsPreview';
 import {
@@ -281,6 +288,85 @@ export default function ScraperDetailsFeatureEditor({
     clearFeedback();
     clearFieldErrorsByPrefix(`derivedValues.${draftId}.`);
   }, [clearFeedback, clearFieldErrorsByPrefix, setFormValues]);
+
+  const derivedSelectorFields = useMemo<Field[]>(() => formValues.derivedValues
+    .filter((item) => item.sourceType === "selector")
+    .map((item) => ({
+      name: `derivedValues.${item.draftId}.selector`,
+      label: `Variable derivee ${item.key || "sans nom"}`,
+      type: "text",
+    })), [formValues.derivedValues]);
+  const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
+    fields: [...SELECTOR_FIELDS, ...THUMBNAIL_FIELDS, ...LANGUAGE_ASSISTANT_FIELDS, ...derivedSelectorFields],
+    valueFieldNames: [
+      ...FIELD_SELECTOR_FIELD_NAMES,
+      "languageSelector",
+      "processedLanguageSelector",
+      ...derivedSelectorFields.map((field) => field.name),
+    ],
+    values: {
+      ...formValues,
+      languageSelector: formValues.languageDetection.languageSelector,
+      processedLanguageSelector: formValues.languageDetection.processedLanguageSelector,
+      ...Object.fromEntries(formValues.derivedValues.map((item) => [
+        `derivedValues.${item.draftId}.selector`,
+        item.selector,
+      ])),
+    },
+    scopeByFieldName: {
+      thumbnailsSelector: "thumbnailsListSelector",
+    },
+    valueModeByFieldName: {
+      coverSelector: "url",
+      authorUrlSelector: "url",
+      tagUrlSelector: "url",
+      thumbnailsSelector: "url",
+      thumbnailsNextPageSelector: "url",
+    },
+  }), [derivedSelectorFields, formValues]);
+  const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
+    if (fieldName === "languageSelector" || fieldName === "processedLanguageSelector") {
+      handleLanguageFieldSelectorChange(fieldName)({ kind: "css", value: selector });
+      return;
+    }
+    if (fieldName.startsWith("derivedValues.")) {
+      const [, draftId] = fieldName.split(".");
+      updateDerivedValue(draftId, "selector", { kind: "css", value: selector });
+      return;
+    }
+    if ((FIELD_SELECTOR_FIELD_NAMES as readonly string[]).includes(fieldName)) {
+      handleFieldSelectorChange(fieldName as Exclude<keyof DetailsFormState, "derivedValues" | "languageDetection">)(
+        { kind: "css", value: selector },
+      );
+      return;
+    }
+    setFormValues((previous) => ({ ...previous, [fieldName]: selector }));
+    clearFieldFeedback(fieldName);
+  }, [
+    clearFieldFeedback,
+    handleFieldSelectorChange,
+    handleLanguageFieldSelectorChange,
+    setFormValues,
+    updateDerivedValue,
+  ]);
+  const selectorAssistant = useSelectorAssistant({
+    request: {
+        scraperName: scraper.name,
+        featureKind: feature.kind,
+        featureLabel: "Configurer la fiche",
+        pageRequest: {
+          baseUrl: scraper.baseUrl,
+          targetUrl: resolvedTestUrl || scraper.baseUrl,
+        },
+        fields: selectorAssistantFields,
+        urlPattern: currentConfig.urlStrategy === "template" ? {
+          fieldName: "urlTemplate",
+          label: "Pattern d'URL de fiche",
+          value: formValues.urlTemplate ?? "",
+        } : undefined,
+      },
+    onApply: handleSelectorAssistantApply,
+  });
 
   const handleValidate = useCallback(async () => {
     const config = buildDetailsConfig(formValues);
@@ -668,6 +754,13 @@ export default function ScraperDetailsFeatureEditor({
               Indique les selecteurs qui permettent d&apos;extraire les donnees utiles de la fiche.
             </p>
           </div>
+
+          <SelectorAssistantLauncher
+            opening={selectorAssistant.opening}
+            error={selectorAssistant.error}
+            disabled={validating || saving}
+            onOpen={() => void selectorAssistant.open()}
+          />
 
           <ScraperConfigFieldGrid
             fields={SELECTOR_FIELDS}
