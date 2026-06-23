@@ -601,6 +601,12 @@
   overflow-anchor: none;
 }
 
+.multi-search__virtual-grid.is-static {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .multi-search__virtual-row {
   position: absolute;
   top: 0;
@@ -609,6 +615,10 @@
   display: grid;
   gap: 14px;
   align-items: start;
+}
+
+.multi-search__virtual-grid.is-static .multi-search__virtual-row {
+  position: static;
 }
 
 .multi-search__virtual-item {

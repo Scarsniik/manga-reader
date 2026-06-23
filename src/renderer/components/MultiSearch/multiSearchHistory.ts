@@ -16,6 +16,7 @@ import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar
 type BuildMultiSearchHistorySettingsOptions = {
   selectedScrapers: ScraperRecord[];
   selectedLanguageCodes: string[];
+  includedLanguageCodes: string[];
   selectedContentTypes: string[];
   depthMode: MultiSearchDepthMode;
   advancedPages: MultiSearchAdvancedPages;
@@ -105,6 +106,7 @@ const formatSelectedContentTypes = (selectedContentTypes: string[]): string[] =>
 export const buildMultiSearchHistorySettings = ({
   selectedScrapers,
   selectedLanguageCodes,
+  includedLanguageCodes,
   selectedContentTypes,
   depthMode,
   advancedPages,
@@ -113,7 +115,11 @@ export const buildMultiSearchHistorySettings = ({
 }: BuildMultiSearchHistorySettingsOptions): SearchHistorySettings => ({
   Scrappers: sortedFallbackList(selectedScrapers.map((scraper) => scraper.name), "Aucun"),
   _scraperIds: sortedList(selectedScrapers.map((scraper) => scraper.id)),
-  Langues: formatSelectedLanguages(selectedLanguageCodes),
+  "Langues des scrappers": formatSelectedLanguages(selectedLanguageCodes),
+  "Langues incluses": formatIncludedExcludedList(includedLanguageCodes, {
+    allLabel: "Toutes",
+    mapLabel: getLanguageLabel,
+  }),
   Types: formatSelectedContentTypes(selectedContentTypes),
   Profondeur: formatDepth(depthMode, advancedPages),
   Rythme: formatPace(paceMode),

@@ -52,6 +52,7 @@ export type AppParams = {
     multiSearchEnableRomajiPhoneticMerge?: boolean;
     multiSearchSelectedScraperIds?: string[];
     multiSearchSelectedLanguageCodes?: string[];
+    multiSearchIncludedLanguageCodes?: string[];
     multiSearchSelectedContentTypes?: string[];
     multiSearchDepthMode?: string;
     multiSearchAdvancedPages?: number | "maximum";
@@ -75,6 +76,7 @@ export type AppParams = {
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestLanguageRejectLimit?: number;
     scraperLatestIncludedLanguageCodes?: string[];
+    scraperLatestAuthorIncludedLanguageCodes?: string[];
     scraperLatestIncludedScraperIds?: string[];
     scraperLatestIncludedAuthorFavoriteIds?: string[];
     scraperLatestIncludedTagFavoriteIds?: string[];

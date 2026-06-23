@@ -41,6 +41,11 @@ const sanitizeStringList = (value: unknown): string[] => (
     : []
 );
 
+const sanitizeNonNegativeInteger = (value: unknown): number => {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 0;
+};
+
 const BOOKMARK_FIELD_OPTIONS: Array<{
   label: string;
   value: ScraperBookmarkMetadataField;
@@ -110,6 +115,10 @@ const buildGlobalConfig = (
     chapterDownloads: {
       autoAssignSeries: Boolean(values.chapterDownloadsAutoAssignSeries),
     },
+    requestLimits: {
+      minDelayMs: sanitizeNonNegativeInteger(values.requestMinDelayMs),
+      maxConcurrentRequests: sanitizeNonNegativeInteger(values.requestMaxConcurrentRequests),
+    },
   };
 };
 
@@ -176,6 +185,20 @@ export default function ScraperGlobalSettingsEditor({
       type: 'checkbox',
     },
     {
+      name: 'requestMinDelayMs',
+      label: 'Delai minimum entre les requetes (ms)',
+      type: 'number',
+      min: 0,
+      step: 100,
+    },
+    {
+      name: 'requestMaxConcurrentRequests',
+      label: 'Nombre maximum de requetes simultanees',
+      type: 'number',
+      min: 0,
+      step: 1,
+    },
+    {
       name: 'homeSearchEnabled',
       label: 'Jouer une recherche automatique a l\'ouverture',
       type: 'checkbox',
@@ -210,6 +233,8 @@ export default function ScraperGlobalSettingsEditor({
     defaultLanguage: scraper.globalConfig.defaultLanguage ?? '',
     bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
     chapterDownloadsAutoAssignSeries: scraper.globalConfig.chapterDownloads.autoAssignSeries,
+    requestMinDelayMs: scraper.globalConfig.requestLimits.minDelayMs,
+    requestMaxConcurrentRequests: scraper.globalConfig.requestLimits.maxConcurrentRequests,
     homeSearchEnabled: scraper.globalConfig.homeSearch.enabled,
     homeSearchQuery: scraper.globalConfig.homeSearch.query,
     latestEnabled: scraper.globalConfig.latest?.enabled ?? false,
@@ -300,6 +325,22 @@ export default function ScraperGlobalSettingsEditor({
       ? 'Les telechargements lances depuis un chapitre creeront ou reutiliseront une serie avec le titre de la fiche'
       : 'Les telechargements de chapitre restent des mangas independants'
   ), [scraper.globalConfig.chapterDownloads.autoAssignSeries]);
+
+  const requestLimitsLabel = useMemo(() => {
+    const { minDelayMs, maxConcurrentRequests } = scraper.globalConfig.requestLimits;
+    if (minDelayMs === 0 && maxConcurrentRequests === 0) {
+      return 'Aucune limite supplementaire';
+    }
+
+    const delayLabel = minDelayMs > 0
+      ? `${minDelayMs} ms minimum entre les requetes`
+      : 'aucun delai minimum';
+    const concurrencyLabel = maxConcurrentRequests > 0
+      ? `${maxConcurrentRequests} requete(s) simultanee(s) maximum`
+      : 'nombre de requetes simultanees non limite';
+
+    return `${delayLabel}, ${concurrencyLabel}`;
+  }, [scraper.globalConfig.requestLimits]);
 
   const handleSubmit = useCallback(async (values: Record<string, unknown>) => {
     if (!window.api || typeof window.api.saveScraperGlobalConfig !== 'function') {
@@ -404,6 +445,14 @@ export default function ScraperGlobalSettingsEditor({
       </div>
 
       <div className="scraper-config-note">
+        <strong>Vitesse de scraping</strong>
+        <span>
+          Le delai espace le depart des requetes et la limite simultanee borne leur parallelisme pour
+          ce scrapper. Une valeur de 0 desactive la limite correspondante.
+        </span>
+      </div>
+
+      <div className="scraper-config-note">
         <strong>Recherche d&apos;accueil</strong>
         <span>
           Ce reglage lance le module `Recherche` a l&apos;arrivee sur le scrapper. Si le module
@@ -470,6 +519,10 @@ export default function ScraperGlobalSettingsEditor({
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Series et chapitres</span>
           <strong>{chapterDownloadsLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Vitesse de scraping</span>
+          <strong>{requestLimitsLabel}</strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Recherche d&apos;accueil</span>

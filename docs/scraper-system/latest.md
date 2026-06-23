@@ -7,6 +7,11 @@ l'historique de vue des cards. La vue ouvre d'abord l'onglet `Sources`, puis pro
 `Auteurs`. Une card reste dans la vue tant qu'elle garde son liseret vert dans la liste courante.
 Au rechargement, les cards deja vues disparaissent.
 
+Le filtre de langue d'affichage est applique avant le calcul de l'etat nouveau. Une card filtree sur
+`Anglais` reste donc visible uniquement si au moins une de ses sources anglaises est nouvelle. Une
+source nouvelle dans une autre langue ne suffit pas. Un split manuel est lui aussi applique avant ce
+calcul afin que chaque card separee respecte individuellement son propre etat de vue.
+
 La collecte ne se lance pas automatiquement a l'ouverture de la vue ni au changement d'onglet.
 L'utilisateur doit lancer explicitement une collecte depuis l'action de l'onglet courant.
 
@@ -105,6 +110,11 @@ Le filtre `Auteurs favoris inclus` utilise le parametre
 `scraperLatestIncludedAuthorFavoriteIds`. Si la liste est vide, tous les auteurs favoris sont
 inclus par defaut. La valeur `__no_author_favorites__` correspond a l'option `Aucun`. Si la liste
 contient des IDs d'auteurs favoris, seuls ces auteurs favoris sont lances.
+
+Le filtre `Langues incluses` de cet onglet utilise le parametre independant
+`scraperLatestAuthorIncludedLanguageCodes`. Les sources hors selection sont ignorees des leur
+chargement, avant la romanisation, le dedoublonnage et la fusion des cards. Une liste vide accepte
+toutes les langues. Le clic gauche inclut une langue et le clic droit l'exclut.
 
 Si les auteurs favoris sont sur `Aucun` ou qu'aucune source auteur lancable n'est disponible, les
 actions de chargement sont bloquees jusqu'a ce qu'au moins une source soit selectionnee.

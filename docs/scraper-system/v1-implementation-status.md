@@ -475,6 +475,10 @@ Le chargement de fiche suit aussi les avertissements HTML qui proposent un lien
 redirection. Les fiches bloquees par ce type d'interstitiel restent donc
 exploitables pour les details et l'enrichissement des cards.
 
+Les reglages globaux d'un scraper peuvent limiter le delai minimal entre les requetes et le nombre
+de requetes simultanees. Ces limites sont appliquees dans le runtime HTTP commun et sont donc
+partagees entre les recherches, fiches, listings et autres vues qui utilisent le meme scraper.
+
 POC : une page `Tag` peut ajouter le tag courant a
 `scraperBlacklistedTagsByScraper` pour le scraper actif. Quand une card a ete
 enrichie avec sa `Fiche`, ses tags sont compares a cette blacklist : la card

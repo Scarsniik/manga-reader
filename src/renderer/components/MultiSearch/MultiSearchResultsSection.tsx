@@ -67,6 +67,7 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  onSplitResult: (resultId: string) => void;
   onExportJson: () => void;
   onExportMergedResultsJson: () => void;
   onExtractAuthors: () => void;
@@ -154,6 +155,7 @@ export default function MultiSearchResultsSection({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  onSplitResult,
   onExportJson,
   onExportMergedResultsJson,
   onExtractAuthors,
@@ -310,6 +312,7 @@ export default function MultiSearchResultsSection({
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
           onSetSourcesRead={onSetSourcesRead}
+          onSplitResult={onSplitResult}
         />
         {!displayedMergedResults.length && mergedResults.length ? (
           <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>

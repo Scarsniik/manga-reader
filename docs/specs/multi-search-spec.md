@@ -46,6 +46,7 @@ La page de recherche multiple contient :
 - Champ de recherche.
 - Sélection multiple de scrapers.
 - Sélection multiple de langues.
+- Sélection des langues incluses dans les résultats collectés.
 - Sélection multiple de types.
 - Profondeur de recherche.
 - Mode de recherche.
@@ -605,11 +606,14 @@ La V1 du multi-search repose sur les choix suivants :
 - Les scrapers sans langue ou sans type renseignes restent utilisables et apparaissent sous `Non renseigne`.
 - La page conserve le dernier etat de recherche dans la session de l'onglet afin qu'un retour arriere depuis une fiche restaure les resultats charges. Une nouvelle recherche remplace cet etat.
 - Les parametres de lancement hors requete sont conserves dans les settings utilisateur : scrapers, langues, types, profondeur, nombre de pages avance, rythme et vue. Le texte recherche reste propre a la recherche courante.
+- Les langues des scrapers et les langues incluses dans les resultats sont deux reglages distincts. Le premier choisit les scrapers a lancer depuis leurs metadonnees ; le second accepte ou rejette chaque card pendant le scraping, avant le merge. Il propose les langues connues et `Inconnue`, avec clic gauche pour inclure et clic droit pour exclure.
+- Le reglage `Langues incluses` est conserve dans les settings utilisateur et reutilise par les chargements de pages supplementaires de la recherche en cours.
 - Dans les filtres de lancement, le clic gauche inclut une valeur et le clic droit l'exclut. Une valeur incluse apparait en bleu ; une valeur exclue apparait en rouge et retire les scrapers qui portent cette valeur.
 - Le statut detaille d'un scraper affiche l'adresse de la derniere page chargee quand elle est disponible.
 - Le merge ignore les marqueurs de langue explicites presents dans les titres, par exemple `[EN]`, `VF`, `RAW` ou `English`, et ces marqueurs enrichissent aussi l'affichage des langues detectees.
 - Les codes de langue courts (`de`, `en`, `fr`, etc.) ne sont detectes dans les titres que lorsqu'ils sont dans un marqueur explicite comme `[DE]` ou `(EN)`, afin d'eviter les faux positifs sur des mots ordinaires.
 - La detection de langue se fait d'abord sur le titre original. Si le titre indique une langue, elle remplace l'inference depuis le scraper. Si le scraper n'a qu'une langue source, elle sert de fallback. Si le scraper en a plusieurs, elles ne sont pas utilisees pour determiner la langue du manga.
+- Le filtre de langue compare des codes normalises : les alias et variantes de casse comme `EN`, `eng` et `English` correspondent tous a `en`. Sur une card fusionnee, seules les sources compatibles sont conservees et la card reste visible tant qu'au moins une source correspond.
 - La normalisation de merge retire ensuite les blocs entre crochets et accolades, puis supprime les apostrophes avant comparaison. Une variante retire aussi les blocs entre parentheses pour comparer le titre coeur sans le contexte de serie.
 - Pour les titres japonais composes de kana sans kanji, le merge ajoute des variantes romaji legeres basees sur la lecture hiragana/katakana. Ces variantes couvrent aussi un repli prudent des voyelles longues et une cle compacte sans espaces pour rapprocher les sources japonaises et les sources romanisees.
 - Pour les titres avec kanji ou japonais mixte, le renderer demande aussi une romanisation avancee a Kuroshiro + Kuromoji via Electron. Les cibles envoyees a l'outil lourd utilisent le meme decoupage que le merge : alternatives separees par `|` ou `/`, blocs auteur/contexte retires, puis auteurs provisoires traites separement. Les variantes normales, espacees, issues des lectures/prononciations Kuromoji, avec macrons (`imōto`), sans macrons (`imouto`), et selon plusieurs systemes romaji (`hepburn`, `passport`, `nippon`) sont ajoutees aux cles de merge avant l'envoi au worker.
@@ -632,6 +636,7 @@ La V1 du multi-search repose sur les choix suivants :
 - Le filtre texte propose un bouton pour reprendre la recherche principale comme valeur de filtre, et un bouton pour vider la valeur.
 - Les resultats peuvent aussi etre filtres par etat de lecture avec des choix cumulables : `Non lu`, `En cours` et `Lu`. Le filtre utilise les progressions scraper et les mangas lies a une source.
 - La liste des scrapers associes a une card multi-search et le menu `Ouvrir avec` s'ouvrent au clic comme des menus deroulants en overlay pour ne pas deplacer les cards suivantes, et se ferment quand l'utilisateur clique en dehors.
+- Une card fusionnee peut etre separee manuellement en cards individuelles dans toutes les vues de resultats fusionnes. Dans la recherche multi-sources, ce split reste actif dans l'etat de session de la recherche courante et est reinitialise au lancement d'une nouvelle recherche.
 - Les couvertures multi-search distantes passent par un protocole local de vignette redimensionnee quand l'application Electron est disponible, avec fallback vers l'image originale.
 - Les cards multi-search indiquent quand une source correspond deja a un manga en bibliotheque, a un bookmark scraper ou a une progression de lecture en cours/terminee.
 - Dans le menu `Ouvrir avec`, chaque source affiche aussi ses etats bibliotheque, bookmark et progression, avec une bordure distincte quand la source a une progression.
@@ -639,6 +644,7 @@ La V1 du multi-search repose sur les choix suivants :
 - En environnement de developpement uniquement, la section de resultats fusionnes expose un bouton `Recharger fusion` qui force le recalcul de la fusion depuis les sources deja chargees.
 - En environnement de developpement uniquement, la section de resultats fusionnes expose aussi un bouton `Merged JSON` qui ouvre un export limite aux `mergedResults`.
 - Les grilles de resultats virtualisent les cards par lignes mesurees : seules les cards visibles, une marge autour du viewport et les cards avec focus ou menu ouvert restent montees dans le DOM.
+- Apres un split manuel, la grille concernee utilise un layout naturel non virtualise afin que les nouvelles hauteurs de cards ne puissent pas provoquer de chevauchement pendant leur mesure.
 - Pendant le scraping, les mises a jour de resultats sont groupees avant d'etre poussees a React afin de limiter les recalculs de fusion, de filtres et d'affichage sur les grosses recherches.
 - La fusion des resultats est incrementale et executee dans un Web Worker pendant une recherche : les nouvelles sources sont inserees dans les groupes existants hors du thread UI, et le bouton de developpement `Recharger fusion` force une reconstruction complete si necessaire.
 - La fusion expose une progression visible pendant le traitement et le tri. Le merge utilise un index URL/titres/fuzzy pour eviter de comparer chaque nouvelle source avec tous les groupes existants.

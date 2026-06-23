@@ -12,6 +12,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import {
   MEASUREMENT_PRECISION_PX,
   MIN_OVERSCAN_PX,
@@ -52,6 +53,7 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  onSplitResult?: (resultId: string) => void;
 };
 
 type MeasuredItemProps = Omit<Props, "results"> & {
@@ -74,6 +76,7 @@ function MeasuredMultiSearchResultCard({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  onSplitResult,
   onHeightChange,
   onStickyChange,
 }: MeasuredItemProps) {
@@ -167,6 +170,7 @@ function MeasuredMultiSearchResultCard({
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
         onOpenProgressReader={onOpenProgressReader}
         onSetSourcesRead={onSetSourcesRead}
+        onSplitResult={onSplitResult}
       />
     </div>
   );
@@ -186,6 +190,7 @@ export default function MultiSearchVirtualizedResultsGrid({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  onSplitResult,
 }: Props) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const scrollTargetRef = React.useRef<ScrollTarget | null>(null);
@@ -202,17 +207,37 @@ export default function MultiSearchVirtualizedResultsGrid({
     height: 0,
   });
   const [stickyResultIds, setStickyResultIds] = React.useState<Set<string>>(() => new Set());
+  const [localSplitResultIds, setLocalSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const [useStaticLayout, setUseStaticLayout] = React.useState(false);
+  const handleSplitResult = React.useCallback((resultId: string) => {
+    setUseStaticLayout(true);
+
+    if (onSplitResult) {
+      onSplitResult(resultId);
+      return;
+    }
+
+    setLocalSplitResultIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      nextIds.add(resultId);
+      return nextIds;
+    });
+  }, [onSplitResult]);
+  const splitResults = React.useMemo(
+    () => applyManualMultiSearchSplits(results, localSplitResultIds),
+    [localSplitResultIds, results],
+  );
 
   // On évite les doublons de résultats lors du rendu
   const usedResults = React.useMemo(() => {
-    return results.reduce<MultiSearchMergedResult[]>((acc, result) => {
+    return splitResults.reduce<MultiSearchMergedResult[]>((acc, result) => {
       if (acc.some((r) => r.id === result.id)) {
         return acc;
       }
 
       return [...acc, result];
     }, []);
-  }, [results]);
+  }, [splitResults]);
 
   resultsRef.current = usedResults;
 
@@ -431,14 +456,18 @@ export default function MultiSearchVirtualizedResultsGrid({
 
     return isInRange || hasStickyItem;
   });
+  const renderedRows = useStaticLayout ? rows : visibleRows;
 
   return (
     <div
       ref={containerRef}
-      className="multi-search__virtual-grid"
-      style={{ height: totalHeight }}
+      className={[
+        "multi-search__virtual-grid",
+        useStaticLayout ? "is-static" : "",
+      ].filter(Boolean).join(" ")}
+      style={useStaticLayout ? undefined : { height: totalHeight }}
     >
-      {visibleRows.map((row) => (
+      {renderedRows.map((row) => (
         <div
           key={row.index}
           className="multi-search__virtual-row"
@@ -464,6 +493,7 @@ export default function MultiSearchVirtualizedResultsGrid({
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}
               onSetSourcesRead={onSetSourcesRead}
+              onSplitResult={handleSplitResult}
               onHeightChange={updateItemHeight}
               onStickyChange={updateStickyState}
             />

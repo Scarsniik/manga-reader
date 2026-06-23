@@ -25,6 +25,8 @@ Options globales envisagees :
 - cookies
 - user-agent
 - timeout
+- delai minimal entre les requetes
+- nombre maximal de requetes simultanees
 - encodage force si necessaire
 - auth future pour les APIs
 
@@ -293,6 +295,8 @@ interface RequestDefaults {
   headers?: Record<string, string>;
   cookies?: Record<string, string>;
   timeoutMs?: number;
+  minDelayMs?: number;
+  maxConcurrentRequests?: number;
 }
 
 interface ScraperFeature {

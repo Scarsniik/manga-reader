@@ -448,6 +448,7 @@ const defaultSettings = {
     multiSearchEnableRomajiPhoneticMerge: false,
     multiSearchSelectedScraperIds: [] as string[],
     multiSearchSelectedLanguageCodes: [] as string[],
+    multiSearchIncludedLanguageCodes: [] as string[],
     multiSearchSelectedContentTypes: [] as string[],
     multiSearchDepthMode: DEFAULT_MULTI_SEARCH_DEPTH_MODE,
     multiSearchAdvancedPages: DEFAULT_MULTI_SEARCH_ADVANCED_PAGES as number | "maximum",
@@ -470,6 +471,7 @@ const defaultSettings = {
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
     scraperLatestIncludedLanguageCodes: [] as string[],
+    scraperLatestAuthorIncludedLanguageCodes: [] as string[],
     scraperLatestIncludedScraperIds: [] as string[],
     scraperLatestIncludedAuthorFavoriteIds: [] as string[],
     scraperLatestIncludedTagFavoriteIds: [] as string[],
@@ -563,6 +565,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.scraperLatestIncludedLanguageCodes,
     );
+    merged.scraperLatestAuthorIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+        merged.scraperLatestAuthorIncludedLanguageCodes,
+    );
     merged.scraperLatestIncludedScraperIds = normalizeStringListSetting(
         merged.scraperLatestIncludedScraperIds,
     );
@@ -584,6 +589,9 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.multiSearchSelectedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.multiSearchSelectedLanguageCodes,
+    );
+    merged.multiSearchIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+        merged.multiSearchIncludedLanguageCodes,
     );
     merged.multiSearchSelectedContentTypes = normalizeStringListSetting(
         merged.multiSearchSelectedContentTypes,
@@ -862,6 +870,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.scraperLatestIncludedLanguageCodes,
         );
+        nextSettings.scraperLatestAuthorIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+            nextSettings.scraperLatestAuthorIncludedLanguageCodes,
+        );
         nextSettings.scraperLatestIncludedScraperIds = normalizeStringListSetting(
             nextSettings.scraperLatestIncludedScraperIds,
         );
@@ -880,6 +891,9 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.multiSearchSelectedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.multiSearchSelectedLanguageCodes,
+        );
+        nextSettings.multiSearchIncludedLanguageCodes = normalizeLowercaseStringListSetting(
+            nextSettings.multiSearchIncludedLanguageCodes,
         );
         nextSettings.multiSearchSelectedContentTypes = normalizeStringListSetting(
             nextSettings.multiSearchSelectedContentTypes,

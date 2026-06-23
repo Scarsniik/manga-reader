@@ -24,6 +24,7 @@ import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch
 import type { Manga } from "@/renderer/types";
 import type { TagFavoriteSourceRun } from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -152,10 +153,15 @@ export default function ScraperTagFavoriteResults({
   onOpenProgressReader,
   onSetSourcesRead,
 }: Props) {
+  const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const manuallySplitMergedResults = React.useMemo(
+    () => applyManualMultiSearchSplits(mergedResults, splitResultIds),
+    [mergedResults, splitResultIds],
+  );
   const displayedMergedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
       sortByScraperViewHistoryNewState(
-        mergedResults,
+        manuallySplitMergedResults,
         (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
         viewHistoryRecordsById,
         newViewHistoryIds,
@@ -166,14 +172,14 @@ export default function ScraperTagFavoriteResults({
     ),
     [
       hideBlacklistedCards,
-      mergedResults,
+      manuallySplitMergedResults,
       newViewHistoryIds,
       showUnseenFirst,
       tagBlacklistByScraper,
       viewHistoryRecordsById,
     ],
   );
-  const hiddenMergedResultCount = mergedResults.length - displayedMergedResults.length;
+  const hiddenMergedResultCount = manuallySplitMergedResults.length - displayedMergedResults.length;
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -296,6 +302,11 @@ export default function ScraperTagFavoriteResults({
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
                 onOpenProgressReader={onOpenProgressReader}
                 onSetSourcesRead={onSetSourcesRead}
+                onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+                  const nextIds = new Set(currentIds);
+                  nextIds.add(resultId);
+                  return nextIds;
+                })}
               />
             ))}
           </div>

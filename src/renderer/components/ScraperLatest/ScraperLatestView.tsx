@@ -295,6 +295,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [authorIncludedFavorites, authorRefreshKey],
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
+  const authorIncludedLanguageCodes = React.useMemo(
+    () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestAuthorIncludedLanguageCodes),
+    [params?.scraperLatestAuthorIncludedLanguageCodes],
+  );
+  const authorIncludedLanguagesKey = authorIncludedLanguageCodes.join("|");
   const scraperResultLimit = getScraperResultLimit(
     params?.scraperLatestScraperResultLimit ?? params?.scraperLatestResultLimit,
   );
@@ -373,6 +378,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     cacheResults: false,
     concurrency: scraperLatestConcurrency,
     scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+    includedLanguageCodes: authorIncludedLanguageCodes,
   });
   const scraperRuns = useScraperLatestRuns();
   const authorSources = React.useMemo(
@@ -402,6 +408,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     ? [
       combinedAuthorFavorite?.id ?? `latest-authors-empty-${authorRefreshKey}`,
       authorIncludedFavoritesKey || "all-authors",
+      authorIncludedLanguagesKey || "all-languages",
     ].join("-")
     : [
       "latest-sources",
@@ -650,6 +657,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
     authorRuns.reset();
   }, [authorFavoriteIds, authorRuns.reset, setParams]);
 
+  const handleAuthorIncludedLanguageCodesChange = React.useCallback((nextLanguageCodes: string[]) => {
+    setParams({
+      scraperLatestAuthorIncludedLanguageCodes: normalizeLatestIncludedLanguageCodes(nextLanguageCodes),
+    }, {
+      remount: false,
+    });
+    lastStartedAuthorRefreshKeyRef.current = 0;
+    setAuthorRefreshKey(0);
+    authorRuns.reset();
+  }, [authorRuns.reset, setParams]);
+
   const handleScraperIncludedLanguageCodesChange = React.useCallback((nextLanguageCodes: string[]) => {
     setParams({
       scraperLatestIncludedLanguageCodes: normalizeLatestIncludedLanguageCodes(nextLanguageCodes),
@@ -692,6 +710,19 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const authorSummary = React.useMemo(() => {
     const authorLabelsById = new Map(authorFavorites.map((favorite) => [favorite.id, favorite.name]));
     const includedAuthorLabel = formatIncludeValuesSummary(authorIncludedFavoriteIds, authorLabelsById, "tous");
+    const languageFilterValues = splitIncludeFilterValues(authorIncludedLanguageCodes);
+    const languageLabelsById = new Map([
+      ...languageFilterValues.includedValues,
+      ...languageFilterValues.excludedValues,
+    ].map((languageCode) => [
+      languageCode,
+      getLatestLanguageLabel(languageCode),
+    ]));
+    const includedLanguageLabel = formatIncludeValuesSummary(
+      authorIncludedLanguageCodes,
+      languageLabelsById,
+      "toutes",
+    );
     const baseSummary = `Charge ${authorPageCount} page(s) pour chaque source d'auteur favori incluse.`
       + ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const authorFilterSummary = !authorFavoritesLoaded
@@ -704,12 +735,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
             ? " Auteurs favoris inclus : tous."
             : ` Auteurs favoris inclus : ${includedAuthorLabel}.`;
 
-    return `${baseSummary}${authorFilterSummary}`;
+    return `${baseSummary}${authorFilterSummary} Langues incluses : ${includedLanguageLabel}.`;
   }, [
     authorFavorites,
     authorFavoritesLoaded,
     authorIncludesNoFavorites,
     authorIncludedFavoriteIds,
+    authorIncludedLanguageCodes,
     authorPageCount,
     scraperLatestConcurrency,
   ]);
@@ -891,6 +923,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
             favorites={authorFavorites}
             value={authorIncludedFavoriteIds}
             onChange={handleAuthorIncludedFavoriteIdsChange}
+          />
+          <ScraperLatestLanguageIncludeBar
+            value={authorIncludedLanguageCodes}
+            onChange={handleAuthorIncludedLanguageCodesChange}
           />
         </div>
       ) : null}

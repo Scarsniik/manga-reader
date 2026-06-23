@@ -22,6 +22,7 @@ import type {
 import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 
 type Props = {
   title: string;
@@ -133,13 +134,18 @@ export default function ScraperAuthorCombinedResults({
   onOpenProgressReader,
   onSetSourcesRead,
 }: Props) {
+  const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const manuallySplitResults = React.useMemo(
+    () => applyManualMultiSearchSplits(displayedResults, splitResultIds),
+    [displayedResults, splitResultIds],
+  );
   const visibleDisplayedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
-      displayedResults,
+      manuallySplitResults,
       tagBlacklistByScraper,
       hideBlacklistedCards,
     ),
-    [displayedResults, hideBlacklistedCards, tagBlacklistByScraper],
+    [hideBlacklistedCards, manuallySplitResults, tagBlacklistByScraper],
   );
 
   return (
@@ -295,6 +301,11 @@ export default function ScraperAuthorCombinedResults({
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
                 onOpenProgressReader={onOpenProgressReader}
                 onSetSourcesRead={onSetSourcesRead}
+                onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+                  const nextIds = new Set(currentIds);
+                  nextIds.add(resultId);
+                  return nextIds;
+                })}
               />
             ))}
           </div>

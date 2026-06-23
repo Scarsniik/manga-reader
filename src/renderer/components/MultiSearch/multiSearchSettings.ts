@@ -19,6 +19,7 @@ import type {
 export type MultiSearchPersistentSettings = {
   selectedScraperIds: string[];
   selectedLanguageCodes: string[];
+  includedLanguageCodes: string[];
   selectedContentTypes: string[];
   depthMode: MultiSearchDepthMode;
   advancedPages: MultiSearchAdvancedPages;
@@ -29,6 +30,7 @@ export type MultiSearchPersistentSettings = {
 const DEFAULT_SETTINGS: MultiSearchPersistentSettings = {
   selectedScraperIds: [],
   selectedLanguageCodes: [],
+  includedLanguageCodes: [],
   selectedContentTypes: [],
   depthMode: "quick",
   advancedPages: 3,
@@ -120,6 +122,10 @@ export const normalizeMultiSearchSelectedLanguageCodes = (value: unknown): strin
   })
 );
 
+export const normalizeMultiSearchIncludedLanguageCodes = (value: unknown): string[] => (
+  normalizeStringList(value, { lowercase: true })
+);
+
 export const normalizeMultiSearchSelectedContentTypes = (value: unknown): string[] => (
   normalizeStringList(value, {
     noneValue: NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
@@ -135,6 +141,7 @@ export const getMultiSearchPersistentSettingsFromParams = (
     scrapers,
   ),
   selectedLanguageCodes: normalizeMultiSearchSelectedLanguageCodes(params?.multiSearchSelectedLanguageCodes),
+  includedLanguageCodes: normalizeMultiSearchIncludedLanguageCodes(params?.multiSearchIncludedLanguageCodes),
   selectedContentTypes: normalizeMultiSearchSelectedContentTypes(params?.multiSearchSelectedContentTypes),
   depthMode: normalizeDepthMode(params?.multiSearchDepthMode),
   advancedPages: normalizeAdvancedPages(params?.multiSearchAdvancedPages),

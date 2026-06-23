@@ -64,8 +64,10 @@ import {
   readMultiSearchState,
   saveMultiSearchState,
 } from "@/renderer/components/MultiSearch/multiSearchPersistence";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import {
   getMultiSearchPersistentSettingsFromParams,
+  normalizeMultiSearchIncludedLanguageCodes,
   normalizeMultiSearchSelectedContentTypes,
   normalizeMultiSearchSelectedLanguageCodes,
   normalizeMultiSearchSelectedScraperIds,
@@ -107,6 +109,7 @@ import { recordSearchHistorySafe } from "@/renderer/utils/history";
 import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import type { AppParams } from "@/renderer/hooks/useParams";
+import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import "./style.scss";
 
 type Props = {
@@ -135,6 +138,7 @@ const buildMultiSearchSettingsParamsPatch = (
 ): Partial<AppParams> => ({
   ...(settings.selectedScraperIds ? { multiSearchSelectedScraperIds: settings.selectedScraperIds } : {}),
   ...(settings.selectedLanguageCodes ? { multiSearchSelectedLanguageCodes: settings.selectedLanguageCodes } : {}),
+  ...(settings.includedLanguageCodes ? { multiSearchIncludedLanguageCodes: settings.includedLanguageCodes } : {}),
   ...(settings.selectedContentTypes ? { multiSearchSelectedContentTypes: settings.selectedContentTypes } : {}),
   ...(settings.depthMode ? { multiSearchDepthMode: settings.depthMode } : {}),
   ...(settings.advancedPages ? { multiSearchAdvancedPages: settings.advancedPages } : {}),
@@ -157,6 +161,7 @@ export default function MultiSearchBrowser({
   const [query, setQuery] = useState("");
   const [selectedScraperIds, setSelectedScraperIds] = useState<string[]>([]);
   const [selectedLanguageCodes, setSelectedLanguageCodes] = useState<string[]>([]);
+  const [includedLanguageCodes, setIncludedLanguageCodes] = useState<string[]>([]);
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [depthMode, setDepthMode] = useState<MultiSearchDepthMode>("quick");
   const [advancedPages, setAdvancedPages] = useState<MultiSearchAdvancedPages>(3);
@@ -175,6 +180,7 @@ export default function MultiSearchBrowser({
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [newSourceHistoryIds, setNewSourceHistoryIds] = useState<Set<string>>(() => new Set());
+  const [splitMergedResultIds, setSplitMergedResultIds] = useState<Set<string>>(() => new Set());
   const viewHistoryRecordsByIdRef = useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
@@ -227,6 +233,7 @@ export default function MultiSearchBrowser({
   const applyPersistentSettings = React.useCallback((settings: MultiSearchPersistentSettings) => {
     setSelectedScraperIds(settings.selectedScraperIds);
     setSelectedLanguageCodes(settings.selectedLanguageCodes);
+    setIncludedLanguageCodes(settings.includedLanguageCodes);
     setSelectedContentTypes(settings.selectedContentTypes);
     setDepthMode(settings.depthMode);
     setAdvancedPages(settings.advancedPages);
@@ -250,6 +257,12 @@ export default function MultiSearchBrowser({
     const normalizedValue = normalizeMultiSearchSelectedLanguageCodes(value);
     setSelectedLanguageCodes(normalizedValue);
     persistMultiSearchSettings({ selectedLanguageCodes: normalizedValue });
+  }, [persistMultiSearchSettings]);
+
+  const handleIncludedLanguageCodesChange = React.useCallback((value: string[]) => {
+    const normalizedValue = normalizeMultiSearchIncludedLanguageCodes(value);
+    setIncludedLanguageCodes(normalizedValue);
+    persistMultiSearchSettings({ includedLanguageCodes: normalizedValue });
   }, [persistMultiSearchSettings]);
 
   const handleSelectedContentTypesChange = React.useCallback((value: string[]) => {
@@ -358,9 +371,10 @@ export default function MultiSearchBrowser({
       setResultTextFilter("");
       setDebouncedResultTextFilter("");
       setNewSourceHistoryIds(new Set());
+      setSplitMergedResultIds(new Set());
       setOpenError(null);
       setAuthorExtractionProgress(null);
-      restoreRuns([], persistentSettings.paceMode);
+      restoreRuns([], persistentSettings.paceMode, persistentSettings.includedLanguageCodes);
       return;
     }
 
@@ -377,7 +391,12 @@ export default function MultiSearchBrowser({
         setResultTextFilter(restoredState.resultTextFilter);
         setDebouncedResultTextFilter(restoredState.resultTextFilter);
         setNewSourceHistoryIds(new Set(restoredState.newSourceHistoryIds));
-        restoreRuns(restoredState.runs, persistentSettings.paceMode);
+        setSplitMergedResultIds(new Set(restoredState.splitMergedResultIds));
+        restoreRuns(
+          restoredState.runs,
+          persistentSettings.paceMode,
+          persistentSettings.includedLanguageCodes,
+        );
         return;
       }
 
@@ -412,11 +431,13 @@ export default function MultiSearchBrowser({
       query,
       selectedScraperIds,
       selectedLanguageCodes,
+      includedLanguageCodes,
       selectedContentTypes,
       resultLanguageFilterModes,
       resultReadingStatusFilters,
       resultTextFilter,
       newSourceHistoryIds: Array.from(newSourceHistoryIds),
+      splitMergedResultIds: Array.from(splitMergedResultIds),
       depthMode,
       advancedPages,
       paceMode,
@@ -425,6 +446,7 @@ export default function MultiSearchBrowser({
   }, [
     advancedPages,
     depthMode,
+    includedLanguageCodes,
     newSourceHistoryIds,
     paceMode,
     query,
@@ -435,6 +457,7 @@ export default function MultiSearchBrowser({
     selectedContentTypes,
     selectedLanguageCodes,
     selectedScraperIds,
+    splitMergedResultIds,
     viewMode,
   ]);
 
@@ -469,10 +492,14 @@ export default function MultiSearchBrowser({
     () => allSourceHistoryIds.join("|"),
     [allSourceHistoryIds],
   );
-  const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
+  const { mergedResults: automaticallyMergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
     allSources,
     mergeRefreshKey,
     mergeOptions,
+  );
+  const mergedResults = useMemo(
+    () => applyManualMultiSearchSplits(automaticallyMergedResults, splitMergedResultIds),
+    [automaticallyMergedResults, splitMergedResultIds],
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(allSources),
@@ -579,6 +606,15 @@ export default function MultiSearchBrowser({
   const selectedTypeSummaryLabel = hasNoSelectedContentType
     ? "Aucun"
     : formatList(selectedTypeSummary, "Tous");
+  const includedLanguageSummaryLabel = useMemo(() => {
+    const { includedValues, excludedValues } = splitIncludeFilterValues(includedLanguageCodes);
+    const includedLabel = formatList(includedValues.map(getLanguageLabel), "Toutes");
+    const excludedLabel = excludedValues.length
+      ? ` sauf ${excludedValues.map(getLanguageLabel).join(", ")}`
+      : "";
+
+    return `${includedLabel}${excludedLabel}`;
+  }, [includedLanguageCodes]);
   const scraperOptions = useMemo<MultiSearchFilterOption[]>(() => (
     searchableScrapers.map((scraper) => ({
       label: scraper.name,
@@ -629,12 +665,14 @@ export default function MultiSearchBrowser({
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
     setNewSourceHistoryIds(new Set());
+    setSplitMergedResultIds(new Set());
     setAuthorExtractionProgress(null);
     void runSearch({
       query,
       scrapers: selectedScrapers,
       maxPages: getDepthPages(depthMode, advancedPages),
       paceMode,
+      includedLanguageCodes,
       scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
     });
 
@@ -645,6 +683,7 @@ export default function MultiSearchBrowser({
         settings: buildMultiSearchHistorySettings({
           selectedScrapers,
           selectedLanguageCodes,
+          includedLanguageCodes,
           selectedContentTypes,
           depthMode,
           advancedPages,
@@ -969,16 +1008,19 @@ export default function MultiSearchBrowser({
         contentTypeOptions={contentTypeOptions}
         selectedScraperIds={selectedScraperIds}
         selectedLanguageCodes={selectedLanguageCodes}
+        includedLanguageCodes={includedLanguageCodes}
         selectedContentTypes={selectedContentTypes}
         onSelectedScraperIdsChange={handleSelectedScraperIdsChange}
         onSelectedLanguageCodesChange={handleSelectedLanguageCodesChange}
+        onIncludedLanguageCodesChange={handleIncludedLanguageCodesChange}
         onSelectedContentTypesChange={handleSelectedContentTypesChange}
       />
 
       <section className="multi-search__panel multi-search__summary">
         <div className="multi-search__summary-main">
           <strong>Recherche sur {selectedScraperSummaryLabel} scrapper(s)</strong>
-          <span>Langues : {selectedLanguageSummaryLabel}</span>
+          <span>Langues des scrappers : {selectedLanguageSummaryLabel}</span>
+          <span>Langues incluses : {includedLanguageSummaryLabel}</span>
           <span>Types : {selectedTypeSummaryLabel}</span>
           <div className="multi-search__summary-counts">
             <span>{statusCounts.done} termine(s)</span>
@@ -1046,6 +1088,11 @@ export default function MultiSearchBrowser({
           openInWorkspace,
         )}
         onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
+        onSplitResult={(resultId) => setSplitMergedResultIds((currentIds) => {
+          const nextIds = new Set(currentIds);
+          nextIds.add(resultId);
+          return nextIds;
+        })}
         onExportJson={() => void handleExportJson()}
         onExportMergedResultsJson={() => void handleExportMergedResultsJson()}
         onExtractAuthors={() => void handleExtractAuthors()}

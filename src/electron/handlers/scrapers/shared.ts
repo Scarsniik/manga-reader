@@ -245,6 +245,11 @@ const sanitizeLatestModule = (value: unknown): ScraperLatestModule => (
   value === "search" ? "search" : "homepage"
 );
 
+const sanitizeNonNegativeInteger = (value: unknown): number => {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 0;
+};
+
 const sanitizeRequestField = (value: unknown): ScraperRequestField | null => {
   if (!value || typeof value !== "object") {
     return null;
@@ -377,6 +382,12 @@ export const sanitizeGlobalConfig = (
     },
     chapterDownloads: {
       autoAssignSeries: Boolean(globalConfig?.chapterDownloads?.autoAssignSeries),
+    },
+    requestLimits: {
+      minDelayMs: sanitizeNonNegativeInteger(globalConfig?.requestLimits?.minDelayMs),
+      maxConcurrentRequests: sanitizeNonNegativeInteger(
+        globalConfig?.requestLimits?.maxConcurrentRequests,
+      ),
     },
   };
 };

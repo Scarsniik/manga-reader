@@ -20,6 +20,7 @@ import {
   isImageContentType,
   SCRAPER_DOCUMENT_ACCEPT,
 } from "./documentFetch";
+import { acquireScraperRequestSlot } from "./requestLimiter";
 
 const MAX_VALIDATED_IMAGE_BYTES = 16 * 1024 * 1024;
 
@@ -135,6 +136,7 @@ export async function fetchScraperDocument(
   }
 
   const controller = new AbortController();
+  const releaseRequestSlot = await acquireScraperRequestSlot(request);
   const timeout = setTimeout(() => {
     controller.abort();
   }, DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS);
@@ -267,5 +269,6 @@ export async function fetchScraperDocument(
     };
   } finally {
     clearTimeout(timeout);
+    releaseRequestSlot();
   }
 }

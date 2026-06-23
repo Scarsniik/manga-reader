@@ -28,6 +28,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRunState";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
+import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 
 type RunSearchOptions = {
   query: string;
@@ -35,6 +36,7 @@ type RunSearchOptions = {
   maxPages: MultiSearchPageLimit;
   paceMode: MultiSearchPaceMode;
   scrapeDetailsWithCards: boolean;
+  includedLanguageCodes: string[];
 };
 
 export default function useMultiSearch() {
@@ -46,6 +48,7 @@ export default function useMultiSearch() {
   const cancelledScraperIdsRef = useRef(new Set<string>());
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
   const lastScrapeDetailsWithCardsRef = useRef(false);
+  const lastIncludedLanguageCodesRef = useRef<string[]>([]);
   const {
     clearRunUpdates,
     flushRunUpdates,
@@ -77,12 +80,14 @@ export default function useMultiSearch() {
   const restoreRuns = useCallback((
     restoredRuns: MultiSearchScraperRun[],
     paceMode: MultiSearchPaceMode,
+    includedLanguageCodes: string[],
   ) => {
     clearRunUpdates();
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
     lastScrapeDetailsWithCardsRef.current = false;
+    lastIncludedLanguageCodesRef.current = includedLanguageCodes;
     setRuns(restoredRuns.map((run) => (
       isMultiSearchRunActive(run) ? cancelMultiSearchRun(run) : run
     )));
@@ -131,8 +136,13 @@ export default function useMultiSearch() {
         return null;
       }
 
+      const includedPageResults = buildSourceResults(run.scraper, page, pageIndex, searchTerm)
+        .filter((source) => doesMultiSearchSourceMatchIncludedLanguages(
+          source,
+          lastIncludedLanguageCodesRef.current,
+        ));
       const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(run.scraper, page, pageIndex, searchTerm),
+        includedPageResults,
       );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
@@ -244,6 +254,7 @@ export default function useMultiSearch() {
     maxPages,
     paceMode,
     scrapeDetailsWithCards,
+    includedLanguageCodes,
   }: RunSearchOptions) => {
     const searchTerms = parseMultiSearchTerms(query);
     if (!searchTerms.length) {
@@ -263,6 +274,7 @@ export default function useMultiSearch() {
     cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
     lastScrapeDetailsWithCardsRef.current = scrapeDetailsWithCards;
+    lastIncludedLanguageCodesRef.current = includedLanguageCodes;
     clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
     const pageLimit = maxPages === null ? null : Math.max(1, maxPages);

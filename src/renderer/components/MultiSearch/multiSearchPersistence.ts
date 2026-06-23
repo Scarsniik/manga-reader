@@ -18,11 +18,13 @@ export type MultiSearchPersistentFormState = {
   query: string;
   selectedScraperIds: string[];
   selectedLanguageCodes: string[];
+  includedLanguageCodes: string[];
   selectedContentTypes: string[];
   resultLanguageFilterModes: MultiSearchLanguageFilterModes;
   resultReadingStatusFilters: MultiSearchReadingStatusFilter[];
   resultTextFilter: string;
   newSourceHistoryIds: string[];
+  splitMergedResultIds: string[];
   depthMode: MultiSearchDepthMode;
   advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
@@ -276,11 +278,13 @@ export const readMultiSearchState = (
       query: typeof parsed.query === "string" ? parsed.query : "",
       selectedScraperIds: isStringArray(parsed.selectedScraperIds) ? parsed.selectedScraperIds : [],
       selectedLanguageCodes: isStringArray(parsed.selectedLanguageCodes) ? parsed.selectedLanguageCodes : [],
+      includedLanguageCodes: isStringArray(parsed.includedLanguageCodes) ? parsed.includedLanguageCodes : [],
       selectedContentTypes: isStringArray(parsed.selectedContentTypes) ? parsed.selectedContentTypes : [],
       resultLanguageFilterModes: restoreLanguageFilterModes(parsed.resultLanguageFilterModes),
       resultReadingStatusFilters: restoreReadingStatusFilters(parsed.resultReadingStatusFilters),
       resultTextFilter: typeof parsed.resultTextFilter === "string" ? parsed.resultTextFilter : "",
       newSourceHistoryIds: isStringArray(parsed.newSourceHistoryIds) ? parsed.newSourceHistoryIds : [],
+      splitMergedResultIds: isStringArray(parsed.splitMergedResultIds) ? parsed.splitMergedResultIds : [],
       depthMode: isDepthMode(parsed.depthMode) ? parsed.depthMode : "quick",
       advancedPages: restoreAdvancedPages(parsed.advancedPages),
       paceMode: isPaceMode(parsed.paceMode) ? parsed.paceMode : "fast",

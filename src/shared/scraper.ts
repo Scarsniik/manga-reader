@@ -281,6 +281,11 @@ export interface ScraperChapterDownloadConfig {
   autoAssignSeries: boolean;
 }
 
+export interface ScraperRequestLimits {
+  minDelayMs: number;
+  maxConcurrentRequests: number;
+}
+
 export interface ScraperGlobalConfig {
   defaultTagIds: string[];
   defaultLanguage?: string;
@@ -290,6 +295,7 @@ export interface ScraperGlobalConfig {
   latest: ScraperLatestConfig;
   bookmark: ScraperBookmarkConfig;
   chapterDownloads: ScraperChapterDownloadConfig;
+  requestLimits: ScraperRequestLimits;
 }
 
 export interface ScraperAccessValidationRequest {
@@ -565,6 +571,7 @@ export interface SaveScraperGlobalConfigRequest {
 }
 
 export interface FetchScraperDocumentRequest {
+  scraperId?: string;
   baseUrl: string;
   targetUrl: string;
   requestConfig?: ScraperRequestConfig;
@@ -1180,6 +1187,10 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
     },
     chapterDownloads: {
       autoAssignSeries: false,
+    },
+    requestLimits: {
+      minDelayMs: 0,
+      maxConcurrentRequests: 0,
     },
   };
 }

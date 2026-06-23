@@ -21,6 +21,7 @@ import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch
 import { buildSearchResultViewHistoryIdentity, isScraperViewHistoryCardNew } from "@/renderer/utils/scraperViewHistory";
 import type { Manga } from "@/renderer/types";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 
 type StatusItem = {
   key: string;
@@ -136,6 +137,7 @@ export default function ScraperLatestResults({
 }: Props) {
   const [mergeRefreshKey, setMergeRefreshKey] = React.useState(0);
   const [isStatusPanelOpen, setIsStatusPanelOpen] = React.useState(false);
+  const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
   const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
     sources,
     mergeRefreshKey,
@@ -145,9 +147,13 @@ export default function ScraperLatestResults({
     () => buildMultiSearchResultLanguageFilterCodes(sources),
     [sources],
   );
+  const manuallySplitResults = React.useMemo(
+    () => applyManualMultiSearchSplits(mergedResults, splitResultIds),
+    [mergedResults, splitResultIds],
+  );
   const languageFilteredResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-    [languageFilterModes, mergedResults],
+    () => filterMultiSearchMergedResultsByLanguage(manuallySplitResults, languageFilterModes),
+    [languageFilterModes, manuallySplitResults],
   );
   const visibleResults = React.useMemo(
     () => languageFilteredResults.filter((result) => (
@@ -289,6 +295,11 @@ export default function ScraperLatestResults({
           onOpenSourceInWorkspace={onOpenSourceInWorkspace}
           onOpenProgressReader={onOpenProgressReader}
           onSetSourcesRead={onSetSourcesRead}
+          onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+            const nextIds = new Set(currentIds);
+            nextIds.add(resultId);
+            return nextIds;
+          })}
         />
       ) : !loading ? (
         <div className="multi-search__message is-info">{emptyLabel}</div>

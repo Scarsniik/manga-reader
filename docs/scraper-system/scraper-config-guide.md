@@ -56,6 +56,15 @@ Les modules utilisent `fetchScraperDocument` :
 - `Accept` oriente HTML
 - pour une image directe, le body n'est pas lu comme HTML ; seul le `content-type` sert a valider
 
+Les reglages globaux de chaque scraper permettent aussi de limiter son rythme HTTP :
+
+- `requestLimits.minDelayMs` impose un delai minimal entre le depart de deux requetes ;
+- `requestLimits.maxConcurrentRequests` borne le nombre de requetes simultanees ;
+- `0` desactive la limite correspondante.
+
+La file est partagee par toutes les vues de l'application pour un meme scraper. Le temps passe dans
+la file n'est pas deduit du timeout HTTP de 10 secondes, qui commence lorsque la requete est autorisee.
+
 Les modules `Recherche` et `Homepage` peuvent aussi envoyer un `POST`. Les autres modules chargent
 une URL par `GET`.
 

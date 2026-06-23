@@ -3,10 +3,12 @@ import IncludeFilterBar, {
   type IncludeFilterOption,
 } from "@/renderer/components/IncludeFilterBar/IncludeFilterBar";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
+import { languages } from "@/renderer/consts/languages";
 import {
   NO_MULTI_SEARCH_CONTENT_TYPES_VALUE,
   NO_MULTI_SEARCH_LANGUAGES_VALUE,
   NO_MULTI_SEARCH_SCRAPERS_VALUE,
+  UNKNOWN_MULTI_SEARCH_VALUE,
 } from "@/renderer/components/MultiSearch/multiSearchConstants";
 
 export type MultiSearchFilterOption = {
@@ -20,9 +22,11 @@ type Props = {
   contentTypeOptions: MultiSearchFilterOption[];
   selectedScraperIds: string[];
   selectedLanguageCodes: string[];
+  includedLanguageCodes: string[];
   selectedContentTypes: string[];
   onSelectedScraperIdsChange: (value: string[]) => void;
   onSelectedLanguageCodesChange: (value: string[]) => void;
+  onIncludedLanguageCodesChange: (value: string[]) => void;
   onSelectedContentTypesChange: (value: string[]) => void;
 };
 
@@ -33,15 +37,28 @@ const toIncludeOptions = (options: MultiSearchFilterOption[]): IncludeFilterOpti
   }))
 );
 
+const INCLUDED_LANGUAGE_OPTIONS: IncludeFilterOption[] = [
+  ...languages.map((language) => ({
+    id: language.code,
+    label: language.frenchName,
+  })),
+  {
+    id: UNKNOWN_MULTI_SEARCH_VALUE,
+    label: "Inconnue",
+  },
+];
+
 export default function MultiSearchFilters({
   scraperOptions,
   languageOptions,
   contentTypeOptions,
   selectedScraperIds,
   selectedLanguageCodes,
+  includedLanguageCodes,
   selectedContentTypes,
   onSelectedScraperIdsChange,
   onSelectedLanguageCodesChange,
+  onIncludedLanguageCodesChange,
   onSelectedContentTypesChange,
 }: Props) {
   const includeScraperOptions = React.useMemo(
@@ -74,14 +91,14 @@ export default function MultiSearchFilters({
         noneValue={NO_MULTI_SEARCH_SCRAPERS_VALUE}
       />
       <IncludeFilterBar
-        title="Langues"
+        title="Langues des scrappers"
         allLabel="Toutes les langues"
         allButtonLabel="Toutes"
         noneLabel="Aucune langue"
         noneButtonLabel="Aucun"
         emptySelectionLabel="Aucune langue"
         emptyOptionsLabel="Aucune langue disponible"
-        ariaLabel="Langues incluses dans la recherche multi-source"
+        ariaLabel="Langues utilisees pour selectionner les scrappers de la recherche multi-source"
         value={selectedLanguageCodes}
         options={includeLanguageOptions}
         onChange={onSelectedLanguageCodesChange}
@@ -106,6 +123,22 @@ export default function MultiSearchFilters({
         options={includeContentTypeOptions}
         onChange={onSelectedContentTypesChange}
         noneValue={NO_MULTI_SEARCH_CONTENT_TYPES_VALUE}
+      />
+      <IncludeFilterBar
+        title="Langues incluses"
+        allLabel="Toutes les langues"
+        allButtonLabel="Toutes"
+        emptySelectionLabel="Aucune langue incluse"
+        ariaLabel="Langues incluses dans les resultats de la recherche multi-source"
+        value={includedLanguageCodes}
+        options={INCLUDED_LANGUAGE_OPTIONS}
+        onChange={onIncludedLanguageCodesChange}
+        renderOptionContent={(language) => (
+          <>
+            <LanguageFlags languageCodes={[language.id]} />
+            <span>{language.label}</span>
+          </>
+        )}
       />
     </div>
   );

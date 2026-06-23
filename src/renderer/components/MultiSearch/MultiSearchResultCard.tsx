@@ -57,6 +57,7 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  onSplitResult?: (resultId: string) => void;
 };
 
 const formatValues = (values: string[], fallback: string): string => (
@@ -138,6 +139,7 @@ export default function MultiSearchResultCard({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  onSplitResult,
 }: Props) {
   const sourceMenuRef = React.useRef<HTMLDetailsElement>(null);
   const openMenuRef = React.useRef<HTMLDetailsElement>(null);
@@ -436,6 +438,15 @@ export default function MultiSearchResultCard({
     </div>
   );
   const actions: ScraperCardAction[] = [];
+
+  if (result.sources.length > 1 && onSplitResult) {
+    actions.push({
+      id: "split-result",
+      type: "secondary",
+      label: "Separer les sources",
+      onClick: () => onSplitResult(result.id),
+    });
+  }
 
   React.useEffect(() => {
     setCoverIndex(0);

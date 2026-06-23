@@ -13,6 +13,11 @@ import type {
   MultiSearchScraperRun,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
+import {
+  detectLanguageCodesFromTitle,
+  uniqueLanguageCodes,
+} from "@/renderer/utils/languageDetection";
+import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 
 const isLanguageFilterMode = (
   mode: MultiSearchLanguageFilterMode | undefined,
@@ -20,9 +25,49 @@ const isLanguageFilterMode = (
   mode === "only" || mode === "without" || mode === "default"
 );
 
-export const getMultiSearchSourceLanguageValues = (source: MultiSearchSourceResult): string[] => (
-  source.sourceLanguageCodes.length ? source.sourceLanguageCodes : [UNKNOWN_MULTI_SEARCH_VALUE]
+const normalizeLanguageFilterValues = (values: string[]): string[] => (
+  uniqueMultiSearchFilterValues(values.flatMap((value) => {
+    const canonicalCodes = uniqueLanguageCodes([value]);
+    if (canonicalCodes.length) {
+      return canonicalCodes;
+    }
+
+    const normalizedValue = String(value ?? "").trim().toLowerCase();
+    return normalizedValue ? [normalizedValue] : [];
+  }))
 );
+
+export const getMultiSearchSourceLanguageValues = (source: MultiSearchSourceResult): string[] => {
+  const titleLanguageCodes = normalizeLanguageFilterValues(
+    detectLanguageCodesFromTitle(source.result.title),
+  );
+  if (titleLanguageCodes.length) {
+    return titleLanguageCodes;
+  }
+
+  const sourceLanguageCodes = normalizeLanguageFilterValues([
+    ...source.sourceLanguageCodes,
+    ...source.detectedLanguageCodes,
+  ]);
+  return sourceLanguageCodes.length ? sourceLanguageCodes : [UNKNOWN_MULTI_SEARCH_VALUE];
+};
+
+export const doesMultiSearchSourceMatchIncludedLanguages = (
+  source: MultiSearchSourceResult,
+  includedLanguageCodes: string[],
+): boolean => {
+  const { includedValues, excludedValues } = splitIncludeFilterValues(includedLanguageCodes);
+  const normalizedIncludedValues = normalizeLanguageFilterValues(includedValues);
+  const normalizedExcludedValues = normalizeLanguageFilterValues(excludedValues);
+  const sourceLanguageCodes = getMultiSearchSourceLanguageValues(source);
+
+  if (sourceLanguageCodes.some((languageCode) => normalizedExcludedValues.includes(languageCode))) {
+    return false;
+  }
+
+  return !normalizedIncludedValues.length
+    || sourceLanguageCodes.some((languageCode) => normalizedIncludedValues.includes(languageCode));
+};
 
 export const getMultiSearchLanguageFilterMode = (
   modes: MultiSearchLanguageFilterModes,
@@ -49,9 +94,9 @@ const getLanguageCodesByFilterMode = (
   modes: MultiSearchLanguageFilterModes,
   expectedMode: MultiSearchLanguageFilterMode,
 ): string[] => (
-  Object.entries(modes)
+  normalizeLanguageFilterValues(Object.entries(modes)
     .filter(([, mode]) => mode === expectedMode)
-    .map(([languageCode]) => languageCode)
+    .map(([languageCode]) => languageCode))
 );
 
 const doesSourceMatchLanguageFilter = (

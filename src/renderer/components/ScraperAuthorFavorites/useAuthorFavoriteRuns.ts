@@ -18,6 +18,7 @@ import {
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
+import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 
@@ -28,6 +29,7 @@ type AuthorFavoriteRunsOptions = {
   cacheResults: boolean;
   concurrency?: number;
   scrapeDetailsWithCards?: boolean;
+  includedLanguageCodes?: string[];
 };
 
 export type AuthorFavoriteSourceRun = {
@@ -44,6 +46,7 @@ export type AuthorFavoriteSourceRun = {
 };
 
 const MAX_AUTHOR_FAVORITE_AUTO_PAGES = 250;
+const ALL_AUTHOR_FAVORITE_LANGUAGES: string[] = [];
 
 const normalizeConcurrency = (value: number | undefined, fallback: number): number => {
   if (!Number.isFinite(value)) {
@@ -179,6 +182,7 @@ export default function useAuthorFavoriteRuns(
 ) {
   const { initialPageCount, cacheResults } = options;
   const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
+  const includedLanguageCodes = options.includedLanguageCodes ?? ALL_AUTHOR_FAVORITE_LANGUAGES;
   const [runs, setRuns] = useState<AuthorFavoriteSourceRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -238,7 +242,8 @@ export default function useAuthorFavoriteRuns(
         },
       );
       const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(run.scraper, page, pageIndex, run.favoriteSource.name),
+        buildSourceResults(run.scraper, page, pageIndex, run.favoriteSource.name)
+          .filter((source) => doesMultiSearchSourceMatchIncludedLanguages(source, includedLanguageCodes)),
       );
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
@@ -273,7 +278,7 @@ export default function useAuthorFavoriteRuns(
       }
       return failedRun;
     }
-  }, [patchRun, scrapeDetailsWithCards]);
+  }, [includedLanguageCodes, patchRun, scrapeDetailsWithCards]);
 
   const loadPagesForRun = useCallback(async (
     run: AuthorFavoriteSourceRun,
