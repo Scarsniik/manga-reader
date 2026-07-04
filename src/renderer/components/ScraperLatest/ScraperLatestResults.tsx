@@ -27,6 +27,7 @@ type StatusItem = {
   key: string;
   name: string;
   status: string;
+  state?: "loading" | "continuable" | "complete" | "error";
   detail: string;
   error?: string;
 };
@@ -44,6 +45,14 @@ type Props = {
   actionLabel?: string;
   secondaryActionLabel?: string;
   continueActionLabel?: string;
+  continueActionDisabled?: boolean;
+  continueActionTitle?: string;
+  continueCount?: number;
+  replaceContinueActionLabel?: string;
+  replaceContinueActionDisabled?: boolean;
+  replaceContinueActionTitle?: string;
+  settingsActionLabel?: string;
+  settingsActionActive?: boolean;
   actionsDisabled?: boolean;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
@@ -56,7 +65,10 @@ type Props = {
   enableRomajiPhoneticMerge?: boolean;
   onReload: () => void;
   onSecondaryAction?: () => void;
-  onContinue?: () => void;
+  onContinue?: (count: number) => void;
+  onContinueCountChange?: (count: number) => void;
+  onReplaceContinue?: () => void;
+  onOpenSettings?: () => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -90,17 +102,50 @@ const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
 
 const buildStatusSummary = (items: StatusItem[]): string => {
   const counts = items.reduce<Record<string, number>>((result, item) => {
-    result[item.status] = (result[item.status] ?? 0) + 1;
+    const state = item.state ?? resolveStatusItemState(item);
+    result[state] = (result[state] ?? 0) + 1;
     return result;
   }, {});
   const parts = [
     counts.loading ? `${counts.loading} en cours` : "",
-    counts.waiting ? `${counts.waiting} en attente` : "",
-    counts.done ? `${counts.done} termine(s)` : "",
+    counts.continuable ? `${counts.continuable} avec suite` : "",
+    counts.complete ? `${counts.complete} sans suite` : "",
     counts.error ? `${counts.error} erreur(s)` : "",
   ].filter(Boolean);
 
   return parts.length ? parts.join(", ") : `${items.length} source(s)`;
+};
+
+const resolveStatusItemState = (item: StatusItem): NonNullable<StatusItem["state"]> => {
+  if (item.state) {
+    return item.state;
+  }
+
+  if (item.status === "waiting" || item.status === "loading") {
+    return "loading";
+  }
+
+  if (item.status === "error") {
+    return "error";
+  }
+
+  return "complete";
+};
+
+const getStatusItemStateLabel = (state: NonNullable<StatusItem["state"]>): string => {
+  if (state === "loading") {
+    return "En cours";
+  }
+
+  if (state === "continuable") {
+    return "Fini avec suite disponible";
+  }
+
+  if (state === "error") {
+    return "Erreur";
+  }
+
+  return "Fini sans suite";
 };
 
 export default function ScraperLatestResults({
@@ -116,6 +161,14 @@ export default function ScraperLatestResults({
   actionLabel = "Recharger",
   secondaryActionLabel,
   continueActionLabel,
+  continueActionDisabled = false,
+  continueActionTitle,
+  continueCount = 1,
+  replaceContinueActionLabel,
+  replaceContinueActionDisabled = false,
+  replaceContinueActionTitle,
+  settingsActionLabel,
+  settingsActionActive = false,
   actionsDisabled = false,
   libraryMangas,
   bookmarkedSourceKeys,
@@ -129,6 +182,9 @@ export default function ScraperLatestResults({
   onReload,
   onSecondaryAction,
   onContinue,
+  onContinueCountChange,
+  onReplaceContinue,
+  onOpenSettings,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -180,6 +236,19 @@ export default function ScraperLatestResults({
     () => buildStatusSummary(statusItems),
     [statusItems],
   );
+  const normalizedContinueCount = Math.max(1, Math.floor(continueCount || 1));
+  const isContinueDisabled = loading || actionsDisabled || continueActionDisabled;
+  const isReplaceContinueDisabled = loading || actionsDisabled || replaceContinueActionDisabled;
+  const resolvedContinueActionTitle = continueActionDisabled
+    ? continueActionTitle ?? "Aucun resultat charge : lance un scan qui trouve au moins un resultat avant de continuer."
+    : loading
+      ? "Chargement en cours."
+      : `Continuer le scan ${normalizedContinueCount} fois.`;
+  const resolvedReplaceContinueActionTitle = replaceContinueActionDisabled
+    ? replaceContinueActionTitle ?? "Aucune suite disponible."
+    : loading
+      ? "Chargement en cours."
+      : "Continuer le scan en remplacant les resultats actuels.";
 
   React.useEffect(() => {
     setIsStatusPanelOpen(false);
@@ -187,9 +256,79 @@ export default function ScraperLatestResults({
 
   return (
     <section className="multi-search__results scraper-latest-results">
-      <div className="multi-search__section-head">
-        <div>
+      <div className="multi-search__section-head scraper-latest-results__head">
+        <div className="scraper-latest-results__head-top">
           <h3>{title}</h3>
+          <div className="multi-search__section-actions">
+            {settingsActionLabel && onOpenSettings ? (
+              <button
+                type="button"
+                className={settingsActionActive ? "secondary is-active" : "secondary"}
+                onClick={onOpenSettings}
+                disabled={loading}
+              >
+                {settingsActionLabel}
+              </button>
+            ) : null}
+            {continueActionLabel && onContinue ? (
+              <div className="scraper-latest-results__continue-action">
+                <label className="scraper-latest-results__continue-count">
+                  <span>Passes</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={normalizedContinueCount}
+                    onChange={(event) => {
+                      onContinueCountChange?.(Number.parseInt(event.currentTarget.value, 10) || 1);
+                    }}
+                    disabled={loading || actionsDisabled}
+                    aria-label="Nombre de continuations"
+                  />
+                </label>
+                <span className="scraper-latest-results__action-tooltip" title={resolvedContinueActionTitle}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setMergeRefreshKey((currentKey) => currentKey + 1);
+                      onContinue(normalizedContinueCount);
+                    }}
+                    disabled={isContinueDisabled}
+                    title={resolvedContinueActionTitle}
+                  >
+                    {loading ? "Chargement..." : continueActionLabel}
+                  </button>
+                </span>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setMergeRefreshKey((currentKey) => currentKey + 1);
+                onReload();
+              }}
+              disabled={loading || actionsDisabled}
+            >
+              {loading ? "Chargement..." : actionLabel}
+            </button>
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setMergeRefreshKey((currentKey) => currentKey + 1);
+                  onSecondaryAction();
+                }}
+                disabled={loading || actionsDisabled}
+              >
+                {secondaryActionLabel}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="scraper-latest-results__summary">
           <p>{summary}</p>
           <p>
             {visibleResults.length} carte(s), {visibleSourceCount} source(s) non vue(s).
@@ -213,32 +352,6 @@ export default function ScraperLatestResults({
               onToggleFilterMode={onToggleLanguageFilterMode}
             />
           </div>
-        </div>
-        <div className="multi-search__section-actions">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              setMergeRefreshKey((currentKey) => currentKey + 1);
-              onReload();
-            }}
-            disabled={loading || actionsDisabled}
-          >
-            {loading ? "Chargement..." : actionLabel}
-          </button>
-          {secondaryActionLabel && onSecondaryAction ? (
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setMergeRefreshKey((currentKey) => currentKey + 1);
-                onSecondaryAction();
-              }}
-              disabled={loading || actionsDisabled}
-            >
-              {secondaryActionLabel}
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -266,15 +379,25 @@ export default function ScraperLatestResults({
           </button>
           {isStatusPanelOpen ? (
             <div id={statusPanelId} className="multi-search__status-list scraper-latest-results__status-list">
-              {statusItems.map((item) => (
-                <div key={item.key} className={`multi-search__status is-${item.status}`}>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>{item.detail}</span>
+              {statusItems.map((item) => {
+                const state = resolveStatusItemState(item);
+                const stateLabel = getStatusItemStateLabel(state);
+                return (
+                  <div key={item.key} className={`multi-search__status is-${item.status} is-${state}`}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <span
+                      className={`scraper-latest-results__status-icon is-${state}`}
+                      role="img"
+                      aria-label={stateLabel}
+                      title={stateLabel}
+                    />
+                    {item.error ? <p>{item.error}</p> : null}
                   </div>
-                  {item.error ? <p>{item.error}</p> : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
         </div>
@@ -305,21 +428,23 @@ export default function ScraperLatestResults({
         <div className="multi-search__message is-info">{emptyLabel}</div>
       ) : null}
 
-      {visibleResults.length > 0 && continueActionLabel && onContinue ? (
+      {visibleResults.length > 0 && replaceContinueActionLabel && onReplaceContinue ? (
         <div className="scraper-latest-results__continue">
           <button
             type="button"
             className="secondary"
             onClick={() => {
               setMergeRefreshKey((currentKey) => currentKey + 1);
-              onContinue();
+              onReplaceContinue();
             }}
-            disabled={loading || actionsDisabled}
+            disabled={isReplaceContinueDisabled}
+            title={resolvedReplaceContinueActionTitle}
           >
-            {loading ? "Chargement..." : continueActionLabel}
+            {loading ? "Chargement..." : replaceContinueActionLabel}
           </button>
         </div>
       ) : null}
+
     </section>
   );
 }

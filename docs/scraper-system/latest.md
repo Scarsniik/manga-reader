@@ -44,8 +44,20 @@ incluses, il continue la pagination normale au lieu de s'arreter a la premiere p
 ignoree par langue. Le parametre `scraperLatestDeepPageLimit` limite le nombre de pages consultees
 en scan profond quand il est superieur a 0 ; la valeur 0 signifie aucune limite de pages.
 
-Quand des cards apparaissent, un bouton `Continuer` devient disponible sous les resultats. Apres un
-scan rapide, il ajoute une nouvelle passe rapide depuis le curseur dynamique du scan precedent.
+Quand des cards apparaissent, un bouton `Continuer` devient disponible dans l'en-tete des resultats.
+Il est place avant la grille pour pouvoir relancer la collecte avant de parcourir les cards. Un petit
+champ numerique indique combien de passes de continuation lancer a la suite. Le bouton est actif
+uniquement si au moins une source a atteint son quota de resultats et garde une suite possible. Une
+source arretee avant son quota, par exemple faute de nouveautes, devient non viable pour `Continuer`.
+Apres un scan rapide, chaque passe ajoute une nouvelle reprise rapide depuis le curseur dynamique du
+scan precedent, sans vider les resultats deja affiches.
+
+Un second bouton `Continuer` est affiche sous les resultats quand des cards sont visibles. Il reprend
+le meme curseur rapide, mais remplace la liste courante par les resultats de la nouvelle reprise.
+
+Le panneau `Detail des sources` affiche l'etat de chaque source avec un indicateur a droite : bleu
+pour une source en cours, vert pour une source terminee avec suite disponible, jaune pour une source
+terminee sans suite, rouge pour une source en erreur.
 
 Les checkpoints sont aussi mis a jour depuis le navigateur scraper classique quand l'utilisateur
 avance dans les pages `Homepage` ou `Recherche`. Un long scroll manuel peut donc servir de nouveau
@@ -84,6 +96,11 @@ Chaque scraper choisit son module de collecte :
 Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Il s'applique
 par source incluse. Si une valeur tres grande est configuree, le runtime suit ce choix et peut donc
 charger beaucoup de pages.
+L'en-tete des resultats propose aussi des parametres de session pour remplacer temporairement le
+nombre de resultats par scrapper et par tag favori, le nombre de scrapings simultanes, la limite du
+scan profond, le seuil de cards vues d'affilee en scan rapide et la limite de refus par langue. Ces
+valeurs ne sont pas sauvegardees dans les settings globaux et le resume commence par un message
+`Override de session actif` tant qu'elles sont utilisees.
 Le parametre global `scraperLatestConcurrency` a un minimum de 1 et pas de limite haute. Il indique
 combien de sources peuvent etre chargees en parallele dans les onglets `Sources` et `Auteurs` du
 mode `Nouveautes`. La valeur par defaut est 2.

@@ -9,6 +9,7 @@ import type {
 } from "@/shared/scraper";
 import { HistoryTabs } from "@/renderer/components/History/HistoryControls";
 import useParams from "@/renderer/hooks/useParams";
+import { useModal } from "@/renderer/hooks/useModal";
 import { useScraperAuthorFavorites } from "@/renderer/stores/scraperAuthorFavorites";
 import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
@@ -39,6 +40,9 @@ import {
 } from "@/renderer/components/ScraperLatest/ScraperLatestIncludeFilters";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLatestResults";
+import buildScraperLatestSessionSettingsModal, {
+  type ScraperLatestSessionSettings,
+} from "@/renderer/components/ScraperLatest/ScraperLatestSessionSettingsModal";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import "@/renderer/components/History/style.scss";
 import "@/renderer/components/MultiSearch/style.scss";
@@ -240,15 +244,19 @@ const formatIncludeValuesSummary = (
 
 export default function ScraperLatestView({ scrapers }: Props) {
   const { params, setParams } = useParams();
+  const { openModal } = useModal();
   const [activeTab, setActiveTab] = React.useState<LatestTabId>("scrapers");
   const [authorRefreshKey, setAuthorRefreshKey] = React.useState(0);
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
   const [scraperSearchMode, setScraperSearchMode] = React.useState<ScraperLatestSearchMode>("quick");
+  const [scraperContinueCount, setScraperContinueCount] = React.useState(1);
+  const [scraperSessionSettings, setScraperSessionSettings] = React.useState<
+    ScraperLatestSessionSettings | null
+  >(null);
   const rootRef = React.useRef<HTMLElement | null>(null);
   const viewHistoryRecordsByIdRef = React.useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const lastStartedAuthorRefreshKeyRef = React.useRef(0);
   const lastStartedScraperRefreshKeyRef = React.useRef(0);
-  const scraperContinueFromQuickScanRef = React.useRef(false);
   const {
     favorites: authorFavorites,
     loaded: authorFavoritesLoaded,
@@ -300,18 +308,26 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [params?.scraperLatestAuthorIncludedLanguageCodes],
   );
   const authorIncludedLanguagesKey = authorIncludedLanguageCodes.join("|");
-  const scraperResultLimit = getScraperResultLimit(
+  const defaultScraperResultLimit = getScraperResultLimit(
     params?.scraperLatestScraperResultLimit ?? params?.scraperLatestResultLimit,
   );
-  const tagResultLimit = getScraperResultLimit(
+  const defaultTagResultLimit = getScraperResultLimit(
     params?.scraperLatestTagResultLimit ?? params?.scraperLatestResultLimit,
   );
-  const scraperLanguageRejectLimit = getScraperLanguageRejectLimit(params?.scraperLatestLanguageRejectLimit);
-  const scraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
-  const scraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
+  const defaultScraperLanguageRejectLimit = getScraperLanguageRejectLimit(params?.scraperLatestLanguageRejectLimit);
+  const defaultScraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
+  const defaultScraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
     params?.scraperLatestQuickConsecutiveSeenStopThreshold,
   );
-  const scraperLatestConcurrency = getScraperLatestConcurrency(params?.scraperLatestConcurrency);
+  const defaultScraperLatestConcurrency = getScraperLatestConcurrency(params?.scraperLatestConcurrency);
+  const scraperResultLimit = scraperSessionSettings?.scraperResultLimit ?? defaultScraperResultLimit;
+  const tagResultLimit = scraperSessionSettings?.tagResultLimit ?? defaultTagResultLimit;
+  const scraperLanguageRejectLimit = scraperSessionSettings?.languageRejectLimit ?? defaultScraperLanguageRejectLimit;
+  const scraperDeepPageLimit = scraperSessionSettings?.deepPageLimit ?? defaultScraperDeepPageLimit;
+  const scraperQuickConsecutiveSeenStopThreshold = scraperSessionSettings?.quickConsecutiveSeenStopThreshold
+    ?? defaultScraperQuickConsecutiveSeenStopThreshold;
+  const scraperLatestConcurrency = scraperSessionSettings?.concurrency ?? defaultScraperLatestConcurrency;
+  const hasScraperSessionSettingsOverride = scraperSessionSettings !== null;
   const scraperIncludedLanguageCodes = React.useMemo(
     () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
     [params?.scraperLatestIncludedLanguageCodes],
@@ -551,28 +567,22 @@ export default function ScraperLatestView({ scrapers }: Props) {
     void authorRuns.start();
   }, [activeTab, authorActionsDisabled, authorFavoritesLoaded, authorRefreshKey, authorRuns.start]);
 
-  React.useEffect(() => {
-    if (
-      activeTab !== "scrapers"
-      || !sourceResults.viewHistoryLoaded
-      || shouldWaitForIncludedTagFavorites
-      || scraperRefreshKey === 0
-      || lastStartedScraperRefreshKeyRef.current === scraperRefreshKey
-    ) {
-      return;
-    }
-
-    lastStartedScraperRefreshKeyRef.current = scraperRefreshKey;
-    const continueFromQuickScan = scraperContinueFromQuickScanRef.current;
-    scraperContinueFromQuickScanRef.current = false;
-    void scraperRuns.start(
+  const startScraperScan = React.useCallback(async (
+    options: {
+      searchMode: ScraperLatestSearchMode;
+      continueFromQuickScan?: boolean;
+      preserveCurrentResults?: boolean;
+    },
+  ) => {
+    await scraperRuns.start(
       scrapers,
       scraperResultLimit,
       new Map(viewHistoryRecordsByIdRef.current),
       scraperIncludedLanguageCodes,
       {
-        searchMode: scraperSearchMode,
-        continueFromQuickScan,
+        searchMode: options.searchMode,
+        continueFromQuickScan: options.continueFromQuickScan === true,
+        preserveCurrentResults: options.preserveCurrentResults === true,
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
         concurrency: scraperLatestConcurrency,
@@ -586,31 +596,68 @@ export default function ScraperLatestView({ scrapers }: Props) {
       },
     );
   }, [
-    activeTab,
-    latestScrapersKey,
-    latestTagFavoritesKey,
     params?.scraperBlacklistedTagsByScraper,
     params?.scraperHideBlacklistedTagCards,
     params?.scraperScrapeDetailsWithCards,
-    scraperIncludedLanguageCodes,
-    scraperIncludedLanguagesKey,
-    scraperIncludedScraperIds,
-    scraperIncludedScrapersKey,
-    scraperIncludedTagFavorites,
-    scraperIncludedTagFavoritesKey,
-    scraperRefreshKey,
     scraperDeepPageLimit,
+    scraperIncludedLanguageCodes,
+    scraperIncludedScraperIds,
+    scraperIncludedTagFavorites,
     scraperLanguageRejectLimit,
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
-    tagResultLimit,
-    scraperSearchMode,
     scraperRuns.start,
     scrapers,
+    tagResultLimit,
+  ]);
+
+  React.useEffect(() => {
+    if (
+      activeTab !== "scrapers"
+      || !sourceResults.viewHistoryLoaded
+      || shouldWaitForIncludedTagFavorites
+      || scraperRefreshKey === 0
+      || lastStartedScraperRefreshKeyRef.current === scraperRefreshKey
+    ) {
+      return;
+    }
+
+    lastStartedScraperRefreshKeyRef.current = scraperRefreshKey;
+    void startScraperScan({
+      searchMode: scraperSearchMode,
+      continueFromQuickScan: false,
+    });
+  }, [
+    activeTab,
+    latestScrapersKey,
+    latestTagFavoritesKey,
+    scraperIncludedLanguageCodes,
+    scraperIncludedLanguagesKey,
+    scraperIncludedScraperIds,
+    scraperIncludedScrapersKey,
+    scraperIncludedTagFavoritesKey,
+    scraperRefreshKey,
+    scraperSearchMode,
     shouldWaitForIncludedTagFavorites,
     sourceResults.viewHistoryLoaded,
+    startScraperScan,
   ]);
+
+  const getStatusState = React.useCallback((
+    status: "waiting" | "loading" | "done" | "error",
+    canContinue = false,
+  ) => {
+    if (status === "waiting" || status === "loading") {
+      return "loading";
+    }
+
+    if (status === "error") {
+      return "error";
+    }
+
+    return canContinue ? "continuable" : "complete";
+  }, []);
 
   const statusItems = React.useMemo(() => (
     activeTab === "authors"
@@ -618,30 +665,38 @@ export default function ScraperLatestView({ scrapers }: Props) {
         key: run.key,
         name: `${run.favoriteSource.name} - ${run.scraper.name}`,
         status: run.status,
+        state: getStatusState(run.status),
         detail: `${run.results.length} source(s), ${run.loadedPages} page(s) chargee(s)`,
         error: run.error,
       }))
-      : scraperRuns.runs.map((run) => ({
-        key: run.key,
-        name: run.sourceKind === "tagFavorite"
-          ? `${run.favorite?.name ?? run.favoriteSource?.name ?? "Tag favori"} - ${run.scraper.name}`
-          : run.scraper.name,
-        status: run.status,
-        detail: [
-          run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
-          `${run.results.length}/${run.sourceKind === "tagFavorite" ? tagResultLimit : scraperResultLimit} non vue(s)`,
-          run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
-          run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
-          run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
-          run.languageRejectLimitReached ? "arret langue" : "",
-          run.checkpointUsed ? "checkpoint utilise" : "",
-          run.deepSearch ? "recherche profonde" : "mode rapide",
-          `${run.checkedPages} page(s) consultee(s)`,
-          run.loadedPages > run.checkedPages ? `jusqu'a la page ${run.loadedPages}` : "",
-        ].filter(Boolean).join(" - "),
-        error: run.error,
-      }))
-  ), [activeTab, authorRuns.runs, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
+      : scraperRuns.runs.map((run) => {
+        const runResultLimit = run.sourceKind === "tagFavorite" ? tagResultLimit : scraperResultLimit;
+        const canContinue = run.canContinue === true;
+        return {
+          key: run.key,
+          name: run.sourceKind === "tagFavorite"
+            ? `${run.favorite?.name ?? run.favoriteSource?.name ?? "Tag favori"} - ${run.scraper.name}`
+            : run.scraper.name,
+          status: run.status,
+          state: getStatusState(run.status, canContinue),
+          detail: [
+            run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
+            `${run.results.length}/${runResultLimit} non vue(s)`,
+            run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
+            run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
+            run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
+            run.languageRejectLimitReached ? "arret langue" : "",
+            run.checkpointUsed ? "checkpoint utilise" : "",
+            run.deepSearch ? "recherche profonde" : "mode rapide",
+            `${run.checkedPages} page(s) consultee(s)`,
+            run.loadedPages > run.checkedPages ? `jusqu'a la page ${run.loadedPages}` : "",
+            run.status === "done" && canContinue ? "suite disponible" : "",
+            run.status === "done" && !canContinue ? "sans suite" : "",
+          ].filter(Boolean).join(" - "),
+          error: run.error,
+        };
+      })
+  ), [activeTab, authorRuns.runs, getStatusState, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
 
   const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
     setParams({
@@ -675,7 +730,6 @@ export default function ScraperLatestView({ scrapers }: Props) {
       remount: false,
     });
     lastStartedScraperRefreshKeyRef.current = 0;
-    scraperContinueFromQuickScanRef.current = false;
     setScraperRefreshKey(0);
     setScraperSearchMode("quick");
     scraperRuns.reset();
@@ -688,7 +742,6 @@ export default function ScraperLatestView({ scrapers }: Props) {
       remount: false,
     });
     lastStartedScraperRefreshKeyRef.current = 0;
-    scraperContinueFromQuickScanRef.current = false;
     setScraperRefreshKey(0);
     setScraperSearchMode("quick");
     scraperRuns.reset();
@@ -701,7 +754,6 @@ export default function ScraperLatestView({ scrapers }: Props) {
       remount: false,
     });
     lastStartedScraperRefreshKeyRef.current = 0;
-    scraperContinueFromQuickScanRef.current = false;
     setScraperRefreshKey(0);
     setScraperSearchMode("quick");
     scraperRuns.reset();
@@ -773,7 +825,17 @@ export default function ScraperLatestView({ scrapers }: Props) {
       "toutes",
     );
     const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
-    const baseSummary = `Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori.`;
+    const sessionOverrideSummary = hasScraperSessionSettingsOverride
+      ? [
+        `Override de session actif : ${scraperResultLimit} resultat(s) par scrapper`,
+        `${tagResultLimit} par tag favori`,
+        `${scraperLatestConcurrency} source(s) en parallele`,
+        `scan profond ${scraperDeepPageLimit} page(s)`,
+        `rapide ${scraperQuickConsecutiveSeenStopThreshold} vue(s)`,
+        `refus langue ${scraperLanguageRejectLimit}. `,
+      ].join(", ")
+      : "";
+    const baseSummary = `${sessionOverrideSummary}Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori.`;
     const concurrencySummary = ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
       ? " Aucun scrapper actif dans les nouveautes."
@@ -807,6 +869,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     enabledLatestScrapers,
     scraperIncludesNoScrapers,
     scraperDeepPageLimit,
+    hasScraperSessionSettingsOverride,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
@@ -828,6 +891,45 @@ export default function ScraperLatestView({ scrapers }: Props) {
     }
   }, []);
 
+  const handleOpenScraperSessionSettings = React.useCallback(() => {
+    openModal(buildScraperLatestSessionSettingsModal({
+      defaults: {
+        scraperResultLimit: defaultScraperResultLimit,
+        tagResultLimit: defaultTagResultLimit,
+        concurrency: defaultScraperLatestConcurrency,
+        deepPageLimit: defaultScraperDeepPageLimit,
+        quickConsecutiveSeenStopThreshold: defaultScraperQuickConsecutiveSeenStopThreshold,
+        languageRejectLimit: defaultScraperLanguageRejectLimit,
+      },
+      initialValues: {
+        scraperResultLimit,
+        tagResultLimit,
+        concurrency: scraperLatestConcurrency,
+        deepPageLimit: scraperDeepPageLimit,
+        quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
+        languageRejectLimit: scraperLanguageRejectLimit,
+      },
+      hasOverride: hasScraperSessionSettingsOverride,
+      onApply: setScraperSessionSettings,
+      onClear: () => setScraperSessionSettings(null),
+    }));
+  }, [
+    defaultScraperDeepPageLimit,
+    defaultScraperLanguageRejectLimit,
+    defaultScraperLatestConcurrency,
+    defaultScraperQuickConsecutiveSeenStopThreshold,
+    defaultScraperResultLimit,
+    defaultTagResultLimit,
+    hasScraperSessionSettingsOverride,
+    scraperDeepPageLimit,
+    scraperLanguageRejectLimit,
+    scraperLatestConcurrency,
+    scraperQuickConsecutiveSeenStopThreshold,
+    openModal,
+    scraperResultLimit,
+    tagResultLimit,
+  ]);
+
   const handleReload = React.useCallback(async () => {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
@@ -846,7 +948,6 @@ export default function ScraperLatestView({ scrapers }: Props) {
     }
 
     await refreshViewHistorySnapshot();
-    scraperContinueFromQuickScanRef.current = false;
     setScraperSearchMode("quick");
     setScraperRefreshKey((currentKey) => currentKey + 1);
   }, [activeTab, authorActionsDisabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
@@ -859,12 +960,37 @@ export default function ScraperLatestView({ scrapers }: Props) {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
     await refreshViewHistorySnapshot();
-    scraperContinueFromQuickScanRef.current = false;
     setScraperSearchMode("deep");
     setScraperRefreshKey((currentKey) => currentKey + 1);
   }, [activeTab, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
-  const handleContinueScan = React.useCallback(async () => {
+  const handleContinueScan = React.useCallback(async (repeatCount: number) => {
+    if (activeTab !== "scrapers" || scraperActionsDisabled) {
+      return;
+    }
+
+    sourceResults.setLanguageFilterModes({});
+    sourceResults.setOpenError(null);
+    await refreshViewHistorySnapshot();
+    const normalizedRepeatCount = Math.max(1, Math.floor(repeatCount || 1));
+
+    for (let index = 0; index < normalizedRepeatCount; index += 1) {
+      await startScraperScan({
+        searchMode: scraperSearchMode,
+        continueFromQuickScan: scraperSearchMode === "quick",
+        preserveCurrentResults: true,
+      });
+    }
+  }, [
+    activeTab,
+    refreshViewHistorySnapshot,
+    scraperActionsDisabled,
+    scraperSearchMode,
+    sourceResults,
+    startScraperScan,
+  ]);
+
+  const handleReplaceContinueScan = React.useCallback(async () => {
     if (activeTab !== "scrapers" || scraperActionsDisabled) {
       return;
     }
@@ -876,10 +1002,19 @@ export default function ScraperLatestView({ scrapers }: Props) {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
     await refreshViewHistorySnapshot();
-    scraperContinueFromQuickScanRef.current = scraperSearchMode === "quick";
-    setScraperSearchMode(scraperSearchMode);
-    setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, refreshViewHistorySnapshot, scraperActionsDisabled, scraperSearchMode, sourceResults]);
+    await startScraperScan({
+      searchMode: scraperSearchMode,
+      continueFromQuickScan: scraperSearchMode === "quick",
+      preserveCurrentResults: false,
+    });
+  }, [
+    activeTab,
+    refreshViewHistorySnapshot,
+    scraperActionsDisabled,
+    scraperSearchMode,
+    sourceResults,
+    startScraperScan,
+  ]);
 
   const hasIncludedTagFavoriteSelection = scraperIncludedTagFavoriteIds.length > 0;
   const loading = activeTab === "authors"
@@ -894,6 +1029,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const activeTabHasStarted = activeTab === "authors"
     ? authorRefreshKey > 0
     : scraperRefreshKey > 0;
+  const canContinueScraperScan = activeTab === "scrapers"
+    && scraperRuns.runs.some((run) => run.canContinue === true);
 
   return (
     <section ref={rootRef} className="scraper-latest">
@@ -971,6 +1108,18 @@ export default function ScraperLatestView({ scrapers }: Props) {
         actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
         secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
         continueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
+        continueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
+        continueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
+          ? "Aucune source n'a atteint son quota avec une suite disponible."
+          : undefined}
+        continueCount={scraperContinueCount}
+        replaceContinueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
+        replaceContinueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
+        replaceContinueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
+          ? "Aucune source n'a atteint son quota avec une suite disponible."
+          : undefined}
+        settingsActionLabel={activeTab === "scrapers" ? "Parametres session" : undefined}
+        settingsActionActive={activeTab === "scrapers" && hasScraperSessionSettingsOverride}
         actionsDisabled={activeTab === "authors"
           ? authorActionsDisabled
           : activeTab === "scrapers"
@@ -988,6 +1137,9 @@ export default function ScraperLatestView({ scrapers }: Props) {
         onReload={handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
+        onContinueCountChange={setScraperContinueCount}
+        onReplaceContinue={activeTab === "scrapers" ? handleReplaceContinueScan : undefined}
+        onOpenSettings={activeTab === "scrapers" ? handleOpenScraperSessionSettings : undefined}
         onOpenSource={sourceResults.handleOpenSource}
         onOpenSourceInWorkspace={sourceResults.handleOpenSourceInWorkspace}
         onOpenProgressReader={(source, page, totalPages, readerMangaId, openInWorkspace) => void sourceResults.handleOpenProgressReader(

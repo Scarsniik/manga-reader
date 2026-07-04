@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildScraperLatestCheckpointId,
   buildScraperViewHistoryCardId,
@@ -77,6 +77,7 @@ export type ScraperLatestRun = {
   loadedPages: number;
   checkedPages: number;
   hasNextPage: boolean;
+  canContinue: boolean;
   checkpoint?: ScraperLatestCheckpointRecord | null;
   checkpointUsed: boolean;
   deepSearch: boolean;
@@ -89,6 +90,7 @@ export type ScraperLatestRun = {
 type StartOptions = {
   searchMode?: ScraperLatestSearchMode;
   continueFromQuickScan?: boolean;
+  preserveCurrentResults?: boolean;
   quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
   concurrency?: number;
@@ -196,6 +198,7 @@ const buildRun = (
   loadedPages: 0,
   checkedPages: 0,
   hasNextPage: true,
+  canContinue: false,
   checkpoint,
   checkpointUsed: false,
   deepSearch: searchMode === "deep",
@@ -335,6 +338,7 @@ const stopRunByLanguageRejectLimit = (run: ScraperLatestRun): ScraperLatestRun =
   ...run,
   status: "done",
   hasNextPage: false,
+  canContinue: false,
   languageRejectLimitReached: true,
 });
 
@@ -510,6 +514,16 @@ const buildQuickContinuation = (
   pageUrl,
 });
 
+const runHasContinuationPotential = (
+  run: ScraperLatestRun,
+  resultLimit: number,
+): boolean => (
+  run.status !== "error"
+  && !run.languageRejectLimitReached
+  && run.hasNextPage
+  && run.results.length >= resultLimit
+);
+
 const getQuickContinuationForKey = (
   continuations: ScraperLatestQuickContinuation[],
   key: ScraperLatestContinuationKey,
@@ -522,11 +536,29 @@ const buildQuickContinuationRun = (
   baseRun: ScraperLatestRun,
   continuation: ScraperLatestQuickContinuation,
   searchMode: ScraperLatestSearchMode,
+  preserveResults: boolean,
 ): ScraperLatestRun => {
   const continuationPageIndex = continuation.pageIndex;
   const canContinue = continuationPageIndex !== null;
+  const resultState = preserveResults
+    ? {
+      results: continuation.run.results,
+      excludedByLanguageCount: continuation.run.excludedByLanguageCount,
+      excludedByBlacklistedTagCount: continuation.run.excludedByBlacklistedTagCount,
+      includedByLanguageCount: continuation.run.includedByLanguageCount,
+      checkedPages: continuation.run.checkedPages,
+    }
+    : {
+      results: [],
+      excludedByLanguageCount: 0,
+      excludedByBlacklistedTagCount: 0,
+      includedByLanguageCount: 0,
+      checkedPages: 0,
+    };
+
   return {
     ...continuation.run,
+    ...resultState,
     key: baseRun.key,
     sourceKind: baseRun.sourceKind,
     scraper: baseRun.scraper,
@@ -538,6 +570,7 @@ const buildQuickContinuationRun = (
     error: undefined,
     deepSearch: searchMode === "deep",
     checkpointUsed: false,
+    canContinue: false,
     hasNextPage: canContinue,
     loadedPages: canContinue ? continuationPageIndex : continuation.run.loadedPages,
     currentPageUrl: canContinue ? continuation.pageUrl : continuation.run.currentPageUrl,
@@ -634,10 +667,15 @@ export default function useScraperLatestRuns() {
   const tokenRef = useRef(0);
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
   const quickContinuationsRef = useRef<ScraperLatestQuickContinuation[]>([]);
+  const runsRef = useRef<ScraperLatestRun[]>([]);
   const enabledRunCount = useMemo(
     () => runs.filter((run) => run.status !== "error").length,
     [runs],
   );
+
+  useEffect(() => {
+    runsRef.current = runs;
+  }, [runs]);
 
   const patchRun = useCallback((
     token: number,
@@ -660,6 +698,16 @@ export default function useScraperLatestRuns() {
     ];
   }, []);
 
+  const removeQuickContinuation = useCallback((
+    run: ScraperLatestRun,
+    includedLanguageCodes: string[],
+  ) => {
+    const id = buildQuickContinuationId(buildContinuationKeyForRun(run, includedLanguageCodes));
+    quickContinuationsRef.current = quickContinuationsRef.current.filter((continuation) => (
+      continuation.id !== id
+    ));
+  }, []);
+
   const applyLatestPage = useCallback(async (
     currentRun: ScraperLatestRun,
     pageIndex: number,
@@ -676,6 +724,7 @@ export default function useScraperLatestRuns() {
     patchRun(token, currentRun.key, (run) => ({
       ...run,
       status: "loading",
+      canContinue: false,
       error: undefined,
     }));
 
@@ -805,6 +854,7 @@ export default function useScraperLatestRuns() {
       loadedPages: Math.max(currentRun.loadedPages, pageIndex + 1),
       checkedPages: currentRun.checkedPages + 1,
       hasNextPage: !hasOnlyDuplicateResults && latestPage.hasNextPage,
+      canContinue: false,
       currentPageUrl: latestPage.page.currentPageUrl,
       nextPageUrl: latestPage.page.nextPageUrl,
       error: undefined,
@@ -1014,6 +1064,10 @@ export default function useScraperLatestRuns() {
         .filter(Boolean),
     );
 
+    if (continueFromQuickScan) {
+      removeQuickContinuation(run, includedLanguageCodes);
+    }
+
     while (
       run.hasNextPage
       && run.results.length < resultLimit
@@ -1092,22 +1146,31 @@ export default function useScraperLatestRuns() {
 
         if (quickBoundaryReached) {
           const nextContinuationPageIndex = processedPage.run.hasNextPage ? pageIndex + 1 : null;
-          saveQuickContinuation(buildQuickContinuation(
-            {
-              ...run,
-              hasNextPage: processedPage.run.hasNextPage,
-              loadedPages: nextContinuationPageIndex ?? processedPage.run.loadedPages,
-              currentPageUrl: processedPage.run.nextPageUrl,
-              nextPageUrl: processedPage.run.nextPageUrl,
-            },
-            includedLanguageCodes,
-            nextContinuationPageIndex,
-            processedPage.run.nextPageUrl,
-          ));
+          const continuationRun = {
+            ...run,
+            hasNextPage: processedPage.run.hasNextPage,
+            loadedPages: nextContinuationPageIndex ?? processedPage.run.loadedPages,
+            currentPageUrl: processedPage.run.nextPageUrl,
+            nextPageUrl: processedPage.run.nextPageUrl,
+          };
+          const hasContinuation = nextContinuationPageIndex !== null
+            && runHasContinuationPotential(continuationRun, resultLimit);
+
+          if (hasContinuation) {
+            saveQuickContinuation(buildQuickContinuation(
+              continuationRun,
+              includedLanguageCodes,
+              nextContinuationPageIndex,
+              processedPage.run.nextPageUrl,
+            ));
+          } else {
+            removeQuickContinuation(run, includedLanguageCodes);
+          }
 
           run = {
             ...run,
             hasNextPage: false,
+            canContinue: hasContinuation,
           };
           patchRun(token, run.key, () => run);
           return run;
@@ -1133,6 +1196,11 @@ export default function useScraperLatestRuns() {
               excludeBlacklistedTagCards,
               tagBlacklistByScraper,
             );
+            run = {
+              ...run,
+              canContinue: runHasContinuationPotential(run, resultLimit),
+            };
+            patchRun(token, run.key, () => run);
             return run;
             }
 
@@ -1151,16 +1219,12 @@ export default function useScraperLatestRuns() {
             continue;
           }
 
-          saveQuickContinuation(buildQuickContinuation(
-            run,
-            includedLanguageCodes,
-            processedPage.run.hasNextPage ? pageIndex + 1 : null,
-            processedPage.run.hasNextPage ? processedPage.run.nextPageUrl : undefined,
-          ));
+          removeQuickContinuation(run, includedLanguageCodes);
 
           run = {
             ...run,
             hasNextPage: false,
+            canContinue: false,
           };
           patchRun(token, run.key, () => run);
           return run;
@@ -1171,6 +1235,7 @@ export default function useScraperLatestRuns() {
           ...run,
           status: run.results.length || isPaginationEnd ? "done" : "error",
           hasNextPage: false,
+          canContinue: false,
           error: isPaginationEnd
             ? undefined
             : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
@@ -1181,17 +1246,32 @@ export default function useScraperLatestRuns() {
       }
     }
 
+    const canContinueRun = runHasContinuationPotential(run, resultLimit);
+
     if (!run.deepSearch && !run.languageRejectLimitReached && token === tokenRef.current) {
-      saveQuickContinuation(buildQuickContinuation(
-        run,
-        includedLanguageCodes,
-        run.hasNextPage ? run.loadedPages : null,
-        run.hasNextPage ? run.nextPageUrl : undefined,
-      ));
+      if (canContinueRun) {
+        saveQuickContinuation(buildQuickContinuation(
+          run,
+          includedLanguageCodes,
+          run.loadedPages,
+          run.nextPageUrl,
+        ));
+      } else {
+        removeQuickContinuation(run, includedLanguageCodes);
+      }
+    }
+
+    run = {
+      ...run,
+      canContinue: canContinueRun,
+    };
+
+    if (token === tokenRef.current) {
+      patchRun(token, run.key, () => run);
     }
 
     return run;
-  }, [applyLatestPage, loadRunFromCheckpoint, patchRun, saveQuickContinuation]);
+  }, [applyLatestPage, loadRunFromCheckpoint, patchRun, removeQuickContinuation, saveQuickContinuation]);
 
   const start = useCallback(async (
     scrapers: ScraperRecord[],
@@ -1217,6 +1297,7 @@ export default function useScraperLatestRuns() {
     const includedSourceCount = includedScrapers.length + includedTagFavoriteSources.length;
     const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
+    const preserveCurrentResults = options.preserveCurrentResults === true;
     const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
     const excludeBlacklistedTagCards = options.excludeBlacklistedTagCards === true;
     const tagBlacklistByScraper = options.tagBlacklistByScraper;
@@ -1229,7 +1310,9 @@ export default function useScraperLatestRuns() {
     const token = tokenRef.current + 1;
     tokenRef.current = token;
 
-    setRuns([]);
+    if (!continueFromQuickScan && !preserveCurrentResults) {
+      setRuns([]);
+    }
     setMessage(null);
     setError(
       includedSourceCount
@@ -1262,6 +1345,7 @@ export default function useScraperLatestRuns() {
           buildTagFavoriteRun(favorite, source, scraper, null, searchMode)
         )),
       ];
+      const currentRunsByKey = new Map(runsRef.current.map((run) => [run.key, run]));
       const continuationIdsToRefresh = new Set(baseRuns.map((run) => (
         buildQuickContinuationId(buildContinuationKeyForRun(run, includedLanguageCodes))
       )));
@@ -1273,6 +1357,7 @@ export default function useScraperLatestRuns() {
       }
 
       const initialRuns = baseRuns.map((baseRun) => {
+        const baseRunResultLimit = baseRun.sourceKind === "tagFavorite" ? tagResultLimit : resultLimit;
         const continuationKey = buildContinuationKeyForRun(baseRun, includedLanguageCodes);
         const quickContinuation = continueFromQuickScan
           ? getQuickContinuationForKey(quickContinuationsRef.current, continuationKey)
@@ -1286,16 +1371,71 @@ export default function useScraperLatestRuns() {
           checkpoint,
         };
 
+        if (
+          quickContinuation
+          && quickContinuation.pageIndex !== null
+          && runHasContinuationPotential(quickContinuation.run, baseRunResultLimit)
+        ) {
+          return buildQuickContinuationRun(run, quickContinuation, searchMode, preserveCurrentResults);
+        }
+
         if (quickContinuation) {
-          return buildQuickContinuationRun(run, quickContinuation, searchMode);
+          quickContinuationsRef.current = quickContinuationsRef.current.filter((continuation) => (
+            continuation.id !== quickContinuation.id
+          ));
         }
 
         if (continueFromQuickScan) {
+          const currentRun = preserveCurrentResults ? currentRunsByKey.get(baseRun.key) : null;
+          if (currentRun) {
+            return {
+              ...currentRun,
+              key: baseRun.key,
+              sourceKind: baseRun.sourceKind,
+              scraper: baseRun.scraper,
+              module: baseRun.module,
+              query: baseRun.query,
+              favorite: baseRun.favorite,
+              favoriteSource: baseRun.favoriteSource,
+              status: "done" as const,
+              error: undefined,
+              deepSearch: false,
+              checkpointUsed: false,
+              hasNextPage: false,
+              canContinue: false,
+            };
+          }
+
           return {
             ...run,
             status: "done" as const,
             hasNextPage: false,
+            canContinue: false,
           };
+        }
+
+        if (preserveCurrentResults) {
+          const currentRun = currentRunsByKey.get(baseRun.key);
+          if (currentRun) {
+            const currentRunCanContinue = runHasContinuationPotential(currentRun, baseRunResultLimit);
+            return {
+              ...currentRun,
+              key: baseRun.key,
+              sourceKind: baseRun.sourceKind,
+              scraper: baseRun.scraper,
+              module: baseRun.module,
+              query: baseRun.query,
+              favorite: baseRun.favorite,
+              favoriteSource: baseRun.favoriteSource,
+              checkpoint,
+              status: currentRunCanContinue ? "waiting" as const : "done" as const,
+              error: undefined,
+              deepSearch: searchMode === "deep",
+              checkpointUsed: false,
+              hasNextPage: currentRunCanContinue,
+              canContinue: false,
+            };
+          }
         }
 
         return run;
@@ -1306,7 +1446,7 @@ export default function useScraperLatestRuns() {
       await runWithConcurrency(
         initialRuns.map((run) => async () => {
           const baseRunResultLimit = run.sourceKind === "tagFavorite" ? tagResultLimit : resultLimit;
-          const runResultLimit = continueFromQuickScan
+          const runResultLimit = preserveCurrentResults
             ? run.results.length + baseRunResultLimit
             : baseRunResultLimit;
           await loadRun(

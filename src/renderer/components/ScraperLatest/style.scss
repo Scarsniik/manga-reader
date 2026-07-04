@@ -31,6 +31,24 @@
   gap: 10px;
 }
 
+.scraper-latest-results__head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.scraper-latest-results__head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.scraper-latest-results__summary {
+  min-width: 0;
+}
+
 .scraper-latest-results__status-panel {
   display: flex;
   flex-direction: column;
@@ -73,7 +91,86 @@
 }
 
 .scraper-latest-results__status-list .multi-search__status {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.scraper-latest-results__status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  justify-self: end;
+}
+
+.scraper-latest-results__status-icon::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.scraper-latest-results__status-icon.is-loading {
+  color: #5d9cff;
+}
+
+.scraper-latest-results__status-icon.is-continuable {
+  color: #5ecf86;
+}
+
+.scraper-latest-results__status-icon.is-complete {
+  color: #e1bd5a;
+}
+
+.scraper-latest-results__status-icon.is-error {
+  color: #df6b6b;
+}
+
+.scraper-latest-results__continue-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.scraper-latest-results__continue-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid rgba(93, 156, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #cfe0ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scraper-latest-results__continue-count input {
+  width: 54px;
+  min-height: 26px;
+  border: 1px solid #2f2f2f;
+  border-radius: 6px;
+  background: #111111;
+  color: #f1f1f1;
+  padding: 0 6px;
+}
+
+.scraper-latest-results__action-tooltip {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.scraper-latest-results__action-tooltip button:disabled {
+  pointer-events: none;
+}
+
+.scraper-latest-results__action-tooltip button.secondary {
+  min-width: 112px;
 }
 
 .scraper-latest-results__continue {
@@ -92,8 +189,91 @@
   font-size: 13px;
 }
 
+.multi-search__section-actions button.secondary.is-active {
+  border-color: rgba(93, 156, 255, 0.62);
+  background: rgba(93, 156, 255, 0.18);
+  color: #dceaff;
+}
+
+.scraper-latest-session-settings-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scraper-latest-session-settings-modal p {
+  margin: 0;
+  color: #c9c9c9;
+  line-height: 1.5;
+}
+
+.scraper-latest-session-settings-modal__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.scraper-latest-session-settings-modal__field span {
+  color: #f5f5f5;
+  font-weight: 700;
+}
+
+.scraper-latest-session-settings-modal__field input {
+  min-height: 36px;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  background: #111111;
+  color: #f1f1f1;
+  padding: 0 10px;
+}
+
+.scraper-latest-session-settings-modal__field small {
+  grid-column: 1 / -1;
+  color: #9f9f9f;
+  font-size: 12px;
+}
+
+.scraper-latest-session-settings-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.scraper-latest-session-settings-modal__actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d6d6d6;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scraper-latest-session-settings-modal__actions button.primary {
+  border-color: transparent;
+  background: #1f6feb;
+  color: #ffffff;
+}
+
 @media (max-width: 760px) {
   .scraper-latest__header {
     flex-direction: column;
+  }
+
+  .scraper-latest-results__head-top {
+    flex-direction: column;
+  }
+
+  .scraper-latest-results__continue-action {
+    flex-wrap: wrap;
+  }
+
+  .scraper-latest-session-settings-modal__field {
+    grid-template-columns: 1fr;
   }
 }
