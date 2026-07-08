@@ -68,7 +68,19 @@
 	border-color: rgba(111,163,200,0.32);
 }
 
-.validate-btn:hover, .clear-btn:hover { background: rgba(255,255,255,0.06) }
+.validate-btn:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
+
+.validate-btn:hover:not(:disabled), .clear-btn:hover { background: rgba(255,255,255,0.06) }
 .validate-btn:focus, .clear-btn:focus { box-shadow: $jp-focus-shadow }
+
+.detected-text__error {
+	margin-top: 10px;
+	color: #ff8c8c;
+	font-size: $jp-font-size-sm;
+	line-height: 1.5;
+}
 
 .auto-text { margin-top: 10px; color: $jp-muted; font-size: 12px; line-height: 1.5 }

@@ -39,6 +39,7 @@ type Props = {
     voicePlaybackError?: string | null;
     voicePlaybackUnavailableMessage?: string | null;
     onPlaySelectedText?: (textOverride?: string) => void;
+    onPlayTokenText?: (text: string) => void;
     voiceAudioDownloadLoading?: boolean;
     voiceAudioDownloadPath?: string | null;
     voiceAudioDownloadError?: string | null;
@@ -81,6 +82,7 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     voicePlaybackError = null,
     voicePlaybackUnavailableMessage = null,
     onPlaySelectedText,
+    onPlayTokenText,
     voiceAudioDownloadLoading = false,
     voiceAudioDownloadPath = null,
     voiceAudioDownloadError = null,
@@ -109,82 +111,10 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
             .map((id) => boxMap.get(id)?.text || '')
             .filter((text) => text.trim().length > 0);
     }, [boxMap, orderedBoxIds, orderedTranslationEnabled, selectedBoxes]);
-    const selectedEditableBox = selectedForAnalyse.length === 1 ? selectedForAnalyse[0] : null;
-    const selectedEditableBoxSourceText = selectedEditableBox ? String(selectedEditableBox.text || '') : '';
-    const selectedEditableBoxKey = selectedEditableBox
-        ? `${selectedEditableBox.id}::${selectedEditableBoxSourceText}`
+    const selectedSingleBox = selectedForAnalyse.length === 1 ? selectedForAnalyse[0] : null;
+    const selectedVoiceText = selectedSingleBox
+        ? String(selectedSingleBox.text || '').trim()
         : '';
-    const [selectedTextDraft, setSelectedTextDraft] = React.useState<string>(selectedEditableBoxSourceText);
-    const [textSaveLoading, setTextSaveLoading] = React.useState<boolean>(false);
-    const [textSaveError, setTextSaveError] = React.useState<string | null>(null);
-    React.useEffect(() => {
-        setSelectedTextDraft(selectedEditableBoxSourceText);
-        setTextSaveError(null);
-        setTextSaveLoading(false);
-    }, [selectedEditableBoxKey, selectedEditableBoxSourceText]);
-    const normalizeEditableText = React.useCallback((value: string) => (
-        value.replace(/\r\n/g, '\n').trim()
-    ), []);
-    const selectedTextDraftChanged = !!selectedEditableBox
-        && normalizeEditableText(selectedTextDraft) !== normalizeEditableText(selectedEditableBoxSourceText);
-    const selectedVoiceText = selectedEditableBox
-        ? normalizeEditableText(selectedTextDraft)
-        : '';
-    const saveSelectedTextDraft = React.useCallback(async (): Promise<string | null> => {
-        if (!selectedEditableBox) {
-            return null;
-        }
-
-        const nextText = normalizeEditableText(selectedTextDraft);
-        if (!selectedTextDraftChanged || typeof onUpdateBoxText !== 'function') {
-            return nextText;
-        }
-
-        setTextSaveLoading(true);
-        setTextSaveError(null);
-
-        try {
-            await onUpdateBoxText(selectedEditableBox.id, nextText);
-            return nextText;
-        } catch (error) {
-            setTextSaveError(error instanceof Error && error.message.trim()
-                ? error.message
-                : "Impossible d'enregistrer le texte OCR.");
-            return null;
-        } finally {
-            setTextSaveLoading(false);
-        }
-    }, [
-        normalizeEditableText,
-        onUpdateBoxText,
-        selectedEditableBox,
-        selectedTextDraft,
-        selectedTextDraftChanged,
-    ]);
-    const handlePlaySelectedText = React.useCallback(() => {
-        if (typeof onPlaySelectedText !== 'function') {
-            return;
-        }
-
-        void (async () => {
-            const text = await saveSelectedTextDraft();
-            if (text !== null) {
-                onPlaySelectedText(text);
-            }
-        })();
-    }, [onPlaySelectedText, saveSelectedTextDraft]);
-    const handleDownloadSelectedAudio = React.useCallback(() => {
-        if (typeof onDownloadSelectedAudio !== 'function') {
-            return;
-        }
-
-        void (async () => {
-            const text = await saveSelectedTextDraft();
-            if (text !== null) {
-                onDownloadSelectedAudio(text);
-            }
-        })();
-    }, [onDownloadSelectedAudio, saveSelectedTextDraft]);
     const selectionSummary = orderSelectionEnabled
         ? `Ordre en cours : ${orderedBoxIds.length} zone(s).`
         : selectedForAnalyse.length === 0
@@ -216,20 +146,14 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
         && !voicePlaybackStatusLoading
         && voicePlaybackAvailable
         && !voicePlaybackLoading
-        && !textSaveLoading
         && selectedForAnalyse.length === 1
         && selectedVoiceText.length > 0;
     const canDownloadSelectedAudio = !!onDownloadSelectedAudio
         && !voicePlaybackStatusLoading
         && voicePlaybackAvailable
         && !voiceAudioDownloadLoading
-        && !textSaveLoading
         && selectedForAnalyse.length === 1
         && selectedVoiceText.length > 0;
-    const canSaveSelectedText = !!selectedEditableBox
-        && selectedTextDraftChanged
-        && !textSaveLoading
-        && typeof onUpdateBoxText === 'function';
     const showVoiceUnavailableNote = selectedForAnalyse.length === 1
         && !voicePlaybackStatusLoading
         && !voicePlaybackAvailable
@@ -269,8 +193,6 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
         || !!orderSelectionEnabled
         || !!error
         || !!statusNote
-        || !!textSaveLoading
-        || !!textSaveError
         || !!voicePlaybackError
         || !!voiceAudioDownloadError
         || !!voiceAudioDownloadLoading
@@ -294,7 +216,11 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                         <button onClick={() => onSimulate()} disabled={manualSelectionLoading} type="button">Relancer</button>
                         <button onClick={() => onClear()} disabled={manualSelectionLoading} type="button">Vider</button>
                         <button
-                            onClick={handlePlaySelectedText}
+                            onClick={() => {
+                                if (typeof onPlaySelectedText === 'function') {
+                                    onPlaySelectedText();
+                                }
+                            }}
                             disabled={!canPlaySelectedText}
                             title={voicePlaybackButtonTitle}
                             type="button"
@@ -302,7 +228,11 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             {voicePlaybackLoading ? 'Préparation...' : voicePlaybackPlaying ? 'Relire' : 'Lire'}
                         </button>
                         <button
-                            onClick={handleDownloadSelectedAudio}
+                            onClick={() => {
+                                if (typeof onDownloadSelectedAudio === 'function') {
+                                    onDownloadSelectedAudio();
+                                }
+                            }}
                             disabled={!canDownloadSelectedAudio}
                             title={selectedForAnalyse.length !== 1
                                 ? 'Sélectionne une seule bulle OCR à télécharger.'
@@ -360,39 +290,10 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                     </label>
                 </div>
 
-                {selectedEditableBox ? (
-                    <div className="ocr-text-editor">
-                        <label htmlFor={`ocr-text-editor-${selectedEditableBox.id}`}>
-                            Texte OCR de la bulle
-                        </label>
-                        <textarea
-                            id={`ocr-text-editor-${selectedEditableBox.id}`}
-                            value={selectedTextDraft}
-                            onChange={(event) => {
-                                setSelectedTextDraft(event.currentTarget.value);
-                                setTextSaveError(null);
-                            }}
-                            rows={4}
-                        />
-                        <div className="ocr-text-editor-actions">
-                            <button
-                                onClick={() => {
-                                    void saveSelectedTextDraft();
-                                }}
-                                disabled={!canSaveSelectedText}
-                                type="button"
-                            >
-                                {textSaveLoading ? 'Enregistrement...' : 'Enregistrer le texte'}
-                            </button>
-                        </div>
-                    </div>
-                ) : null}
-
                 {hasStatus ? (
                     <div className="ocr-status">
                         {loading ? <div className="ocr-status-pill">Chargement OCR…</div> : null}
                         {manualSelectionLoading ? <div className="ocr-status-pill">Analyse de la sélection manuelle…</div> : null}
-                        {textSaveLoading ? <div className="ocr-status-pill">Enregistrement du texte OCR…</div> : null}
                         {voicePlaybackLoading ? <div className="ocr-status-pill">Préparation de la voix…</div> : null}
                         {voicePlaybackPlaying ? <div className="ocr-status-pill">Lecture audio en cours.</div> : null}
                         {voiceAudioDownloadLoading ? <div className="ocr-status-pill">Enregistrement audio OCR…</div> : null}
@@ -404,7 +305,6 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             <div className="ocr-status-note">Clique les zones sur la page dans l&apos;ordre de lecture. Clique une zone déjà numérotée pour la retirer.</div>
                         ) : null}
                         {error ? <div className="ocr-status-error">{error}</div> : null}
-                        {textSaveError ? <div className="ocr-status-error">{textSaveError}</div> : null}
                         {voicePlaybackError ? <div className="ocr-status-error">{voicePlaybackError}</div> : null}
                         {voiceAudioDownloadError ? <div className="ocr-status-error">{voiceAudioDownloadError}</div> : null}
                         {showVoiceUnavailableNote ? <div className="ocr-status-note">{voicePlaybackUnavailableMessage}</div> : null}
@@ -499,6 +399,17 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             translationOrderRevision={orderedTranslationRevision}
                             tokenCycleRequestNonce={tokenCycleRequestNonce}
                             tokenCycleSelectionKey={tokenCycleSelectionKey}
+                            voicePlaybackAvailable={voicePlaybackAvailable}
+                            voicePlaybackStatusLoading={voicePlaybackStatusLoading}
+                            voicePlaybackLoading={voicePlaybackLoading}
+                            voicePlaybackPlaying={voicePlaybackPlaying}
+                            voicePlaybackUnavailableMessage={voicePlaybackUnavailableMessage}
+                            onUpdateSelectedBoxText={
+                                selectedSingleBox && typeof onUpdateBoxText === 'function'
+                                    ? (text) => onUpdateBoxText(selectedSingleBox.id, text)
+                                    : undefined
+                            }
+                            onPlayTokenText={onPlayTokenText}
                             onClose={() => onSelectBox(null)}
                         />
                     ) : (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './JapaneseAnalyse.scss';
 import {
   addVocabularyToJpdbDeck,
@@ -28,6 +28,10 @@ import DetailsPanel from './DetailsPanel';
 
 const TOKEN_CYCLE_DEBOUNCE_MS = 500;
 
+const normalizeEditableAnalysisText = (value: string): string => (
+  value.replace(/\r\n/g, '\n').trim()
+);
+
 type JpdbReviewOverride = {
   spelling?: string;
   reading?: string;
@@ -53,7 +57,14 @@ type Props = {
   translationOrderRevision?: number;
   tokenCycleRequestNonce?: number;
   tokenCycleSelectionKey?: string | null;
+  voicePlaybackAvailable?: boolean;
+  voicePlaybackStatusLoading?: boolean;
+  voicePlaybackLoading?: boolean;
+  voicePlaybackPlaying?: boolean;
+  voicePlaybackUnavailableMessage?: string | null;
   onWordClick?: (word: string) => void;
+  onUpdateSelectedBoxText?: (text: string) => void | Promise<void>;
+  onPlayTokenText?: (text: string) => void;
   onClose?: () => void;
 };
 
@@ -92,7 +103,14 @@ export default function JapaneseAnalyse({
   translationOrderRevision = 0,
   tokenCycleRequestNonce = 0,
   tokenCycleSelectionKey = null,
+  voicePlaybackAvailable = false,
+  voicePlaybackStatusLoading = false,
+  voicePlaybackLoading = false,
+  voicePlaybackPlaying = false,
+  voicePlaybackUnavailableMessage = null,
   onWordClick,
+  onUpdateSelectedBoxText,
+  onPlayTokenText,
   onClose,
 }: Props) {
   const [inputText, setInputText] = useState<string>('');
@@ -116,6 +134,8 @@ export default function JapaneseAnalyse({
   const [actionSubmittingKey, setActionSubmittingKey] = useState<string | null>(null);
   const [actionSubmittingType, setActionSubmittingType] = useState<JpdbActionType | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [textSaveLoading, setTextSaveLoading] = useState<boolean>(false);
+  const [textSaveError, setTextSaveError] = useState<string | null>(null);
   const analysisRootRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const lastAnalysisScrollKeyRef = useRef<string | null>(null);
@@ -161,6 +181,8 @@ export default function JapaneseAnalyse({
     setActionSubmittingKey(null);
     setActionSubmittingType(null);
     setActionError(null);
+    setTextSaveLoading(false);
+    setTextSaveError(null);
   }, [autoText]);
 
   useEffect(() => {
@@ -182,6 +204,8 @@ export default function JapaneseAnalyse({
       setActionSubmittingKey(null);
       setActionSubmittingType(null);
       setActionError(null);
+      setTextSaveLoading(false);
+      setTextSaveError(null);
       return;
     }
 
@@ -205,6 +229,8 @@ export default function JapaneseAnalyse({
     setActionSubmittingKey(null);
     setActionSubmittingType(null);
     setActionError(null);
+    setTextSaveLoading(false);
+    setTextSaveError(null);
 
     (async () => {
       const analysis = await loadJpdbTextAnalysis(text, {
@@ -447,6 +473,42 @@ export default function JapaneseAnalyse({
     }
   }, [onWordClick, selectedSurface]);
 
+  const handleValidateText = useCallback(async () => {
+    const nextText = normalizeEditableAnalysisText(inputText);
+
+    if (
+      typeof onUpdateSelectedBoxText === 'function'
+      && normalizeEditableAnalysisText(autoText) !== nextText
+    ) {
+      setTextSaveLoading(true);
+      setTextSaveError(null);
+
+      try {
+        await onUpdateSelectedBoxText(nextText);
+      } catch (error) {
+        setTextSaveError(error instanceof Error && error.message.trim()
+          ? error.message
+          : "Impossible d'enregistrer le texte OCR.");
+        setTextSaveLoading(false);
+        return;
+      }
+
+      setTextSaveLoading(false);
+    }
+
+    setInputText(nextText);
+    setManualText(nextText);
+    setTextSaveError(null);
+    setAnalysisNonce((value) => value + 1);
+  }, [autoText, inputText, onUpdateSelectedBoxText]);
+
+  const handleResetText = useCallback(() => {
+    setInputText(autoText);
+    setManualText(null);
+    setTextSaveError(null);
+    setAnalysisNonce((value) => value + 1);
+  }, [autoText]);
+
   useEffect(() => {
     const pendingCycleCount = tokenCycleRequestNonce - previewedTokenCycleNonceRef.current;
     if (
@@ -542,15 +604,10 @@ export default function JapaneseAnalyse({
         inputText={inputText}
         isUsingManualText={isUsingManualText}
         setInputText={setInputText}
-        onValidate={() => {
-          setManualText(inputText);
-          setAnalysisNonce((value) => value + 1);
-        }}
-        onReset={() => {
-          setInputText(autoText);
-          setManualText(null);
-          setAnalysisNonce((value) => value + 1);
-        }}
+        onValidate={handleValidateText}
+        onReset={handleResetText}
+        validateLoading={textSaveLoading}
+        validateError={textSaveError}
       />
 
       {analysisLoading ? (
@@ -589,6 +646,12 @@ export default function JapaneseAnalyse({
               kanjiDetails={enrichedKanjiDetails}
               loading={kanjiFetchLoading}
               kanjiMeaningsLoading={kanjiMeaningsLoading}
+              voicePlaybackAvailable={voicePlaybackAvailable}
+              voicePlaybackStatusLoading={voicePlaybackStatusLoading}
+              voicePlaybackLoading={voicePlaybackLoading}
+              voicePlaybackPlaying={voicePlaybackPlaying}
+              voicePlaybackUnavailableMessage={voicePlaybackUnavailableMessage}
+              onPlayTokenText={onPlayTokenText}
               showFailReviewButton={canShowFailReviewButton}
               showAddVocabularyButton={canShowAddVocabularyButton}
               showRemoveVocabularyButton={canShowRemoveVocabularyButton}

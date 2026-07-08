@@ -69,6 +69,12 @@ const createAudioBlob = (audioBase64: string, mimeType: string): Blob => {
     return new Blob([bytes], { type: mimeType || "audio/wav" });
 };
 
+const createTextPlaybackBox = (text: string): ReaderOcrBox => ({
+    id: `text:${text}`,
+    text,
+    bbox: { x: 0, y: 0, w: 0, h: 0 },
+});
+
 const getFriendlyPlaybackError = (error: unknown): string => {
     if (error instanceof Error && error.message.trim().length > 0) {
         return error.message;
@@ -367,6 +373,16 @@ const useReaderVoicevoxSpeech = ({
         playSelectedTextAtSpeed(temporarySpeedScaleRef.current, textOverride);
     }, [playSelectedTextAtSpeed]);
 
+    const playText = React.useCallback((text: string) => {
+        const normalizedText = String(text || "").trim();
+        if (!normalizedText) {
+            setPlaybackError("Aucun texte à lire.");
+            return;
+        }
+
+        void playBoxAtSpeed(createTextPlaybackBox(normalizedText), temporarySpeedScaleRef.current);
+    }, [playBoxAtSpeed]);
+
     const playSelectedTextWithSpeedDirection = React.useCallback((direction: SpeedDirection) => {
         const normalizedStep = normalizeReaderOcrVoicevoxSpeedStep(speedStep);
         const currentSpeed = normalizeReaderOcrVoicevoxSpeedScale(
@@ -507,6 +523,7 @@ const useReaderVoicevoxSpeech = ({
         voiceAudioDownloadPath: audioDownloadPath,
         voiceAudioDownloadError: audioDownloadError,
         playSelectedText,
+        playText,
         playSelectedTextSlower,
         playSelectedTextFaster,
         downloadSelectedAudio,

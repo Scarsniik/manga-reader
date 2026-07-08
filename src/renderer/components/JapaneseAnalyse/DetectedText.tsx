@@ -8,6 +8,8 @@ type Props = {
   setInputText: (s: string) => void;
   onValidate: () => Promise<void> | void;
   onReset: () => void;
+  validateLoading?: boolean;
+  validateError?: string | null;
 };
 
 export default function DetectedText({
@@ -17,6 +19,8 @@ export default function DetectedText({
   setInputText,
   onValidate,
   onReset,
+  validateLoading = false,
+  validateError = null,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -52,9 +56,14 @@ export default function DetectedText({
           className="manual-input__input"
           rows={1}
         />
-        <button onClick={onValidate} className="validate-btn">Analyser</button>
+        <button onClick={onValidate} className="validate-btn" disabled={validateLoading}>
+          {validateLoading ? 'Enregistrement...' : 'Analyser'}
+        </button>
         <button onClick={onReset} className="clear-btn">Texte OCR</button>
       </div>
+      {validateError ? (
+        <div className="detected-text__error">{validateError}</div>
+      ) : null}
       {autoText ? (
         <div className="auto-text">
           La phrase ci-dessous reste affichée exactement telle qu&apos;elle est transmise à JPDB.

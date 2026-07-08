@@ -31,6 +31,11 @@ type Props = {
   kanjiDetails: DisplayKanjiDetail[];
   loading?: boolean;
   kanjiMeaningsLoading?: boolean;
+  voicePlaybackAvailable?: boolean;
+  voicePlaybackStatusLoading?: boolean;
+  voicePlaybackLoading?: boolean;
+  voicePlaybackPlaying?: boolean;
+  voicePlaybackUnavailableMessage?: string | null;
   showFailReviewButton?: boolean;
   showAddVocabularyButton?: boolean;
   showRemoveVocabularyButton?: boolean;
@@ -43,6 +48,7 @@ type Props = {
   onFailReview?: (() => void | Promise<void>) | null;
   onAddVocabulary?: (() => void | Promise<void>) | null;
   onRemoveVocabulary?: (() => void | Promise<void>) | null;
+  onPlayTokenText?: ((text: string) => void) | null;
 };
 
 const formatFrequencyRank = (rank: number): string => {
@@ -103,6 +109,11 @@ export default function DetailsPanel({
   kanjiDetails,
   loading = false,
   kanjiMeaningsLoading = false,
+  voicePlaybackAvailable = false,
+  voicePlaybackStatusLoading = false,
+  voicePlaybackLoading = false,
+  voicePlaybackPlaying = false,
+  voicePlaybackUnavailableMessage = null,
   showFailReviewButton = false,
   showAddVocabularyButton = false,
   showRemoveVocabularyButton = false,
@@ -115,6 +126,7 @@ export default function DetailsPanel({
   onFailReview = null,
   onAddVocabulary = null,
   onRemoveVocabulary = null,
+  onPlayTokenText = null,
 }: Props) {
   const { openModal } = useModal();
   const hasVocabulary = selectedVocabulary.length > 0;
@@ -130,6 +142,27 @@ export default function DetailsPanel({
   const selectedFormReference = selectedInflection?.formKey
     ? getJapaneseFormReference(selectedInflection.formKey)
     : null;
+  const selectedSurfaceText = String(selectedSurface || '').trim();
+  const canPlayTokenText = !!onPlayTokenText
+    && voicePlaybackAvailable
+    && !voicePlaybackStatusLoading
+    && !voicePlaybackLoading
+    && selectedSurfaceText.length > 0;
+  const playTokenTitle = (() => {
+    if (voicePlaybackStatusLoading) {
+      return 'Vérification de la lecture audio...';
+    }
+
+    if (!voicePlaybackAvailable) {
+      return voicePlaybackUnavailableMessage || "La lecture audio n'est pas disponible pour le moment.";
+    }
+
+    if (!selectedSurfaceText) {
+      return 'Aucun texte de token à lire.';
+    }
+
+    return voicePlaybackPlaying ? 'Lire ce token à la place de la lecture en cours' : 'Lire ce token';
+  })();
 
   return (
     <div className="details">
@@ -157,6 +190,22 @@ export default function DetailsPanel({
                   className="details-token-hero__surface"
                 />
                 <div className="details-token-hero__actions">
+                  {onPlayTokenText ? (
+                    <button
+                      type="button"
+                      className={`details-token-play-btn${voicePlaybackLoading ? ' is-loading' : ''}`}
+                      aria-label="Lire ce token"
+                      title={playTokenTitle}
+                      onClick={() => {
+                        if (selectedSurfaceText) {
+                          onPlayTokenText(selectedSurfaceText);
+                        }
+                      }}
+                      disabled={!canPlayTokenText}
+                    >
+                      ▶
+                    </button>
+                  ) : null}
                   {primaryCardStatus ? (
                     <span className={`details-meta-pill details-meta-pill--status${primaryCardStatusIsFailed ? ' details-meta-pill--danger' : ''}`}>
                       {primaryCardStatus}

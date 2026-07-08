@@ -660,6 +660,7 @@ const Reader: React.FC<ReaderProps> = ({
                         voicePlaybackError={voiceSpeech.voicePlaybackError}
                         voicePlaybackUnavailableMessage={voiceSpeech.voicePlaybackUnavailableMessage}
                         onPlaySelectedText={voiceSpeech.playSelectedText}
+                        onPlayTokenText={voiceSpeech.playText}
                         voiceAudioDownloadLoading={voiceSpeech.voiceAudioDownloadLoading}
                         voiceAudioDownloadPath={voiceSpeech.voiceAudioDownloadPath}
                         voiceAudioDownloadError={voiceSpeech.voiceAudioDownloadError}

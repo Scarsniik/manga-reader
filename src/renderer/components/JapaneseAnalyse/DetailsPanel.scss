@@ -103,6 +103,44 @@
   border-color: rgba(175, 93, 105, 0.38);
 }
 
+.details-token-play-btn {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid rgba(111,163,200,0.28);
+  background: rgba(111,163,200,0.14);
+  color: $jp-text;
+  font-size: 0.82rem;
+  line-height: 1;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.details-token-play-btn:hover:not(:disabled) {
+  background: rgba(111,163,200,0.22);
+  border-color: rgba(111,163,200,0.38);
+}
+
+.details-token-play-btn:focus-visible {
+  outline: none;
+  box-shadow: $jp-focus-shadow;
+}
+
+.details-token-play-btn:disabled {
+  cursor: default;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.3);
+}
+
+.details-token-play-btn.is-loading {
+  opacity: 0.8;
+}
+
 .details-review-fail-btn {
   width: 30px;
   height: 30px;
