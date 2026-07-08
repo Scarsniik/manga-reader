@@ -28,10 +28,15 @@ const OCR_GITHUB_REPO_ENV_NAMES = [
   "MANGA_HELPER_OCR_GITHUB_REPO",
   "SCARAMANGA_OCR_GITHUB_REPO",
 ];
+const VOICEVOX_BASE_URL_ENV_NAMES = [
+  "MANGA_HELPER_VOICEVOX_BASE_URL",
+  "SCARAMANGA_VOICEVOX_BASE_URL",
+];
 const DEFAULT_OCR_RUNTIME_REPOSITORY = {
   owner: "Scarsniik",
   repo: "manga-runtime-OCR",
 };
+const DEFAULT_VOICEVOX_BASE_URL = "https://voicevox.up.railway.app/";
 
 const readPackageMetadata = () => {
   const packageJsonPath = path.join(__dirname, "package.json");
@@ -113,8 +118,13 @@ const resolveOcrRuntimeManifestUrl = () => {
   return buildGithubLatestAssetUrl(resolveOcrRuntimeRepository(), "manifest.json");
 };
 
+const resolveVoicevoxBaseUrl = () => (
+  readFirstEnvValue(VOICEVOX_BASE_URL_ENV_NAMES) || DEFAULT_VOICEVOX_BASE_URL
+);
+
 const publishRepository = resolveGithubPublishRepository();
 const ocrRuntimeManifestUrl = resolveOcrRuntimeManifestUrl();
+const voicevoxBaseUrl = resolveVoicevoxBaseUrl();
 
 module.exports = {
   appId: appIdentity.appId,
@@ -165,5 +175,6 @@ module.exports = {
     name: appIdentity.packageName,
     productName: appIdentity.productName,
     ocrRuntimeManifestUrl,
+    voicevoxBaseUrl,
   },
 };

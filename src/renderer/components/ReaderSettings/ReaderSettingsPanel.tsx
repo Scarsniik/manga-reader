@@ -361,7 +361,7 @@ const buildReaderSettingsFields = (voicevoxOptions: VoicevoxFormOptions): FormIt
     id: 'reader-voicevox',
     title: 'Voix OCR (VOICEVOX)',
     description: voicevoxOptions.configured === false
-      ? 'Configure MANGA_HELPER_VOICEVOX_BASE_URL pour activer la lecture audio.'
+      ? "La lecture audio n'est pas disponible pour le moment."
       : 'Réglages utilisés par le bouton Lire et par la lecture automatique des bulles OCR.',
     fields: [
       {
@@ -711,7 +711,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
     }
 
     if (voicevoxConfigured === false || !window.api || typeof window.api.voicevoxSynthesize !== 'function') {
-      setVoicevoxTestPlaybackError(voicevoxStatusMessage || "La lecture audio n'est pas configurée.")
+      setVoicevoxTestPlaybackError(voicevoxStatusMessage || "La lecture audio n'est pas disponible pour le moment.")
       return
     }
 

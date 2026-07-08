@@ -153,7 +153,7 @@ const useReaderVoicevoxSpeech = ({
         }
 
         if (!voicevoxConfigured || !window.api || typeof window.api.voicevoxSynthesize !== "function") {
-            setPlaybackError(voicevoxUnavailableMessage || "La lecture audio n'est pas configurée.");
+            setPlaybackError(voicevoxUnavailableMessage || "La lecture audio n'est pas disponible pour le moment.");
             return;
         }
 

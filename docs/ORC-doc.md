@@ -604,9 +604,12 @@ Le Reader peut envoyer le texte de la bulle OCR selectionnee a un serveur
 VOICEVOX externe. L'application charge la liste des voix via `/speakers` et
 expose dans les parametres une section `Voix OCR (VOICEVOX)`.
 
-La variable d'environnement `MANGA_HELPER_VOICEVOX_BASE_URL` est obligatoire.
-Si elle est absente ou invalide, le bouton de lecture reste indisponible et
-l'option de lecture automatique est desactivee dans les parametres.
+La release embarque une URL VOICEVOX par defaut via les metadonnees Electron.
+La variable d'environnement `MANGA_HELPER_VOICEVOX_BASE_URL` peut encore
+surcharger cette URL pour les builds de test ou un changement de serveur.
+Si aucune URL exploitable n'est disponible, le bouton de lecture reste
+indisponible et l'option de lecture automatique est desactivee dans les
+parametres, avec un message utilisateur generique.
 
 Parametres exposes :
 

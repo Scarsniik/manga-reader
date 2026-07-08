@@ -116,7 +116,7 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
         }
 
         if (!voicePlaybackAvailable) {
-            return voicePlaybackUnavailableMessage || 'La lecture audio VOICEVOX n’est pas configurée.';
+            return voicePlaybackUnavailableMessage || "La lecture audio n'est pas disponible pour le moment.";
         }
 
         if (selectedForAnalyse.length !== 1) {

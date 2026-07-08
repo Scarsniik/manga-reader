@@ -21,9 +21,16 @@ import {
     normalizeReaderOcrVoicevoxStyleId,
     normalizeReaderOcrVoicevoxVolumeScale,
 } from "../../shared/readerSettings";
+import { app } from "electron";
+import fs from "fs";
+import path from "path";
 
-const VOICEVOX_BASE_URL_ENV_NAME = "MANGA_HELPER_VOICEVOX_BASE_URL";
+const VOICEVOX_BASE_URL_ENV_NAMES = [
+    "MANGA_HELPER_VOICEVOX_BASE_URL",
+    "SCARAMANGA_VOICEVOX_BASE_URL",
+];
 const VOICEVOX_REQUEST_TIMEOUT_MS = 45000;
+const VOICEVOX_UNAVAILABLE_MESSAGE = "La lecture audio n'est pas disponible pour le moment.";
 
 type VoicevoxConfig = {
     baseUrl: URL | null;
@@ -90,13 +97,45 @@ type VoicevoxSynthesisRequest = {
     options: VoicevoxSynthesisOptions;
 };
 
+const normalizeNullableString = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const trimmedValue = value.trim();
+    return trimmedValue.length > 0 ? trimmedValue : null;
+};
+
+const readPackagedVoicevoxBaseUrl = (): string | null => {
+    try {
+        const packageJsonPath = path.join(app.getAppPath(), "package.json");
+        const packageText = fs.readFileSync(packageJsonPath, "utf-8");
+        const packageMetadata = JSON.parse(packageText);
+
+        if (!packageMetadata || typeof packageMetadata !== "object") {
+            return null;
+        }
+
+        return normalizeNullableString((packageMetadata as Record<string, unknown>).voicevoxBaseUrl);
+    } catch {
+        return null;
+    }
+};
+
+const readVoicevoxBaseUrl = (): string | null => (
+    VOICEVOX_BASE_URL_ENV_NAMES
+        .map((name) => normalizeNullableString(process.env[name]))
+        .find((value): value is string => !!value)
+    || readPackagedVoicevoxBaseUrl()
+);
+
 const readVoicevoxConfig = (): VoicevoxConfig => {
-    const rawBaseUrl = process.env[VOICEVOX_BASE_URL_ENV_NAME]?.trim();
+    const rawBaseUrl = readVoicevoxBaseUrl();
 
     if (!rawBaseUrl) {
         return {
             baseUrl: null,
-            message: `La lecture audio n'est pas configurée. Ajoute ${VOICEVOX_BASE_URL_ENV_NAME} dans .env puis redémarre l'application.`,
+            message: VOICEVOX_UNAVAILABLE_MESSAGE,
         };
     }
 
@@ -105,7 +144,7 @@ const readVoicevoxConfig = (): VoicevoxConfig => {
         if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") {
             return {
                 baseUrl: null,
-                message: `L'URL VOICEVOX doit commencer par http:// ou https://.`,
+                message: VOICEVOX_UNAVAILABLE_MESSAGE,
             };
         }
 
@@ -116,7 +155,7 @@ const readVoicevoxConfig = (): VoicevoxConfig => {
     } catch {
         return {
             baseUrl: null,
-            message: `L'URL VOICEVOX configurée dans ${VOICEVOX_BASE_URL_ENV_NAME} est invalide.`,
+            message: VOICEVOX_UNAVAILABLE_MESSAGE,
         };
     }
 };
@@ -332,7 +371,7 @@ export const getVoicevoxVoices = async (): Promise<VoicevoxVoicesResult> => {
             defaultSpeakerId: DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
             defaultSpeakerUuid: null,
             code: "voicevox-not-configured",
-            message: config.message || "La lecture audio n'est pas configurée.",
+            message: config.message || VOICEVOX_UNAVAILABLE_MESSAGE,
         };
     }
 
@@ -394,7 +433,7 @@ export const synthesizeVoicevoxSpeech = async (payload: unknown): Promise<Voicev
         return {
             success: false,
             code: "voicevox-not-configured",
-            error: config.message || "La lecture audio n'est pas configurée.",
+            error: config.message || VOICEVOX_UNAVAILABLE_MESSAGE,
         };
     }
 
