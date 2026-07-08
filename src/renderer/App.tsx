@@ -1,6 +1,5 @@
 import React from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import Home from '@/renderer/components/Home/Home';
 import AppTitleBar from "@/renderer/components/AppTitleBar/AppTitleBar";
 import OcrRuntimeFirstLaunchGate from "@/renderer/components/OcrRuntimeFirstLaunchGate/OcrRuntimeFirstLaunchGate";
 import OcrRuntimeGlobalUi from "@/renderer/components/OcrRuntime/OcrRuntimeGlobalUi";
@@ -17,6 +16,7 @@ const loadDefaultComponent = async (loader: () => Promise<unknown>): Promise<Def
     return { default: loaded.default };
 };
 
+const Home = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Home/Home.js')));
 const Reader = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Reader/Reader.js')));
 const WorkspaceView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Workspace/WorkspaceView.js')));
 const SelectorAssistantView = React.lazy(() => (

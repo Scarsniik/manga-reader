@@ -5,41 +5,73 @@ $electronPath = Join-Path $repoRoot 'node_modules\electron\dist\electron.exe'
 $viteScriptPath = Join-Path $repoRoot 'node_modules\vite\bin\vite.js'
 $viteStdout = Join-Path $repoRoot '.vite-dev.stdout.log'
 $viteStderr = Join-Path $repoRoot '.vite-dev.stderr.log'
-$viteUrl = 'http://127.0.0.1:3000'
+$viteHost = '127.0.0.1'
+$vitePort = 3000
+$viteUrl = "http://${viteHost}:${vitePort}"
 
-function Test-ViteReady {
+function Test-TcpPortOpen {
     param(
-        [string]$Url
+        [string]$HostName,
+        [int]$Port,
+        [int]$TimeoutMs = 250
     )
 
-    $request = $null
-    $response = $null
-    $reader = $null
+    $client = [System.Net.Sockets.TcpClient]::new()
     try {
-        $request = [System.Net.HttpWebRequest]::Create($Url)
-        $request.Timeout = 2000
-        $request.ReadWriteTimeout = 2000
-        $request.Proxy = $null
-        $response = $request.GetResponse()
-        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) {
+        $connectTask = $client.ConnectAsync($HostName, $Port)
+        if (-not $connectTask.Wait($TimeoutMs)) {
             return $false
         }
 
-        $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
-        $content = $reader.ReadToEnd()
-        return $content.Contains('/src/renderer/index.tsx')
+        if ($connectTask.IsFaulted -or $connectTask.IsCanceled) {
+            return $false
+        }
+
+        return $client.Connected
     }
     catch {
         return $false
     }
     finally {
-        if ($reader) {
-            $reader.Dispose()
+        $client.Dispose()
+    }
+}
+
+function Test-ViteLogReady {
+    param(
+        [string]$StdoutPath
+    )
+
+    if (-not (Test-Path $StdoutPath)) {
+        return $false
+    }
+
+    $stdout = Get-Content $StdoutPath -Raw -ErrorAction SilentlyContinue
+    $ansiPattern = "$([char]27)\[[0-?]*[ -/]*[@-~]"
+    $plainStdout = $stdout -replace $ansiPattern, ''
+    return $plainStdout -match 'ready in\s+\d+\s*ms' -or $plainStdout -match 'Local:\s+http://'
+}
+
+function Test-VitePortOwner {
+    param(
+        [int]$Port,
+        [string]$ExpectedScriptPath
+    )
+
+    $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    foreach ($connection in $connections) {
+        $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -ErrorAction SilentlyContinue
+        if (-not $processInfo) {
+            continue
         }
-        if ($response) {
-            $response.Dispose()
+
+        $commandLine = if ($processInfo.CommandLine) { $processInfo.CommandLine } else { '' }
+        if ($commandLine.IndexOf($ExpectedScriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
         }
     }
+
+    return $false
 }
 
 function Stop-ProcessTree {
@@ -79,15 +111,19 @@ finally {
     Pop-Location
 }
 
-if (Test-Path $viteStdout) { Remove-Item $viteStdout -Force -ErrorAction SilentlyContinue }
-if (Test-Path $viteStderr) { Remove-Item $viteStderr -Force -ErrorAction SilentlyContinue }
-
-$reuseExistingServer = Test-ViteReady -Url $viteUrl
+$reuseExistingServer = Test-VitePortOwner -Port $vitePort -ExpectedScriptPath $viteScriptPath
 $viteProcess = $null
 
 if (-not $reuseExistingServer) {
+    if (Test-TcpPortOpen -HostName $viteHost -Port $vitePort) {
+        throw "Un serveur utilise deja le port $vitePort, mais ce n'est pas le serveur Vite attendu."
+    }
+
+    if (Test-Path $viteStdout) { Remove-Item $viteStdout -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $viteStderr) { Remove-Item $viteStderr -Force -ErrorAction SilentlyContinue }
+
     $viteProcess = Start-Process -FilePath $nodePath `
-        -ArgumentList @($viteScriptPath, '--host', '127.0.0.1', '--strictPort') `
+        -ArgumentList @($viteScriptPath, '--host', $viteHost, '--strictPort') `
         -WorkingDirectory $repoRoot `
         -WindowStyle Hidden `
         -PassThru `
@@ -99,7 +135,7 @@ try {
     if (-not $reuseExistingServer) {
         $ready = $false
         for ($i = 0; $i -lt 60; $i++) {
-            Start-Sleep -Milliseconds 500
+            Start-Sleep -Milliseconds 250
 
             if ($viteProcess.HasExited) {
                 $stdout = if (Test-Path $viteStdout) { Get-Content $viteStdout -Raw } else { '' }
@@ -107,7 +143,7 @@ try {
                 throw "Le serveur Vite s'est arrêté avant qu'Electron puisse démarrer.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
             }
 
-            if (Test-ViteReady -Url $viteUrl) {
+            if ((Test-ViteLogReady -StdoutPath $viteStdout) -and (Test-TcpPortOpen -HostName $viteHost -Port $vitePort)) {
                 $ready = $true
                 break
             }
@@ -118,8 +154,6 @@ try {
             $stderr = if (Test-Path $viteStderr) { Get-Content $viteStderr -Raw } else { '' }
             throw "Timeout en attendant Vite sur $viteUrl.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
         }
-    } elseif (-not (Test-ViteReady -Url $viteUrl)) {
-        throw "Un serveur semble déjà utiliser le port 3000, mais il ne répond pas correctement sur $viteUrl."
     }
 
     $env:VITE_DEV_SERVER_URL = $viteUrl
