@@ -1,6 +1,6 @@
 # Specification OCR - Reader Manga Helper
 
-Date de mise a jour : 2026-03-31
+Date de mise a jour : 2026-07-08
 
 ## Statut du document
 
@@ -578,6 +578,7 @@ Le Reader reste focalise sur :
 - afficher les boxes
 - permettre la selection
 - lancer ou relancer la page courante
+- lire la bulle OCR selectionnee via VOICEVOX quand le service est configure
 
 La Bibliotheque et le panneau d'avancement doivent porter :
 
@@ -592,9 +593,37 @@ Parametres produit recommandes :
 
 - activer/desactiver l'OCR japonais
 - nombre de pages prechargees autour de la page courante
+- lecture automatique de la bulle OCR selectionnee
 - lancer l'OCR complet a l'importation
 - appliquer automatiquement la langue japonaise si detectee
 - comportement par defaut si un fichier OCR existe deja
+
+### Lecture audio VOICEVOX
+
+Le Reader peut envoyer le texte de la bulle OCR selectionnee a un serveur
+VOICEVOX externe. L'application charge la liste des voix via `/speakers` et
+expose dans les parametres une section `Voix OCR (VOICEVOX)`.
+
+La variable d'environnement `MANGA_HELPER_VOICEVOX_BASE_URL` est obligatoire.
+Si elle est absente ou invalide, le bouton de lecture reste indisponible et
+l'option de lecture automatique est desactivee dans les parametres.
+
+Parametres exposes :
+
+- voix et variante de voix, correspondant au `speaker` VOICEVOX utilise pour la synthese
+- vitesse, hauteur, intonation et volume
+- silences avant/apres la voix et duree des pauses de ponctuation
+- frequence de sortie, stereo, ajustement des phrases interrogatives
+- lecture des mots anglais inconnus en katakana
+- texte de test pre-rempli et bouton de lecture pour essayer les reglages avant enregistrement
+
+Flux technique :
+
+1. Electron appelle `GET /speakers` pour alimenter les options de voix.
+2. Electron appelle `POST /audio_query?text=...&speaker=<styleId>`.
+3. Electron applique les reglages utilisateur a l'`AudioQuery`.
+4. Electron appelle `POST /synthesis?speaker=<styleId>` avec la requete audio obtenue.
+5. Le renderer lit le WAV retourne pour la bulle courante.
 
 ## Risques et mitigations
 

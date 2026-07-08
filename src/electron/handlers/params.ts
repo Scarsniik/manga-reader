@@ -14,6 +14,33 @@ const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
 const MAX_READER_OCR_PRELOAD_PAGE_COUNT = 10;
 const DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES = true;
 const DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS = false;
+const DEFAULT_READER_OCR_AUTO_PLAY_VOICE = false;
+const DEFAULT_READER_OCR_VOICEVOX_SPEAKER_UUID = "";
+const DEFAULT_READER_OCR_VOICEVOX_STYLE_ID = 2;
+const DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE = 1;
+const MIN_READER_OCR_VOICEVOX_SPEED_SCALE = 0.5;
+const MAX_READER_OCR_VOICEVOX_SPEED_SCALE = 2;
+const DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE = 0;
+const MIN_READER_OCR_VOICEVOX_PITCH_SCALE = -0.15;
+const MAX_READER_OCR_VOICEVOX_PITCH_SCALE = 0.15;
+const DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE = 1;
+const MIN_READER_OCR_VOICEVOX_INTONATION_SCALE = 0;
+const MAX_READER_OCR_VOICEVOX_INTONATION_SCALE = 2;
+const DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE = 1;
+const MIN_READER_OCR_VOICEVOX_VOLUME_SCALE = 0;
+const MAX_READER_OCR_VOICEVOX_VOLUME_SCALE = 2;
+const DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH = 0.1;
+const DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH = 0.1;
+const MIN_READER_OCR_VOICEVOX_PHONEME_LENGTH = 0;
+const MAX_READER_OCR_VOICEVOX_PHONEME_LENGTH = 1.5;
+const DEFAULT_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE = 1;
+const MIN_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE = 0.5;
+const MAX_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE = 2;
+const DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE = 24000;
+const READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE_OPTIONS = [16000, 24000, 44100, 48000] as const;
+const DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO = false;
+const DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK = true;
+const DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH = true;
 const DEFAULT_READER_OCR_NAVIGATION_OFFSET = 6;
 const MIN_READER_OCR_NAVIGATION_OFFSET = 0;
 const MAX_READER_OCR_NAVIGATION_OFFSET = 25;
@@ -106,6 +133,22 @@ const normalizeIntegerSetting = (
     return Math.max(min, Math.min(max, Math.floor(parsed)));
 };
 
+const normalizeNumberSetting = (
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+): number => {
+    const parsed = parseNumericSetting(value);
+
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    const clamped = Math.max(min, Math.min(max, parsed));
+    return Number(clamped.toFixed(3));
+};
+
 const normalizeIntegerSettingWithoutMax = (
     value: unknown,
     fallback: number,
@@ -132,6 +175,14 @@ const normalizeReaderOcrPreloadPageCount = (value: unknown): number => (
 const normalizeBooleanSetting = (value: unknown, fallback: boolean): boolean => (
     typeof value === "boolean" ? value : fallback
 );
+
+const normalizeStringSetting = (value: unknown, fallback: string = ""): string => {
+    if (typeof value !== "string") {
+        return fallback;
+    }
+
+    return value.trim();
+};
 
 const normalizeLowercaseStringListSetting = (value: unknown): string[] => {
     if (!Array.isArray(value)) {
@@ -225,6 +276,111 @@ const normalizeReaderOcrAutoAnalyzeBubbles = (value: unknown): boolean => (
 
 const normalizeReaderOcrPreloadTokenDetails = (value: unknown): boolean => (
     normalizeBooleanSetting(value, DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS)
+);
+
+const normalizeReaderOcrAutoPlayVoice = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_AUTO_PLAY_VOICE)
+);
+
+const normalizeReaderOcrVoicevoxSpeakerUuid = (value: unknown): string => (
+    normalizeStringSetting(value, DEFAULT_READER_OCR_VOICEVOX_SPEAKER_UUID)
+);
+
+const normalizeReaderOcrVoicevoxStyleId = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
+        0,
+        100000,
+    )
+);
+
+const normalizeReaderOcrVoicevoxSpeedScale = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
+        MIN_READER_OCR_VOICEVOX_SPEED_SCALE,
+        MAX_READER_OCR_VOICEVOX_SPEED_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxPitchScale = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE,
+        MIN_READER_OCR_VOICEVOX_PITCH_SCALE,
+        MAX_READER_OCR_VOICEVOX_PITCH_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxIntonationScale = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE,
+        MIN_READER_OCR_VOICEVOX_INTONATION_SCALE,
+        MAX_READER_OCR_VOICEVOX_INTONATION_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxVolumeScale = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE,
+        MIN_READER_OCR_VOICEVOX_VOLUME_SCALE,
+        MAX_READER_OCR_VOICEVOX_VOLUME_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxPrePhonemeLength = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH,
+        MIN_READER_OCR_VOICEVOX_PHONEME_LENGTH,
+        MAX_READER_OCR_VOICEVOX_PHONEME_LENGTH,
+    )
+);
+
+const normalizeReaderOcrVoicevoxPostPhonemeLength = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH,
+        MIN_READER_OCR_VOICEVOX_PHONEME_LENGTH,
+        MAX_READER_OCR_VOICEVOX_PHONEME_LENGTH,
+    )
+);
+
+const normalizeReaderOcrVoicevoxPauseLengthScale = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE,
+        MIN_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE,
+        MAX_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxOutputSamplingRate = (value: unknown): number => {
+    const parsed = normalizeIntegerSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE,
+        1,
+        192000,
+    );
+
+    return (READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE_OPTIONS as readonly number[]).includes(parsed)
+        ? parsed
+        : DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE;
+};
+
+const normalizeReaderOcrVoicevoxOutputStereo = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO)
+);
+
+const normalizeReaderOcrVoicevoxInterrogativeUpspeak = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK)
+);
+
+const normalizeReaderOcrVoicevoxEnableKatakanaEnglish = (value: unknown): boolean => (
+    normalizeBooleanSetting(value, DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH)
 );
 
 const normalizeReaderOcrNavigationOffset = (value: unknown): number => (
@@ -417,6 +573,20 @@ const defaultSettings = {
     readerOcrPreloadPageCount: DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT,
     readerOcrAutoAnalyzeBubbles: DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES,
     readerOcrPreloadTokenDetails: DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS,
+    readerOcrAutoPlayVoice: DEFAULT_READER_OCR_AUTO_PLAY_VOICE,
+    readerOcrVoicevoxSpeakerUuid: DEFAULT_READER_OCR_VOICEVOX_SPEAKER_UUID,
+    readerOcrVoicevoxStyleId: DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
+    readerOcrVoicevoxSpeedScale: DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
+    readerOcrVoicevoxPitchScale: DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE,
+    readerOcrVoicevoxIntonationScale: DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE,
+    readerOcrVoicevoxVolumeScale: DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE,
+    readerOcrVoicevoxPrePhonemeLength: DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH,
+    readerOcrVoicevoxPostPhonemeLength: DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH,
+    readerOcrVoicevoxPauseLengthScale: DEFAULT_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE,
+    readerOcrVoicevoxOutputSamplingRate: DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE,
+    readerOcrVoicevoxOutputStereo: DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO,
+    readerOcrVoicevoxInterrogativeUpspeak: DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK,
+    readerOcrVoicevoxEnableKatakanaEnglish: DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH,
     readerOcrNavigationOffset: DEFAULT_READER_OCR_NAVIGATION_OFFSET,
     readerOcrNavigationDeadZone: DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
     readerOcrNavigationStrictDirection: DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
@@ -517,6 +687,32 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.readerOcrAutoAnalyzeBubbles = normalizeReaderOcrAutoAnalyzeBubbles(merged.readerOcrAutoAnalyzeBubbles);
     merged.readerOcrPreloadTokenDetails = normalizeReaderOcrPreloadTokenDetails(merged.readerOcrPreloadTokenDetails);
+    merged.readerOcrAutoPlayVoice = normalizeReaderOcrAutoPlayVoice(merged.readerOcrAutoPlayVoice);
+    merged.readerOcrVoicevoxSpeakerUuid = normalizeReaderOcrVoicevoxSpeakerUuid(merged.readerOcrVoicevoxSpeakerUuid);
+    merged.readerOcrVoicevoxStyleId = normalizeReaderOcrVoicevoxStyleId(merged.readerOcrVoicevoxStyleId);
+    merged.readerOcrVoicevoxSpeedScale = normalizeReaderOcrVoicevoxSpeedScale(merged.readerOcrVoicevoxSpeedScale);
+    merged.readerOcrVoicevoxPitchScale = normalizeReaderOcrVoicevoxPitchScale(merged.readerOcrVoicevoxPitchScale);
+    merged.readerOcrVoicevoxIntonationScale = normalizeReaderOcrVoicevoxIntonationScale(merged.readerOcrVoicevoxIntonationScale);
+    merged.readerOcrVoicevoxVolumeScale = normalizeReaderOcrVoicevoxVolumeScale(merged.readerOcrVoicevoxVolumeScale);
+    merged.readerOcrVoicevoxPrePhonemeLength = normalizeReaderOcrVoicevoxPrePhonemeLength(
+        merged.readerOcrVoicevoxPrePhonemeLength,
+    );
+    merged.readerOcrVoicevoxPostPhonemeLength = normalizeReaderOcrVoicevoxPostPhonemeLength(
+        merged.readerOcrVoicevoxPostPhonemeLength,
+    );
+    merged.readerOcrVoicevoxPauseLengthScale = normalizeReaderOcrVoicevoxPauseLengthScale(
+        merged.readerOcrVoicevoxPauseLengthScale,
+    );
+    merged.readerOcrVoicevoxOutputSamplingRate = normalizeReaderOcrVoicevoxOutputSamplingRate(
+        merged.readerOcrVoicevoxOutputSamplingRate,
+    );
+    merged.readerOcrVoicevoxOutputStereo = normalizeReaderOcrVoicevoxOutputStereo(merged.readerOcrVoicevoxOutputStereo);
+    merged.readerOcrVoicevoxInterrogativeUpspeak = normalizeReaderOcrVoicevoxInterrogativeUpspeak(
+        merged.readerOcrVoicevoxInterrogativeUpspeak,
+    );
+    merged.readerOcrVoicevoxEnableKatakanaEnglish = normalizeReaderOcrVoicevoxEnableKatakanaEnglish(
+        merged.readerOcrVoicevoxEnableKatakanaEnglish,
+    );
     merged.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(merged.readerOcrNavigationOffset);
     merged.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(merged.readerOcrNavigationDeadZone);
     merged.readerOcrNavigationStrictDirection = normalizeReaderOcrNavigationStrictDirection(
@@ -813,6 +1009,44 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.readerOcrPreloadTokenDetails = normalizeReaderOcrPreloadTokenDetails(
             nextSettings.readerOcrPreloadTokenDetails,
+        );
+        nextSettings.readerOcrAutoPlayVoice = normalizeReaderOcrAutoPlayVoice(nextSettings.readerOcrAutoPlayVoice);
+        nextSettings.readerOcrVoicevoxSpeakerUuid = normalizeReaderOcrVoicevoxSpeakerUuid(
+            nextSettings.readerOcrVoicevoxSpeakerUuid,
+        );
+        nextSettings.readerOcrVoicevoxStyleId = normalizeReaderOcrVoicevoxStyleId(nextSettings.readerOcrVoicevoxStyleId);
+        nextSettings.readerOcrVoicevoxSpeedScale = normalizeReaderOcrVoicevoxSpeedScale(
+            nextSettings.readerOcrVoicevoxSpeedScale,
+        );
+        nextSettings.readerOcrVoicevoxPitchScale = normalizeReaderOcrVoicevoxPitchScale(
+            nextSettings.readerOcrVoicevoxPitchScale,
+        );
+        nextSettings.readerOcrVoicevoxIntonationScale = normalizeReaderOcrVoicevoxIntonationScale(
+            nextSettings.readerOcrVoicevoxIntonationScale,
+        );
+        nextSettings.readerOcrVoicevoxVolumeScale = normalizeReaderOcrVoicevoxVolumeScale(
+            nextSettings.readerOcrVoicevoxVolumeScale,
+        );
+        nextSettings.readerOcrVoicevoxPrePhonemeLength = normalizeReaderOcrVoicevoxPrePhonemeLength(
+            nextSettings.readerOcrVoicevoxPrePhonemeLength,
+        );
+        nextSettings.readerOcrVoicevoxPostPhonemeLength = normalizeReaderOcrVoicevoxPostPhonemeLength(
+            nextSettings.readerOcrVoicevoxPostPhonemeLength,
+        );
+        nextSettings.readerOcrVoicevoxPauseLengthScale = normalizeReaderOcrVoicevoxPauseLengthScale(
+            nextSettings.readerOcrVoicevoxPauseLengthScale,
+        );
+        nextSettings.readerOcrVoicevoxOutputSamplingRate = normalizeReaderOcrVoicevoxOutputSamplingRate(
+            nextSettings.readerOcrVoicevoxOutputSamplingRate,
+        );
+        nextSettings.readerOcrVoicevoxOutputStereo = normalizeReaderOcrVoicevoxOutputStereo(
+            nextSettings.readerOcrVoicevoxOutputStereo,
+        );
+        nextSettings.readerOcrVoicevoxInterrogativeUpspeak = normalizeReaderOcrVoicevoxInterrogativeUpspeak(
+            nextSettings.readerOcrVoicevoxInterrogativeUpspeak,
+        );
+        nextSettings.readerOcrVoicevoxEnableKatakanaEnglish = normalizeReaderOcrVoicevoxEnableKatakanaEnglish(
+            nextSettings.readerOcrVoicevoxEnableKatakanaEnglish,
         );
         nextSettings.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(nextSettings.readerOcrNavigationOffset);
         nextSettings.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(

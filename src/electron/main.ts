@@ -1,3 +1,4 @@
+import "./env";
 import { app, BrowserWindow, protocol, shell } from "electron";
 import path from "path";
 import { configureApplicationIdentity } from "./appIdentity";

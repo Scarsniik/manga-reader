@@ -31,6 +31,13 @@ type Props = {
     loading?: boolean;
     error?: string | null;
     statusNote?: string | null;
+    voicePlaybackAvailable?: boolean;
+    voicePlaybackStatusLoading?: boolean;
+    voicePlaybackLoading?: boolean;
+    voicePlaybackPlaying?: boolean;
+    voicePlaybackError?: string | null;
+    voicePlaybackUnavailableMessage?: string | null;
+    onPlaySelectedText?: () => void;
     showBoxes?: boolean;
     onToggleShowBoxes?: (next: boolean) => void;
 };
@@ -61,6 +68,13 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
     loading,
     error,
     statusNote,
+    voicePlaybackAvailable = false,
+    voicePlaybackStatusLoading = false,
+    voicePlaybackLoading = false,
+    voicePlaybackPlaying = false,
+    voicePlaybackError = null,
+    voicePlaybackUnavailableMessage = null,
+    onPlaySelectedText,
     showBoxes = true,
     onToggleShowBoxes,
 }, ref) => {
@@ -93,6 +107,38 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
             ? '1 bulle sélectionnée'
             : `${selectedForAnalyse.length} bulles sélectionnées`;
     const selectionScrollKey = useMemo(() => selectedBoxes.join('|'), [selectedBoxes]);
+    const selectedVoiceText = selectedForAnalyse.length === 1
+        ? String(selectedForAnalyse[0].text || '').trim()
+        : '';
+    const voicePlaybackButtonTitle = (() => {
+        if (voicePlaybackStatusLoading) {
+            return 'Vérification de la configuration VOICEVOX...';
+        }
+
+        if (!voicePlaybackAvailable) {
+            return voicePlaybackUnavailableMessage || 'La lecture audio VOICEVOX n’est pas configurée.';
+        }
+
+        if (selectedForAnalyse.length !== 1) {
+            return 'Sélectionne une seule bulle OCR à lire.';
+        }
+
+        if (!selectedVoiceText) {
+            return 'La bulle sélectionnée est vide.';
+        }
+
+        return 'Lire la bulle OCR sélectionnée';
+    })();
+    const canPlaySelectedText = !!onPlaySelectedText
+        && !voicePlaybackStatusLoading
+        && voicePlaybackAvailable
+        && !voicePlaybackLoading
+        && selectedForAnalyse.length === 1
+        && selectedVoiceText.length > 0;
+    const showVoiceUnavailableNote = selectedForAnalyse.length === 1
+        && !voicePlaybackStatusLoading
+        && !voicePlaybackAvailable
+        && !!voicePlaybackUnavailableMessage;
 
     const renderBoxButton = (box: Box, typeLabel: string) => (
         <button
@@ -127,7 +173,11 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
         || !!manualSelectionEnabled
         || !!orderSelectionEnabled
         || !!error
-        || !!statusNote;
+        || !!statusNote
+        || !!voicePlaybackError
+        || !!voicePlaybackLoading
+        || !!voicePlaybackPlaying
+        || !!showVoiceUnavailableNote;
 
     return (
         <aside className="reader-ocr-panel" aria-label="OCR panel" ref={ref}>
@@ -143,6 +193,18 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                     <div className="ocr-panel-controls">
                         <button onClick={() => onSimulate()} disabled={manualSelectionLoading} type="button">Relancer</button>
                         <button onClick={() => onClear()} disabled={manualSelectionLoading} type="button">Vider</button>
+                        <button
+                            onClick={() => {
+                                if (typeof onPlaySelectedText === 'function') {
+                                    onPlaySelectedText();
+                                }
+                            }}
+                            disabled={!canPlaySelectedText}
+                            title={voicePlaybackButtonTitle}
+                            type="button"
+                        >
+                            {voicePlaybackLoading ? 'Préparation...' : voicePlaybackPlaying ? 'Relire' : 'Lire'}
+                        </button>
                         <button
                             onClick={() => {
                                 if (typeof onToggleManualSelection === 'function') {
@@ -192,6 +254,8 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                     <div className="ocr-status">
                         {loading ? <div className="ocr-status-pill">Chargement OCR…</div> : null}
                         {manualSelectionLoading ? <div className="ocr-status-pill">Analyse de la sélection manuelle…</div> : null}
+                        {voicePlaybackLoading ? <div className="ocr-status-pill">Préparation de la voix…</div> : null}
+                        {voicePlaybackPlaying ? <div className="ocr-status-pill">Lecture audio en cours.</div> : null}
                         {manualSelectionEnabled ? (
                             <div className="ocr-status-note">Dessine une zone sur l&apos;image pour ajouter une sélection manuelle.</div>
                         ) : null}
@@ -199,6 +263,8 @@ const OcrPanel = React.forwardRef<HTMLElement, Props>(({
                             <div className="ocr-status-note">Clique les zones sur la page dans l&apos;ordre de lecture. Clique une zone déjà numérotée pour la retirer.</div>
                         ) : null}
                         {error ? <div className="ocr-status-error">{error}</div> : null}
+                        {voicePlaybackError ? <div className="ocr-status-error">{voicePlaybackError}</div> : null}
+                        {showVoiceUnavailableNote ? <div className="ocr-status-note">{voicePlaybackUnavailableMessage}</div> : null}
                         {statusNote ? <div className="ocr-status-note">{statusNote}</div> : null}
                     </div>
                 ) : null}

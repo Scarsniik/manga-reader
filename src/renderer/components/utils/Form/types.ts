@@ -3,8 +3,15 @@ export type Option = { label: string; value: string; description?: string }
 export type Field = {
   name: string
   label?: string
-  type: 'text' | 'number' | 'select' | 'selectMulti' | 'radio' | 'checkbox' | 'textarea' | 'file' | 'tagsPicker' | 'entityPicker' | 'series' | 'author'
+  type: 'text' | 'number' | 'select' | 'selectMulti' | 'radio' | 'checkbox' | 'textarea' | 'file' | 'tagsPicker' | 'entityPicker' | 'series' | 'author' | 'action'
   options?: Option[]
+  dynamicOptions?: {
+    field: string
+    optionsByValue: Record<string, Option[]>
+    fallbackOptions?: Option[]
+  }
+  actionId?: string
+  buttonLabel?: string
   layout?: 'stack' | 'inline' | 'cards'
   placeholder?: string
   required?: boolean

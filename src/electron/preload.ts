@@ -435,6 +435,9 @@ contextBridge.exposeInMainWorld('api', {
     appUpdateInstall: () => ipcRenderer.invoke("app-update-install"),
     appUpdateOpenReleasePage: () => ipcRenderer.invoke("app-update-open-release-page"),
     appUpdateGetPatchNotes: (query?: Record<string, unknown>) => ipcRenderer.invoke("app-update-get-patch-notes", query),
+    voicevoxStatus: () => ipcRenderer.invoke("voicevox-status"),
+    voicevoxVoices: () => ipcRenderer.invoke("voicevox-voices"),
+    voicevoxSynthesize: (payload: Record<string, unknown> | string) => ipcRenderer.invoke("voicevox-synthesize", payload),
     romanizeJapaneseTexts: (request: JapaneseRomanizationRequest) => ipcRenderer.invoke("romanize-japanese-texts", request),
     analyzeJapaneseInflections: (request: JapaneseInflectionRequest) => ipcRenderer.invoke("analyze-japanese-inflections", request),
     // Scrapers API

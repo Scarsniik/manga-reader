@@ -23,23 +23,49 @@ import type {
 import {
     DEFAULT_READER_IMAGE_MAX_WIDTH,
     DEFAULT_READER_OCR_AUTO_ANALYZE_BUBBLES,
+    DEFAULT_READER_OCR_AUTO_PLAY_VOICE,
     DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
     DEFAULT_READER_OCR_NAVIGATION_LOOSE_FALLBACK,
     DEFAULT_READER_OCR_NAVIGATION_OFFSET,
     DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
     DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS,
+    DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH,
+    DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK,
+    DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE,
+    DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE,
+    DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO,
+    DEFAULT_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE,
+    DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE,
+    DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH,
+    DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH,
+    DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
+    DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
+    DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE,
     DEFAULT_READER_SCROLL_HOLD_SPEED,
     DEFAULT_READER_SCROLL_START_BOOST,
     DEFAULT_READER_SCROLL_STRENGTH,
     normalizeReaderImageMaxWidth,
     normalizeReaderImagePreloadPageCount,
     normalizeReaderOcrAutoAnalyzeBubbles,
+    normalizeReaderOcrAutoPlayVoice,
     normalizeReaderOcrNavigationDeadZone,
     normalizeReaderOcrNavigationLooseFallback,
     normalizeReaderOcrNavigationOffset,
     normalizeReaderOcrNavigationStrictDirection,
     normalizeReaderOcrPreloadPageCount,
     normalizeReaderOcrPreloadTokenDetails,
+    normalizeReaderOcrVoicevoxEnableKatakanaEnglish,
+    normalizeReaderOcrVoicevoxInterrogativeUpspeak,
+    normalizeReaderOcrVoicevoxIntonationScale,
+    normalizeReaderOcrVoicevoxOutputSamplingRate,
+    normalizeReaderOcrVoicevoxOutputStereo,
+    normalizeReaderOcrVoicevoxPauseLengthScale,
+    normalizeReaderOcrVoicevoxPitchScale,
+    normalizeReaderOcrVoicevoxPostPhonemeLength,
+    normalizeReaderOcrVoicevoxPrePhonemeLength,
+    normalizeReaderOcrVoicevoxSpeedScale,
+    normalizeReaderOcrVoicevoxStyleId,
+    normalizeReaderOcrVoicevoxVolumeScale,
     normalizeReaderScrollHoldSpeed,
     normalizeReaderScrollStartBoost,
     normalizeReaderScrollStrength,
@@ -58,6 +84,7 @@ import useReaderNavigation from './hooks/useReaderNavigation';
 import useReaderOcr from './hooks/useReaderOcr';
 import useReaderOcrPanelLayout from './hooks/useReaderOcrPanelLayout';
 import useReaderShortcuts from './hooks/useReaderShortcuts';
+import useReaderVoicevoxSpeech from './hooks/useReaderVoicevoxSpeech';
 import { buildBookmarkRecommendationMangas } from '@/renderer/components/Reader/readerBookmarkRecommendations';
 
 type ReaderProps = {
@@ -177,6 +204,47 @@ const Reader: React.FC<ReaderProps> = ({
     const readerOcrPreloadTokenDetails = settingsLoading
         ? DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS
         : normalizeReaderOcrPreloadTokenDetails(params?.readerOcrPreloadTokenDetails);
+    const readerOcrAutoPlayVoice = settingsLoading
+        ? DEFAULT_READER_OCR_AUTO_PLAY_VOICE
+        : normalizeReaderOcrAutoPlayVoice(params?.readerOcrAutoPlayVoice);
+    const readerOcrVoicevoxSpeechSettings = React.useMemo(() => ({
+        speakerId: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_STYLE_ID
+            : normalizeReaderOcrVoicevoxStyleId(params?.readerOcrVoicevoxStyleId),
+        speedScale: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE
+            : normalizeReaderOcrVoicevoxSpeedScale(params?.readerOcrVoicevoxSpeedScale),
+        pitchScale: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE
+            : normalizeReaderOcrVoicevoxPitchScale(params?.readerOcrVoicevoxPitchScale),
+        intonationScale: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE
+            : normalizeReaderOcrVoicevoxIntonationScale(params?.readerOcrVoicevoxIntonationScale),
+        volumeScale: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE
+            : normalizeReaderOcrVoicevoxVolumeScale(params?.readerOcrVoicevoxVolumeScale),
+        prePhonemeLength: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH
+            : normalizeReaderOcrVoicevoxPrePhonemeLength(params?.readerOcrVoicevoxPrePhonemeLength),
+        postPhonemeLength: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH
+            : normalizeReaderOcrVoicevoxPostPhonemeLength(params?.readerOcrVoicevoxPostPhonemeLength),
+        pauseLengthScale: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_PAUSE_LENGTH_SCALE
+            : normalizeReaderOcrVoicevoxPauseLengthScale(params?.readerOcrVoicevoxPauseLengthScale),
+        outputSamplingRate: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE
+            : normalizeReaderOcrVoicevoxOutputSamplingRate(params?.readerOcrVoicevoxOutputSamplingRate),
+        outputStereo: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO
+            : normalizeReaderOcrVoicevoxOutputStereo(params?.readerOcrVoicevoxOutputStereo),
+        interrogativeUpspeak: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK
+            : normalizeReaderOcrVoicevoxInterrogativeUpspeak(params?.readerOcrVoicevoxInterrogativeUpspeak),
+        enableKatakanaEnglish: settingsLoading
+            ? DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH
+            : normalizeReaderOcrVoicevoxEnableKatakanaEnglish(params?.readerOcrVoicevoxEnableKatakanaEnglish),
+    }), [params, settingsLoading]);
     const readerOcrNavigationOffset = settingsLoading
         ? DEFAULT_READER_OCR_NAVIGATION_OFFSET
         : normalizeReaderOcrNavigationOffset(params?.readerOcrNavigationOffset);
@@ -332,6 +400,13 @@ const Reader: React.FC<ReaderProps> = ({
         navigationStrictDirection: readerOcrNavigationStrictDirection,
         navigationLooseFallback: readerOcrNavigationLooseFallback,
         imgRef,
+    });
+    const voiceSpeech = useReaderVoicevoxSpeech({
+        activeOcrEnabled,
+        allOcrBoxes: ocr.allOcrBoxes,
+        selectedBoxes: ocr.selectedBoxes,
+        autoPlayEnabled: readerOcrAutoPlayVoice,
+        speechSettings: readerOcrVoicevoxSpeechSettings,
     });
 
     React.useEffect(() => {
@@ -562,6 +637,13 @@ const Reader: React.FC<ReaderProps> = ({
                         loading={ocr.ocrLoading}
                         error={ocr.ocrError}
                         statusNote={ocr.ocrStatusNote}
+                        voicePlaybackAvailable={voiceSpeech.voicePlaybackAvailable}
+                        voicePlaybackStatusLoading={voiceSpeech.voicePlaybackStatusLoading}
+                        voicePlaybackLoading={voiceSpeech.voicePlaybackLoading}
+                        voicePlaybackPlaying={voiceSpeech.voicePlaybackPlaying}
+                        voicePlaybackError={voiceSpeech.voicePlaybackError}
+                        voicePlaybackUnavailableMessage={voiceSpeech.voicePlaybackUnavailableMessage}
+                        onPlaySelectedText={voiceSpeech.playSelectedText}
                         showBoxes={ocr.showBoxes}
                         onToggleShowBoxes={ocr.setShowBoxes}
                     />

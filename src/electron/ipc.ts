@@ -22,6 +22,7 @@ import * as jsonDocuments from "./handlers/jsonDocuments";
 import * as history from "./handlers/history";
 import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import * as japaneseInflection from "./handlers/japaneseInflection";
+import * as voicevox from "./handlers/voicevox";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -260,6 +261,13 @@ ipcMain.handle("app-update-install", async () => appUpdate.installAppUpdate());
 ipcMain.handle("app-update-open-release-page", async () => appUpdate.openAppUpdateReleasePage());
 ipcMain.handle("app-update-get-patch-notes", async (_event: IpcMainInvokeEvent, query?: unknown) => (
     appUpdate.getAppUpdatePatchNotes(query as Parameters<typeof appUpdate.getAppUpdatePatchNotes>[0])
+));
+
+// Voice synthesis
+ipcMain.handle("voicevox-status", async () => voicevox.getVoicevoxStatus());
+ipcMain.handle("voicevox-voices", async () => voicevox.getVoicevoxVoices());
+ipcMain.handle("voicevox-synthesize", async (_event: IpcMainInvokeEvent, payload: unknown) => (
+    voicevox.synthesizeVoicevoxSpeech(payload)
 ));
 
 // Japanese romanization

@@ -13,6 +13,7 @@ type Props = {
   globalError?: string
   fieldErrors?: Record<string, string>
   className?: string
+  onAction?: (actionId: string, values: Record<string, any>) => void | Promise<void>
 }
 
 const isFormSection = (item: FormItem): item is Extract<FormItem, { type: 'section' }> => (
@@ -23,7 +24,7 @@ const getFieldsFromItems = (items: FormItem[]): Field[] => (
     items.flatMap(item => (isFormSection(item) ? item.fields : [item]))
 )
 
-export default function Form({ fields, onSubmit, initialValues = {}, submitLabel = 'Submit', globalError, fieldErrors = {}, className = '', formId, submitButtonId }: Props) {
+export default function Form({ fields, onSubmit, initialValues = {}, submitLabel = 'Submit', globalError, fieldErrors = {}, className = '', formId, submitButtonId, onAction }: Props) {
     const flatFields = useMemo(() => getFieldsFromItems(fields), [fields])
 
     const buildInitialState = useCallback((srcInitial: Record<string, any>) => {
@@ -55,11 +56,60 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         if (!formId?.startsWith('batch-edit-form-')) return false
         return flatFields.some(f => ['authorId', 'seriesId', 'clearAuthor', 'clearSeries'].includes(f.name))
     }, [flatFields, formId])
+    const resolveFieldOptions = useCallback((field: Field, sourceValues: Record<string, any>) => {
+        if (!field.dynamicOptions) {
+            return field.options || []
+        }
+
+        const referenceValue = String(sourceValues[field.dynamicOptions.field] ?? '')
+        return field.dynamicOptions.optionsByValue[referenceValue]
+            || field.dynamicOptions.fallbackOptions
+            || field.options
+            || []
+    }, [])
+    const applyValueChange = useCallback((field: Field, nextValue: any) => {
+        setValues(prev => {
+            const next = { ...prev, [field.name]: nextValue }
+
+            for (const candidateField of flatFields) {
+                if (candidateField.dynamicOptions?.field !== field.name) {
+                    continue
+                }
+
+                const options = resolveFieldOptions(candidateField, next)
+                const currentValue = String(next[candidateField.name] ?? '')
+                if (options.some(option => option.value === currentValue)) {
+                    continue
+                }
+
+                next[candidateField.name] = options[0]?.value ?? ''
+            }
+
+            return next
+        })
+    }, [flatFields, resolveFieldOptions])
 
     // Keep internal values in sync when initialValues or fields change
     const fieldsKey = useMemo(() => flatFields.map(f => f.name).join('|'), [flatFields])
+    const lastSyncedValuesRef = React.useRef<{
+        fieldsKey: string
+        initialValues: Record<string, any>
+    } | null>(null)
     useEffect(() => {
+        const lastSyncedValues = lastSyncedValuesRef.current
+        if (
+            lastSyncedValues
+            && lastSyncedValues.fieldsKey === fieldsKey
+            && lastSyncedValues.initialValues === initialValues
+        ) {
+            return
+        }
+
         const nextValues = buildInitialState(initialValues)
+        lastSyncedValuesRef.current = {
+            fieldsKey,
+            initialValues,
+        }
         setValues(nextValues)
 
         if (isBatchDebugForm) {
@@ -88,7 +138,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                     nextValue: target.files,
                 })
             }
-            setValues(prev => ({ ...prev, [f.name]: target.files }))
+            applyValueChange(f, target.files)
             return
         }
 
@@ -103,7 +153,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                     nextValue: target.checked,
                 })
             }
-            setValues(prev => ({ ...prev, [f.name]: target.checked }))
+            applyValueChange(f, target.checked)
             return
         }
 
@@ -119,9 +169,10 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                         nextValue: target.value,
                     })
                 }
-                setValues(prev => ({ ...prev, [f.name]: target.value }))
+                applyValueChange(f, target.value)
                 return
             }
+
             const select = e.target as HTMLSelectElement
             const selected: string[] = Array.from(select.selectedOptions).map(o => o.value)
             if (isBatchDebugForm) {
@@ -132,7 +183,7 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                     nextValue: selected,
                 })
             }
-            setValues(prev => ({ ...prev, [f.name]: selected }))
+            applyValueChange(f, selected)
             return
         }
 
@@ -145,8 +196,8 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
                 nextValue: val,
             })
         }
-        setValues(prev => ({ ...prev, [f.name]: val }))
-    }, [formId, isBatchDebugForm])
+        applyValueChange(f, val)
+    }, [applyValueChange, formId, isBatchDebugForm])
 
 
     const validate = useCallback((): boolean => {
@@ -161,66 +212,76 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         return Object.keys(errors).length === 0
     }, [flatFields, values])
 
+    const readCurrentSnapshot = useCallback((): Record<string, any> => {
+        let snapshot: Record<string, any> = values
+        if (!formId) {
+            return snapshot
+        }
+
+        const fEl = document.getElementById(formId) as HTMLFormElement | null
+        if (!fEl) {
+            return snapshot
+        }
+
+        try {
+            const fd = new FormData(fEl)
+            const s: Record<string, any> = {}
+            for (const f of flatFields) {
+                if (f.type === 'checkbox') {
+                    const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
+                    s[f.name] = !!input?.checked
+                    continue
+                }
+                if (f.type === 'file') {
+                    const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
+                    s[f.name] = input?.files || null
+                    continue
+                }
+                if (f.type === 'selectMulti') {
+                    const sel = fEl.querySelector<HTMLSelectElement>(`[name="${f.name}"]`)
+                    s[f.name] = sel ? Array.from(sel.selectedOptions).map(o => o.value) : []
+                    continue
+                }
+
+                if (f.type === 'tagsPicker' || f.type === 'entityPicker') {
+                    const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
+                    if (input && input.value) {
+                        try {
+                            const parsed = JSON.parse(input.value)
+                            s[f.name] = Array.isArray(parsed) ? parsed : values[f.name] || []
+                        } catch (e) {
+                            s[f.name] = values[f.name] || []
+                        }
+                    } else {
+                        s[f.name] = values[f.name] || []
+                    }
+                    continue
+                }
+
+                if (f.type === 'author' || f.type === 'series') {
+                    const input = fEl.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${f.name}"]`)
+                    s[f.name] = input ? input.value : (values[f.name] ?? '')
+                    continue
+                }
+
+                const v = fd.get(f.name)
+                s[f.name] = v === null ? values[f.name] ?? '' : String(v)
+            }
+            snapshot = s
+        } catch {
+            // fallback to state
+            // intentionally silent
+        }
+
+        return snapshot
+    }, [flatFields, formId, values])
+
     const submitValues = useCallback(async () => {
         // Validate current state first
         if (!validate()) return
 
         // Take a fresh snapshot from DOM when possible to avoid stale React state
-        let snapshot: Record<string, any> = values
-        if (formId) {
-            const fEl = document.getElementById(formId) as HTMLFormElement | null
-            if (fEl) {
-                try {
-                    const fd = new FormData(fEl)
-                    const s: Record<string, any> = {}
-                    for (const f of flatFields) {
-                        if (f.type === 'checkbox') {
-                            const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
-                            s[f.name] = !!input?.checked
-                            continue
-                        }
-                        if (f.type === 'file') {
-                            const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
-                            s[f.name] = input?.files || null
-                            continue
-                        }
-                        if (f.type === 'selectMulti') {
-                            const sel = fEl.querySelector<HTMLSelectElement>(`[name="${f.name}"]`)
-                            s[f.name] = sel ? Array.from(sel.selectedOptions).map(o => o.value) : []
-                            continue
-                        }
-
-                        if (f.type === 'tagsPicker' || f.type === 'entityPicker') {
-                            const input = fEl.querySelector<HTMLInputElement>(`[name="${f.name}"]`)
-                            if (input && input.value) {
-                                try {
-                                    const parsed = JSON.parse(input.value)
-                                    s[f.name] = Array.isArray(parsed) ? parsed : values[f.name] || []
-                                } catch (e) {
-                                    s[f.name] = values[f.name] || []
-                                }
-                            } else {
-                                s[f.name] = values[f.name] || []
-                            }
-                            continue
-                        }
-
-                        if (f.type === 'author' || f.type === 'series') {
-                            const input = fEl.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${f.name}"]`)
-                            s[f.name] = input ? input.value : (values[f.name] ?? '')
-                            continue
-                        }
-
-                        const v = fd.get(f.name)
-                        s[f.name] = v === null ? values[f.name] ?? '' : String(v)
-                    }
-                    snapshot = s
-                } catch {
-                    // fallback to state
-                    // intentionally silent
-                }
-            }
-        }
+        const snapshot = readCurrentSnapshot()
 
         if (isBatchDebugForm) {
             console.log('[BatchEditForm] submit snapshot ready', {
@@ -248,11 +309,19 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         } finally {
             setSubmitting(false)
         }
-    }, [flatFields, formId, onSubmit, validate, values])
+    }, [flatFields, formId, onSubmit, readCurrentSnapshot, validate, values])
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault()
         void submitValues()
     }
+
+    const runFieldAction = useCallback(async (field: Field) => {
+        if (!field.actionId || !onAction) {
+            return
+        }
+
+        await onAction(field.actionId, readCurrentSnapshot())
+    }, [onAction, readCurrentSnapshot])
 
     const openPath = useCallback(async (field: Field) => {
         const targetPath = String(values[field.name] || '').trim()
@@ -339,17 +408,26 @@ export default function Form({ fields, onSubmit, initialValues = {}, submitLabel
         return Boolean(referenceValue)
     }, [values])
 
-    const renderField = (f: Field) => (
-        <FormField
-            key={f.name}
-            field={{ ...f, disabled: isFieldDisabled(f) }}
-            value={values[f.name]}
-            error={mergedFieldError(f.name)}
-            onChange={handleChange}
-            onOpenPath={(field) => void openPath(field)}
-            onChoosePath={(field) => void choosePath(field)}
-        />
-    )
+    const renderField = (f: Field) => {
+        const resolvedField = {
+            ...f,
+            options: resolveFieldOptions(f, values),
+            disabled: isFieldDisabled(f),
+        }
+
+        return (
+            <FormField
+                key={f.name}
+                field={resolvedField}
+                value={values[f.name]}
+                error={mergedFieldError(f.name)}
+                onChange={handleChange}
+                onOpenPath={(field) => void openPath(field)}
+                onChoosePath={(field) => void choosePath(field)}
+                onAction={(field) => void runFieldAction(field)}
+            />
+        )
+    }
 
     return (
     <form id={formId} className={`mh-form ${className}`} onSubmit={handleSubmit} noValidate>

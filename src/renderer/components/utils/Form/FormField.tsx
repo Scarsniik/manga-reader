@@ -20,6 +20,7 @@ type Props = {
     onChange: (field: Field) => (event: ChangeEvent<any>) => void
     onOpenPath: (field: Field) => void
     onChoosePath: (field: Field) => void
+    onAction: (field: Field) => void
 }
 
 const renderLabel = (field: Field) => (
@@ -41,7 +42,27 @@ export default function FormField({
     onChange,
     onOpenPath,
     onChoosePath,
+    onAction,
 }: Props) {
+    if (field.type === "action") {
+        return (
+            <div className={getFieldClassName(field, 'action')}>
+                {renderLabel(field)}
+
+                <button
+                    type="button"
+                    className="mh-form__action-button"
+                    disabled={field.disabled}
+                    onClick={() => onAction(field)}
+                >
+                    {field.buttonLabel || field.label || 'Action'}
+                </button>
+
+                {error ? <div className="mh-form__field-error">{error}</div> : null}
+            </div>
+        )
+    }
+
     if (field.type === "checkbox") {
         return (
             <div className={getFieldClassName(field, 'checkbox')}>
