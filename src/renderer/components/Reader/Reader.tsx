@@ -39,6 +39,7 @@ import {
     DEFAULT_READER_OCR_VOICEVOX_POST_PHONEME_LENGTH,
     DEFAULT_READER_OCR_VOICEVOX_PRE_PHONEME_LENGTH,
     DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
+    DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP,
     DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
     DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE,
     DEFAULT_READER_SCROLL_HOLD_SPEED,
@@ -64,6 +65,7 @@ import {
     normalizeReaderOcrVoicevoxPostPhonemeLength,
     normalizeReaderOcrVoicevoxPrePhonemeLength,
     normalizeReaderOcrVoicevoxSpeedScale,
+    normalizeReaderOcrVoicevoxSpeedStep,
     normalizeReaderOcrVoicevoxStyleId,
     normalizeReaderOcrVoicevoxVolumeScale,
     normalizeReaderScrollHoldSpeed,
@@ -207,6 +209,9 @@ const Reader: React.FC<ReaderProps> = ({
     const readerOcrAutoPlayVoice = settingsLoading
         ? DEFAULT_READER_OCR_AUTO_PLAY_VOICE
         : normalizeReaderOcrAutoPlayVoice(params?.readerOcrAutoPlayVoice);
+    const readerOcrVoicevoxSpeedStep = settingsLoading
+        ? DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP
+        : normalizeReaderOcrVoicevoxSpeedStep(params?.readerOcrVoicevoxSpeedStep);
     const readerOcrVoicevoxSpeechSettings = React.useMemo(() => ({
         speakerId: settingsLoading
             ? DEFAULT_READER_OCR_VOICEVOX_STYLE_ID
@@ -407,6 +412,7 @@ const Reader: React.FC<ReaderProps> = ({
         selectedBoxes: ocr.selectedBoxes,
         autoPlayEnabled: readerOcrAutoPlayVoice,
         speechSettings: readerOcrVoicevoxSpeechSettings,
+        speedStep: readerOcrVoicevoxSpeedStep,
     });
 
     React.useEffect(() => {
@@ -426,6 +432,9 @@ const Reader: React.FC<ReaderProps> = ({
         openOcrPanel: () => setOcrEnabled(true),
         toggleOcrPanel: () => setOcrEnabled((value) => !value),
         toggleFullscreen: fullscreen.toggleFullscreen,
+        playSelectedOcrVoice: voiceSpeech.playSelectedText,
+        playSelectedOcrVoiceSlower: voiceSpeech.playSelectedTextSlower,
+        playSelectedOcrVoiceFaster: voiceSpeech.playSelectedTextFaster,
         readerBodyRef: containerRef,
         next: navigation.next,
         prev: navigation.prev,

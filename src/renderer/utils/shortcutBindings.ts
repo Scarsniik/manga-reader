@@ -15,7 +15,10 @@ export type ShortcutActionId =
   | "readerOcrOrderedPrevious"
   | "readerOcrOrderedNext"
   | "readerOcrTogglePanel"
-  | "readerOcrTokenNavigation";
+  | "readerOcrTokenNavigation"
+  | "readerOcrPlayVoice"
+  | "readerOcrPlayVoiceSlower"
+  | "readerOcrPlayVoiceFaster";
 
 export type ShortcutBindingsByAction = Record<ShortcutActionId, string[]>;
 
@@ -101,6 +104,18 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
         id: "readerOcrTokenNavigation",
         label: "Navigation dans les tokens",
       },
+      {
+        id: "readerOcrPlayVoice",
+        label: "Lire la bulle OCR",
+      },
+      {
+        id: "readerOcrPlayVoiceSlower",
+        label: "Relire la bulle plus lentement",
+      },
+      {
+        id: "readerOcrPlayVoiceFaster",
+        label: "Relire la bulle plus rapidement",
+      },
     ],
   },
 ];
@@ -121,6 +136,9 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   readerOcrOrderedNext: ["", "", ""],
   readerOcrTogglePanel: ["$", "", ""],
   readerOcrTokenNavigation: [":", "", ""],
+  readerOcrPlayVoice: ["", "", ""],
+  readerOcrPlayVoiceSlower: ["", "", ""],
+  readerOcrPlayVoiceFaster: ["", "", ""],
 };
 
 const LEGACY_SHORTCUT_SETTING_BY_ACTION: Partial<Record<ShortcutActionId, string>> = {

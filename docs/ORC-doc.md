@@ -615,11 +615,19 @@ parametres, avec un message utilisateur generique.
 Parametres exposes :
 
 - voix et variante de voix, correspondant au `speaker` VOICEVOX utilise pour la synthese
-- vitesse, hauteur, intonation et volume
+- vitesse, pas temporaire plus lent/plus rapide, hauteur, intonation et volume
 - silences avant/apres la voix et duree des pauses de ponctuation
 - frequence de sortie, stereo, ajustement des phrases interrogatives
 - lecture des mots anglais inconnus en katakana
 - texte de test pre-rempli et bouton de lecture pour essayer les reglages avant enregistrement
+
+Les raccourcis lecteur exposent aussi trois actions sans touche par defaut :
+lire la bulle OCR courante, relire plus lentement, et relire plus rapidement.
+Le pas plus lent/plus rapide est configurable dans les options VOICEVOX. Cette
+vitesse temporaire ne vaut que pour la bulle selectionnee ; elle revient a la
+vitesse par defaut quand la selection change. L'audio deja genere pour la bulle
+et les reglages courants est garde en memoire pour eviter un nouvel appel
+VOICEVOX lors d'une relecture immediate.
 
 Flux technique :
 

@@ -20,6 +20,9 @@ const DEFAULT_READER_OCR_VOICEVOX_STYLE_ID = 2;
 const DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE = 1;
 const MIN_READER_OCR_VOICEVOX_SPEED_SCALE = 0.5;
 const MAX_READER_OCR_VOICEVOX_SPEED_SCALE = 2;
+const DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP = 0.15;
+const MIN_READER_OCR_VOICEVOX_SPEED_STEP = 0.05;
+const MAX_READER_OCR_VOICEVOX_SPEED_STEP = 0.5;
 const DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE = 0;
 const MIN_READER_OCR_VOICEVOX_PITCH_SCALE = -0.15;
 const MAX_READER_OCR_VOICEVOX_PITCH_SCALE = 0.15;
@@ -87,6 +90,7 @@ const defaultShortcutBindings = {
     readerScrollDown: ["S", "ArrowDown", "J"],
     readerPageNext: ["D", "ArrowRight", "P"],
     readerPagePrevious: ["Q", "ArrowLeft", "I"],
+    readerFullscreenToggle: ["F", "", ""],
     readerOcrNavigateUp: ["O", "", ""],
     readerOcrNavigateDown: ["L", "", ""],
     readerOcrNavigateLeft: ["K", "", ""],
@@ -97,6 +101,9 @@ const defaultShortcutBindings = {
     readerOcrOrderedNext: ["", "", ""],
     readerOcrTogglePanel: ["$", "", ""],
     readerOcrTokenNavigation: [":", "", ""],
+    readerOcrPlayVoice: ["", "", ""],
+    readerOcrPlayVoiceSlower: ["", "", ""],
+    readerOcrPlayVoiceFaster: ["", "", ""],
 };
 
 const legacyShortcutSettingByAction: Partial<Record<keyof typeof defaultShortcutBindings, string>> = {
@@ -301,6 +308,15 @@ const normalizeReaderOcrVoicevoxSpeedScale = (value: unknown): number => (
         DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
         MIN_READER_OCR_VOICEVOX_SPEED_SCALE,
         MAX_READER_OCR_VOICEVOX_SPEED_SCALE,
+    )
+);
+
+const normalizeReaderOcrVoicevoxSpeedStep = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP,
+        MIN_READER_OCR_VOICEVOX_SPEED_STEP,
+        MAX_READER_OCR_VOICEVOX_SPEED_STEP,
     )
 );
 
@@ -577,6 +593,7 @@ const defaultSettings = {
     readerOcrVoicevoxSpeakerUuid: DEFAULT_READER_OCR_VOICEVOX_SPEAKER_UUID,
     readerOcrVoicevoxStyleId: DEFAULT_READER_OCR_VOICEVOX_STYLE_ID,
     readerOcrVoicevoxSpeedScale: DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
+    readerOcrVoicevoxSpeedStep: DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP,
     readerOcrVoicevoxPitchScale: DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE,
     readerOcrVoicevoxIntonationScale: DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE,
     readerOcrVoicevoxVolumeScale: DEFAULT_READER_OCR_VOICEVOX_VOLUME_SCALE,
@@ -691,6 +708,7 @@ const normalizeSettings = (value: unknown) => {
     merged.readerOcrVoicevoxSpeakerUuid = normalizeReaderOcrVoicevoxSpeakerUuid(merged.readerOcrVoicevoxSpeakerUuid);
     merged.readerOcrVoicevoxStyleId = normalizeReaderOcrVoicevoxStyleId(merged.readerOcrVoicevoxStyleId);
     merged.readerOcrVoicevoxSpeedScale = normalizeReaderOcrVoicevoxSpeedScale(merged.readerOcrVoicevoxSpeedScale);
+    merged.readerOcrVoicevoxSpeedStep = normalizeReaderOcrVoicevoxSpeedStep(merged.readerOcrVoicevoxSpeedStep);
     merged.readerOcrVoicevoxPitchScale = normalizeReaderOcrVoicevoxPitchScale(merged.readerOcrVoicevoxPitchScale);
     merged.readerOcrVoicevoxIntonationScale = normalizeReaderOcrVoicevoxIntonationScale(merged.readerOcrVoicevoxIntonationScale);
     merged.readerOcrVoicevoxVolumeScale = normalizeReaderOcrVoicevoxVolumeScale(merged.readerOcrVoicevoxVolumeScale);
@@ -1017,6 +1035,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.readerOcrVoicevoxStyleId = normalizeReaderOcrVoicevoxStyleId(nextSettings.readerOcrVoicevoxStyleId);
         nextSettings.readerOcrVoicevoxSpeedScale = normalizeReaderOcrVoicevoxSpeedScale(
             nextSettings.readerOcrVoicevoxSpeedScale,
+        );
+        nextSettings.readerOcrVoicevoxSpeedStep = normalizeReaderOcrVoicevoxSpeedStep(
+            nextSettings.readerOcrVoicevoxSpeedStep,
         );
         nextSettings.readerOcrVoicevoxPitchScale = normalizeReaderOcrVoicevoxPitchScale(
             nextSettings.readerOcrVoicevoxPitchScale,

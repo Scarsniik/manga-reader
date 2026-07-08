@@ -26,6 +26,9 @@ type Args = {
     openOcrPanel: () => void;
     toggleOcrPanel: () => void;
     toggleFullscreen: () => void;
+    playSelectedOcrVoice: () => void;
+    playSelectedOcrVoiceSlower: () => void;
+    playSelectedOcrVoiceFaster: () => void;
     readerBodyRef: React.RefObject<HTMLDivElement | null>;
     next: () => void;
     prev: () => void;
@@ -88,6 +91,9 @@ const useReaderShortcuts = ({
     openOcrPanel,
     toggleOcrPanel,
     toggleFullscreen,
+    playSelectedOcrVoice,
+    playSelectedOcrVoiceSlower,
+    playSelectedOcrVoiceFaster,
     readerBodyRef,
     next,
     prev,
@@ -379,6 +385,30 @@ const useReaderShortcuts = ({
             if (matchesShortcut(event, "readerOcrTokenNavigation") && selectedBoxes.length > 0) {
                 preventShortcutDefault(event);
                 requestTokenCycle();
+                return;
+            }
+
+            if (matchesShortcut(event, "readerOcrPlayVoice")) {
+                preventShortcutDefault(event);
+                if (!event.repeat) {
+                    playSelectedOcrVoice();
+                }
+                return;
+            }
+
+            if (matchesShortcut(event, "readerOcrPlayVoiceSlower")) {
+                preventShortcutDefault(event);
+                if (!event.repeat) {
+                    playSelectedOcrVoiceSlower();
+                }
+                return;
+            }
+
+            if (matchesShortcut(event, "readerOcrPlayVoiceFaster")) {
+                preventShortcutDefault(event);
+                if (!event.repeat) {
+                    playSelectedOcrVoiceFaster();
+                }
             }
         };
 
@@ -412,6 +442,9 @@ const useReaderShortcuts = ({
         next,
         ocrPanelAvailable,
         openOcrPanel,
+        playSelectedOcrVoice,
+        playSelectedOcrVoiceFaster,
+        playSelectedOcrVoiceSlower,
         prev,
         requestTokenCycle,
         requireFreshNavigationInput,

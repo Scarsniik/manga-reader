@@ -8,6 +8,9 @@ export const DEFAULT_READER_OCR_VOICEVOX_STYLE_ID = 2;
 export const DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE = 1;
 export const MIN_READER_OCR_VOICEVOX_SPEED_SCALE = 0.5;
 export const MAX_READER_OCR_VOICEVOX_SPEED_SCALE = 2;
+export const DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP = 0.15;
+export const MIN_READER_OCR_VOICEVOX_SPEED_STEP = 0.05;
+export const MAX_READER_OCR_VOICEVOX_SPEED_STEP = 0.5;
 export const DEFAULT_READER_OCR_VOICEVOX_PITCH_SCALE = 0;
 export const MIN_READER_OCR_VOICEVOX_PITCH_SCALE = -0.15;
 export const MAX_READER_OCR_VOICEVOX_PITCH_SCALE = 0.15;
@@ -147,6 +150,15 @@ export const normalizeReaderOcrVoicevoxSpeedScale = (value: unknown): number => 
         DEFAULT_READER_OCR_VOICEVOX_SPEED_SCALE,
         MIN_READER_OCR_VOICEVOX_SPEED_SCALE,
         MAX_READER_OCR_VOICEVOX_SPEED_SCALE,
+    )
+);
+
+export const normalizeReaderOcrVoicevoxSpeedStep = (value: unknown): number => (
+    normalizeNumberSetting(
+        value,
+        DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP,
+        MIN_READER_OCR_VOICEVOX_SPEED_STEP,
+        MAX_READER_OCR_VOICEVOX_SPEED_STEP,
     )
 );
 

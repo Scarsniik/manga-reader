@@ -28,6 +28,7 @@ export type AppParams = {
     readerOcrVoicevoxSpeakerUuid?: string;
     readerOcrVoicevoxStyleId?: number;
     readerOcrVoicevoxSpeedScale?: number;
+    readerOcrVoicevoxSpeedStep?: number;
     readerOcrVoicevoxPitchScale?: number;
     readerOcrVoicevoxIntonationScale?: number;
     readerOcrVoicevoxVolumeScale?: number;

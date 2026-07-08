@@ -1,5 +1,9 @@
 import React from "react";
 import type { ReaderOcrBox } from "@/renderer/components/Reader/types";
+import {
+    normalizeReaderOcrVoicevoxSpeedScale,
+    normalizeReaderOcrVoicevoxSpeedStep,
+} from "@/shared/readerSettings";
 
 type VoicevoxStatus = {
     configured?: boolean;
@@ -34,9 +38,16 @@ type Args = {
     selectedBoxes: string[];
     autoPlayEnabled: boolean;
     speechSettings: ReaderVoicevoxSpeechSettings;
+    speedStep: number;
 };
 
 type PlaybackState = "idle" | "loading" | "playing";
+type SpeedDirection = "slower" | "faster";
+
+type CachedVoiceAudio = {
+    audioBase64: string;
+    mimeType: string;
+};
 
 const createAudioBlob = (audioBase64: string, mimeType: string): Blob => {
     const binary = atob(audioBase64);
@@ -63,6 +74,7 @@ const useReaderVoicevoxSpeech = ({
     selectedBoxes,
     autoPlayEnabled,
     speechSettings,
+    speedStep,
 }: Args) => {
     const [voicevoxConfigured, setVoicevoxConfigured] = React.useState<boolean>(false);
     const [voicevoxStatusLoading, setVoicevoxStatusLoading] = React.useState<boolean>(true);
@@ -73,6 +85,11 @@ const useReaderVoicevoxSpeech = ({
     const activeAudioUrlRef = React.useRef<string | null>(null);
     const playbackRequestIdRef = React.useRef<number>(0);
     const lastAutoPlayKeyRef = React.useRef<string | null>(null);
+    const audioCacheRef = React.useRef<Map<string, CachedVoiceAudio>>(new Map());
+    const inFlightAudioCacheRef = React.useRef<Map<string, Promise<CachedVoiceAudio>>>(new Map());
+    const audioCacheGenerationRef = React.useRef<number>(0);
+    const temporarySpeedScaleRef = React.useRef<number>(speechSettings.speedScale);
+    const [temporarySpeedScale, setTemporarySpeedScale] = React.useState<number>(speechSettings.speedScale);
 
     const selectedBox = React.useMemo(() => {
         if (selectedBoxes.length !== 1) {
@@ -82,6 +99,22 @@ const useReaderVoicevoxSpeech = ({
         const selectedBoxId = selectedBoxes[0];
         return allOcrBoxes.find((box) => box.id === selectedBoxId) ?? null;
     }, [allOcrBoxes, selectedBoxes]);
+    const selectedBoxKey = React.useMemo(() => (
+        selectedBox ? `${selectedBox.id}::${selectedBox.text}` : ""
+    ), [selectedBox]);
+    const baseSpeechSettingsKey = React.useMemo(() => JSON.stringify({
+        speakerId: speechSettings.speakerId,
+        pitchScale: speechSettings.pitchScale,
+        intonationScale: speechSettings.intonationScale,
+        volumeScale: speechSettings.volumeScale,
+        prePhonemeLength: speechSettings.prePhonemeLength,
+        postPhonemeLength: speechSettings.postPhonemeLength,
+        pauseLengthScale: speechSettings.pauseLengthScale,
+        outputSamplingRate: speechSettings.outputSamplingRate,
+        outputStereo: speechSettings.outputStereo,
+        interrogativeUpspeak: speechSettings.interrogativeUpspeak,
+        enableKatakanaEnglish: speechSettings.enableKatakanaEnglish,
+    }), [speechSettings]);
 
     const releaseActiveAudio = React.useCallback(() => {
         const activeAudio = activeAudioRef.current;
@@ -103,6 +136,15 @@ const useReaderVoicevoxSpeech = ({
         releaseActiveAudio();
         setPlaybackState("idle");
     }, [releaseActiveAudio]);
+
+    const resetCurrentBubbleAudioState = React.useCallback(() => {
+        audioCacheGenerationRef.current += 1;
+        audioCacheRef.current.clear();
+        inFlightAudioCacheRef.current.clear();
+        temporarySpeedScaleRef.current = normalizeReaderOcrVoicevoxSpeedScale(speechSettings.speedScale);
+        setTemporarySpeedScale(temporarySpeedScaleRef.current);
+        stopPlayback();
+    }, [speechSettings.speedScale, stopPlayback]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -144,8 +186,75 @@ const useReaderVoicevoxSpeech = ({
         };
     }, []);
 
-    const playText = React.useCallback(async (text: string) => {
-        const normalizedText = String(text || "").trim();
+    const buildEffectiveSpeechSettings = React.useCallback((speedScale: number): ReaderVoicevoxSpeechSettings => ({
+        ...speechSettings,
+        speedScale: normalizeReaderOcrVoicevoxSpeedScale(speedScale),
+    }), [speechSettings]);
+
+    const getAudioCacheKey = React.useCallback((
+        box: ReaderOcrBox,
+        effectiveSpeechSettings: ReaderVoicevoxSpeechSettings,
+    ): string => JSON.stringify({
+        boxId: box.id,
+        text: String(box.text || "").trim(),
+        settings: effectiveSpeechSettings,
+    }), []);
+
+    const getVoiceAudio = React.useCallback(async (
+        box: ReaderOcrBox,
+        effectiveSpeechSettings: ReaderVoicevoxSpeechSettings,
+    ): Promise<CachedVoiceAudio> => {
+        if (!window.api || typeof window.api.voicevoxSynthesize !== "function") {
+            throw new Error(voicevoxUnavailableMessage || "La lecture audio n'est pas disponible pour le moment.");
+        }
+
+        const cacheKey = getAudioCacheKey(box, effectiveSpeechSettings);
+        const cachedAudio = audioCacheRef.current.get(cacheKey);
+        if (cachedAudio) {
+            return cachedAudio;
+        }
+
+        const inFlightAudio = inFlightAudioCacheRef.current.get(cacheKey);
+        if (inFlightAudio) {
+            return inFlightAudio;
+        }
+
+        const cacheGeneration = audioCacheGenerationRef.current;
+        const request = (async () => {
+            const result = await window.api.voicevoxSynthesize({
+                text: String(box.text || "").trim(),
+                ...effectiveSpeechSettings,
+            }) as VoicevoxSynthesisResult;
+
+            if (!result?.success || !result.audioBase64) {
+                throw new Error(result?.error || "VOICEVOX n'a pas pu générer l'audio.");
+            }
+
+            const audio = {
+                audioBase64: result.audioBase64,
+                mimeType: result.mimeType || "audio/wav",
+            };
+
+            if (audioCacheGenerationRef.current === cacheGeneration) {
+                audioCacheRef.current.set(cacheKey, audio);
+            }
+
+            return audio;
+        })();
+
+        inFlightAudioCacheRef.current.set(cacheKey, request);
+
+        try {
+            return await request;
+        } finally {
+            if (inFlightAudioCacheRef.current.get(cacheKey) === request) {
+                inFlightAudioCacheRef.current.delete(cacheKey);
+            }
+        }
+    }, [getAudioCacheKey, voicevoxUnavailableMessage]);
+
+    const playBoxAtSpeed = React.useCallback(async (box: ReaderOcrBox, speedScale: number) => {
+        const normalizedText = String(box.text || "").trim();
 
         if (!normalizedText) {
             setPlaybackError("Aucun texte OCR à lire pour cette bulle.");
@@ -157,6 +266,7 @@ const useReaderVoicevoxSpeech = ({
             return;
         }
 
+        const effectiveSpeechSettings = buildEffectiveSpeechSettings(speedScale);
         const playbackRequestId = playbackRequestIdRef.current + 1;
         playbackRequestIdRef.current = playbackRequestId;
         releaseActiveAudio();
@@ -164,19 +274,12 @@ const useReaderVoicevoxSpeech = ({
         setPlaybackError(null);
 
         try {
-            const result = await window.api.voicevoxSynthesize({
-                text: normalizedText,
-                ...speechSettings,
-            }) as VoicevoxSynthesisResult;
+            const voiceAudio = await getVoiceAudio(box, effectiveSpeechSettings);
             if (playbackRequestIdRef.current !== playbackRequestId) {
                 return;
             }
 
-            if (!result?.success || !result.audioBase64) {
-                throw new Error(result?.error || "VOICEVOX n'a pas pu générer l'audio.");
-            }
-
-            const audioBlob = createAudioBlob(result.audioBase64, result.mimeType || "audio/wav");
+            const audioBlob = createAudioBlob(voiceAudio.audioBase64, voiceAudio.mimeType);
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
 
@@ -214,22 +317,62 @@ const useReaderVoicevoxSpeech = ({
             setPlaybackState("idle");
             setPlaybackError(getFriendlyPlaybackError(error));
         }
-    }, [releaseActiveAudio, speechSettings, voicevoxConfigured, voicevoxUnavailableMessage]);
+    }, [
+        buildEffectiveSpeechSettings,
+        getVoiceAudio,
+        releaseActiveAudio,
+        voicevoxConfigured,
+        voicevoxUnavailableMessage,
+    ]);
 
-    const playSelectedText = React.useCallback(() => {
+    const playSelectedTextAtSpeed = React.useCallback((speedScale: number) => {
         if (!selectedBox) {
             setPlaybackError("Sélectionne une bulle OCR avant de lancer la lecture.");
             return;
         }
 
-        void playText(selectedBox.text);
-    }, [playText, selectedBox]);
+        void playBoxAtSpeed(selectedBox, speedScale);
+    }, [playBoxAtSpeed, selectedBox]);
+
+    const playSelectedText = React.useCallback(() => {
+        playSelectedTextAtSpeed(temporarySpeedScaleRef.current);
+    }, [playSelectedTextAtSpeed]);
+
+    const playSelectedTextWithSpeedDirection = React.useCallback((direction: SpeedDirection) => {
+        const normalizedStep = normalizeReaderOcrVoicevoxSpeedStep(speedStep);
+        const currentSpeed = normalizeReaderOcrVoicevoxSpeedScale(
+            temporarySpeedScaleRef.current || speechSettings.speedScale,
+        );
+        const nextSpeed = normalizeReaderOcrVoicevoxSpeedScale(
+            currentSpeed + (direction === "faster" ? normalizedStep : -normalizedStep),
+        );
+
+        temporarySpeedScaleRef.current = nextSpeed;
+        setTemporarySpeedScale(nextSpeed);
+        playSelectedTextAtSpeed(nextSpeed);
+    }, [playSelectedTextAtSpeed, speechSettings.speedScale, speedStep]);
+
+    const playSelectedTextSlower = React.useCallback(() => {
+        playSelectedTextWithSpeedDirection("slower");
+    }, [playSelectedTextWithSpeedDirection]);
+
+    const playSelectedTextFaster = React.useCallback(() => {
+        playSelectedTextWithSpeedDirection("faster");
+    }, [playSelectedTextWithSpeedDirection]);
 
     React.useEffect(() => {
         if (!activeOcrEnabled) {
             stopPlayback();
         }
     }, [activeOcrEnabled, stopPlayback]);
+
+    React.useEffect(() => {
+        resetCurrentBubbleAudioState();
+    }, [
+        baseSpeechSettingsKey,
+        resetCurrentBubbleAudioState,
+        selectedBoxKey,
+    ]);
 
     React.useEffect(() => () => {
         stopPlayback();
@@ -250,18 +393,22 @@ const useReaderVoicevoxSpeech = ({
             return;
         }
 
-        const autoPlayKey = `${selectedBox.id}::${selectedBox.text}`;
+        const autoPlayKey = `${selectedBox.id}::${selectedBox.text}::${baseSpeechSettingsKey}::${speechSettings.speedScale}`;
         if (lastAutoPlayKeyRef.current === autoPlayKey) {
             return;
         }
 
         lastAutoPlayKeyRef.current = autoPlayKey;
-        void playText(selectedBox.text);
+        temporarySpeedScaleRef.current = normalizeReaderOcrVoicevoxSpeedScale(speechSettings.speedScale);
+        setTemporarySpeedScale(temporarySpeedScaleRef.current);
+        void playBoxAtSpeed(selectedBox, temporarySpeedScaleRef.current);
     }, [
         activeOcrEnabled,
         autoPlayEnabled,
-        playText,
+        baseSpeechSettingsKey,
+        playBoxAtSpeed,
         selectedBox,
+        speechSettings.speedScale,
         voicevoxConfigured,
         voicevoxStatusLoading,
     ]);
@@ -274,7 +421,10 @@ const useReaderVoicevoxSpeech = ({
         voicePlaybackPlaying: playbackState === "playing",
         voicePlaybackError: playbackError,
         voicePlaybackUnavailableMessage: voicevoxUnavailableMessage,
+        voicePlaybackSpeedScale: temporarySpeedScale,
         playSelectedText,
+        playSelectedTextSlower,
+        playSelectedTextFaster,
         stopPlayback,
     };
 };

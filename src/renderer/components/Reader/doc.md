@@ -29,6 +29,11 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - gère la sélection/focalisation des bulles avec une navigation clavier configurable via `readerOcrNavigationOffset`, `readerOcrNavigationDeadZone`, `readerOcrNavigationStrictDirection` et `readerOcrNavigationLooseFallback`
 - `hooks/useReaderShortcuts.ts`
   - centralise les raccourcis clavier et applique `readerScrollStrength` aux actions de scroll
+  - branche aussi les actions VOICEVOX sans raccourci par defaut : lire la bulle courante, relire plus lentement, relire plus rapidement
+- `hooks/useReaderVoicevoxSpeech.ts`
+  - lit la bulle OCR selectionnee via VOICEVOX
+  - garde en cache l'audio genere pour la bulle et les reglages courants afin de relire sans nouvel appel API
+  - applique une vitesse temporaire plus lente/rapide limitee a la bulle selectionnee
 - `hooks/useReaderFullscreen.ts`
   - cible le bloc image + panneau OCR avec le Fullscreen API, sans inclure l'en-tête du lecteur ni les onglets workspace
 - `ReaderStage.tsx`
@@ -60,6 +65,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.
 - Le lecteur d'ecran reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones de lecture peuvent être détectées automatiquement ou ajoutées manuellement.
+- Les raccourcis configurables permettent de lire la bulle OCR courante, puis de la relire plus lentement ou plus rapidement. Le pas de vitesse est regle dans l'onglet Lecteur et cette vitesse temporaire revient a la valeur par defaut quand la selection OCR change.
 - Le détail d'un token JPDB peut afficher son type grammatical et sa forme détectée pour les verbes, les adjectifs en `い` et les adjectifs en `な`. Ces libellés ouvrent une fiche explicative en Markdown, avec un fil d'Ariane interne pour naviguer entre les fiches liées.
 - Le panneau OCR permet de choisir manuellement l'ordre des bulles, avec un raccourci configurable sans valeur par défaut ; les traductions sont alors relancées en chaîne avec la phrase japonaise et la traduction anglaise précédentes comme contexte JPDB. Une fois l'ordre validé, deux raccourcis configurables sans valeur par défaut permettent d'aller à la bulle ordonnée précédente ou suivante, même si aucune bulle n'est encore sélectionnée.
 - L'onglet Lecteur des paramètres pilote la largeur maximale de l'image, la barre de progression, la force de scroll, la vitesse du scroll maintenu, l'impulsion initiale du scroll clavier, le préchargement image et une section `Lecteur d’écran` dédiée au pré-rendu OCR, au préchargement de l'analyse JPDB des bulles, au préchargement optionnel des détails de token, aux garde-fous de navigation clavier et à l'ouverture automatique du panneau pour les mangas marqués en japonais (`language = ja`). Il pilote aussi l'inclusion optionnelle des bookmarks dans les propositions de fin de lecture et l'ouverture surprise via `Suivant`.
