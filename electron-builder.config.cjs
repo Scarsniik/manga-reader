@@ -36,7 +36,48 @@ const DEFAULT_OCR_RUNTIME_REPOSITORY = {
   owner: "Scarsniik",
   repo: "manga-runtime-OCR",
 };
-const DEFAULT_VOICEVOX_BASE_URL = "https://voicevox.up.railway.app/";
+
+const parseDotEnvValue = (value) => {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if ((quote === "\"" || quote === "'") && trimmed.endsWith(quote)) {
+    const unquoted = trimmed.slice(1, -1);
+    return quote === "\""
+      ? unquoted.replace(/\\n/g, "\n").replace(/\\r/g, "\r")
+      : unquoted;
+  }
+
+  return trimmed;
+};
+
+const loadDotEnvFile = (filePath) => {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<value>.*)\s*$/);
+    if (!match?.groups) {
+      continue;
+    }
+
+    const name = match.groups.name;
+    if (typeof process.env[name] === "string") {
+      continue;
+    }
+
+    process.env[name] = parseDotEnvValue(match.groups.value);
+  }
+};
+
+const loadDotEnvFiles = () => {
+  for (const fileName of [".env.local", ".env"]) {
+    loadDotEnvFile(path.join(__dirname, fileName));
+  }
+};
+
+loadDotEnvFiles();
 
 const readPackageMetadata = () => {
   const packageJsonPath = path.join(__dirname, "package.json");
@@ -118,9 +159,7 @@ const resolveOcrRuntimeManifestUrl = () => {
   return buildGithubLatestAssetUrl(resolveOcrRuntimeRepository(), "manifest.json");
 };
 
-const resolveVoicevoxBaseUrl = () => (
-  readFirstEnvValue(VOICEVOX_BASE_URL_ENV_NAMES) || DEFAULT_VOICEVOX_BASE_URL
-);
+const resolveVoicevoxBaseUrl = () => readFirstEnvValue(VOICEVOX_BASE_URL_ENV_NAMES);
 
 const publishRepository = resolveGithubPublishRepository();
 const ocrRuntimeManifestUrl = resolveOcrRuntimeManifestUrl();
@@ -175,6 +214,6 @@ module.exports = {
     name: appIdentity.packageName,
     productName: appIdentity.productName,
     ocrRuntimeManifestUrl,
-    voicevoxBaseUrl,
+    ...(voicevoxBaseUrl ? { voicevoxBaseUrl } : {}),
   },
 };
