@@ -247,6 +247,11 @@ Flux MVP :
    - redemarrer maintenant ;
    - plus tard.
 
+Le redemarrage lance l'installation NSIS en mode silencieux. L'installeur reste
+un artefact technique utilise par l'updater, mais aucun assistant d'installation
+ne doit etre affiche pendant une mise a jour automatique acceptee depuis
+l'application.
+
 L'application ne doit pas se fermer toute seule pendant une lecture, un OCR en
 cours, ou un telechargement de manga. Le redemarrage doit rester une action
 explicite de l'utilisateur.

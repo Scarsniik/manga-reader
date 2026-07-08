@@ -647,7 +647,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const getStatusState = React.useCallback((
     status: "waiting" | "loading" | "done" | "error",
     canContinue = false,
-  ) => {
+  ): "loading" | "continuable" | "complete" | "error" => {
     if (status === "waiting" || status === "loading") {
       return "loading";
     }

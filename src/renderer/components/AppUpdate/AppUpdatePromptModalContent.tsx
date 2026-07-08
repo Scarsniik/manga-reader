@@ -160,8 +160,9 @@ export default function AppUpdatePromptModalContent({
                     </>
                 ) : (
                     <>
-                        La version <strong>{availableVersion}</strong> est telechargee et prete a etre installee.
-                        Vous pouvez redemarrer maintenant ou continuer et installer plus tard.
+                        La version <strong>{availableVersion}</strong> est telechargee. En redemarrant maintenant,
+                        l'application va se fermer, installer la mise a jour en silence, puis se relancer
+                        automatiquement. Cela peut prendre quelques instants.
                     </>
                 )}
             </p>
@@ -212,7 +213,7 @@ export default function AppUpdatePromptModalContent({
                 ) : null}
                 {resolvedMode === "downloaded" ? (
                     <button type="button" onClick={handleInstall} disabled={isInstalling}>
-                        {isInstalling ? "Redemarrage..." : "Redemarrer maintenant"}
+                        {isInstalling ? "Fermeture..." : "Redemarrer maintenant"}
                     </button>
                 ) : null}
             </div>

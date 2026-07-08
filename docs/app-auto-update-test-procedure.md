@@ -284,12 +284,15 @@ Depuis `0.1.0` avec `0.1.1` detectee :
 2. Verifier que la progression s'affiche.
 3. Attendre l'etat `downloaded` ou equivalent.
 4. Choisir `Redemarrer maintenant`.
-5. Laisser l'application se fermer et redemarrer.
+5. Laisser l'application se fermer, installer silencieusement la mise a jour,
+   puis redemarrer.
 6. Ouvrir `Version et installation`.
 
 Resultat attendu :
 
 - la version affichee est `0.1.1` ;
+- aucun assistant d'installation ne s'affiche pendant la mise a jour acceptee
+  depuis l'application ;
 - les donnees utilisateur creees en `0.1.0` sont toujours presentes ;
 - le runtime OCR existant reste detecte ;
 - l'application n'a pas modifie `ocr-runtime.json`.

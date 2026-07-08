@@ -173,7 +173,7 @@ export default function AppUpdateSettingsPanel() {
             if (result?.started === false) {
                 throw new Error("Aucune mise a jour prete a etre installee.");
             }
-        }, "Redemarrage pour installer la mise a jour.")
+        }, "L'application va se fermer, installer la mise a jour en silence, puis se relancer.")
     ), [runAction]);
 
     const openReleasePage = useCallback(() => (

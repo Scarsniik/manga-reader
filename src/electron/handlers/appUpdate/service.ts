@@ -324,7 +324,7 @@ const handleUpdateDownloaded = async (info: UpdateDownloadedEvent) => {
         releaseName: normalizeReleaseName(info),
         releaseUrl: await buildReleaseUrl(info.version),
         errorMessage: null,
-        message: "La mise a jour est prete a etre installee au redemarrage.",
+        message: "La mise a jour est prete. Au redemarrage, l'application se fermera, installera la mise a jour en silence, puis se relancera.",
         progressPercent: 100,
     });
 
@@ -544,12 +544,12 @@ export const installAppUpdate = async () => {
     });
 
     setStatus({
-        message: "Redemarrage pour installer la mise a jour.",
+        message: "L'application va se fermer, installer la mise a jour en silence, puis se relancer.",
         errorMessage: null,
     });
 
     setTimeout(() => {
-        getAutoUpdater().quitAndInstall(false, true);
+        getAutoUpdater().quitAndInstall(true, true);
     }, 150);
 
     return {
