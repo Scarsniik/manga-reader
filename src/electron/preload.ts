@@ -414,6 +414,7 @@ contextBridge.exposeInMainWorld('api', {
     ocrRecognize: (imagePathOrDataUrl: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-recognize', imagePathOrDataUrl, options),
     ocrAddManualSelections: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-add-manual-selections', payload),
     ocrDeleteManualSelection: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-delete-manual-selection', payload),
+    ocrUpdateBoxText: (payload?: Record<string, any>) => ipcRenderer.invoke('ocr-update-box-text', payload),
     ocrGetMangaStatus: (mangaId: string) => ipcRenderer.invoke('ocr-get-manga-status', mangaId),
     ocrGetMangaCompletionMap: (mangaIds?: string[]) => ipcRenderer.invoke('ocr-get-manga-completion-map', mangaIds),
     ocrStartManga: (mangaId: string, options?: Record<string, any>) => ipcRenderer.invoke('ocr-start-manga', mangaId, options),
@@ -438,6 +439,7 @@ contextBridge.exposeInMainWorld('api', {
     voicevoxStatus: () => ipcRenderer.invoke("voicevox-status"),
     voicevoxVoices: () => ipcRenderer.invoke("voicevox-voices"),
     voicevoxSynthesize: (payload: Record<string, unknown> | string) => ipcRenderer.invoke("voicevox-synthesize", payload),
+    voicevoxSaveAudio: (payload: Record<string, unknown>) => ipcRenderer.invoke("voicevox-save-audio", payload),
     romanizeJapaneseTexts: (request: JapaneseRomanizationRequest) => ipcRenderer.invoke("romanize-japanese-texts", request),
     analyzeJapaneseInflections: (request: JapaneseInflectionRequest) => ipcRenderer.invoke("analyze-japanese-inflections", request),
     // Scrapers API

@@ -24,6 +24,7 @@ import {
 import { app } from "electron";
 import fs from "fs";
 import path from "path";
+import { dataDir, ensureDataDir } from "../utils";
 
 const VOICEVOX_BASE_URL_ENV_NAMES = [
     "MANGA_HELPER_VOICEVOX_BASE_URL",
@@ -77,6 +78,15 @@ export type VoicevoxSynthesisResult = {
     code?: string;
 };
 
+export type VoicevoxAudioSaveResult = {
+    success: boolean;
+    filePath?: string;
+    directoryPath?: string;
+    fileName?: string;
+    error?: string;
+    code?: string;
+};
+
 type VoicevoxSynthesisOptions = {
     speakerId: number;
     speedScale: number;
@@ -97,6 +107,13 @@ type VoicevoxSynthesisRequest = {
     options: VoicevoxSynthesisOptions;
 };
 
+type VoicevoxAudioSaveRequest = {
+    audioBase64: string;
+    mimeType: string;
+    text: string;
+    outputDirectory: string | null;
+};
+
 const normalizeNullableString = (value: unknown): string | null => {
     if (typeof value !== "string") {
         return null;
@@ -104,6 +121,72 @@ const normalizeNullableString = (value: unknown): string | null => {
 
     const trimmedValue = value.trim();
     return trimmedValue.length > 0 ? trimmedValue : null;
+};
+
+const getVoicevoxAudioDownloadsDir = (): string => path.join(dataDir, "ocr-audio");
+
+const sanitizeFileNamePart = (value: string): string => (
+    value
+        .normalize("NFKC")
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 48)
+);
+
+const getAudioExtension = (mimeType: string): string => {
+    const normalizedMimeType = mimeType.toLowerCase();
+    if (normalizedMimeType.includes("mpeg") || normalizedMimeType.includes("mp3")) {
+        return "mp3";
+    }
+
+    if (normalizedMimeType.includes("ogg")) {
+        return "ogg";
+    }
+
+    if (normalizedMimeType.includes("flac")) {
+        return "flac";
+    }
+
+    return "wav";
+};
+
+const buildAudioDownloadFileName = (text: string, mimeType: string): string => {
+    const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-");
+    const textPart = sanitizeFileNamePart(text) || "ocr-audio";
+    return `${timestamp}-${textPart}.${getAudioExtension(mimeType)}`;
+};
+
+const getUniqueFilePath = async (directoryPath: string, fileName: string): Promise<string> => {
+    const extension = path.extname(fileName);
+    const baseName = path.basename(fileName, extension);
+    let candidatePath = path.join(directoryPath, fileName);
+
+    for (let index = 1; index < 1000; index += 1) {
+        try {
+            await fs.promises.access(candidatePath);
+            candidatePath = path.join(directoryPath, `${baseName}-${index}${extension}`);
+        } catch {
+            return candidatePath;
+        }
+    }
+
+    return path.join(directoryPath, `${baseName}-${Date.now()}${extension}`);
+};
+
+const extractAudioSaveRequest = (payload: unknown): VoicevoxAudioSaveRequest => {
+    const source = payload && typeof payload === "object"
+        ? payload as Record<string, unknown>
+        : {};
+
+    return {
+        audioBase64: String(source.audioBase64 ?? "").trim(),
+        mimeType: String(source.mimeType ?? "audio/wav").trim() || "audio/wav",
+        text: String(source.text ?? "").trim(),
+        outputDirectory: normalizeNullableString(source.outputDirectory),
+    };
 };
 
 const readPackagedVoicevoxBaseUrl = (): string | null => {
@@ -513,6 +596,44 @@ export const synthesizeVoicevoxSpeech = async (payload: unknown): Promise<Voicev
             success: false,
             code: "voicevox-request-failed",
             error: normalizeSynthesisError(error),
+        };
+    }
+};
+
+export const saveVoicevoxAudio = async (payload: unknown): Promise<VoicevoxAudioSaveResult> => {
+    const request = extractAudioSaveRequest(payload);
+    if (!request.audioBase64) {
+        return {
+            success: false,
+            code: "voicevox-audio-empty",
+            error: "Aucun audio à enregistrer pour cette bulle.",
+        };
+    }
+
+    const directoryPath = request.outputDirectory || getVoicevoxAudioDownloadsDir();
+
+    try {
+        if (!request.outputDirectory) {
+            await ensureDataDir();
+        }
+
+        await fs.promises.mkdir(directoryPath, { recursive: true });
+        const fileName = buildAudioDownloadFileName(request.text, request.mimeType);
+        const filePath = await getUniqueFilePath(directoryPath, fileName);
+        await fs.promises.writeFile(filePath, Buffer.from(request.audioBase64, "base64"));
+
+        return {
+            success: true,
+            filePath,
+            directoryPath,
+            fileName: path.basename(filePath),
+        };
+    } catch (error) {
+        console.warn("VOICEVOX audio save failed", error);
+        return {
+            success: false,
+            code: "voicevox-audio-save-failed",
+            error: "Impossible d'enregistrer l'audio OCR pour le moment.",
         };
     }
 };

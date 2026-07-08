@@ -9,6 +9,7 @@ import {
   detectLanguageForManga,
   readMangaOcrFile,
   removeManualBoxFromMangaPage,
+  updateOcrBoxTextOnMangaPage,
 } from "./manga-file";
 import { getQueueStatusInternal, startMangaOcrInternal, recognizePageInternal, getMangaOcrStatusInternal, ensureMangaOcrReadyForVocabularyExtraction, enqueueMangaQueueJob, pauseQueueJob, resumeQueueJob, cancelQueueJob, cancelAllQueueJobs } from "./queue";
 import { ocrRuntimeState } from "./state";
@@ -130,6 +131,56 @@ export async function ocrDeleteManualSelection(
   const result = await removeManualBoxFromMangaPage(manga, imagePath, Math.floor(pageIndexValue), boxId.trim());
   if (!result) {
     throw new Error("Unable to remove manual OCR selection");
+  }
+
+  return result;
+}
+
+export async function ocrUpdateBoxText(
+  _event: IpcMainInvokeEvent,
+  payload?: Record<string, any>,
+) {
+  const mangaId = payload?.mangaId;
+  const imagePathValue = payload?.imagePath;
+  const pageIndexValue = payload?.pageIndex;
+  const boxId = payload?.boxId;
+  const textValue = payload?.text;
+
+  if (!mangaId) {
+    throw new Error("Missing mangaId for OCR text update");
+  }
+
+  if (typeof imagePathValue !== "string" || !imagePathValue.trim()) {
+    throw new Error("Missing imagePath for OCR text update");
+  }
+
+  if (typeof pageIndexValue !== "number" || !Number.isFinite(pageIndexValue) || pageIndexValue < 0) {
+    throw new Error("Missing pageIndex for OCR text update");
+  }
+
+  if (typeof boxId !== "string" || !boxId.trim()) {
+    throw new Error("Missing boxId for OCR text update");
+  }
+
+  if (typeof textValue !== "string") {
+    throw new Error("Missing text for OCR text update");
+  }
+
+  const manga = await getMangaById(String(mangaId));
+  if (!manga) {
+    throw new Error("Manga not found");
+  }
+
+  const imagePath = resolveImagePath(imagePathValue);
+  const result = await updateOcrBoxTextOnMangaPage(
+    manga,
+    imagePath,
+    Math.floor(pageIndexValue),
+    boxId.trim(),
+    textValue.trim(),
+  );
+  if (!result) {
+    throw new Error("Unable to update OCR text");
   }
 
   return result;

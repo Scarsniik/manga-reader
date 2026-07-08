@@ -269,6 +269,9 @@ ipcMain.handle("voicevox-voices", async () => voicevox.getVoicevoxVoices());
 ipcMain.handle("voicevox-synthesize", async (_event: IpcMainInvokeEvent, payload: unknown) => (
     voicevox.synthesizeVoicevoxSpeech(payload)
 ));
+ipcMain.handle("voicevox-save-audio", async (_event: IpcMainInvokeEvent, payload: unknown) => (
+    voicevox.saveVoicevoxAudio(payload)
+));
 
 // Japanese romanization
 ipcMain.handle("romanize-japanese-texts", async (_event: IpcMainInvokeEvent, request: unknown) => (
@@ -525,6 +528,7 @@ ipcMain.handle("ocr-recognize", async (event: IpcMainInvokeEvent, imagePathOrDat
 }));
 ipcMain.handle("ocr-add-manual-selections", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrAddManualSelections(event, payload));
 ipcMain.handle("ocr-delete-manual-selection", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrDeleteManualSelection(event, payload));
+ipcMain.handle("ocr-update-box-text", async (event: IpcMainInvokeEvent, payload?: Record<string, any>) => ocr.ocrUpdateBoxText(event, payload));
 ipcMain.handle("ocr-get-manga-status", async (event: IpcMainInvokeEvent, mangaId: string) => ocr.ocrGetMangaStatus(event, mangaId));
 ipcMain.handle("ocr-get-manga-completion-map", async (event: IpcMainInvokeEvent, mangaIds?: string[]) => ocr.ocrGetMangaCompletionMap(event, mangaIds));
 ipcMain.handle("ocr-start-manga", async (event: IpcMainInvokeEvent, mangaId: string, opts?: Record<string, any>) => ocr.ocrStartManga(event, mangaId, opts));

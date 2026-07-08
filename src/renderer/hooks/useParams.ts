@@ -39,6 +39,7 @@ export type AppParams = {
     readerOcrVoicevoxOutputStereo?: boolean;
     readerOcrVoicevoxInterrogativeUpspeak?: boolean;
     readerOcrVoicevoxEnableKatakanaEnglish?: boolean;
+    readerOcrVoicevoxAudioDownloadDirectory?: string;
     readerOcrNavigationOffset?: number;
     readerOcrNavigationDeadZone?: number;
     readerOcrNavigationStrictDirection?: boolean;

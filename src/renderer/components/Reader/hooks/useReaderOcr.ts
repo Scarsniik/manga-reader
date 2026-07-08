@@ -45,6 +45,30 @@ type Args = {
 type OrderedOcrNavigationDirection = "previous" | "next";
 const OCR_FOCUS_SCROLL_BEHAVIOR: ScrollBehavior = "auto";
 
+const normalizeEditedOcrText = (text: string): string => (
+    text.replace(/\r\n/g, '\n').trim()
+);
+
+const getEditedOcrTextLines = (text: string): string[] => (
+    text
+        .split(/\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+);
+
+const updateReaderOcrBoxText = (
+    boxes: ReaderOcrBox[],
+    boxId: string,
+    text: string,
+): ReaderOcrBox[] => {
+    const lines = getEditedOcrTextLines(text);
+    return boxes.map((box) => (
+        box.id === boxId
+            ? { ...box, text, lines }
+            : box
+    ));
+};
+
 const clampScrollTopToImage = (
     targetScrollTop: number,
     imageTop: number,
@@ -467,6 +491,83 @@ const useReaderOcr = ({
         manualBoxes,
         manga,
         rememberOcrBoxesForPage,
+    ]);
+
+    const updateOcrBoxText = React.useCallback(async (boxId: string, text: string) => {
+        const src = images[currentIndex];
+        if (!src) {
+            return;
+        }
+
+        const normalizedText = normalizeEditedOcrText(text);
+        const currentBoxes = [...detectedBoxes, ...manualBoxes];
+        const currentBox = currentBoxes.find((box) => box.id === boxId);
+        if (!currentBox) {
+            setOcrError("Impossible de retrouver cette bulle OCR.");
+            return;
+        }
+
+        if (normalizeEditedOcrText(String(currentBox.text || '')) === normalizedText) {
+            return;
+        }
+
+        setOcrError(null);
+        const localNextBoxes = updateReaderOcrBoxText(currentBoxes, boxId, normalizedText);
+
+        try {
+            let nextBoxes = localNextBoxes;
+
+            if (
+                manga
+                && window.api
+                && typeof window.api.ocrUpdateBoxText === 'function'
+            ) {
+                const storedResult = await window.api.ocrUpdateBoxText({
+                    mangaId: manga.id,
+                    imagePath: src,
+                    pageIndex: currentIndex,
+                    boxId,
+                    text: normalizedText,
+                });
+
+                nextBoxes = filterVisibleOcrBoxes(
+                    Array.isArray(storedResult?.boxes)
+                        ? storedResult.boxes as ReaderOcrBox[]
+                        : localNextBoxes
+                );
+            }
+
+            rememberOcrBoxesForPage(src, nextBoxes);
+            applyCurrentPageOcrBoxes(nextBoxes);
+            const updatedBox = nextBoxes.find((box) => box.id === boxId);
+            if (updatedBox) {
+                preloadOcrBoxAnalysis([updatedBox], 'high');
+            }
+            if (selectedBoxes.includes(boxId) || orderedBoxIds.includes(boxId)) {
+                setOrderedTranslationRevision((revision) => revision + 1);
+            }
+            setOcrStatusNote(
+                manga && window.api && typeof window.api.ocrUpdateBoxText === 'function'
+                    ? 'Texte OCR mis à jour'
+                    : 'Texte OCR mis à jour pour cette session'
+            );
+        } catch (error: any) {
+            const message = String(error && error.message ? error.message : error);
+            setOcrError(message);
+            setOcrStatusNote("Modification du texte OCR non enregistrée.");
+            throw new Error(message);
+        }
+    }, [
+        applyCurrentPageOcrBoxes,
+        currentIndex,
+        detectedBoxes,
+        images,
+        manualBoxes,
+        manga,
+        orderedBoxIds,
+        preloadOcrBoxAnalysis,
+        rememberOcrBoxesForPage,
+        selectedBoxes,
     ]);
 
     const focusOcrBox = React.useCallback((boxId: string) => {
@@ -926,6 +1027,7 @@ const useReaderOcr = ({
         updateSelectedBoxes,
         handleManualSelectionComplete,
         handleRemoveManualBox,
+        updateOcrBoxText,
         focusOcrBox,
         navigateOcrBox,
         navigateOrderedOcrBox,

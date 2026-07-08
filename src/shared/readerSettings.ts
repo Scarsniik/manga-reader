@@ -32,6 +32,7 @@ export const READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE_OPTIONS = [16000, 24000, 4
 export const DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO = false;
 export const DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK = true;
 export const DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH = true;
+export const DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY = "";
 export const DEFAULT_READER_OCR_NAVIGATION_OFFSET = 6;
 export const MIN_READER_OCR_NAVIGATION_OFFSET = 0;
 export const MAX_READER_OCR_NAVIGATION_OFFSET = 25;
@@ -239,6 +240,10 @@ export const normalizeReaderOcrVoicevoxInterrogativeUpspeak = (value: unknown): 
 
 export const normalizeReaderOcrVoicevoxEnableKatakanaEnglish = (value: unknown): boolean => (
     normalizeBooleanSetting(value, DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH)
+);
+
+export const normalizeReaderOcrVoicevoxAudioDownloadDirectory = (value: unknown): string => (
+    normalizeStringSetting(value, DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY)
 );
 
 export const normalizeReaderOcrNavigationOffset = (value: unknown): number => (

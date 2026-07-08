@@ -25,6 +25,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - précharge traduction et parsing JPDB des bulles quand `readerOcrAutoAnalyzeBubbles` est actif
   - peut précharger les détails de tous les tokens via `readerOcrPreloadTokenDetails`
   - gère les sélections manuelles
+  - persiste les corrections de texte d'une bulle OCR dans le fichier OCR du manga
   - gère l'ordre manuel de traduction des bulles pour chaîner le contexte JPDB
   - gère la sélection/focalisation des bulles avec une navigation clavier configurable via `readerOcrNavigationOffset`, `readerOcrNavigationDeadZone`, `readerOcrNavigationStrictDirection` et `readerOcrNavigationLooseFallback`
 - `hooks/useReaderShortcuts.ts`
@@ -32,8 +33,9 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   - branche aussi les actions VOICEVOX sans raccourci par defaut : lire la bulle courante, relire plus lentement, relire plus rapidement
 - `hooks/useReaderVoicevoxSpeech.ts`
   - lit la bulle OCR selectionnee via VOICEVOX
-  - garde en cache l'audio genere pour la bulle et les reglages courants afin de relire sans nouvel appel API
+  - garde en cache l'audio genere pour la bulle, le texte courant et les reglages courants afin de relire sans nouvel appel API
   - applique une vitesse temporaire plus lente/rapide limitee a la bulle selectionnee
+  - enregistre l'audio OCR dans le dossier utilisateur par defaut ou dans le dossier configure
 - `hooks/useReaderFullscreen.ts`
   - cible le bloc image + panneau OCR avec le Fullscreen API, sans inclure l'en-tête du lecteur ni les onglets workspace
 - `ReaderStage.tsx`
@@ -65,6 +67,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.
 - Le lecteur d'ecran reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones de lecture peuvent être détectées automatiquement ou ajoutées manuellement.
+- Le panneau OCR permet de corriger le texte d'une bulle. La correction est enregistree dans le fichier OCR du manga et les actions audio utilisent le texte corrige.
+- Le bouton de telechargement audio OCR enregistre la bulle courante via VOICEVOX sans rappeler l'API si l'audio est deja en cache avec les memes reglages. Le dossier cible est configurable dans l'onglet Lecteur ; vide, l'application utilise le dossier utilisateur par defaut.
 - Les raccourcis configurables permettent de lire la bulle OCR courante, puis de la relire plus lentement ou plus rapidement. Le pas de vitesse est regle dans l'onglet Lecteur et cette vitesse temporaire revient a la valeur par defaut quand la selection OCR change.
 - Le détail d'un token JPDB peut afficher son type grammatical et sa forme détectée pour les verbes, les adjectifs en `い` et les adjectifs en `な`. Ces libellés ouvrent une fiche explicative en Markdown, avec un fil d'Ariane interne pour naviguer entre les fiches liées.
 - Le panneau OCR permet de choisir manuellement l'ordre des bulles, avec un raccourci configurable sans valeur par défaut ; les traductions sont alors relancées en chaîne avec la phrase japonaise et la traduction anglaise précédentes comme contexte JPDB. Une fois l'ordre validé, deux raccourcis configurables sans valeur par défaut permettent d'aller à la bulle ordonnée précédente ou suivante, même si aucune bulle n'est encore sélectionnée.

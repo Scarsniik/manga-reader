@@ -44,6 +44,7 @@ const READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE_OPTIONS = [16000, 24000, 44100, 4
 const DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO = false;
 const DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK = true;
 const DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH = true;
+const DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY = "";
 const DEFAULT_READER_OCR_NAVIGATION_OFFSET = 6;
 const MIN_READER_OCR_NAVIGATION_OFFSET = 0;
 const MAX_READER_OCR_NAVIGATION_OFFSET = 25;
@@ -399,6 +400,10 @@ const normalizeReaderOcrVoicevoxEnableKatakanaEnglish = (value: unknown): boolea
     normalizeBooleanSetting(value, DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH)
 );
 
+const normalizeReaderOcrVoicevoxAudioDownloadDirectory = (value: unknown): string => (
+    normalizeStringSetting(value, DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY)
+);
+
 const normalizeReaderOcrNavigationOffset = (value: unknown): number => (
     normalizeIntegerSetting(
         value,
@@ -604,6 +609,7 @@ const defaultSettings = {
     readerOcrVoicevoxOutputStereo: DEFAULT_READER_OCR_VOICEVOX_OUTPUT_STEREO,
     readerOcrVoicevoxInterrogativeUpspeak: DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK,
     readerOcrVoicevoxEnableKatakanaEnglish: DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH,
+    readerOcrVoicevoxAudioDownloadDirectory: DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY,
     readerOcrNavigationOffset: DEFAULT_READER_OCR_NAVIGATION_OFFSET,
     readerOcrNavigationDeadZone: DEFAULT_READER_OCR_NAVIGATION_DEAD_ZONE,
     readerOcrNavigationStrictDirection: DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
@@ -730,6 +736,9 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.readerOcrVoicevoxEnableKatakanaEnglish = normalizeReaderOcrVoicevoxEnableKatakanaEnglish(
         merged.readerOcrVoicevoxEnableKatakanaEnglish,
+    );
+    merged.readerOcrVoicevoxAudioDownloadDirectory = normalizeReaderOcrVoicevoxAudioDownloadDirectory(
+        merged.readerOcrVoicevoxAudioDownloadDirectory,
     );
     merged.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(merged.readerOcrNavigationOffset);
     merged.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(merged.readerOcrNavigationDeadZone);
@@ -1068,6 +1077,9 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.readerOcrVoicevoxEnableKatakanaEnglish = normalizeReaderOcrVoicevoxEnableKatakanaEnglish(
             nextSettings.readerOcrVoicevoxEnableKatakanaEnglish,
+        );
+        nextSettings.readerOcrVoicevoxAudioDownloadDirectory = normalizeReaderOcrVoicevoxAudioDownloadDirectory(
+            nextSettings.readerOcrVoicevoxAudioDownloadDirectory,
         );
         nextSettings.readerOcrNavigationOffset = normalizeReaderOcrNavigationOffset(nextSettings.readerOcrNavigationOffset);
         nextSettings.readerOcrNavigationDeadZone = normalizeReaderOcrNavigationDeadZone(

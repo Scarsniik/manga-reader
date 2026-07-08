@@ -30,6 +30,7 @@ import {
     DEFAULT_READER_OCR_NAVIGATION_STRICT_DIRECTION,
     DEFAULT_READER_OCR_PRELOAD_TOKEN_DETAILS,
     DEFAULT_READER_OCR_VOICEVOX_ENABLE_KATAKANA_ENGLISH,
+    DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY,
     DEFAULT_READER_OCR_VOICEVOX_INTERROGATIVE_UPSPEAK,
     DEFAULT_READER_OCR_VOICEVOX_INTONATION_SCALE,
     DEFAULT_READER_OCR_VOICEVOX_OUTPUT_SAMPLING_RATE,
@@ -56,6 +57,7 @@ import {
     normalizeReaderOcrPreloadPageCount,
     normalizeReaderOcrPreloadTokenDetails,
     normalizeReaderOcrVoicevoxEnableKatakanaEnglish,
+    normalizeReaderOcrVoicevoxAudioDownloadDirectory,
     normalizeReaderOcrVoicevoxInterrogativeUpspeak,
     normalizeReaderOcrVoicevoxIntonationScale,
     normalizeReaderOcrVoicevoxOutputSamplingRate,
@@ -212,6 +214,9 @@ const Reader: React.FC<ReaderProps> = ({
     const readerOcrVoicevoxSpeedStep = settingsLoading
         ? DEFAULT_READER_OCR_VOICEVOX_SPEED_STEP
         : normalizeReaderOcrVoicevoxSpeedStep(params?.readerOcrVoicevoxSpeedStep);
+    const readerOcrVoicevoxAudioDownloadDirectory = settingsLoading
+        ? DEFAULT_READER_OCR_VOICEVOX_AUDIO_DOWNLOAD_DIRECTORY
+        : normalizeReaderOcrVoicevoxAudioDownloadDirectory(params?.readerOcrVoicevoxAudioDownloadDirectory);
     const readerOcrVoicevoxSpeechSettings = React.useMemo(() => ({
         speakerId: settingsLoading
             ? DEFAULT_READER_OCR_VOICEVOX_STYLE_ID
@@ -413,6 +418,7 @@ const Reader: React.FC<ReaderProps> = ({
         autoPlayEnabled: readerOcrAutoPlayVoice,
         speechSettings: readerOcrVoicevoxSpeechSettings,
         speedStep: readerOcrVoicevoxSpeedStep,
+        audioDownloadDirectory: readerOcrVoicevoxAudioDownloadDirectory,
     });
 
     React.useEffect(() => {
@@ -643,6 +649,7 @@ const Reader: React.FC<ReaderProps> = ({
                         onRemoveManualBox={(boxId) => {
                             void ocr.handleRemoveManualBox(boxId);
                         }}
+                        onUpdateBoxText={ocr.updateOcrBoxText}
                         loading={ocr.ocrLoading}
                         error={ocr.ocrError}
                         statusNote={ocr.ocrStatusNote}
@@ -653,6 +660,10 @@ const Reader: React.FC<ReaderProps> = ({
                         voicePlaybackError={voiceSpeech.voicePlaybackError}
                         voicePlaybackUnavailableMessage={voiceSpeech.voicePlaybackUnavailableMessage}
                         onPlaySelectedText={voiceSpeech.playSelectedText}
+                        voiceAudioDownloadLoading={voiceSpeech.voiceAudioDownloadLoading}
+                        voiceAudioDownloadPath={voiceSpeech.voiceAudioDownloadPath}
+                        voiceAudioDownloadError={voiceSpeech.voiceAudioDownloadError}
+                        onDownloadSelectedAudio={voiceSpeech.downloadSelectedAudio}
                         showBoxes={ocr.showBoxes}
                         onToggleShowBoxes={ocr.setShowBoxes}
                     />

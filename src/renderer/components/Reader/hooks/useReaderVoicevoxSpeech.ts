@@ -17,6 +17,14 @@ type VoicevoxSynthesisResult = {
     error?: string;
 };
 
+type VoicevoxAudioSaveResult = {
+    success?: boolean;
+    filePath?: string;
+    directoryPath?: string;
+    fileName?: string;
+    error?: string;
+};
+
 export type ReaderVoicevoxSpeechSettings = {
     speakerId: number;
     speedScale: number;
@@ -39,6 +47,7 @@ type Args = {
     autoPlayEnabled: boolean;
     speechSettings: ReaderVoicevoxSpeechSettings;
     speedStep: number;
+    audioDownloadDirectory: string;
 };
 
 type PlaybackState = "idle" | "loading" | "playing";
@@ -75,12 +84,16 @@ const useReaderVoicevoxSpeech = ({
     autoPlayEnabled,
     speechSettings,
     speedStep,
+    audioDownloadDirectory,
 }: Args) => {
     const [voicevoxConfigured, setVoicevoxConfigured] = React.useState<boolean>(false);
     const [voicevoxStatusLoading, setVoicevoxStatusLoading] = React.useState<boolean>(true);
     const [voicevoxUnavailableMessage, setVoicevoxUnavailableMessage] = React.useState<string | null>(null);
     const [playbackState, setPlaybackState] = React.useState<PlaybackState>("idle");
     const [playbackError, setPlaybackError] = React.useState<string | null>(null);
+    const [audioDownloadLoading, setAudioDownloadLoading] = React.useState<boolean>(false);
+    const [audioDownloadPath, setAudioDownloadPath] = React.useState<string | null>(null);
+    const [audioDownloadError, setAudioDownloadError] = React.useState<string | null>(null);
     const activeAudioRef = React.useRef<HTMLAudioElement | null>(null);
     const activeAudioUrlRef = React.useRef<string | null>(null);
     const playbackRequestIdRef = React.useRef<number>(0);
@@ -100,7 +113,7 @@ const useReaderVoicevoxSpeech = ({
         return allOcrBoxes.find((box) => box.id === selectedBoxId) ?? null;
     }, [allOcrBoxes, selectedBoxes]);
     const selectedBoxKey = React.useMemo(() => (
-        selectedBox ? `${selectedBox.id}::${selectedBox.text}` : ""
+        selectedBox ? selectedBox.id : ""
     ), [selectedBox]);
     const baseSpeechSettingsKey = React.useMemo(() => JSON.stringify({
         speakerId: speechSettings.speakerId,
@@ -143,6 +156,8 @@ const useReaderVoicevoxSpeech = ({
         inFlightAudioCacheRef.current.clear();
         temporarySpeedScaleRef.current = normalizeReaderOcrVoicevoxSpeedScale(speechSettings.speedScale);
         setTemporarySpeedScale(temporarySpeedScaleRef.current);
+        setAudioDownloadPath(null);
+        setAudioDownloadError(null);
         stopPlayback();
     }, [speechSettings.speedScale, stopPlayback]);
 
@@ -190,6 +205,20 @@ const useReaderVoicevoxSpeech = ({
         ...speechSettings,
         speedScale: normalizeReaderOcrVoicevoxSpeedScale(speedScale),
     }), [speechSettings]);
+
+    const withTextOverride = React.useCallback((
+        box: ReaderOcrBox,
+        textOverride?: string,
+    ): ReaderOcrBox => {
+        if (typeof textOverride !== "string") {
+            return box;
+        }
+
+        return {
+            ...box,
+            text: textOverride.trim(),
+        };
+    }, []);
 
     const getAudioCacheKey = React.useCallback((
         box: ReaderOcrBox,
@@ -325,17 +354,17 @@ const useReaderVoicevoxSpeech = ({
         voicevoxUnavailableMessage,
     ]);
 
-    const playSelectedTextAtSpeed = React.useCallback((speedScale: number) => {
+    const playSelectedTextAtSpeed = React.useCallback((speedScale: number, textOverride?: string) => {
         if (!selectedBox) {
             setPlaybackError("Sélectionne une bulle OCR avant de lancer la lecture.");
             return;
         }
 
-        void playBoxAtSpeed(selectedBox, speedScale);
-    }, [playBoxAtSpeed, selectedBox]);
+        void playBoxAtSpeed(withTextOverride(selectedBox, textOverride), speedScale);
+    }, [playBoxAtSpeed, selectedBox, withTextOverride]);
 
-    const playSelectedText = React.useCallback(() => {
-        playSelectedTextAtSpeed(temporarySpeedScaleRef.current);
+    const playSelectedText = React.useCallback((textOverride?: string) => {
+        playSelectedTextAtSpeed(temporarySpeedScaleRef.current, textOverride);
     }, [playSelectedTextAtSpeed]);
 
     const playSelectedTextWithSpeedDirection = React.useCallback((direction: SpeedDirection) => {
@@ -359,6 +388,58 @@ const useReaderVoicevoxSpeech = ({
     const playSelectedTextFaster = React.useCallback(() => {
         playSelectedTextWithSpeedDirection("faster");
     }, [playSelectedTextWithSpeedDirection]);
+
+    const downloadSelectedAudio = React.useCallback(async (textOverride?: string) => {
+        if (!selectedBox) {
+            setAudioDownloadError("Sélectionne une bulle OCR avant de télécharger l'audio.");
+            return;
+        }
+
+        if (!window.api || typeof window.api.voicevoxSaveAudio !== "function") {
+            setAudioDownloadError("Le téléchargement audio n'est pas disponible dans cet environnement.");
+            return;
+        }
+
+        const downloadBox = withTextOverride(selectedBox, textOverride);
+        const normalizedText = String(downloadBox.text || "").trim();
+        if (!normalizedText) {
+            setAudioDownloadError("La bulle sélectionnée est vide.");
+            return;
+        }
+
+        const effectiveSpeechSettings = buildEffectiveSpeechSettings(temporarySpeedScaleRef.current);
+        setAudioDownloadLoading(true);
+        setAudioDownloadPath(null);
+        setAudioDownloadError(null);
+
+        try {
+            const voiceAudio = await getVoiceAudio(downloadBox, effectiveSpeechSettings);
+            const result = await window.api.voicevoxSaveAudio({
+                audioBase64: voiceAudio.audioBase64,
+                mimeType: voiceAudio.mimeType,
+                text: normalizedText,
+                outputDirectory: audioDownloadDirectory,
+            }) as VoicevoxAudioSaveResult;
+
+            if (!result?.success || !result.filePath) {
+                throw new Error(result?.error || "Impossible d'enregistrer l'audio OCR.");
+            }
+
+            setAudioDownloadPath(result.filePath);
+        } catch (error) {
+            setAudioDownloadError(error instanceof Error && error.message.trim()
+                ? error.message
+                : "Impossible d'enregistrer l'audio OCR pour le moment.");
+        } finally {
+            setAudioDownloadLoading(false);
+        }
+    }, [
+        audioDownloadDirectory,
+        buildEffectiveSpeechSettings,
+        getVoiceAudio,
+        selectedBox,
+        withTextOverride,
+    ]);
 
     React.useEffect(() => {
         if (!activeOcrEnabled) {
@@ -422,9 +503,13 @@ const useReaderVoicevoxSpeech = ({
         voicePlaybackError: playbackError,
         voicePlaybackUnavailableMessage: voicevoxUnavailableMessage,
         voicePlaybackSpeedScale: temporarySpeedScale,
+        voiceAudioDownloadLoading: audioDownloadLoading,
+        voiceAudioDownloadPath: audioDownloadPath,
+        voiceAudioDownloadError: audioDownloadError,
         playSelectedText,
         playSelectedTextSlower,
         playSelectedTextFaster,
+        downloadSelectedAudio,
         stopPlayback,
     };
 };

@@ -19,10 +19,58 @@ import { ensureMangaOcrFile, readMangaOcrFile, writeMangaOcrFile } from "./manga
 import type {
   MangaOcrPageEntry,
   NormalizedBox,
+  NormalizedPageBlock,
   NormalizedOcrResult,
   OcrPassProfile,
   OcrQueueJobMode,
 } from "./types";
+
+const getEditedTextLines = (text: string): string[] => (
+  text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+);
+
+const updateBoxTextById = (boxes: NormalizedBox[], boxId: string, text: string) => {
+  let updated = false;
+  const lines = getEditedTextLines(text);
+  const nextBoxes = boxes.map((box) => {
+    if (box.id !== boxId) {
+      return box;
+    }
+
+    updated = true;
+    return {
+      ...box,
+      text,
+      lines,
+    };
+  });
+
+  return { boxes: nextBoxes, updated };
+};
+
+const updateBlockTextById = (blocks: NormalizedPageBlock[], boxId: string, text: string) => {
+  const lines = getEditedTextLines(text);
+
+  return blocks.map((block) => {
+    if (block.id !== boxId) {
+      return block;
+    }
+
+    return {
+      ...block,
+      text,
+      lines: lines.length > 0
+        ? lines.map((line, index) => ({
+          ...(Array.isArray(block.lines) ? block.lines[index] : undefined),
+          text: line,
+        }))
+        : [],
+    };
+  });
+};
 
 export async function persistPageResultForManga(
   manga: any,
@@ -159,6 +207,44 @@ export async function removeManualBoxFromMangaPage(
     schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     manualBoxes: nextManualBoxes,
   };
+  setMangaOcrPageEntryForFile(file, pageKey, nextEntry, pageFiles.length, file.progress.mode || "on_demand");
+  await writeMangaOcrFile(manga.path, file);
+  await invalidateCacheForImagePath(imagePath);
+  return pageEntryToNormalized(nextEntry, imagePath, "manga-file");
+}
+
+export async function updateOcrBoxTextOnMangaPage(
+  manga: any,
+  imagePath: string,
+  pageIndex: number,
+  boxId: string,
+  text: string,
+) {
+  const pageFiles = await listImageFiles(manga.path);
+  const file = await ensureMangaOcrFile(manga, pageFiles.length);
+  const pageKey = buildMangaPageKey(pageIndex, imagePath);
+  const entry = file.pages[pageKey];
+  if (!entry) {
+    throw new Error("No OCR data stored for this page");
+  }
+
+  const currentAutoBoxes = Array.isArray(entry.boxes) ? entry.boxes : [];
+  const currentManualBoxes = Array.isArray(entry.manualBoxes) ? entry.manualBoxes : [];
+  const nextAuto = updateBoxTextById(currentAutoBoxes, boxId, text);
+  const nextManual = updateBoxTextById(currentManualBoxes, boxId, text);
+
+  if (!nextAuto.updated && !nextManual.updated) {
+    throw new Error("OCR bubble not found");
+  }
+
+  const nextEntry: MangaOcrPageEntry = {
+    ...entry,
+    schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
+    boxes: nextAuto.boxes,
+    blocks: updateBlockTextById(Array.isArray(entry.blocks) ? entry.blocks : [], boxId, text),
+    manualBoxes: nextManual.boxes,
+  };
+
   setMangaOcrPageEntryForFile(file, pageKey, nextEntry, pageFiles.length, file.progress.mode || "on_demand");
   await writeMangaOcrFile(manga.path, file);
   await invalidateCacheForImagePath(imagePath);

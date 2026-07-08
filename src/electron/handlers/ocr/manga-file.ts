@@ -27,4 +27,5 @@ export {
   persistPageResultForManga,
   readStoredPageFromMangaFile,
   removeManualBoxFromMangaPage,
+  updateOcrBoxTextOnMangaPage,
 } from "./manga-pages";
