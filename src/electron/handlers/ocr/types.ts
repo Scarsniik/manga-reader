@@ -28,6 +28,7 @@ export type NormalizedBox = {
   vertical?: boolean;
   lines?: string[];
   manual?: boolean;
+  textEditedAt?: string;
 };
 
 export type NormalizedPageBlock = {
@@ -46,6 +47,7 @@ export type NormalizedPageBlock = {
   confidence?: number | null;
   filteredOut?: boolean;
   filterReason?: string | null;
+  textEditedAt?: string;
 };
 
 export type NormalizedOcrResult = {

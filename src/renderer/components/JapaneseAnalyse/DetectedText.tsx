@@ -10,6 +10,8 @@ type Props = {
   onReset: () => void;
   validateLoading?: boolean;
   validateError?: string | null;
+  isDirty?: boolean;
+  onCommitPending?: () => Promise<void> | void;
 };
 
 export default function DetectedText({
@@ -21,6 +23,8 @@ export default function DetectedText({
   onReset,
   validateLoading = false,
   validateError = null,
+  isDirty = false,
+  onCommitPending,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -37,16 +41,32 @@ export default function DetectedText({
       <div className="detected-text__header">
         <div className="label">Texte analysé</div>
         <span className="detected-text__status">
-          {isUsingManualText ? 'Texte corrigé manuellement' : 'Texte OCR brut'}
+          {isDirty ? 'Modification non enregistrée' : isUsingManualText ? 'Texte corrigé manuellement' : 'Texte OCR brut'}
         </span>
       </div>
-      <div className="manual-input">
+      <div
+        className="manual-input"
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+            return;
+          }
+
+          if (!validateLoading && isDirty && typeof onCommitPending === 'function') {
+            void onCommitPending();
+          }
+        }}
+      >
         <textarea
           ref={textareaRef}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if ((e.nativeEvent as KeyboardEvent).isComposing) {
+              return;
+            }
+
+            if (e.key === 'Enter' && !e.shiftKey && !validateLoading) {
               e.preventDefault();
               void onValidate();
             }
@@ -56,11 +76,16 @@ export default function DetectedText({
           className="manual-input__input"
           rows={1}
         />
-        <button onClick={onValidate} className="validate-btn" disabled={validateLoading}>
+        <button onClick={onValidate} className="validate-btn" disabled={validateLoading} type="button">
           {validateLoading ? 'Enregistrement...' : 'Analyser'}
         </button>
-        <button onClick={onReset} className="clear-btn">Texte OCR</button>
+        <button onClick={onReset} className="clear-btn" disabled={validateLoading} type="button">Texte OCR</button>
       </div>
+      {isDirty ? (
+        <div className="detected-text__hint">
+          Appuie sur Entrée, clique Analyser, ou quitte le champ pour enregistrer la correction OCR.
+        </div>
+      ) : null}
       {validateError ? (
         <div className="detected-text__error">{validateError}</div>
       ) : null}

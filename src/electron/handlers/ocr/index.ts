@@ -3,6 +3,7 @@ import path from "path";
 import { getSettings } from "../params";
 import { getMangaById, getMangas } from "../mangas";
 import { listImageFiles } from "../pages";
+import { updateCacheBoxTextForImagePath } from "./cache";
 import { ensureOcrDirs, resolveImagePath, resolveWorkerInput } from "./helpers";
 import {
   addManualBoxesToMangaPage,
@@ -146,10 +147,6 @@ export async function ocrUpdateBoxText(
   const boxId = payload?.boxId;
   const textValue = payload?.text;
 
-  if (!mangaId) {
-    throw new Error("Missing mangaId for OCR text update");
-  }
-
   if (typeof imagePathValue !== "string" || !imagePathValue.trim()) {
     throw new Error("Missing imagePath for OCR text update");
   }
@@ -166,24 +163,39 @@ export async function ocrUpdateBoxText(
     throw new Error("Missing text for OCR text update");
   }
 
-  const manga = await getMangaById(String(mangaId));
-  if (!manga) {
-    throw new Error("Manga not found");
-  }
-
   const imagePath = resolveImagePath(imagePathValue);
-  const result = await updateOcrBoxTextOnMangaPage(
-    manga,
-    imagePath,
-    Math.floor(pageIndexValue),
-    boxId.trim(),
-    textValue.trim(),
-  );
-  if (!result) {
-    throw new Error("Unable to update OCR text");
+  let mangaFileError: unknown = null;
+
+  if (mangaId) {
+    const manga = await getMangaById(String(mangaId));
+    if (manga?.path) {
+      try {
+        const result = await updateOcrBoxTextOnMangaPage(
+          manga,
+          imagePath,
+          Math.floor(pageIndexValue),
+          boxId.trim(),
+          textValue.trim(),
+        );
+        if (result) {
+          return result;
+        }
+      } catch (error) {
+        mangaFileError = error;
+      }
+    }
   }
 
-  return result;
+  const cachedResult = await updateCacheBoxTextForImagePath(imagePath, boxId.trim(), textValue.trim());
+  if (cachedResult) {
+    return cachedResult;
+  }
+
+  if (mangaFileError instanceof Error) {
+    throw mangaFileError;
+  }
+
+  throw new Error("Impossible d'enregistrer cette correction OCR.");
 }
 
 export async function ocrGetMangaStatus(_event: IpcMainInvokeEvent, mangaId: string) {

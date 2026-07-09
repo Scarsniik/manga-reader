@@ -147,6 +147,7 @@ export default function JapaneseAnalyse({
   const autoText = useMemo(() => selectedBoxes.map((box) => box.text).join('\n'), [selectedBoxes]);
   const text = manualText ?? autoText;
   const isUsingManualText = manualText !== null;
+  const hasPendingTextEdit = normalizeEditableAnalysisText(inputText) !== normalizeEditableAnalysisText(autoText);
   const translationSegments = useMemo(
     () => (
       useTranslationOrder && !isUsingManualText
@@ -608,6 +609,8 @@ export default function JapaneseAnalyse({
         onReset={handleResetText}
         validateLoading={textSaveLoading}
         validateError={textSaveError}
+        isDirty={hasPendingTextEdit}
+        onCommitPending={handleValidateText}
       />
 
       {analysisLoading ? (

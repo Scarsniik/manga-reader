@@ -67,7 +67,8 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Une option de l'onglet Lecteur permet d'inclure les bookmarks scraper lisibles directement dans les recommandations et dans le bouton de manga aléatoire. Le manga aléatoire garde la même langue que la lecture en cours et exclut les mangas rattachés à une série.
 - Le lecteur d'ecran reste optionnel et s'affiche dans un panneau latéral dédié.
 - Les zones de lecture peuvent être détectées automatiquement ou ajoutées manuellement.
-- Le panneau OCR permet de corriger le texte d'une bulle depuis la zone `Texte analysé`. La correction est enregistree dans le fichier OCR du manga et les actions audio utilisent le texte corrige.
+- Le panneau OCR permet de corriger le texte d'une bulle depuis la zone `Texte analysé`. `Entrée`, le bouton `Analyser` ou la sortie du champ enregistrent la correction dans l'OCR, puis les actions audio utilisent le texte corrige.
+- Les bulles corrigees sont marquees dans les donnees OCR pour conserver la correction lors d'un recalcul OCR lorsque l'identifiant de bulle reste stable.
 - Le bouton de telechargement audio OCR enregistre la bulle courante via VOICEVOX sans rappeler l'API si l'audio est deja en cache avec les memes reglages. Le dossier cible est configurable dans l'onglet Lecteur ; vide, l'application utilise le dossier utilisateur par defaut.
 - Le detail d'un token peut lire uniquement le texte de ce token via les reglages VOICEVOX courants.
 - Les raccourcis configurables permettent de lire la bulle OCR courante, puis de la relire plus lentement ou plus rapidement. Le pas de vitesse est regle dans l'onglet Lecteur et cette vitesse temporaire revient a la valeur par defaut quand la selection OCR change.

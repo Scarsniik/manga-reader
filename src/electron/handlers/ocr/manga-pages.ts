@@ -32,7 +32,7 @@ const getEditedTextLines = (text: string): string[] => (
     .filter((line) => line.length > 0)
 );
 
-const updateBoxTextById = (boxes: NormalizedBox[], boxId: string, text: string) => {
+const updateBoxTextById = (boxes: NormalizedBox[], boxId: string, text: string, textEditedAt: string) => {
   let updated = false;
   const lines = getEditedTextLines(text);
   const nextBoxes = boxes.map((box) => {
@@ -45,13 +45,19 @@ const updateBoxTextById = (boxes: NormalizedBox[], boxId: string, text: string) 
       ...box,
       text,
       lines,
+      textEditedAt,
     };
   });
 
   return { boxes: nextBoxes, updated };
 };
 
-const updateBlockTextById = (blocks: NormalizedPageBlock[], boxId: string, text: string) => {
+const updateBlockTextById = (
+  blocks: NormalizedPageBlock[],
+  boxId: string,
+  text: string,
+  textEditedAt: string,
+) => {
   const lines = getEditedTextLines(text);
 
   return blocks.map((block) => {
@@ -62,6 +68,7 @@ const updateBlockTextById = (blocks: NormalizedPageBlock[], boxId: string, text:
     return {
       ...block,
       text,
+      textEditedAt,
       lines: lines.length > 0
         ? lines.map((line, index) => ({
           ...(Array.isArray(block.lines) ? block.lines[index] : undefined),
@@ -71,6 +78,69 @@ const updateBlockTextById = (blocks: NormalizedPageBlock[], boxId: string, text:
     };
   });
 };
+
+const getEditedBoxOverrides = (boxes?: NormalizedBox[] | null) => {
+  const overrides = new Map<string, NormalizedBox>();
+
+  if (!Array.isArray(boxes)) {
+    return overrides;
+  }
+
+  boxes.forEach((box) => {
+    if (typeof box.id !== "string" || !box.id || !box.textEditedAt) {
+      return;
+    }
+
+    overrides.set(box.id, box);
+  });
+
+  return overrides;
+};
+
+const applyEditedBoxOverrides = (
+  boxes: NormalizedBox[],
+  overrides: Map<string, NormalizedBox>,
+): NormalizedBox[] => (
+  boxes.map((box) => {
+    const override = overrides.get(box.id);
+    if (!override) {
+      return box;
+    }
+
+    return {
+      ...box,
+      text: override.text,
+      lines: Array.isArray(override.lines) ? override.lines : getEditedTextLines(override.text),
+      textEditedAt: override.textEditedAt,
+    };
+  })
+);
+
+const applyEditedBlockOverrides = (
+  blocks: NormalizedPageBlock[],
+  overrides: Map<string, NormalizedBox>,
+): NormalizedPageBlock[] => (
+  blocks.map((block) => {
+    const override = overrides.get(block.id);
+    if (!override) {
+      return block;
+    }
+
+    const lines = Array.isArray(override.lines) && override.lines.length > 0
+      ? override.lines
+      : getEditedTextLines(override.text);
+
+    return {
+      ...block,
+      text: override.text,
+      textEditedAt: override.textEditedAt,
+      lines: lines.map((line, index) => ({
+        ...(Array.isArray(block.lines) ? block.lines[index] : undefined),
+        text: line,
+      })),
+    };
+  })
+);
 
 export async function persistPageResultForManga(
   manga: any,
@@ -86,8 +156,15 @@ export async function persistPageResultForManga(
   const file = await ensureMangaOcrFile(manga, pageFiles.length);
   const pageKey = buildMangaPageKey(pageIndex, imagePath);
   const existingEntry = file.pages[pageKey];
-  const blocks = Array.isArray(result.page?.blocks) ? result.page?.blocks : [];
-  const boxes = Array.isArray(result.boxes) ? result.boxes : [];
+  const editedAutoBoxOverrides = getEditedBoxOverrides(existingEntry?.boxes);
+  const blocks = applyEditedBlockOverrides(
+    Array.isArray(result.page?.blocks) ? result.page?.blocks : [],
+    editedAutoBoxOverrides,
+  );
+  const boxes = applyEditedBoxOverrides(
+    Array.isArray(result.boxes) ? result.boxes : [],
+    editedAutoBoxOverrides,
+  );
 
   const nextEntry: MangaOcrPageEntry = {
     schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
@@ -230,8 +307,9 @@ export async function updateOcrBoxTextOnMangaPage(
 
   const currentAutoBoxes = Array.isArray(entry.boxes) ? entry.boxes : [];
   const currentManualBoxes = Array.isArray(entry.manualBoxes) ? entry.manualBoxes : [];
-  const nextAuto = updateBoxTextById(currentAutoBoxes, boxId, text);
-  const nextManual = updateBoxTextById(currentManualBoxes, boxId, text);
+  const textEditedAt = new Date().toISOString();
+  const nextAuto = updateBoxTextById(currentAutoBoxes, boxId, text, textEditedAt);
+  const nextManual = updateBoxTextById(currentManualBoxes, boxId, text, textEditedAt);
 
   if (!nextAuto.updated && !nextManual.updated) {
     throw new Error("OCR bubble not found");
@@ -241,7 +319,7 @@ export async function updateOcrBoxTextOnMangaPage(
     ...entry,
     schemaVersion: MANGA_OCR_PAGE_SCHEMA_VERSION,
     boxes: nextAuto.boxes,
-    blocks: updateBlockTextById(Array.isArray(entry.blocks) ? entry.blocks : [], boxId, text),
+    blocks: updateBlockTextById(Array.isArray(entry.blocks) ? entry.blocks : [], boxId, text, textEditedAt),
     manualBoxes: nextManual.boxes,
   };
 
