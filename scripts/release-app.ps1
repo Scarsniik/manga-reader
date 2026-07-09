@@ -613,13 +613,14 @@ function Publish-GitHubReleaseWithApi {
     $headers = Get-GitHubApiHeaders -RequireAuthorization
     $releaseBody = [string](Get-Content -Raw -Encoding UTF8 -LiteralPath $ReleaseNotesFile)
     $release = Get-ExistingRelease -Owner $Owner -Repo $Repo -TagName $TagName -Headers $headers
+    $createdDraftRelease = $false
 
     if ($null -eq $release) {
         $payload = @{
             tag_name = $TagName
             name = $TagName
             body = $releaseBody
-            draft = $false
+            draft = $true
             prerelease = $false
             generate_release_notes = $false
         } | ConvertTo-Json -Depth 5
@@ -631,6 +632,7 @@ function Publish-GitHubReleaseWithApi {
             -Headers $headers `
             -ContentType "application/json; charset=utf-8" `
             -Body $payloadBytes
+        $createdDraftRelease = $true
     } elseif (-not $AllowExisting) {
         throw "GitHub release $TagName already exists."
     } else {
@@ -673,6 +675,24 @@ function Publish-GitHubReleaseWithApi {
             -Headers $headers `
             -ContentType "application/octet-stream" `
             -InFile $assetPath | Out-Null
+    }
+
+    if ($createdDraftRelease) {
+        $publishPayload = @{
+            tag_name = $TagName
+            name = $TagName
+            body = $releaseBody
+            draft = $false
+            prerelease = $false
+        } | ConvertTo-Json -Depth 5
+        $publishPayloadBytes = [System.Text.Encoding]::UTF8.GetBytes($publishPayload)
+
+        Invoke-RestMethod `
+            -Method Patch `
+            -Uri "https://api.github.com/repos/$Owner/$Repo/releases/$($release.id)" `
+            -Headers $headers `
+            -ContentType "application/json; charset=utf-8" `
+            -Body $publishPayloadBytes | Out-Null
     }
 }
 
