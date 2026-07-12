@@ -13,7 +13,10 @@ import {
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
-import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import {
+  countBlacklistedMultiSearchResults,
+  filterBlacklistedMultiSearchResults,
+} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -25,6 +28,9 @@ import type { Manga } from "@/renderer/types";
 import type { TagFavoriteSourceRun } from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
+import BlacklistedCardsDisplayToggle, {
+  useLocalBlacklistedCardsDisplay,
+} from "@/renderer/components/BlacklistedCardsDisplayToggle";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -154,32 +160,46 @@ export default function ScraperTagFavoriteResults({
   onSetSourcesRead,
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const {
+    shouldHideBlacklistedCards,
+    showBlacklistedCardsLocally,
+    setShowBlacklistedCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
   const manuallySplitMergedResults = React.useMemo(
     () => applyManualMultiSearchSplits(mergedResults, splitResultIds),
     [mergedResults, splitResultIds],
   );
-  const displayedMergedResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      sortByScraperViewHistoryNewState(
-        manuallySplitMergedResults,
-        (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-        viewHistoryRecordsById,
-        newViewHistoryIds,
-        showUnseenFirst,
-      ),
-      tagBlacklistByScraper,
-      hideBlacklistedCards,
+  const sortedMergedResults = React.useMemo(
+    () => sortByScraperViewHistoryNewState(
+      manuallySplitMergedResults,
+      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+      viewHistoryRecordsById,
+      newViewHistoryIds,
+      showUnseenFirst,
     ),
     [
-      hideBlacklistedCards,
       manuallySplitMergedResults,
       newViewHistoryIds,
       showUnseenFirst,
-      tagBlacklistByScraper,
       viewHistoryRecordsById,
     ],
   );
-  const hiddenMergedResultCount = manuallySplitMergedResults.length - displayedMergedResults.length;
+  const displayedMergedResults = React.useMemo(
+    () => filterBlacklistedMultiSearchResults(
+      sortedMergedResults,
+      tagBlacklistByScraper,
+      shouldHideBlacklistedCards,
+    ),
+    [
+      shouldHideBlacklistedCards,
+      sortedMergedResults,
+      tagBlacklistByScraper,
+    ],
+  );
+  const blacklistedMergedResultCount = React.useMemo(
+    () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
+    [sortedMergedResults, tagBlacklistByScraper],
+  );
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -254,8 +274,8 @@ export default function ScraperTagFavoriteResults({
             <p>
               Page {pageIndex + 1}, {displayedMergedResults.length} carte(s), {visibleSourceCount} resultat(s)
               source visible(s)
-              {hideBlacklistedCards && hiddenMergedResultCount > 0
-                ? `, ${hiddenMergedResultCount} masquee(s)`
+              {shouldHideBlacklistedCards && blacklistedMergedResultCount > 0
+                ? `, ${blacklistedMergedResultCount} masquee(s)`
                 : ""}.
             </p>
             <div className="multi-search__result-filter-stack">
@@ -275,13 +295,21 @@ export default function ScraperTagFavoriteResults({
               </div>
             </div>
           </div>
-          <TagFavoritePaginationActions
-            loading={loading}
-            canGoPrevious={canGoPrevious}
-            canGoNext={canGoNext}
-            onPreviousPage={onPreviousPage}
-            onNextPage={onNextPage}
-          />
+          <div className="multi-search__section-actions">
+            <BlacklistedCardsDisplayToggle
+              blacklistedCardCount={blacklistedMergedResultCount}
+              hideBlacklistedCards={hideBlacklistedCards}
+              showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+              onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+            />
+            <TagFavoritePaginationActions
+              loading={loading}
+              canGoPrevious={canGoPrevious}
+              canGoNext={canGoNext}
+              onPreviousPage={onPreviousPage}
+              onNextPage={onNextPage}
+            />
+          </div>
         </div>
 
         {displayedMergedResults.length ? (

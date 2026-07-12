@@ -22,6 +22,11 @@ import { buildSearchResultViewHistoryIdentity, isScraperViewHistoryCardNew } fro
 import type { Manga } from "@/renderer/types";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
+import {
+  countBlacklistedMultiSearchResults,
+  filterBlacklistedMultiSearchResults,
+} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import BlacklistedCardsDisplayToggle from "@/renderer/components/BlacklistedCardsDisplayToggle";
 
 type StatusItem = {
   key: string;
@@ -61,8 +66,12 @@ type Props = {
   newViewHistoryIds: Set<string>;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
+  hideBlacklistedCards?: boolean;
+  showBlacklistedCardsLocally?: boolean;
+  hiddenBlacklistedCardCount?: number;
   languageFilterModes: MultiSearchLanguageFilterModes;
   enableRomajiPhoneticMerge?: boolean;
+  onShowBlacklistedCardsLocallyChange?: (showBlacklistedCards: boolean) => void;
   onReload: () => void;
   onSecondaryAction?: () => void;
   onContinue?: (count: number) => void;
@@ -177,8 +186,12 @@ export default function ScraperLatestResults({
   newViewHistoryIds,
   tagBlacklistByScraper,
   tagFavorites = [],
+  hideBlacklistedCards = false,
+  showBlacklistedCardsLocally = false,
+  hiddenBlacklistedCardCount = 0,
   languageFilterModes,
   enableRomajiPhoneticMerge = false,
+  onShowBlacklistedCardsLocallyChange,
   onReload,
   onSecondaryAction,
   onContinue,
@@ -221,9 +234,23 @@ export default function ScraperLatestResults({
     )),
     [languageFilteredResults, newViewHistoryIds, viewHistoryRecordsById],
   );
+  const visibleBlacklistedResultCount = React.useMemo(
+    () => countBlacklistedMultiSearchResults(visibleResults, tagBlacklistByScraper),
+    [tagBlacklistByScraper, visibleResults],
+  );
+  const shouldHideBlacklistedCards = hideBlacklistedCards && !showBlacklistedCardsLocally;
+  const displayedResults = React.useMemo(
+    () => filterBlacklistedMultiSearchResults(
+      visibleResults,
+      tagBlacklistByScraper,
+      shouldHideBlacklistedCards,
+    ),
+    [shouldHideBlacklistedCards, tagBlacklistByScraper, visibleResults],
+  );
+  const blacklistedCardCount = Math.max(0, hiddenBlacklistedCardCount) + visibleBlacklistedResultCount;
   const visibleSourceCount = React.useMemo(
-    () => visibleResults.reduce((count, result) => count + result.sources.length, 0),
-    [visibleResults],
+    () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
+    [displayedResults],
   );
   const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
   const mergeProgressClassName = [
@@ -260,6 +287,14 @@ export default function ScraperLatestResults({
         <div className="scraper-latest-results__head-top">
           <h3>{title}</h3>
           <div className="multi-search__section-actions">
+            {onShowBlacklistedCardsLocallyChange ? (
+              <BlacklistedCardsDisplayToggle
+                blacklistedCardCount={blacklistedCardCount}
+                hideBlacklistedCards={hideBlacklistedCards}
+                showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+                onShowBlacklistedCardsLocallyChange={onShowBlacklistedCardsLocallyChange}
+              />
+            ) : null}
             {settingsActionLabel && onOpenSettings ? (
               <button
                 type="button"
@@ -331,7 +366,10 @@ export default function ScraperLatestResults({
         <div className="scraper-latest-results__summary">
           <p>{summary}</p>
           <p>
-            {visibleResults.length} carte(s), {visibleSourceCount} source(s) non vue(s).
+            {displayedResults.length} carte(s), {visibleSourceCount} source(s) non vue(s)
+            {shouldHideBlacklistedCards && blacklistedCardCount > 0
+              ? `, ${blacklistedCardCount} masquee(s)`
+              : ""}.
           </p>
           <div
             className={mergeProgressClassName}
@@ -403,9 +441,9 @@ export default function ScraperLatestResults({
         </div>
       ) : null}
 
-      {visibleResults.length ? (
+      {displayedResults.length ? (
         <MultiSearchVirtualizedResultsGrid
-          results={visibleResults}
+          results={displayedResults}
           libraryMangas={libraryMangas}
           bookmarkedSourceKeys={bookmarkedSourceKeys}
           sourceProgressIndex={sourceProgressIndex}
@@ -425,10 +463,14 @@ export default function ScraperLatestResults({
           })}
         />
       ) : !loading ? (
-        <div className="multi-search__message is-info">{emptyLabel}</div>
+        <div className="multi-search__message is-info">
+          {shouldHideBlacklistedCards && blacklistedCardCount > 0
+            ? "Toutes les nouveautes visibles sont masquees par la blacklist."
+            : emptyLabel}
+        </div>
       ) : null}
 
-      {visibleResults.length > 0 && replaceContinueActionLabel && onReplaceContinue ? (
+      {displayedResults.length > 0 && replaceContinueActionLabel && onReplaceContinue ? (
         <div className="scraper-latest-results__continue">
           <button
             type="button"

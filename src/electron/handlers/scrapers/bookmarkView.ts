@@ -685,11 +685,17 @@ export async function getScraperBookmarkView(
   const filteredCandidates = candidates
     .filter((candidate) => matchesBookmarkFilters(candidate, filters))
     .sort((left, right) => compareBookmarkViewCandidates(left, right, filters.sortBy));
-  const visibleCandidates = request?.hideBlacklistedCards
-    ? filteredCandidates.filter((candidate) => !hasBlacklistedTags(
-      getBlacklistEntries(request.blacklistedTagsByScraper, candidate.bookmark.scraperId),
+  const candidatesWithBlacklistState = filteredCandidates.map((candidate) => ({
+    candidate,
+    hasBlacklistedTags: hasBlacklistedTags(
+      getBlacklistEntries(request?.blacklistedTagsByScraper, candidate.bookmark.scraperId),
       candidate.bookmark.tags,
-    ))
+    ),
+  }));
+  const visibleCandidates = request?.hideBlacklistedCards
+    ? candidatesWithBlacklistState
+      .filter((entry) => !entry.hasBlacklistedTags)
+      .map((entry) => entry.candidate)
     : filteredCandidates;
 
   return {
@@ -697,7 +703,7 @@ export async function getScraperBookmarkView(
     allBookmarkCount: allBookmarks.length,
     scopeCount: scopeBookmarks.length,
     filteredCount: filteredCandidates.length,
-    hiddenBlacklistedCount: filteredCandidates.length - visibleCandidates.length,
+    hiddenBlacklistedCount: candidatesWithBlacklistState.filter((entry) => entry.hasBlacklistedTags).length,
     languageCodes: buildLanguageFilterCodes(candidates),
   };
 }

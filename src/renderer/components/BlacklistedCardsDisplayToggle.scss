@@ -1,0 +1,56 @@
+.blacklisted-cards-display-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.blacklisted-cards-display-toggle__count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid rgba(239, 83, 80, 0.28);
+  border-radius: 999px;
+  background: rgba(84, 24, 24, 0.28);
+  color: #ffd8d4;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.blacklisted-cards-display-toggle .blacklisted-cards-display-toggle__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(142, 142, 142, 0.38);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f0f0f0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.blacklisted-cards-display-toggle .blacklisted-cards-display-toggle__button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.blacklisted-cards-display-toggle .blacklisted-cards-display-toggle__button:hover,
+.blacklisted-cards-display-toggle .blacklisted-cards-display-toggle__button:focus-visible {
+  border-color: rgba(93, 156, 255, 0.62);
+  background: rgba(93, 156, 255, 0.12);
+  color: #eef4ff;
+}
+
+.blacklisted-cards-display-toggle .blacklisted-cards-display-toggle__button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
+}

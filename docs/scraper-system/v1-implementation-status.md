@@ -487,6 +487,9 @@ Les chips de tags de la fiche utilisent le meme marquage rouge. Dans
 `Nouveautes`, l'option de masquage des tags blacklistes agit comme une
 exclusion de selection : la card rejetee n'est pas ajoutee aux resultats non
 vus et ne remplit pas le quota recherche.
+Les vues qui appliquent ce masquage affichent le nombre de cards concernees et
+permettent de basculer localement sur un affichage grise sans modifier le
+reglage global.
 
 Dans `Nouveautes`, quand une card est enrichie avec sa `Fiche`, les langues
 extraites de la fiche remplacent aussi le signal du listing pour l'acceptation

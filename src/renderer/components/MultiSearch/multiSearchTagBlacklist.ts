@@ -71,3 +71,12 @@ export const filterBlacklistedMultiSearchResults = (
 
   return results.filter((result) => !hasMultiSearchBlacklistedTags(result, blacklistByScraper));
 };
+
+export const countBlacklistedMultiSearchResults = (
+  results: MultiSearchMergedResult[],
+  blacklistByScraper: ScraperTagBlacklistByScraper | null | undefined,
+): number => (
+  results.reduce((count, result) => (
+    count + (hasMultiSearchBlacklistedTags(result, blacklistByScraper) ? 1 : 0)
+  ), 0)
+);

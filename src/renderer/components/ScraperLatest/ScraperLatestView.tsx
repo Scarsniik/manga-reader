@@ -44,6 +44,7 @@ import buildScraperLatestSessionSettingsModal, {
   type ScraperLatestSessionSettings,
 } from "@/renderer/components/ScraperLatest/ScraperLatestSessionSettingsModal";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
+import { useLocalBlacklistedCardsDisplay } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import "@/renderer/components/History/style.scss";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/ScraperLatest/style.scss";
@@ -245,6 +246,13 @@ const formatIncludeValuesSummary = (
 export default function ScraperLatestView({ scrapers }: Props) {
   const { params, setParams } = useParams();
   const { openModal } = useModal();
+  const hideBlacklistedLatestCards = params?.scraperHideBlacklistedTagCards === true;
+  const {
+    shouldHideBlacklistedCards: shouldHideBlacklistedLatestCards,
+    showBlacklistedCardsLocally: showBlacklistedLatestCardsLocally,
+    setShowBlacklistedCardsLocally: setShowBlacklistedLatestCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedLatestCards);
+  const lastAppliedLatestBlacklistModeRef = React.useRef(shouldHideBlacklistedLatestCards ? "hide" : "show");
   const [activeTab, setActiveTab] = React.useState<LatestTabId>("scrapers");
   const [authorRefreshKey, setAuthorRefreshKey] = React.useState(0);
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
@@ -432,7 +440,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
       scraperIncludedLanguagesKey || "all-languages",
       scraperIncludedScrapersKey || "all-scrapers",
       scraperIncludedTagFavoritesKey || "no-tag-favorites",
-      params?.scraperHideBlacklistedTagCards === true ? "exclude-blacklisted" : "show-blacklisted",
+      shouldHideBlacklistedLatestCards ? "exclude-blacklisted" : "show-blacklisted",
       latestTagBlacklistKey || "no-blacklist",
     ].join("-");
 
@@ -591,13 +599,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-        excludeBlacklistedTagCards: params?.scraperHideBlacklistedTagCards === true,
+        excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
         tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
       },
     );
   }, [
     params?.scraperBlacklistedTagsByScraper,
-    params?.scraperHideBlacklistedTagCards,
     params?.scraperScrapeDetailsWithCards,
     scraperDeepPageLimit,
     scraperIncludedLanguageCodes,
@@ -608,6 +615,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperRuns.start,
+    shouldHideBlacklistedLatestCards,
     scrapers,
     tagResultLimit,
   ]);
@@ -952,6 +960,20 @@ export default function ScraperLatestView({ scrapers }: Props) {
     setScraperRefreshKey((currentKey) => currentKey + 1);
   }, [activeTab, authorActionsDisabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
+  React.useEffect(() => {
+    const nextMode = shouldHideBlacklistedLatestCards ? "hide" : "show";
+    if (lastAppliedLatestBlacklistModeRef.current === nextMode) {
+      return;
+    }
+
+    lastAppliedLatestBlacklistModeRef.current = nextMode;
+    if (activeTab !== "scrapers" || scraperRefreshKey === 0) {
+      return;
+    }
+
+    void handleReload();
+  }, [activeTab, handleReload, scraperRefreshKey, shouldHideBlacklistedLatestCards]);
+
   const handleSearchDeeper = React.useCallback(async () => {
     if (activeTab !== "scrapers" || scraperActionsDisabled) {
       return;
@@ -1031,6 +1053,12 @@ export default function ScraperLatestView({ scrapers }: Props) {
     : scraperRefreshKey > 0;
   const canContinueScraperScan = activeTab === "scrapers"
     && scraperRuns.runs.some((run) => run.canContinue === true);
+  const hiddenBlacklistedLatestCardCount = React.useMemo(
+    () => activeTab === "scrapers"
+      ? scraperRuns.runs.reduce((count, run) => count + run.excludedByBlacklistedTagCount, 0)
+      : 0,
+    [activeTab, scraperRuns.runs],
+  );
 
   return (
     <section ref={rootRef} className="scraper-latest">
@@ -1132,8 +1160,14 @@ export default function ScraperLatestView({ scrapers }: Props) {
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
+        hideBlacklistedCards={activeTab === "scrapers" ? hideBlacklistedLatestCards : false}
+        showBlacklistedCardsLocally={showBlacklistedLatestCardsLocally}
+        hiddenBlacklistedCardCount={hiddenBlacklistedLatestCardCount}
         languageFilterModes={sourceResults.languageFilterModes}
         enableRomajiPhoneticMerge={params?.multiSearchEnableRomajiPhoneticMerge === true}
+        onShowBlacklistedCardsLocallyChange={activeTab === "scrapers"
+          ? setShowBlacklistedLatestCardsLocally
+          : undefined}
         onReload={handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}

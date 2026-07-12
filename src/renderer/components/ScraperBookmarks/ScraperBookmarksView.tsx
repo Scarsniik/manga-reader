@@ -49,6 +49,9 @@ import {
   getScraperTagBlacklistEntries,
 } from '@/renderer/utils/scraperTagBlacklist';
 import { getScraperTagFavoriteSources } from '@/renderer/utils/scraperTagFavorites';
+import BlacklistedCardsDisplayToggle, {
+  useLocalBlacklistedCardsDisplay,
+} from '@/renderer/components/BlacklistedCardsDisplayToggle';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
 import type { ReadingListItem } from '@/renderer/types/readingList';
@@ -163,16 +166,21 @@ export default function ScraperBookmarksView({
   const filteredScraper = filterScraperId ? scrapersById.get(filterScraperId) ?? null : null;
   const bookmarksReturn = locationState?.bookmarksReturn ?? null;
   const hideBlacklistedBookmarkCards = params?.scraperHideBlacklistedTagCards === true;
+  const {
+    shouldHideBlacklistedCards: shouldHideBlacklistedBookmarkCards,
+    showBlacklistedCardsLocally,
+    setShowBlacklistedCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedBookmarkCards);
   const bookmarkViewRequest = useMemo((): ScraperBookmarkViewRequest => ({
     scraperId: filterScraperId ?? null,
     filters: bookmarkFilters,
-    hideBlacklistedCards: hideBlacklistedBookmarkCards,
+    hideBlacklistedCards: shouldHideBlacklistedBookmarkCards,
     blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
   }), [
     bookmarkFilters,
     filterScraperId,
-    hideBlacklistedBookmarkCards,
     params?.scraperBlacklistedTagsByScraper,
+    shouldHideBlacklistedBookmarkCards,
   ]);
   const {
     loaded,
@@ -942,6 +950,13 @@ export default function ScraperBookmarksView({
         </div>
 
         <div className="scraper-bookmarks-view__header-actions">
+          <BlacklistedCardsDisplayToggle
+            blacklistedCardCount={hiddenBlacklistedBookmarkCount}
+            hideBlacklistedCards={hideBlacklistedBookmarkCards}
+            showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+            onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+          />
+
           <button
             type="button"
             className="scraper-bookmarks-view__clear"
@@ -1089,7 +1104,7 @@ export default function ScraperBookmarksView({
             ? 'Aucun bookmark n\'a encore ete enregistre pour ce scrapper.'
             : 'Aucun bookmark scraper n\'a encore ete enregistre.'}
         </div>
-      ) : displayedBookmarks.length === 0 && hideBlacklistedBookmarkCards && hiddenBlacklistedBookmarkCount > 0 ? (
+      ) : displayedBookmarks.length === 0 && shouldHideBlacklistedBookmarkCards && hiddenBlacklistedBookmarkCount > 0 ? (
         <div className="scraper-browser__message is-warning">
           Tous les bookmarks visibles sont masques par la blacklist.
         </div>

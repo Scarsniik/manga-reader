@@ -27,8 +27,14 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
-import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import {
+  countBlacklistedMultiSearchResults,
+  filterBlacklistedMultiSearchResults,
+} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
+import BlacklistedCardsDisplayToggle, {
+  useLocalBlacklistedCardsDisplay,
+} from "@/renderer/components/BlacklistedCardsDisplayToggle";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -166,6 +172,11 @@ export default function MultiSearchResultsSection({
   onToggleLanguageFilterMode,
   onToggleReadingStatusFilter,
 }: Props) {
+  const {
+    shouldHideBlacklistedCards,
+    showBlacklistedCardsLocally,
+    setShowBlacklistedCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
   const sortMergedResultsByUnseen = React.useCallback((results: MultiSearchMergedResult[]) => (
     sortByScraperViewHistoryNewState(
       results,
@@ -175,15 +186,22 @@ export default function MultiSearchResultsSection({
       showUnseenFirst,
     )
   ), [newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById]);
+  const sortedMergedResults = React.useMemo(
+    () => sortMergedResultsByUnseen(mergedResults),
+    [mergedResults, sortMergedResultsByUnseen],
+  );
   const displayedMergedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
-      sortMergedResultsByUnseen(mergedResults),
+      sortedMergedResults,
       tagBlacklistByScraper,
-      hideBlacklistedCards,
+      shouldHideBlacklistedCards,
     ),
-    [hideBlacklistedCards, mergedResults, sortMergedResultsByUnseen, tagBlacklistByScraper],
+    [shouldHideBlacklistedCards, sortedMergedResults, tagBlacklistByScraper],
   );
-  const hiddenMergedResultCount = mergedResults.length - displayedMergedResults.length;
+  const blacklistedMergedResultCount = React.useMemo(
+    () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
+    [sortedMergedResults, tagBlacklistByScraper],
+  );
   const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
   const mergeProgressClassName = [
     "multi-search__merge-progress",
@@ -191,18 +209,26 @@ export default function MultiSearchResultsSection({
   ].filter(Boolean).join(" ");
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
-      ? runs.map((run) => ({
-        scraperId: run.scraper.id,
-        scraperName: run.scraper.name,
-        sourceResultCount: run.results.length,
-        results: filterBlacklistedMultiSearchResults(
-          sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
-          tagBlacklistByScraper,
-          hideBlacklistedCards,
-        ),
-      }))
+      ? runs.map((run) => {
+        const sortedResults = sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult));
+
+        return {
+          scraperId: run.scraper.id,
+          scraperName: run.scraper.name,
+          blacklistedResultCount: countBlacklistedMultiSearchResults(sortedResults, tagBlacklistByScraper),
+          results: filterBlacklistedMultiSearchResults(
+            sortedResults,
+            tagBlacklistByScraper,
+            shouldHideBlacklistedCards,
+          ),
+        };
+      })
       : []
-  ), [hideBlacklistedCards, runs, sortMergedResultsByUnseen, tagBlacklistByScraper, viewMode]);
+  ), [runs, shouldHideBlacklistedCards, sortMergedResultsByUnseen, tagBlacklistByScraper, viewMode]);
+  const blacklistedScraperResultCount = React.useMemo(
+    () => scraperResultGroups.reduce((count, group) => count + group.blacklistedResultCount, 0),
+    [scraperResultGroups],
+  );
 
   if (viewMode === "merged") {
     return (
@@ -212,8 +238,8 @@ export default function MultiSearchResultsSection({
             <h3>Resultats fusionnes</h3>
             <p>
               {displayedMergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s)
-              {hideBlacklistedCards && hiddenMergedResultCount > 0
-                ? `, ${hiddenMergedResultCount} masquee(s)`
+              {shouldHideBlacklistedCards && blacklistedMergedResultCount > 0
+                ? `, ${blacklistedMergedResultCount} masquee(s)`
                 : ""}.
             </p>
             <div
@@ -250,6 +276,12 @@ export default function MultiSearchResultsSection({
             </div>
           </div>
           <div className="multi-search__section-actions">
+            <BlacklistedCardsDisplayToggle
+              blacklistedCardCount={blacklistedMergedResultCount}
+              hideBlacklistedCards={hideBlacklistedCards}
+              showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+              onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+            />
             <button
               type="button"
               className="multi-search__export-json-button"
@@ -326,7 +358,12 @@ export default function MultiSearchResultsSection({
       <div className="multi-search__section-head">
         <div>
           <h3>Resultats par scrapper</h3>
-          <p>{visibleSourceCount} source(s) chargee(s) sans fusion.</p>
+          <p>
+            {visibleSourceCount} source(s) chargee(s) sans fusion
+            {shouldHideBlacklistedCards && blacklistedScraperResultCount > 0
+              ? `, ${blacklistedScraperResultCount} masquee(s)`
+              : ""}.
+          </p>
           <div className="multi-search__result-filter-stack">
             <MultiSearchTextFilterBar
               value={textFilter}
@@ -349,6 +386,12 @@ export default function MultiSearchResultsSection({
           </div>
         </div>
         <div className="multi-search__section-actions">
+          <BlacklistedCardsDisplayToggle
+            blacklistedCardCount={blacklistedScraperResultCount}
+            hideBlacklistedCards={hideBlacklistedCards}
+            showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+            onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+          />
           <button
             type="button"
             className="multi-search__export-json-button"
@@ -393,7 +436,7 @@ export default function MultiSearchResultsSection({
               onOpenProgressReader={onOpenProgressReader}
               onSetSourcesRead={onSetSourcesRead}
             />
-            {!group.results.length && hideBlacklistedCards && group.sourceResultCount > 0 ? (
+            {!group.results.length && shouldHideBlacklistedCards && group.blacklistedResultCount > 0 ? (
               <div className="scraper-browser__message">Tous les resultats visibles sont masques par la blacklist.</div>
             ) : null}
           </div>

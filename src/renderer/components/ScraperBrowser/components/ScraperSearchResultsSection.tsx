@@ -10,6 +10,9 @@ import {
 } from '@/renderer/utils/scraperTagBlacklist';
 import type { ScraperTagFavoriteSourceTarget } from '@/renderer/utils/scraperTagFavorites';
 import { appendScraperSearchResultTag } from '@/renderer/utils/scraperSearchResultTags';
+import BlacklistedCardsDisplayToggle, {
+  useLocalBlacklistedCardsDisplay,
+} from '@/renderer/components/BlacklistedCardsDisplayToggle';
 
 type Props = {
   scraperId: string;
@@ -88,6 +91,11 @@ export default function ScraperSearchResultsSection({
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
 }: Props) {
+  const {
+    shouldHideBlacklistedCards,
+    showBlacklistedCardsLocally,
+    setShowBlacklistedCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
   const resultsWithTagContext = React.useMemo(() => {
     if (mode !== 'tag') {
       return visibleSearchResults;
@@ -104,15 +112,21 @@ export default function ScraperSearchResultsSection({
     ));
   }, [authorTitle, mode, query, visibleSearchResults]);
 
+  const blacklistedSearchResultCount = React.useMemo(() => (
+    resultsWithTagContext.reduce((count, result) => (
+      count + (getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length > 0 ? 1 : 0)
+    ), 0)
+  ), [resultsWithTagContext, tagBlacklistEntries]);
+
   const displayedSearchResults = React.useMemo(() => {
-    if (!hideBlacklistedCards) {
+    if (!shouldHideBlacklistedCards) {
       return resultsWithTagContext;
     }
 
     return resultsWithTagContext.filter((result) => (
       getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length === 0
     ));
-  }, [hideBlacklistedCards, resultsWithTagContext, tagBlacklistEntries]);
+  }, [resultsWithTagContext, shouldHideBlacklistedCards, tagBlacklistEntries]);
 
   if (!visibleSearchResults.length && !backLabel) {
     return null;
@@ -180,6 +194,12 @@ export default function ScraperSearchResultsSection({
 
         <div className="scraper-browser__results-side">
           {headerAction}
+          <BlacklistedCardsDisplayToggle
+            blacklistedCardCount={blacklistedSearchResultCount}
+            hideBlacklistedCards={hideBlacklistedCards}
+            showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+            onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+          />
           {searchPage ? (
             <span className="scraper-browser__results-count">
               Page {searchPageIndex + 1}
@@ -239,7 +259,11 @@ export default function ScraperSearchResultsSection({
         })}
       </div>
       {!displayedSearchResults.length && visibleSearchResults.length ? (
-        <div className="scraper-browser__message">Tous les resultats visibles sont masques par la blacklist.</div>
+        <div className="scraper-browser__message">
+          {shouldHideBlacklistedCards && blacklistedSearchResultCount > 0
+            ? 'Tous les resultats visibles sont masques par la blacklist.'
+            : 'Aucun resultat ne correspond aux filtres actifs.'}
+        </div>
       ) : null}
 
       {shouldShowSearchPagination ? (

@@ -10,7 +10,10 @@ import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/Mult
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
-import { filterBlacklistedMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
+import {
+  countBlacklistedMultiSearchResults,
+  filterBlacklistedMultiSearchResults,
+} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type {
   MultiSearchLanguageFilterMode,
@@ -23,6 +26,9 @@ import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
+import BlacklistedCardsDisplayToggle, {
+  useLocalBlacklistedCardsDisplay,
+} from "@/renderer/components/BlacklistedCardsDisplayToggle";
 
 type Props = {
   title: string;
@@ -135,6 +141,11 @@ export default function ScraperAuthorCombinedResults({
   onSetSourcesRead,
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const {
+    shouldHideBlacklistedCards,
+    showBlacklistedCardsLocally,
+    setShowBlacklistedCardsLocally,
+  } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
   const manuallySplitResults = React.useMemo(
     () => applyManualMultiSearchSplits(displayedResults, splitResultIds),
     [displayedResults, splitResultIds],
@@ -143,9 +154,13 @@ export default function ScraperAuthorCombinedResults({
     () => filterBlacklistedMultiSearchResults(
       manuallySplitResults,
       tagBlacklistByScraper,
-      hideBlacklistedCards,
+      shouldHideBlacklistedCards,
     ),
-    [hideBlacklistedCards, manuallySplitResults, tagBlacklistByScraper],
+    [manuallySplitResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
+  );
+  const blacklistedResultCount = React.useMemo(
+    () => countBlacklistedMultiSearchResults(manuallySplitResults, tagBlacklistByScraper),
+    [manuallySplitResults, tagBlacklistByScraper],
   );
 
   return (
@@ -257,8 +272,8 @@ export default function ScraperAuthorCombinedResults({
               <h3>{resultsSectionTitle}</h3>
               <p>
                 {visibleDisplayedResults.length} carte(s), {loadedSourceCount} source(s) chargee(s)
-                {hideBlacklistedCards && visibleDisplayedResults.length < visibleResultCount
-                  ? `, ${visibleResultCount - visibleDisplayedResults.length} masquee(s)`
+                {shouldHideBlacklistedCards && blacklistedResultCount > 0
+                  ? `, ${blacklistedResultCount} masquee(s)`
                   : ""}.
               </p>
               <div className="multi-search__result-filter-stack">
@@ -281,6 +296,14 @@ export default function ScraperAuthorCombinedResults({
                   />
                 </div>
               </div>
+            </div>
+            <div className="multi-search__section-actions">
+              <BlacklistedCardsDisplayToggle
+                blacklistedCardCount={blacklistedResultCount}
+                hideBlacklistedCards={hideBlacklistedCards}
+                showBlacklistedCardsLocally={showBlacklistedCardsLocally}
+                onShowBlacklistedCardsLocallyChange={setShowBlacklistedCardsLocally}
+              />
             </div>
           </div>
 
