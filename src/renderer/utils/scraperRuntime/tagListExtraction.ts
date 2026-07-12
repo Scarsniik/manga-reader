@@ -90,10 +90,8 @@ const shouldResolveTagTargetAsUrl = (
     .toLowerCase();
 
   return (
-    normalizedAttribute === "href"
-    || normalizedAttribute === "src"
+    normalizedAttribute === "src"
     || normalizedAttribute === "action"
-    || (!attribute && (element?.tagName === "A" || element?.tagName === "IMG"))
     || looksLikeScraperDirectUrlInput(value)
   );
 };
@@ -206,7 +204,7 @@ const buildTagListItem = (
 
   return {
     name,
-    url: rawUrl ? toAbsoluteScraperUrl(rawUrl, documentUrl) : undefined,
+    url: rawUrl || undefined,
     count: count || undefined,
   };
 };

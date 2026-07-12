@@ -375,10 +375,11 @@ fin normale de pagination : les tags deja recuperes sont conserves et enregistre
 | `tagUrlSelector` | non | tag | extrait l'URL d'ouverture du tag ou une valeur brute a injecter dans le template du module `Tag` |
 | `tagCountSelector` | non | tag | extrait le compteur affiche par le site |
 
-Les items sont dedoublonnes par cible tag quand elle existe, sinon par nom. Les valeurs extraites
-depuis un lien HTML, un attribut `href`, `src` ou `action`, ou une URL directe sont resolues depuis
-la page courante. Les autres valeurs restent brutes : a l'ouverture du tag, le module `Tag` les
-utilise comme valeur de template si sa strategie d'URL est `template`.
+Les items sont dedoublonnes par cible tag quand elle existe, sinon par nom. Les URLs absolues,
+les chemins explicites (`/tag/x`, `./tag/x`, `../tag/x`) et les valeurs `src` ou `action` sont
+resolus depuis la page courante. Un `href` ou un texte contenant seulement un slug, par exemple
+`animal-bond`, reste brut : a l'ouverture du tag, le module `Tag` l'utilise comme valeur de
+template si sa strategie d'URL est `template`.
 
 ### Runtime
 
