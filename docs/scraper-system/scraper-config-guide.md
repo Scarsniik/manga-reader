@@ -372,11 +372,13 @@ fin normale de pagination : les tags deja recuperes sont conserves et enregistre
 | `tagListSelector` | non | document | limite la recherche a un ou plusieurs conteneurs de tags |
 | `tagItemSelector` | oui, sauf `collectFromDetails` | conteneur ou document | detecte chaque tag |
 | `tagNameSelector` | oui, sauf `collectFromDetails` | tag | extrait le nom affiche ; un tag sans nom est ignore |
-| `tagUrlSelector` | non | tag | extrait l'URL ou la valeur source du tag |
+| `tagUrlSelector` | non | tag | extrait l'URL d'ouverture du tag ou une valeur brute a injecter dans le template du module `Tag` |
 | `tagCountSelector` | non | tag | extrait le compteur affiche par le site |
 
-Les items sont dedoublonnes par URL quand elle existe, sinon par nom. Les URLs relatives sont
-resolues depuis la page courante.
+Les items sont dedoublonnes par cible tag quand elle existe, sinon par nom. Les valeurs extraites
+depuis un lien HTML, un attribut `href`, `src` ou `action`, ou une URL directe sont resolues depuis
+la page courante. Les autres valeurs restent brutes : a l'ouverture du tag, le module `Tag` les
+utilise comme valeur de template si sa strategie d'URL est `template`.
 
 ### Runtime
 

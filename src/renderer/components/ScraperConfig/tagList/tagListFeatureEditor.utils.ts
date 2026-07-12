@@ -101,9 +101,9 @@ export const SCRAPING_FIELDS: Field[] = [
   },
   {
     name: "tagUrlSelector",
-    label: "Selecteur du lien tag",
+    label: "Selecteur du lien ou de la valeur tag",
     type: "text",
-    placeholder: "Optionnel : a@href, .name@href",
+    placeholder: "Optionnel : a@href, .tag@data-id, .slug",
   },
   {
     name: "tagCountSelector",
@@ -242,7 +242,7 @@ export const buildValidationPresentation = (
   }
 
   if (tagUrlCheck?.matchedCount) {
-    details.push(`Liens tag detectes : ${tagUrlCheck.matchedCount}`);
+    details.push(`Cibles tag detectees : ${tagUrlCheck.matchedCount}`);
   }
 
   if (pageCountCheck?.matchedCount) {
@@ -258,7 +258,7 @@ export const buildValidationPresentation = (
   }
 
   if (previewTags[0]?.url) {
-    details.push(`Premier lien tag : ${formatDisplayUrl(previewTags[0].url)}`);
+    details.push(`Premiere cible tag : ${formatDisplayUrl(previewTags[0].url)}`);
   }
 
   return {

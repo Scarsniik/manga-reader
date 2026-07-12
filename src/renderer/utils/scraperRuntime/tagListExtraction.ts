@@ -13,6 +13,7 @@ import {
   toAbsoluteScraperUrl,
   uniqueValues,
 } from "@/renderer/utils/scraperRuntime/selectorExtraction";
+import { looksLikeScraperDirectUrlInput } from "@/renderer/utils/scraperRuntime/urlResolution";
 
 type SelectorValueMode = "text" | "url";
 
@@ -79,6 +80,86 @@ const extractFieldValuesIncludingSelf = (
   ]);
 };
 
+const shouldResolveTagTargetAsUrl = (
+  element: Element | undefined,
+  attribute: string | undefined,
+  value: string,
+): boolean => {
+  const normalizedAttribute = String(attribute ?? "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    normalizedAttribute === "href"
+    || normalizedAttribute === "src"
+    || normalizedAttribute === "action"
+    || (!attribute && (element?.tagName === "A" || element?.tagName === "IMG"))
+    || looksLikeScraperDirectUrlInput(value)
+  );
+};
+
+const normalizeTagTargetValue = (
+  value: string,
+  documentUrl: string,
+  element?: Element,
+  attribute?: string,
+): string => {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return "";
+  }
+
+  return shouldResolveTagTargetAsUrl(element, attribute, trimmedValue)
+    ? toAbsoluteScraperUrl(trimmedValue, documentUrl)
+    : trimmedValue;
+};
+
+const extractTagTargetValuesIncludingSelf = (
+  root: ParentNode,
+  input: ScraperFieldSelector | string,
+  documentUrl: string,
+): string[] => {
+  const selector = normalizeScraperFieldSelector(input);
+  if (!selector) {
+    return [];
+  }
+
+  if (selector.kind === "regex") {
+    return uniqueValues(
+      extractRegexValuesFromRoot(root, selector.value)
+        .map((value) => normalizeTagTargetValue(value, documentUrl))
+        .filter(Boolean),
+    );
+  }
+
+  if (!(root instanceof Element)) {
+    return [];
+  }
+
+  const parsedSelector = parseSelectorExpression(selector.value);
+  if (!parsedSelector.selector) {
+    return [];
+  }
+
+  const matchedElements = [
+    ...Array.from(root.querySelectorAll(parsedSelector.selector)),
+    ...(root.matches(parsedSelector.selector) ? [root] : []),
+  ];
+
+  return uniqueValues(
+    matchedElements
+      .map((element) => (
+        normalizeTagTargetValue(
+          getSelfSelectorValue(element, parsedSelector.selector, parsedSelector.attribute, "url"),
+          documentUrl,
+          element,
+          parsedSelector.attribute,
+        )
+      ))
+      .filter(Boolean),
+  );
+};
+
 const uniqueTagListItems = (items: ScraperTagListItem[]): ScraperTagListItem[] => {
   const seen = new Set<string>();
 
@@ -117,7 +198,7 @@ const buildTagListItem = (
   }
 
   const rawUrl = config.tagUrlSelector
-    ? extractFieldValuesIncludingSelf(item, config.tagUrlSelector, "url")[0]
+    ? extractTagTargetValuesIncludingSelf(item, config.tagUrlSelector, documentUrl)[0]
     : "";
   const count = config.tagCountSelector
     ? extractFieldValuesIncludingSelf(item, config.tagCountSelector, "text")[0]
