@@ -796,6 +796,12 @@
 	outline-offset: 2px;
 }
 
+.reader-controls .reader-controls__skip-reading-list-item {
+	margin-left: auto;
+	border-color: rgba(224, 173, 84, 0.34);
+	color: #e7c58d;
+}
+
 .reader-empty {
 	text-align: center;
 	color: #ccc;

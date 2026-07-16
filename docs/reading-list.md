@@ -1,4 +1,4 @@
-# Listes de lecture temporaires
+# Listes de lecture
 
 ## Création
 
@@ -8,7 +8,7 @@ fiche manga ou un lecteur.
 
 La conversion respecte l'ordre des onglets. Par défaut, les onglets sources sont fermés et remplacés par un onglet
 `Liste de lecture`. L'option générale `Conserver les onglets manga après la création d'une liste de lecture` permet de
-les garder. La liste reste uniquement en mémoire et disparaît avec la session du workspace.
+les garder.
 
 ### Depuis les bookmarks
 
@@ -20,12 +20,31 @@ Sans lecture aléatoire, les premiers bookmarks sont pris dans leur ordre d'affi
 affichés sont mélangés avant la sélection. La création ouvre et active un nouvel onglet `Liste de lecture` dans le
 workspace.
 
+## Enregistrement
+
+La page de préparation permet d'enregistrer la liste telle qu'elle est affichée. Une liste enregistrée conserve son
+ordre, ses mangas et les métadonnées utiles à leur affichage et à leur réouverture. Elle n'a pour le moment ni nom ni
+description.
+
+Les listes sont stockées dans le fichier utilisateur `data/saved-reading-lists.json`. Elles restent donc disponibles
+après la fermeture du workspace ou de l'application.
+
+La page Bookmarks possède deux onglets :
+
+- `Bookmarks`, ouvert par défaut, conserve la vue et les actions existantes ;
+- `Listes`, affiche une ligne par liste enregistrée avec le nombre de mangas, un aperçu des premières couvertures et la
+  date d'enregistrement.
+
+Un clic sur une ligne ouvre la page de préparation de la liste dans le workspace. Le bouton `Lecture` l'ouvre et lance
+directement le premier manga. Le bouton `Supprimer` efface la liste enregistrée sans supprimer ses mangas, leurs
+bookmarks ou leur progression.
+
 ## Options
 
 La page de liste propose trois options avant le lancement :
 
 - `Lecture aléatoire`, désactivée par défaut, mélange une fois la liste au lancement ;
-- `Retirer le bookmark après lecture`, désactivée par défaut, retire un bookmark scraper existant lorsque le manga est terminé ;
+- `Retirer le bookmark après lecture`, activée par défaut, retire un bookmark scraper existant lorsque le manga est terminé ;
 - `Reprendre depuis la progression`, activée par défaut, reprend chaque manga à sa progression enregistrée. Une lecture
   déjà terminée redémarre à la première page.
 
@@ -41,6 +60,9 @@ Après la dernière page d'un manga, une transition indique le titre, la couvert
 Cette transition permet aussi d'ouvrir la fiche du manga terminé dans un nouvel onglet. Les commandes `Suivant`, clavier
 et souris du lecteur continuent la liste. Le dernier manga affiche la même transition avant le résumé. Le bouton retour
 du lecteur revient à la page de préparation de la liste.
+
+Pendant la lecture, l'action `Passer au manga suivant` ouvre directement cette transition sans marquer le manga courant
+comme lu et sans retirer son bookmark. La poursuite depuis la transition charge ensuite l'élément suivant normalement.
 
 Tant qu'il reste des mangas, la transition propose aussi `Terminer la liste`. Cette action ouvre immédiatement le résumé
 sans marquer les éléments restants comme lus. Les cards du résumé indiquent explicitement `Lu` ou `Non lu` selon ce qui

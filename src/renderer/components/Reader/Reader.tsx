@@ -550,6 +550,7 @@ const Reader: React.FC<ReaderProps> = ({
                     isLastPage={navigation.isLastPage}
                     isTransitionPage={navigation.isTransitionPage}
                     isCompletionPage={navigation.isCompletionPage}
+                    isReadingListSkipTransition={navigation.isReadingListSkipTransition}
                     transitionDirection={navigation.transitionDirection}
                     activeTransitionTarget={navigation.activeTransitionTarget}
                     completionRecommendations={navigation.completionRecommendations}
@@ -680,6 +681,8 @@ const Reader: React.FC<ReaderProps> = ({
                 transitionDirection={navigation.transitionDirection}
                 onPrev={navigation.prev}
                 onNext={navigation.next}
+                canSkipReadingListItem={navigation.canSkipReadingListItem}
+                onSkipReadingListItem={readingListNavigation ? navigation.skipReadingListItem : undefined}
             />
         </div>
     );

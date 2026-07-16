@@ -77,6 +77,7 @@ type ReadingListWorkspaceTarget = {
         };
         sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
     }>;
+    autoStart?: boolean;
     title?: string;
 };
 
@@ -191,6 +192,10 @@ const isOptionalStringList = (value: unknown): boolean => (
     || (Array.isArray(value) && value.every((entry) => typeof entry === "string"))
 );
 
+const isOptionalBoolean = (value: unknown): boolean => (
+    value === undefined || typeof value === "boolean"
+);
+
 const isReadingListItem = (value: unknown): boolean => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         return false;
@@ -302,6 +307,7 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
             Array.isArray(readingListTarget.items)
             && readingListTarget.items.length > 0
             && readingListTarget.items.every(isReadingListItem)
+            && isOptionalBoolean(readingListTarget.autoStart)
         );
     }
 

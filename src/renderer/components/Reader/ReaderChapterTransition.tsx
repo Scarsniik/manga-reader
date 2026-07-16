@@ -12,6 +12,7 @@ type Props = {
     onOpenDetails?: () => void;
     targetKind?: 'library' | 'scraper' | 'reading-list';
     isReadingListCompletion?: boolean;
+    isReadingListItemSkipped?: boolean;
 };
 
 const ReaderChapterTransition: React.FC<Props> = ({
@@ -26,10 +27,13 @@ const ReaderChapterTransition: React.FC<Props> = ({
     onOpenDetails,
     targetKind,
     isReadingListCompletion = false,
+    isReadingListItemSkipped = false,
 }) => {
     const isPrevious = direction === 'previous';
     const isReadingList = targetKind === 'reading-list';
-    const eyebrow = isReadingList ? 'Manga terminé' : isPrevious ? 'Début du chapitre' : 'Fin du chapitre';
+    const eyebrow = isReadingList
+        ? isReadingListItemSkipped ? 'Manga passé' : 'Manga terminé'
+        : isPrevious ? 'Début du chapitre' : 'Fin du chapitre';
     const titleText = isReadingList
         ? isReadingListCompletion ? 'La liste de lecture est terminée' : 'La liste de lecture continue'
         : isPrevious ? 'Le chapitre précédent est disponible' : 'La suite est prête';
@@ -38,7 +42,9 @@ const ReaderChapterTransition: React.FC<Props> = ({
         : isReadingList
         ? isReadingListCompletion
             ? 'Continue avec la page suivante pour afficher le résumé de la lecture.'
-            : 'Le manga suivant de la liste sera ouvert si tu continues avec la page suivante.'
+            : isReadingListItemSkipped
+                ? 'Ce manga reste non lu. Le manga suivant sera ouvert si tu continues avec la page suivante.'
+                : 'Le manga suivant de la liste sera ouvert si tu continues avec la page suivante.'
         : 'Le prochain chapitre sera ouvert si tu continues avec la page suivante.';
     const metaLabel = isPrevious ? 'Lecture précédente' : 'Prochaine lecture';
     const hint = isPrevious
@@ -84,7 +90,7 @@ const ReaderChapterTransition: React.FC<Props> = ({
                                 className="reader-transition__button secondary"
                                 onClick={onOpenDetails}
                             >
-                                Ouvrir la fiche du manga lu
+                                Ouvrir la fiche du manga
                             </button>
                         ) : null}
                         {isReadingList && !isReadingListCompletion && onFinishReadingList ? (

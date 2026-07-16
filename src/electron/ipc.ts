@@ -20,6 +20,7 @@ import * as selectorAssistantWindow from "./handlers/selectorAssistantWindow";
 import * as appUpdate from "./handlers/appUpdate";
 import * as jsonDocuments from "./handlers/jsonDocuments";
 import * as history from "./handlers/history";
+import * as readingLists from "./handlers/readingLists";
 import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import * as japaneseInflection from "./handlers/japaneseInflection";
 import * as voicevox from "./handlers/voicevox";
@@ -79,6 +80,12 @@ const notifyMangasUpdated = () => {
 const notifyHistoryUpdated = () => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("history-updated");
+    }
+};
+
+const notifySavedReadingListsUpdated = () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("saved-reading-lists-updated");
     }
 };
 
@@ -175,6 +182,26 @@ ipcMain.handle("remove-search-history-record", async (event: IpcMainInvokeEvent,
     const records = await history.removeSearchHistoryRecord(event, historyId);
     notifyHistoryUpdated();
     return records;
+});
+
+// Saved reading lists
+ipcMain.handle("get-saved-reading-lists", async () => readingLists.getSavedReadingLists());
+ipcMain.handle("get-saved-reading-list", async (_event: IpcMainInvokeEvent, readingListId: unknown) => (
+    readingLists.getSavedReadingList(readingListId)
+));
+ipcMain.handle("save-reading-list", async (_event: IpcMainInvokeEvent, request: unknown) => {
+    const savedList = await readingLists.saveReadingList(
+        request as Parameters<typeof readingLists.saveReadingList>[0],
+    );
+    notifySavedReadingListsUpdated();
+    return savedList;
+});
+ipcMain.handle("delete-saved-reading-list", async (_event: IpcMainInvokeEvent, readingListId: unknown) => {
+    const deleted = await readingLists.deleteSavedReadingList(readingListId);
+    if (deleted) {
+        notifySavedReadingListsUpdated();
+    }
+    return deleted;
 });
 
 // Mangas

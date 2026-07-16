@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Reader from "@/renderer/components/Reader/Reader";
 import ReadingListCard from "@/renderer/components/ReadingList/ReadingListCard";
+import ReadingListSetup from "@/renderer/components/ReadingList/ReadingListSetup";
 import {
   getReadingListBookmarkTarget,
   resolveReadingListDetailsTarget,
   resolveReadingListReaderTarget,
 } from "@/renderer/components/ReadingList/readingListReader";
 import { shuffleReadingListItems } from "@/renderer/components/ReadingList/readingListItems";
+import useSaveReadingList from "@/renderer/components/ReadingList/useSaveReadingList";
 import useAuthors from "@/renderer/hooks/useAuthors";
 import useTags from "@/renderer/hooks/useTags";
 import {
@@ -29,17 +31,18 @@ import "@/renderer/components/ReadingList/style.scss";
 
 type Props = {
   initialItems: ReadingListItem[];
+  autoStart?: boolean;
 };
 
 type ReadingListPhase = "setup" | "reading" | "summary";
 
 const DEFAULT_OPTIONS: ReadingListOptions = {
   randomOrder: false,
-  removeBookmarkAfterReading: false,
+  removeBookmarkAfterReading: true,
   resumeProgress: true,
 };
 
-export default function ReadingListView({ initialItems }: Props) {
+export default function ReadingListView({ initialItems, autoStart = false }: Props) {
   const { authors } = useAuthors();
   const { tags } = useTags();
   const [items, setItems] = useState<ReadingListItem[]>(initialItems);
@@ -52,6 +55,8 @@ export default function ReadingListView({ initialItems }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Record<string, ReadingListItemStatus>>({});
   const requestIdRef = useRef(0);
+  const autoStartHandledRef = useRef(false);
+  const readingListSave = useSaveReadingList(items);
 
   const handleOpenDetails = useCallback(async (item: ReadingListItem) => {
     try {
@@ -161,6 +166,15 @@ export default function ReadingListView({ initialItems }: Props) {
     void loadItem(0, nextOrderedItems);
   }, [items, loadItem, options.randomOrder]);
 
+  useEffect(() => {
+    if (!autoStart || autoStartHandledRef.current || items.length === 0) {
+      return;
+    }
+
+    autoStartHandledRef.current = true;
+    handleStart();
+  }, [autoStart, handleStart, items.length]);
+
   const handleItemCompleted = useCallback(async () => {
     const item = orderedItems[activeIndex];
     if (!item) {
@@ -239,6 +253,16 @@ export default function ReadingListView({ initialItems }: Props) {
     setPhase("summary");
   }, [activeIndex, loadItem, orderedItems.length]);
 
+  const handleOptionChange = useCallback((
+    option: keyof ReadingListOptions,
+    checked: boolean,
+  ) => {
+    setOptions((currentOptions) => ({
+      ...currentOptions,
+      [option]: checked,
+    }));
+  }, []);
+
   if (phase === "reading") {
     if (loading) {
       return <div className="reading-list-state">Chargement du manga...</div>;
@@ -305,73 +329,24 @@ export default function ReadingListView({ initialItems }: Props) {
   }
 
   return (
-    <section className="reading-list-view">
-      <header className="reading-list-view__header">
-        <span className="reading-list-view__eyebrow">Lecture temporaire</span>
-        <h2>Liste de lecture</h2>
-        <p>{items.length} manga(s), dans l&apos;ordre des onglets.</p>
-      </header>
-
-      <div className="reading-list-launch-panel">
-        <div className="reading-list-options" aria-label="Options de lecture">
-          <label>
-            <input
-              type="checkbox"
-              checked={options.randomOrder}
-              onChange={(event) => setOptions((currentOptions) => ({
-                ...currentOptions,
-                randomOrder: event.target.checked,
-              }))}
-            />
-            <span>Lecture aléatoire</span>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={options.removeBookmarkAfterReading}
-              onChange={(event) => setOptions((currentOptions) => ({
-                ...currentOptions,
-                removeBookmarkAfterReading: event.target.checked,
-              }))}
-            />
-            <span>Retirer le bookmark après lecture</span>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={options.resumeProgress}
-              onChange={(event) => setOptions((currentOptions) => ({
-                ...currentOptions,
-                resumeProgress: event.target.checked,
-              }))}
-            />
-            <span>Reprendre depuis la progression</span>
-          </label>
-        </div>
-
-        <button
-          type="button"
-          className="reading-list-primary-action"
-          disabled={items.length === 0 || loading}
-          onClick={handleStart}
-        >
-          {loading ? "Préparation..." : "Lancer la lecture"}
-        </button>
-      </div>
-
-      <div className="reading-list-grid">
-        {items.map((item, index) => (
-          <ReadingListCard
-            key={item.id}
-            item={item}
-            index={index}
-            onOpenDetails={(targetItem) => {
-              void handleOpenDetails(targetItem);
-            }}
-            onRemove={(itemId) => setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== itemId))}
-          />
-        ))}
-      </div>
-    </section>
+    <ReadingListSetup
+      items={items}
+      loading={loading}
+      options={options}
+      saved={readingListSave.saved}
+      saving={readingListSave.saving}
+      saveError={readingListSave.error}
+      onOpenDetails={(item) => {
+        void handleOpenDetails(item);
+      }}
+      onOptionChange={handleOptionChange}
+      onRemove={(itemId) => {
+        setItems((currentItems) => currentItems.filter((candidate) => candidate.id !== itemId));
+      }}
+      onSave={() => {
+        void readingListSave.save();
+      }}
+      onStart={handleStart}
+    />
   );
 }

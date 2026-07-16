@@ -22,6 +22,7 @@ export const scraperReaderProgressFilePath = path.join(dataDir, "scraper-reader-
 export const scraperViewHistoryFilePath = path.join(dataDir, "scraper-view-history.json");
 export const scraperLatestCheckpointsFilePath = path.join(dataDir, "scraper-latest-checkpoints.json");
 export const appHistoryFilePath = path.join(dataDir, "history.json");
+export const savedReadingListsFilePath = path.join(dataDir, "saved-reading-lists.json");
 export const workspaceWindowStateFilePath = path.join(dataDir, "workspace-window-state.json");
 
 export async function ensureDataDir() {

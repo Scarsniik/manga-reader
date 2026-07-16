@@ -88,6 +88,7 @@ const useReaderNavigation = ({
     const [isCompletionPage, setIsCompletionPage] = React.useState<boolean>(false);
     const [continuationLoading, setContinuationLoading] = React.useState<boolean>(false);
     const [continuationError, setContinuationError] = React.useState<string | null>(null);
+    const [isReadingListSkipTransition, setIsReadingListSkipTransition] = React.useState(false);
     const [copyFeedback, setCopyFeedback] = React.useState<ReaderCopyFeedback | null>(null);
     const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
     const readingListCompletionNotifiedRef = React.useRef(false);
@@ -608,6 +609,7 @@ const useReaderNavigation = ({
         scrollToTopImmediate();
         setTransitionDirection(null);
         setIsCompletionPage(false);
+        setIsReadingListSkipTransition(false);
         setContinuationError(null);
         setCurrentIndex(() => {
             if (images.length === 0) {
@@ -769,6 +771,38 @@ const useReaderNavigation = ({
         void readingListNavigation.onCurrentItemCompleted();
     }, [readingListNavigation]);
 
+    const canSkipReadingListItem = Boolean(
+        readingListNavigation?.nextItem
+        && !readingListCompletionNotifiedRef.current
+        && !isTransitionPage
+        && !isCompletionPage
+        && !continuationLoading,
+    );
+
+    const skipReadingListItem = React.useCallback(() => {
+        if (
+            !readingListNavigation?.nextItem
+            || readingListCompletionNotifiedRef.current
+            || isTransitionPage
+            || isCompletionPage
+            || continuationLoading
+        ) {
+            return;
+        }
+
+        scrollToTopImmediate();
+        setIsReadingListSkipTransition(true);
+        setTransitionDirection('next');
+        setIsCompletionPage(false);
+        setContinuationError(null);
+    }, [
+        continuationLoading,
+        isCompletionPage,
+        isTransitionPage,
+        readingListNavigation?.nextItem,
+        scrollToTopImmediate,
+    ]);
+
     const next = React.useCallback(() => {
         if (continuationLoading) {
             return;
@@ -797,6 +831,7 @@ const useReaderNavigation = ({
         if (images.length > 0 && currentIndex >= images.length - 1) {
             scrollToTopImmediate();
             notifyReadingListItemCompleted();
+            setIsReadingListSkipTransition(false);
             if (nextTarget) {
                 setTransitionDirection('next');
                 setIsCompletionPage(false);
@@ -845,6 +880,7 @@ const useReaderNavigation = ({
 
             scrollToTopImmediate();
             setTransitionDirection(null);
+            setIsReadingListSkipTransition(false);
             setContinuationError(null);
             return;
         }
@@ -906,6 +942,7 @@ const useReaderNavigation = ({
         readingListCompletionNotifiedRef.current = false;
         setTransitionDirection(null);
         setIsCompletionPage(false);
+        setIsReadingListSkipTransition(false);
         setContinuationLoading(false);
         setContinuationError(null);
     }, [locationSearch]);
@@ -1035,6 +1072,7 @@ const useReaderNavigation = ({
         continuationError,
         isTransitionPage,
         isCompletionPage,
+        isReadingListSkipTransition,
         currentImageSrc,
         completionRecommendations,
         completionRandomRecommendation,
@@ -1048,6 +1086,7 @@ const useReaderNavigation = ({
         progressAriaText,
         canGoPrev,
         canGoNext,
+        canSkipReadingListItem,
         copyFeedback,
         handleBack,
         returnToLibrary,
@@ -1057,6 +1096,7 @@ const useReaderNavigation = ({
         continueToAdjacentChapter,
         next,
         prev,
+        skipReadingListItem,
         copyCurrentImage,
     };
 };

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeftIcon, DownloadArrowIcon, OpenBookIcon, PlusSignIcon, TrashCanIcon } from '@/renderer/components/icons';
 import { ScraperBrowserLocationState } from '@/renderer/components/ScraperBrowser/types';
@@ -16,6 +16,7 @@ import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/Scra
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
 import buildScraperBookmarkTagStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
 import buildScraperBookmarkReadingListModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkReadingListModal';
+import SavedReadingListsView from '@/renderer/components/ScraperBookmarks/SavedReadingListsView';
 import {
   findScraperBookmarkDuplicateGroups,
   type ScraperBookmarkDuplicateDetectionProgress,
@@ -137,6 +138,8 @@ export default function ScraperBookmarksView({
   const { params } = useParams();
   const locationState = location.state as ScraperBookmarksLocationState;
   const { favorites: tagFavorites } = useScraperTagFavorites();
+  const pageTabsId = useId();
+  const [activePageTab, setActivePageTab] = useState<"bookmarks" | "lists">("bookmarks");
   const [libraryMangas, setLibraryMangas] = useState<Manga[]>([]);
   const [bookmarkFilters, setBookmarkFilters] = useState<ScraperBookmarkFilterState>(() => (
     normalizeInitialBookmarkFilters(initialFilters)
@@ -155,9 +158,15 @@ export default function ScraperBookmarksView({
     total: 0,
   });
   const [duplicateCheckError, setDuplicateCheckError] = useState<string | null>(null);
+  const bookmarksPageTabRef = useRef<HTMLButtonElement | null>(null);
+  const listsPageTabRef = useRef<HTMLButtonElement | null>(null);
   const seenCardsQueueRef = useRef(new Map<string, ReturnType<typeof buildBookmarkViewHistoryIdentity>>());
   const seenCardsTimerRef = useRef<number | null>(null);
   const initialFiltersKey = useMemo(() => JSON.stringify(initialFilters ?? null), [initialFilters]);
+  const bookmarksTabId = `${pageTabsId}-bookmarks-tab`;
+  const bookmarksPanelId = `${pageTabsId}-bookmarks-panel`;
+  const listsTabId = `${pageTabsId}-lists-tab`;
+  const listsPanelId = `${pageTabsId}-lists-panel`;
 
   const scrapersById = useMemo(
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
@@ -917,9 +926,85 @@ export default function ScraperBookmarksView({
     tagFavorites,
   ]);
 
+  const handlePageTabKeyDown = useCallback((
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    currentTab: "bookmarks" | "lists",
+  ) => {
+    let nextTab: "bookmarks" | "lists" | null = null;
+    if (event.key === "Home") {
+      nextTab = "bookmarks";
+    } else if (event.key === "End") {
+      nextTab = "lists";
+    } else if (event.key === "ArrowRight") {
+      nextTab = currentTab === "bookmarks" ? "lists" : "bookmarks";
+    } else if (event.key === "ArrowLeft") {
+      nextTab = currentTab === "bookmarks" ? "lists" : "bookmarks";
+    }
+
+    if (!nextTab) {
+      return;
+    }
+
+    event.preventDefault();
+    setActivePageTab(nextTab);
+    (nextTab === "bookmarks" ? bookmarksPageTabRef : listsPageTabRef).current?.focus();
+  }, []);
+
   return (
     <section className="scraper-bookmarks-view scraper-browser__panel">
-      <div className="scraper-bookmarks-view__header">
+      <div
+        className="scraper-bookmarks-view__tabs"
+        role="tablist"
+        aria-label="Contenu sauvegardé"
+        aria-orientation="horizontal"
+      >
+        <button
+          ref={bookmarksPageTabRef}
+          id={bookmarksTabId}
+          type="button"
+          role="tab"
+          className={`scraper-bookmarks-view__tab ${activePageTab === "bookmarks" ? "is-active" : ""}`}
+          aria-controls={activePageTab === "bookmarks" ? bookmarksPanelId : undefined}
+          aria-selected={activePageTab === "bookmarks"}
+          tabIndex={activePageTab === "bookmarks" ? 0 : -1}
+          onKeyDown={(event) => handlePageTabKeyDown(event, "bookmarks")}
+          onClick={() => setActivePageTab("bookmarks")}
+        >
+          Bookmarks
+        </button>
+        <button
+          ref={listsPageTabRef}
+          id={listsTabId}
+          type="button"
+          role="tab"
+          className={`scraper-bookmarks-view__tab ${activePageTab === "lists" ? "is-active" : ""}`}
+          aria-controls={activePageTab === "lists" ? listsPanelId : undefined}
+          aria-selected={activePageTab === "lists"}
+          tabIndex={activePageTab === "lists" ? 0 : -1}
+          onKeyDown={(event) => handlePageTabKeyDown(event, "lists")}
+          onClick={() => setActivePageTab("lists")}
+        >
+          Listes
+        </button>
+      </div>
+
+      {activePageTab === "lists" ? (
+        <div
+          id={listsPanelId}
+          className="scraper-bookmarks-view__tab-panel"
+          role="tabpanel"
+          aria-labelledby={listsTabId}
+        >
+          <SavedReadingListsView />
+        </div>
+      ) : (
+        <div
+          id={bookmarksPanelId}
+          className="scraper-bookmarks-view__tab-panel"
+          role="tabpanel"
+          aria-labelledby={bookmarksTabId}
+        >
+          <div className="scraper-bookmarks-view__header">
         <div>
           <span className="scraper-browser__eyebrow">Bookmarks scraper</span>
           <div className="scraper-bookmarks-view__title-row">
@@ -1044,7 +1129,7 @@ export default function ScraperBookmarksView({
         </div>
       </div>
 
-      {error ? (
+          {error ? (
         <div className="scraper-browser__message is-error">{error}</div>
       ) : null}
 
@@ -1096,7 +1181,7 @@ export default function ScraperBookmarksView({
         />
       ) : null}
 
-      {!loaded && loading ? (
+          {!loaded && loading ? (
         <div className="scraper-browser__message">Chargement des bookmarks...</div>
       ) : bookmarkView.scopeCount === 0 ? (
         <div className="scraper-browser__message is-warning">
@@ -1117,6 +1202,8 @@ export default function ScraperBookmarksView({
           bookmarks={displayedBookmarks}
           renderBookmark={renderDisplayedBookmark}
         />
+          )}
+        </div>
       )}
     </section>
   );

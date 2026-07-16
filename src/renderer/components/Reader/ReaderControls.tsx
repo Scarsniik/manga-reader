@@ -9,6 +9,8 @@ type Props = {
     transitionDirection: 'previous' | 'next' | null;
     onPrev: () => void;
     onNext: () => void;
+    canSkipReadingListItem?: boolean;
+    onSkipReadingListItem?: () => void;
 };
 
 const ReaderControls: React.FC<Props> = ({
@@ -20,6 +22,8 @@ const ReaderControls: React.FC<Props> = ({
     transitionDirection,
     onPrev,
     onNext,
+    canSkipReadingListItem = false,
+    onSkipReadingListItem,
 }) => {
     const nextButtonLabel = isCompletionPage
         ? (canGoNext ? 'Suivant' : 'Fin de lecture')
@@ -41,6 +45,15 @@ const ReaderControls: React.FC<Props> = ({
             <button onClick={onNext} disabled={!canGoNext} type="button">
                 {nextButtonLabel}
             </button>
+            {onSkipReadingListItem && canSkipReadingListItem ? (
+                <button
+                    className="reader-controls__skip-reading-list-item"
+                    onClick={onSkipReadingListItem}
+                    type="button"
+                >
+                    Passer au manga suivant
+                </button>
+            ) : null}
         </div>
     );
 };

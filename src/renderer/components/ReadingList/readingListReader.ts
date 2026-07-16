@@ -30,7 +30,7 @@ const resolveExistingReaderTarget = async (
 ): Promise<ReaderWorkspaceTarget> => {
   const scraperReader = target.locationState?.scraperReader;
 
-  if (scraperReader) {
+  if (scraperReader && Array.isArray(scraperReader.pageUrls)) {
     const savedProgress = resumeProgress
       && window.api
       && typeof window.api.getScraperReaderProgress === "function"

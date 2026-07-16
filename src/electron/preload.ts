@@ -33,6 +33,10 @@ import type {
 import type { JapaneseRomanizationRequest } from "../shared/japaneseRomanization";
 import type { JapaneseInflectionRequest } from "../shared/japaneseInflection";
 import type {
+    SaveReadingListRequest,
+    SavedReadingList,
+} from "../shared/readingList";
+import type {
     OpenSelectorAssistantRequest,
     SelectorAssistantAppliedValue,
     SelectorAssistantEvaluationRequest,
@@ -123,6 +127,7 @@ type ReadingListWorkspaceTarget = {
         };
         sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
     }>;
+    autoStart?: boolean;
     title?: string;
 };
 
@@ -384,6 +389,19 @@ contextBridge.exposeInMainWorld('api', {
     removeReadingHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-reading-history-record", historyId),
     removeDetailsHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-details-history-record", historyId),
     removeSearchHistoryRecord: (historyId: string) => ipcRenderer.invoke("remove-search-history-record", historyId),
+    getSavedReadingLists: (): Promise<SavedReadingList[]> => ipcRenderer.invoke("get-saved-reading-lists"),
+    getSavedReadingList: (readingListId: string): Promise<SavedReadingList | null> => (
+        ipcRenderer.invoke("get-saved-reading-list", readingListId)
+    ),
+    saveReadingList: (request: SaveReadingListRequest): Promise<SavedReadingList> => (
+        ipcRenderer.invoke("save-reading-list", request)
+    ),
+    deleteSavedReadingList: (readingListId: string): Promise<boolean> => (
+        ipcRenderer.invoke("delete-saved-reading-list", readingListId)
+    ),
+    onSavedReadingListsUpdated: (callback: () => void) => (
+        createIpcSubscription<void>("saved-reading-lists-updated", callback)
+    ),
     // Mangas API
     getMangas: () => ipcRenderer.invoke('get-mangas'),
     addManga: (manga: any) => ipcRenderer.invoke('add-manga', manga),

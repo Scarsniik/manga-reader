@@ -19,6 +19,7 @@ type Props = {
     isLastPage: boolean;
     isTransitionPage: boolean;
     isCompletionPage: boolean;
+    isReadingListSkipTransition: boolean;
     transitionDirection: 'previous' | 'next' | null;
     activeTransitionTarget: ReaderAdjacentTarget | null;
     completionRecommendations: EndOfReadingRecommendation[];
@@ -70,6 +71,7 @@ const ReaderStage: React.FC<Props> = ({
     isLastPage,
     isTransitionPage,
     isCompletionPage,
+    isReadingListSkipTransition,
     transitionDirection,
     activeTransitionTarget,
     completionRecommendations,
@@ -146,6 +148,7 @@ const ReaderStage: React.FC<Props> = ({
                             error={continuationError}
                             targetKind={activeTransitionTarget.kind}
                             isReadingListCompletion={activeTransitionTarget.isReadingListCompletion}
+                            isReadingListItemSkipped={isReadingListSkipTransition}
                             onOpenDetails={onOpenReadingListDetails}
                             onFinishReadingList={onFinishReadingList}
                             onContinue={() => {

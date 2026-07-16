@@ -427,7 +427,7 @@ export default function WorkspaceTargetPanel({
   }
 
   if (target.kind === "reading-list") {
-    return <ReadingListView initialItems={target.items} />;
+    return <ReadingListView initialItems={target.items} autoStart={target.autoStart} />;
   }
 
   if (target.kind === "scraper.config") {

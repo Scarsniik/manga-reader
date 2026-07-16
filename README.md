@@ -10,7 +10,7 @@ Scaramanga is a lightweight desktop application designed to help users learn Jap
 - **User-Friendly Interface**: Intuitive layout with a sidebar for quick access to links and annotations.
 - **Version Badge**: The custom title bar displays the actual application version instead of a fixed label.
 - **User Data Access**: Open the managed user data folder directly from the Options modal for inspection or backup.
-- **Temporary Reading Lists**: Convert open manga workspace tabs into an ordered or shuffled reading session.
+- **Reading Lists**: Convert open manga workspace tabs into an ordered or shuffled session, save lists, and resume them from Bookmarks.
 
 ## Project Structure
 
