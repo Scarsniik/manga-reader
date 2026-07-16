@@ -123,6 +123,11 @@ const ReaderStage: React.FC<Props> = ({
                                 style={{ height: `${readingProgress}%` }}
                             />
                         </span>
+                        <span className="reader-progress-pages" aria-hidden="true">
+                            <strong>{Math.min(Math.max(currentPage, 1), totalPages)}</strong>
+                            <span>/</span>
+                            <span>{totalPages}</span>
+                        </span>
                     </div>
                 ) : null}
 

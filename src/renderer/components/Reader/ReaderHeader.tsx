@@ -1,11 +1,14 @@
-import React from 'react';
-import { Manga } from '@/renderer/types';
-import { ScraperBookmarkMetadataField } from '@/shared/scraper';
-import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
-import useModal from '@/renderer/hooks/useModal';
-import buildSettingsModal from '@/renderer/components/Modal/modales/SettingsModal';
-import { ImageExpandIcon } from '@/renderer/components/icons';
-import { ReaderCopyFeedback } from './types';
+import React from "react";
+import { Manga } from "@/renderer/types";
+import { ScraperBookmarkMetadataField } from "@/shared/scraper";
+import ScraperBookmarkButton from "@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton";
+import useModal from "@/renderer/hooks/useModal";
+import buildSettingsModal from "@/renderer/components/Modal/modales/SettingsModal";
+import { ChevronLeftIcon, ImageExpandIcon } from "@/renderer/components/icons";
+import CopyImageIcon from "./icons/copy-image.svg?react";
+import OcrScanIcon from "./icons/ocr-scan.svg?react";
+import ReaderSettingsIcon from "./icons/settings.svg?react";
+import { ReaderCopyFeedback } from "./types";
 
 type Props = {
     manga: Manga | null;
@@ -41,18 +44,33 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
     onToggleOcr,
 }, ref) => {
     const { openModal } = useModal();
+    const copyLabel = copyFeedback?.message ?? "Copier l'image courante (Ctrl/Cmd+C)";
 
     return (
         <div className="reader-header" ref={ref}>
-            {showBackButton ? (
-                <button type="button" className="reader-back" aria-label="Retour" onClick={onBack}>←</button>
-            ) : null}
-            <div className="reader-info">
-                <div className="reader-info__text">
-                    {manga ? <strong>{manga.title}</strong> : <span>Lecture</span>}
-                    {manga?.chapters ? <span className="reader-info__subtitle">{manga.chapters}</span> : null}
+            <div className="reader-header__context">
+                {showBackButton ? (
+                    <button
+                        type="button"
+                        className="reader-header__icon-button reader-back"
+                        aria-label="Retour"
+                        title="Retour"
+                        onClick={onBack}
+                    >
+                        <ChevronLeftIcon aria-hidden="true" focusable="false" />
+                    </button>
+                ) : null}
+                <div className="reader-info">
+                    <div className="reader-info__text">
+                        <strong title={manga?.title || "Lecture"}>{manga?.title || "Lecture"}</strong>
+                        {manga?.chapters ? (
+                            <span className="reader-info__subtitle" title={manga.chapters}>{manga.chapters}</span>
+                        ) : null}
+                    </div>
+                    <span className="page-counter" aria-label={`Progression : ${pageCounterLabel}`}>
+                        {pageCounterLabel}
+                    </span>
                 </div>
-                <span className="page-counter">{pageCounterLabel}</span>
             </div>
 
             <div className="reader-actions">
@@ -64,6 +82,7 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
                         cover={manga.thumbnailPath || undefined}
                         excludedFields={bookmarkExcludedFields}
                         className="reader-bookmark-button"
+                        size="sm"
                     />
                 ) : null}
                 <button
@@ -71,15 +90,16 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
                     className="reader-action-button"
                     onClick={() => openModal(buildSettingsModal())}
                     title="Ouvrir les paramètres"
+                    aria-label="Ouvrir les paramètres"
                 >
-                    Paramètres
+                    <ReaderSettingsIcon aria-hidden="true" focusable="false" />
                 </button>
                 <button
                     type="button"
-                    className={"reader-action-button reader-fullscreen-toggle" + (isFullscreen ? ' active' : '')}
+                    className={`reader-action-button reader-fullscreen-toggle${isFullscreen ? " active" : ""}`}
                     onClick={onToggleFullscreen}
                     disabled={!fullscreenAvailable}
-                    title={fullscreenAvailable ? 'Plein écran lecteur + OCR (F)' : 'Plein écran indisponible'}
+                    title={fullscreenAvailable ? "Plein écran lecteur + OCR (F)" : "Plein écran indisponible"}
                     aria-label="Plein écran lecteur et OCR"
                     aria-pressed={isFullscreen}
                 >
@@ -87,28 +107,30 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
                 </button>
                 <button
                     type="button"
-                    className={"reader-action-button" + (copyFeedback ? ` ${copyFeedback.type}` : '')}
+                    className={`reader-action-button${copyFeedback ? ` ${copyFeedback.type}` : ""}`}
                     onClick={onCopyImage}
                     disabled={!canCopyImage}
-                    title="Copier l'image courante dans le presse-papiers (Ctrl/Cmd+C)"
+                    title={copyLabel}
+                    aria-label={copyLabel}
                 >
-                    {copyFeedback?.message ?? 'Copier (Ctrl/Cmd+C)'}
+                    <CopyImageIcon aria-hidden="true" focusable="false" />
                 </button>
                 <button
                     type="button"
-                    className={"reader-action-button ocr-toggle" + (ocrEnabled ? ' active' : '')}
-                    title={ocrAvailable ? 'Activer/Désactiver OCR' : 'OCR indisponible en lecture en ligne'}
+                    className={`reader-action-button ocr-toggle${ocrEnabled ? " active" : ""}`}
+                    title={ocrAvailable ? "Activer ou désactiver l'OCR" : "OCR indisponible en lecture en ligne"}
                     onClick={onToggleOcr}
                     aria-pressed={ocrEnabled}
                     disabled={!ocrAvailable}
                 >
-                    OCR
+                    <OcrScanIcon aria-hidden="true" focusable="false" />
+                    <span>OCR</span>
                 </button>
             </div>
         </div>
     );
 });
 
-ReaderHeader.displayName = 'ReaderHeader';
+ReaderHeader.displayName = "ReaderHeader";
 
 export default ReaderHeader;

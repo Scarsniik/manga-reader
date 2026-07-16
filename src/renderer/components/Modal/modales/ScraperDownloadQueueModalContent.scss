@@ -1,0 +1,370 @@
+.download-queue-dialog {
+  width: min(900px, 94vw);
+  max-width: 900px;
+  height: min(760px, 88vh);
+  max-height: 88vh;
+  border-color: #343941;
+  border-radius: 14px;
+  background: #17191c;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.download-queue-dialog .app-modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #2d3238;
+  background: linear-gradient(180deg, #202328, #1b1d21);
+}
+
+.download-queue-dialog .app-modal-actions {
+  padding: 10px 16px;
+  border-top: 1px solid #2d3238;
+  background: #181a1e;
+}
+
+.download-queue-dialog .app-modal-btn {
+  min-width: 82px;
+  min-height: 34px;
+  border-color: #3a4048;
+  border-radius: 7px;
+}
+
+.download-queue-dialog__body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.download-queue-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.download-queue-modal-title__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(79, 157, 223, 0.3);
+  border-radius: 8px;
+  background: rgba(79, 157, 223, 0.12);
+  color: #73b5eb;
+}
+
+.download-queue-modal-title__icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.download-queue-modal-title > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.download-queue-modal-title strong {
+  color: #f5f7fa;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.download-queue-modal-title small {
+  color: #8f99a6;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.download-queue-modal-content {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(180px, 1fr);
+  gap: 18px;
+  padding: 18px 20px 20px;
+  background:
+    radial-gradient(circle at 88% -10%, rgba(79, 157, 223, 0.08), transparent 32%),
+    #17191c;
+}
+
+.download-queue-top {
+  display: grid;
+  gap: 12px;
+}
+
+.download-queue-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.download-queue-overview__copy > span {
+  color: #6eace0;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.download-queue-overview h3 {
+  margin: 4px 0 3px;
+  color: #f4f6f8;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.download-queue-overview p {
+  margin: 0;
+  color: #929ca8;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.download-queue-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.download-queue-controls button,
+.download-queue-card__cancel {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #aab2bc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.66rem;
+}
+
+.download-queue-controls button:hover:not(:disabled),
+.download-queue-card__cancel:hover {
+  background: rgba(255, 255, 255, 0.065);
+  color: #ffffff;
+}
+
+.download-queue-controls button.danger,
+.download-queue-card__cancel {
+  color: #dca09d;
+}
+
+.download-queue-controls button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.download-queue-controls svg,
+.download-queue-card__cancel svg {
+  width: 14px;
+  height: 14px;
+}
+
+.download-queue-controls .is-spinning,
+.download-queue-feedback .is-spinning {
+  animation: download-queue-spin 0.8s linear infinite;
+}
+
+.download-queue-controls button > span {
+  display: inline-grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(197, 67, 60, 0.18);
+  font-size: 0.58rem;
+}
+
+.download-queue-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.download-queue-summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid #30353c;
+  border-radius: 8px;
+  background: rgba(9, 11, 13, 0.3);
+}
+
+.download-queue-summary strong {
+  color: #f3f5f7;
+  font-size: 1rem;
+}
+
+.download-queue-summary span {
+  color: #808a96;
+  font-size: 0.64rem;
+}
+
+.download-queue-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid #35516d;
+  border-radius: 8px;
+  background: rgba(25, 118, 210, 0.08);
+  color: #c9e2f7;
+  font-size: 0.69rem;
+}
+
+.download-queue-feedback svg {
+  width: 15px;
+  height: 15px;
+}
+
+.download-queue-feedback.is-error,
+.download-queue-card__error {
+  border-color: rgba(196, 64, 57, 0.42);
+  background: rgba(196, 64, 57, 0.1);
+  color: #f1b0ac;
+}
+
+.download-queue-activity {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.download-queue-activity__heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.download-queue-activity__heading h3 {
+  margin: 0;
+  color: #eceff3;
+  font-size: 0.79rem;
+}
+
+.download-queue-activity__heading span {
+  color: #7e8894;
+  font-size: 0.65rem;
+}
+
+.download-queue-list {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 5px;
+  scrollbar-color: #414852 transparent;
+  scrollbar-width: thin;
+}
+
+.download-queue-card {
+  position: relative;
+  display: grid;
+  gap: 9px;
+  padding: 11px 12px;
+  overflow: hidden;
+  border: 1px solid #30353c;
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(34, 38, 43, 0.72), rgba(25, 28, 32, 0.75));
+}
+
+.download-queue-card::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: #4f9ddf;
+  content: "";
+}
+
+.download-queue-card.status-completed::before {
+  background: #55ad72;
+}
+
+.download-queue-card.status-error::before,
+.download-queue-card.status-cancelled::before {
+  background: #c45b55;
+}
+
+.download-queue-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.download-queue-card__title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.download-queue-card__title > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(79, 157, 223, 0.1);
+  color: #70afe3;
+}
+
+.download-queue-card__title svg {
+  width: 16px;
+  height: 16px;
+}
+
+.download-queue-card__title > div {
+  min-width: 0;
+}
+
+.download-queue-card__title h4 {
+  overflow: hidden;
+  margin: 0 0 2px;
+  color: #eef0f3;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-queue-card__title small {
+  color: #808a96;
+  font-size: 0.61rem;
+}
+
+.download-queue-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid rgba(79, 157, 223, 0.22);
+  border-radius: 999px;
+  background: rgba(79, 157, 223, 0.11);
+  color: #a9d2f2;
+  font-size: 0.6rem;
+  font-weight: 650;
+}
+
+.download-queue-badge.completed {
+  border-color: rgba(67, 156, 96, 0.25);
+  background: rgba(67, 156, 96, 0.12);
+  color: #a9dfba;
+}
+
+.download-queue-badge.error,
+.download-queue-badge.cancelled {
+  border-color: rgba(196, 75, 68, 0.25);
+  background: rgba(196, 75, 68, 0.12);
+  color: #e8aaa6;
+}

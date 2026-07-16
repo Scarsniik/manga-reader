@@ -1,34 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
+import OcrQueueJobCard from '@/renderer/components/Modal/modales/OcrQueueJobCard';
+import {
+  CloseXIcon,
+  FilterRemoveIcon,
+  LoadingSpinnerIcon,
+  OpenBookIcon,
+} from '@/renderer/components/icons';
+import OcrScanIcon from '@/renderer/components/MangaManger/icons/ocr-scan.svg?react';
+import SelectionIcon from '@/renderer/components/MangaManger/icons/selection.svg?react';
+import SettingsIcon from '@/renderer/components/MangaManger/icons/settings.svg?react';
 import { useModal } from '@/renderer/hooks/useModal';
 import { notifyOcrRuntimeMissing, openOcrRuntimeStatus } from '@/renderer/utils/ocrRuntimeUi';
 import './OcrModalContent.scss';
+import './OcrQueueModalContent.scss';
+import './OcrQueueActivity.scss';
 
 type Props = {
   selectedMangaIds: string[];
   filteredMangaIds: string[];
 };
 
-const formatJobStatus = (status?: string | null) => {
-  switch (status) {
-    case 'queued':
-      return 'En attente';
-    case 'detecting_language':
-      return 'Detection langue';
-    case 'running':
-      return 'En cours';
-    case 'paused':
-      return 'En pause';
-    case 'completed':
-      return 'Termine';
-    case 'error':
-      return 'Erreur';
-    case 'cancelled':
-      return 'Annule';
-    default:
-      return 'Inconnu';
-  }
-};
+const TERMINAL_JOB_STATUSES = ['completed', 'cancelled', 'error'];
 
 const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredMangaIds }) => {
   const { openModal } = useModal();
@@ -36,6 +29,7 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [choiceScope, setChoiceScope] = useState<'library' | 'selection' | 'filtered' | null>(null);
+  const [heavyPass, setHeavyPass] = useState(false);
   const [lastLibraryResult, setLastLibraryResult] = useState<any>(null);
 
   const loadQueue = useCallback(async () => {
@@ -77,7 +71,11 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
         : scope === 'filtered'
           ? filteredMangaIds
           : undefined;
-      const result = await window.api.ocrStartLibrary({ mode, mangaIds });
+      const result = await window.api.ocrStartLibrary({
+        mode,
+        mangaIds,
+        heavyPass,
+      });
       setLastLibraryResult(result);
       setChoiceScope(null);
       await loadQueue();
@@ -97,7 +95,7 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
 
       setError(String(err?.message || err || 'Impossible de lancer l\'OCR de la bibliotheque'));
     }
-  }, [filteredMangaIds, loadQueue, selectedMangaIds]);
+  }, [filteredMangaIds, heavyPass, loadQueue, selectedMangaIds]);
 
   const runJobAction = useCallback(async (action: 'pause' | 'resume' | 'cancel', jobId: string) => {
     const apiName = action === 'pause'
@@ -175,60 +173,110 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
     }));
   }, [cancelActiveJobs, openModal, queue?.jobs]);
 
-  const activeJobCount = (queue?.jobs || []).filter((job: any) => !['completed', 'cancelled', 'error'].includes(job.status)).length;
+  const jobs = queue?.jobs || [];
+  const activeJobCount = jobs.filter((job: any) => !TERMINAL_JOB_STATUSES.includes(job.status)).length;
+  const completedJobCount = jobs.filter((job: any) => job.status === 'completed').length;
 
   return (
     <div className="ocr-modal-content ocr-queue-modal-content">
       <div className="ocr-queue-top">
-        {loading ? <div>Chargement de la file OCR...</div> : null}
-        {error ? <div>{error}</div> : null}
-
-        <div className="ocr-queue-actions">
-          <button type="button" onClick={() => setChoiceScope((value) => value === 'library' ? null : 'library')}>
-            OCR toute la bibliotheque
-          </button>
-          <button
-            type="button"
-            onClick={() => setChoiceScope((value) => value === 'selection' ? null : 'selection')}
-            disabled={selectedMangaIds.length === 0}
-          >
-            OCR selection ({selectedMangaIds.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setChoiceScope((value) => value === 'filtered' ? null : 'filtered')}
-            disabled={filteredMangaIds.length === 0}
-          >
-            OCR mangas affiches ({filteredMangaIds.length})
-          </button>
-          <button type="button" className="secondary" onClick={() => { void loadQueue(); }}>
-            Actualiser
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => openOcrRuntimeStatus({ title: "Installation OCR" })}
-          >
-            Runtime OCR
-          </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => { void cancelAllJobs(); }}
-            disabled={activeJobCount === 0}
-          >
-            Tout annuler ({activeJobCount})
-          </button>
+        <div className="ocr-queue-overview">
+          <div className="ocr-queue-overview__copy">
+            <span className="ocr-queue-kicker">File de traitement</span>
+            <h3>{activeJobCount > 0 ? `${activeJobCount} traitement${activeJobCount > 1 ? 's' : ''} actif${activeJobCount > 1 ? 's' : ''}` : 'File OCR disponible'}</h3>
+            <p>Lance un traitement puis suis sa progression page par page.</p>
+          </div>
+          <div className="ocr-queue-stats" aria-label="Resume de la file OCR">
+            <div><strong>{activeJobCount}</strong><span>Actifs</span></div>
+            <div><strong>{jobs.length}</strong><span>Total</span></div>
+            <div><strong>{completedJobCount}</strong><span>Termines</span></div>
+          </div>
         </div>
+
+        <section className="ocr-queue-launcher">
+          <div className="ocr-queue-section-heading">
+            <div>
+              <h4>Lancer un traitement</h4>
+              <p>Choisis les mangas a analyser.</p>
+            </div>
+            <div className="ocr-queue-utilities">
+              <button type="button" onClick={() => { void loadQueue(); }}>
+                {loading ? <LoadingSpinnerIcon className="is-spinning" aria-hidden="true" /> : null}
+                Actualiser
+              </button>
+              <button type="button" onClick={() => openOcrRuntimeStatus({ title: "Installation OCR" })}>
+                <SettingsIcon aria-hidden="true" /> Runtime
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => { void cancelAllJobs(); }}
+                disabled={activeJobCount === 0}
+              >
+                <CloseXIcon aria-hidden="true" /> Tout annuler
+                {activeJobCount > 0 ? <span>{activeJobCount}</span> : null}
+              </button>
+            </div>
+          </div>
+
+          <div className="ocr-queue-scope-grid">
+            <button
+              type="button"
+              className={choiceScope === 'library' ? 'is-active' : ''}
+              aria-pressed={choiceScope === 'library'}
+              onClick={() => setChoiceScope((value) => value === 'library' ? null : 'library')}
+            >
+              <span className="ocr-queue-scope-icon"><OpenBookIcon aria-hidden="true" /></span>
+              <span><strong>Bibliotheque</strong><small>Tous les mangas enregistres</small></span>
+            </button>
+            <button
+              type="button"
+              className={choiceScope === 'selection' ? 'is-active' : ''}
+              aria-pressed={choiceScope === 'selection'}
+              onClick={() => setChoiceScope((value) => value === 'selection' ? null : 'selection')}
+              disabled={selectedMangaIds.length === 0}
+            >
+              <span className="ocr-queue-scope-icon"><SelectionIcon aria-hidden="true" /></span>
+              <span><strong>Selection</strong><small>{selectedMangaIds.length} manga{selectedMangaIds.length > 1 ? 's' : ''}</small></span>
+            </button>
+            <button
+              type="button"
+              className={choiceScope === 'filtered' ? 'is-active' : ''}
+              aria-pressed={choiceScope === 'filtered'}
+              onClick={() => setChoiceScope((value) => value === 'filtered' ? null : 'filtered')}
+              disabled={filteredMangaIds.length === 0}
+            >
+              <span className="ocr-queue-scope-icon"><FilterRemoveIcon aria-hidden="true" /></span>
+              <span><strong>Resultats affiches</strong><small>{filteredMangaIds.length} manga{filteredMangaIds.length > 1 ? 's' : ''}</small></span>
+            </button>
+          </div>
+
+          <label className={`ocr-queue-heavy-toggle${heavyPass ? ' is-active' : ''}`}>
+            <input
+              type="checkbox"
+              checked={heavyPass}
+              onChange={(event) => setHeavyPass(event.target.checked)}
+            />
+            <span>
+              <strong>Passe lourde</strong>
+              <small>Plus lente et plus complete. Le mode standard rapide reste utilise par defaut.</small>
+            </span>
+          </label>
 
         {choiceScope ? (
           <div className="ocr-library-choice">
-            <div>
+            <div className="ocr-library-choice__copy">
+              <OcrScanIcon aria-hidden="true" />
+              <span>
+                <strong>Mode de traitement</strong>
+                <small>
               {choiceScope === 'library'
                 ? 'Choisis comment lancer l\'OCR sur toute la bibliotheque.'
                 : choiceScope === 'selection'
                   ? 'Choisis comment lancer l\'OCR sur la selection courante.'
                   : 'Choisis comment lancer l\'OCR sur les mangas actuellement affiches par les filtres.'}
+                </small>
+              </span>
             </div>
             <div className="ocr-queue-actions">
               <button type="button" onClick={() => { void startLibrary('missing_only', choiceScope); }}>
@@ -243,9 +291,16 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
             </div>
           </div>
         ) : null}
+        </section>
+
+        {loading && jobs.length === 0 ? (
+          <div className="ocr-queue-feedback is-loading"><LoadingSpinnerIcon aria-hidden="true" /> Chargement de la file OCR...</div>
+        ) : null}
+        {error ? <div className="ocr-queue-feedback is-error">{error}</div> : null}
 
         {lastLibraryResult ? (
-          <div className="ocr-result-summary">
+          <div className="ocr-result-summary" role="status">
+            <strong>Traitement ajoute.</strong>{' '}
             {lastLibraryResult.scope === 'subset'
               ? `${lastLibraryResult.requestedCount || 0} manga(s) cibles. `
               : ''}
@@ -257,44 +312,27 @@ const OcrQueueModalContent: React.FC<Props> = ({ selectedMangaIds, filteredManga
         ) : null}
       </div>
 
-      <div className="ocr-queue-list">
-        {(queue?.jobs || []).length === 0 ? (
-          <div className="ocr-status-card">Aucun job OCR dans la file.</div>
+      <section className="ocr-queue-jobs">
+        <div className="ocr-queue-jobs__heading">
+          <div>
+            <h3>Activite recente</h3>
+            <span>{jobs.length} traitement{jobs.length > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div className="ocr-queue-list">
+        {jobs.length === 0 ? (
+          <div className="ocr-queue-empty">
+            <span><OcrScanIcon aria-hidden="true" /></span>
+            <strong>Aucun traitement pour le moment</strong>
+            <p>Les traitements lances apparaitront ici avec leur progression.</p>
+          </div>
         ) : (
-          (queue.jobs || []).map((job: any) => (
-            <div key={job.id} className="ocr-queue-job">
-              <div className="ocr-queue-job-header">
-                <h4>{job.mangaTitle}</h4>
-                <span className={`ocr-job-badge ${job.status}`}>{formatJobStatus(job.status)}</span>
-              </div>
-              <div className="ocr-job-meta">
-                <div>Mode: {job.mode === 'full_manga' ? 'Manga complet' : 'A la volee'}</div>
-                <div>Progression: {job.completedPages || 0}/{job.totalPages || 0}</div>
-                {typeof job.currentPage === 'number' ? <div>Page en cours: {job.currentPage}</div> : null}
-                {job.languageDetection?.status ? <div>Langue: {job.languageDetection.status}</div> : null}
-                {job.message ? <div>Info: {job.message}</div> : null}
-              </div>
-              <div className="ocr-queue-actions">
-                {job.status === 'running' ? (
-                  <button type="button" className="secondary" onClick={() => { void runJobAction('pause', job.id); }}>
-                    Pause
-                  </button>
-                ) : null}
-                {job.status === 'paused' ? (
-                  <button type="button" onClick={() => { void runJobAction('resume', job.id); }}>
-                    Reprendre
-                  </button>
-                ) : null}
-                {!['completed', 'cancelled'].includes(job.status) ? (
-                  <button type="button" className="secondary" onClick={() => { void runJobAction('cancel', job.id); }}>
-                    Annuler
-                  </button>
-                ) : null}
-              </div>
-            </div>
+          jobs.map((job: any) => (
+            <OcrQueueJobCard key={job.id} job={job} onAction={runJobAction} />
           ))
         )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 };

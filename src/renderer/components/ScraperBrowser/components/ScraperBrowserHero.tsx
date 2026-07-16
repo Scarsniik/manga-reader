@@ -1,6 +1,8 @@
 import React from 'react';
 import { ScraperRecord } from '@/shared/scraper';
 import { ScraperCapability } from '@/renderer/components/ScraperBrowser/types';
+import ScraperFavicon from '@/renderer/components/ScraperFavicon/ScraperFavicon';
+import { DetailsCardIcon } from '@/renderer/components/icons';
 
 const FEATURE_STATUS_LABELS = {
   not_configured: 'Non configure',
@@ -29,16 +31,25 @@ export default function ScraperBrowserHero({
     <div className="scraper-browser__hero">
       <div className="scraper-browser__intro">
         <span className="scraper-browser__eyebrow">Scrapper actif</span>
-        <h2>
-          <button
-            type="button"
-            className="scraper-browser__home"
-            onClick={onHome}
-            title="Revenir a la page d'accueil du scrapper"
-          >
-            {scraper.name}
-          </button>
-        </h2>
+        <div className="scraper-browser__title-row">
+          <span className="scraper-browser__favicon" aria-hidden="true">
+            <ScraperFavicon
+              scraperId={scraper.id}
+              baseUrl={scraper.baseUrl}
+              fallback={<DetailsCardIcon />}
+            />
+          </span>
+          <h2>
+            <button
+              type="button"
+              className="scraper-browser__home"
+              onClick={onHome}
+              title="Revenir a la page d'accueil du scrapper"
+            >
+              {scraper.name}
+            </button>
+          </h2>
+        </div>
         <p>{scraper.description || 'Affichage temporaire pour executer la configuration du scrapper sans passer par la bibliotheque.'}</p>
       </div>
 

@@ -5,6 +5,14 @@ import {
     type AppTitleBarContext,
     getAvailableTitleBarMenuActions,
 } from "@/renderer/components/AppTitleBar/titleBarMenu";
+import {
+    ChevronDownIcon,
+    CloseXIcon,
+    OpenBookIcon,
+} from "@/renderer/components/icons";
+import MaximizeWindowIcon from "@/renderer/components/AppTitleBar/icons/maximize-window.svg?react";
+import MinimizeWindowIcon from "@/renderer/components/AppTitleBar/icons/minimize-window.svg?react";
+import RestoreWindowIcon from "@/renderer/components/AppTitleBar/icons/restore-window.svg?react";
 import "@/renderer/components/AppTitleBar/style.scss";
 
 type WindowState = {
@@ -176,8 +184,11 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
     const versionBadgeLabel = runtimeInfo?.version ? `v${runtimeInfo.version}` : "Version";
 
     return (
-        <header className="app-titlebar">
+        <header className={`app-titlebar${windowState.isFocused ? "" : " is-unfocused"}`}>
             <div className="app-titlebar__brand" title={`${title} - ${versionBadgeLabel}`}>
+                <span className="app-titlebar__brand-mark" aria-hidden="true">
+                    <OpenBookIcon />
+                </span>
                 <div className="app-titlebar__title">
                     {title}
                 </div>
@@ -201,11 +212,15 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                         aria-haspopup="menu"
                         onClick={() => setMenuOpen((isOpen) => !isOpen)}
                     >
-                        Actions
-                        <span aria-hidden="true">▾</span>
+                        <span className="app-titlebar__menu-trigger-icon" aria-hidden="true">
+                            <OpenBookIcon />
+                        </span>
+                        <span>Actions</span>
+                        <ChevronDownIcon className="app-titlebar__menu-chevron" aria-hidden="true" />
                     </button>
                     {menuOpen ? (
                         <div className="app-titlebar__menu-dropdown" role="menu">
+                            <div className="app-titlebar__menu-heading">Actions rapides</div>
                             {menuActions.map((action) => (
                                 <button
                                     key={action.id}
@@ -216,7 +231,10 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                                         window.dispatchEvent(new CustomEvent(action.commandEventName));
                                     }}
                                 >
-                                    {action.label}
+                                    <span className="app-titlebar__menu-item-icon" aria-hidden="true">
+                                        <OpenBookIcon />
+                                    </span>
+                                    <span>{action.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -232,8 +250,10 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                         type="button"
                         className="app-titlebar__devtools"
                         onClick={handleToggleDevTools}
+                        title="Ouvrir les outils de developpement"
                     >
-                        DevTools
+                        <span aria-hidden="true">&lt;/&gt;</span>
+                        <span className="app-titlebar__devtools-label">DevTools</span>
                     </button>
                 ) : null}
 
@@ -245,7 +265,7 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                     aria-label="Reduire la fenetre"
                     title="Reduire"
                 >
-                    _
+                    <MinimizeWindowIcon aria-hidden="true" />
                 </button>
 
                 <button
@@ -256,7 +276,9 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                     aria-label={`${maximizeLabel} la fenetre`}
                     title={maximizeLabel}
                 >
-                    {windowState.isMaximized ? "[]" : "[ ]"}
+                    {windowState.isMaximized
+                        ? <RestoreWindowIcon aria-hidden="true" />
+                        : <MaximizeWindowIcon aria-hidden="true" />}
                 </button>
 
                 <button
@@ -267,7 +289,7 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
                     aria-label="Fermer la fenetre"
                     title="Fermer"
                 >
-                    X
+                    <CloseXIcon aria-hidden="true" />
                 </button>
             </div>
         </header>

@@ -10,9 +10,8 @@ import type { ModalOptions } from '@/renderer/context/ModalContext';
 import useTags from '@/renderer/hooks/useTags';
 import useParams from '@/renderer/hooks/useParams';
 import SearchAndSort from '@/renderer/components/SearchAndSort/SearchAndSort';
-import MangaManagerViewMenu, {
-    MangaManagerViewOption,
-} from '@/renderer/components/MangaManger/MangaManagerViewMenu';
+import type { MangaManagerViewOption } from '@/renderer/components/MangaManger/MangaManagerViewMenu';
+import MangaManagerHeader from '@/renderer/components/MangaManger/MangaManagerHeader';
 import type { ScraperBrowserReturnState } from '@/renderer/components/ScraperBrowser/types';
 import {
     clearScraperRouteState,
@@ -414,20 +413,20 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const forcedBookmarksFilterScraperId = typeof forcedLocationState?.bookmarksFilterScraperId === 'string'
         ? forcedLocationState.bookmarksFilterScraperId
         : null;
-    const downloadQueueButtonLabel = activeDownloadJobCount > 0
-        ? `Telechargements (${activeDownloadJobCount})`
-        : 'Telechargements';
     const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
-        { id: 'library', label: 'Bibliotheque' },
-        { id: SCRAPER_MULTI_SEARCH_VIEW_ID, label: 'Recherche multi-sources' },
-        { id: SCRAPER_LATEST_VIEW_ID, label: 'Nouveautes' },
-        { id: SCRAPER_HISTORY_VIEW_ID, label: 'Historique' },
-        { id: SCRAPER_AUTHOR_FAVORITES_VIEW_ID, label: 'Auteurs favoris' },
-        { id: SCRAPER_TAG_FAVORITES_VIEW_ID, label: 'Tags favoris' },
-        { id: 'bookmarks', label: 'Tous les bookmarks' },
+        { id: 'library', label: 'Bibliotheque', group: 'navigation', icon: 'library' },
+        { id: SCRAPER_MULTI_SEARCH_VIEW_ID, label: 'Recherche multi-sources', group: 'navigation', icon: 'search' },
+        { id: SCRAPER_LATEST_VIEW_ID, label: 'Nouveautes', group: 'navigation', icon: 'latest' },
+        { id: SCRAPER_HISTORY_VIEW_ID, label: 'Historique', group: 'navigation', icon: 'history' },
+        { id: SCRAPER_AUTHOR_FAVORITES_VIEW_ID, label: 'Auteurs favoris', group: 'navigation', icon: 'authors' },
+        { id: SCRAPER_TAG_FAVORITES_VIEW_ID, label: 'Tags favoris', group: 'navigation', icon: 'tags' },
+        { id: 'bookmarks', label: 'Tous les bookmarks', group: 'navigation', icon: 'bookmarks' },
         ...sortedScrapers.map((scraper) => ({
             id: scraper.id,
             label: scraper.name,
+            group: 'source' as const,
+            icon: 'source' as const,
+            baseUrl: scraper.baseUrl,
         })),
     ], [sortedScrapers]);
 
@@ -740,49 +739,24 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     return (
         <div className="mangaManager">
             {showHeader ? (
-                <div className="mangaManager-header">
-                    <div className="mangaManager-header__view">
-                        <MangaManagerViewMenu
-                            activeViewId={activeViewId}
-                            options={viewOptions}
-                            onSelect={handleActiveViewChange}
-                            onOpenInWorkspace={handleOpenViewInWorkspace}
-                        />
-                    </div>
-
-                    <div className="mangaManager-header__actions">
-                        {isLibraryView ? (
-                            <>
-                                <button onClick={() => { void openTagsModal(); }}>Tags</button>
-                                <button
-                                    onClick={() => { void openOcrQueueModal(); }}
-                                >
-                                    Avancement OCR
-                                </button>
-                            </>
-                        ) : null}
-                        <button onClick={() => { void openScraperDownloadQueueModal(); }}>
-                            {downloadQueueButtonLabel}
-                        </button>
-                        <button onClick={() => { void openSettingsModal(); }}>Parametres</button>
-                        <button onClick={() => { void openScraperConfigModal(); }}>Scrappers</button>
-                        {isLibraryView ? (
-                            <>
-                                <button onClick={onAddClick}>Ajouter</button>
-                                <button
-                                    onClick={() => setSelectionMode(s => !s)}
-                                    title="Mode sélection"
-                                    aria-pressed={selectionMode}
-                                >
-                                    {selectionMode ? 'Quitter sélection' : 'Sélection'}
-                                </button>
-                                {selectedIds.length > 0 ? (
-                                    <button onClick={() => { void openBatchEditModal(); }}>Modification multiple ({selectedIds.length})</button>
-                                ) : null}
-                            </>
-                        ) : null}
-                    </div>
-                </div>
+                <MangaManagerHeader
+                    activeDownloadJobCount={activeDownloadJobCount}
+                    activeViewId={activeViewId}
+                    isLibraryView={isLibraryView}
+                    onAdd={onAddClick}
+                    onEditSelection={() => { void openBatchEditModal(); }}
+                    onOpenDownloads={() => { void openScraperDownloadQueueModal(); }}
+                    onOpenOcr={() => { void openOcrQueueModal(); }}
+                    onOpenScrapers={() => { void openScraperConfigModal(); }}
+                    onOpenSettings={() => { void openSettingsModal(); }}
+                    onOpenTags={() => { void openTagsModal(); }}
+                    onOpenViewInWorkspace={handleOpenViewInWorkspace}
+                    onSelectView={handleActiveViewChange}
+                    onToggleSelection={() => setSelectionMode((value) => !value)}
+                    selectedCount={selectedIds.length}
+                    selectionMode={selectionMode}
+                    viewOptions={viewOptions}
+                />
             ) : null}
 
             {isLibraryView ? (

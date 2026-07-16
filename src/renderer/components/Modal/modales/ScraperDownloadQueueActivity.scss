@@ -1,0 +1,149 @@
+.download-queue-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.download-queue-card .download-queue-progress {
+  height: 5px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: #101215;
+}
+
+.download-queue-card .download-queue-progress__bar {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2e7fbe, #69b3eb);
+}
+
+.download-queue-card .download-queue-progress__bar.completed {
+  background: linear-gradient(90deg, #368d54, #65c581);
+}
+
+.download-queue-progress-row > strong {
+  min-width: 34px;
+  color: #aeb6c0;
+  font-size: 0.63rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.download-queue-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.download-queue-card__meta > span {
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #939da9;
+  font-size: 0.62rem;
+}
+
+.download-queue-card__path {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: #7f8995;
+  font-size: 0.61rem;
+}
+
+.download-queue-card__path svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.download-queue-card__path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-queue-card__error {
+  padding: 7px 8px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 0.63rem;
+}
+
+.download-queue-card__cancel {
+  width: fit-content;
+  min-height: 27px;
+  margin-top: -2px;
+  padding: 0 7px;
+}
+
+.download-queue-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  border: 1px dashed #353b43;
+  border-radius: 10px;
+  color: #8d97a3;
+  text-align: center;
+}
+
+.download-queue-empty > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 3px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(79, 157, 223, 0.09);
+  color: #68a9de;
+}
+
+.download-queue-empty svg {
+  width: 21px;
+  height: 21px;
+}
+
+.download-queue-empty strong {
+  color: #cdd2d8;
+  font-size: 0.76rem;
+}
+
+.download-queue-empty p {
+  margin: 0;
+  font-size: 0.65rem;
+}
+
+@keyframes download-queue-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 700px) {
+  .download-queue-dialog {
+    width: 96vw;
+  }
+
+  .download-queue-overview {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .download-queue-controls {
+    justify-content: flex-start;
+  }
+
+  .download-queue-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-queue-progress__bar {
+    transition: none;
+  }
+}

@@ -1,11 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
+import {
+  CloseXIcon,
+  DownloadArrowIcon,
+  FolderExternalLinkIcon,
+  LoadingSpinnerIcon,
+  OpenBookIcon,
+} from '@/renderer/components/icons';
 import { useModal } from '@/renderer/hooks/useModal';
 import {
   ScraperDownloadJob,
   ScraperDownloadQueueStatus,
 } from '@/shared/scraper';
 import './OcrModalContent.scss';
+import './ScraperDownloadQueueModalContent.scss';
+import './ScraperDownloadQueueActivity.scss';
 
 const EMPTY_COUNTS = {
   total: 0,
@@ -61,46 +70,48 @@ const DownloadQueueJobCard: React.FC<{
   const canCancel = !TERMINAL_STATUSES.has(job.status);
 
   return (
-    <div className="ocr-queue-job download-queue-job">
-      <div className="ocr-queue-job-header">
-        <h4>{job.title}</h4>
-        <span className={`ocr-job-badge ${job.status}`}>{formatJobStatus(job.status)}</span>
+    <article className={`download-queue-card status-${job.status}`}>
+      <div className="download-queue-card__header">
+        <div className="download-queue-card__title">
+          <span aria-hidden="true"><OpenBookIcon /></span>
+          <div>
+            <h4>{job.title}</h4>
+            <small>{formatJobMode(job)}{job.scraperName ? ` · ${job.scraperName}` : ''}</small>
+          </div>
+        </div>
+        <span className={`download-queue-badge ${job.status}`}>{formatJobStatus(job.status)}</span>
       </div>
 
-      <div className="ocr-job-meta">
-        <div>Type: {formatJobMode(job)}</div>
-        {job.scraperName ? <div>Scraper: {job.scraperName}</div> : null}
-        {job.chapterLabel ? <div>Chapitre: {job.chapterLabel}</div> : null}
-        <div>Progression: {job.downloadedPages || 0}/{job.totalPages || 0}</div>
-        {typeof job.currentPage === 'number' ? <div>Page en cours: {job.currentPage}</div> : null}
-        {job.folderPath ? <div>Dossier: {job.folderPath}</div> : null}
-        {job.message ? <div>Info: {job.message}</div> : null}
-        {job.error ? <div className="download-queue-job-error">Erreur: {job.error}</div> : null}
+      <div className="download-queue-progress-row">
+        <div className="download-queue-progress" aria-label={`Progression ${progressPercent}%`}>
+          <span
+            className={`download-queue-progress__bar ${job.status}`}
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <strong>{progressPercent}%</strong>
       </div>
 
-      <div className="download-queue-progress" aria-hidden="true">
-        <span
-          className={`download-queue-progress__bar ${job.status}`}
-          style={{ width: `${progressPercent}%` }}
-        />
+      <div className="download-queue-card__meta">
+        <span>{job.downloadedPages || 0}/{job.totalPages || 0} pages</span>
+        {job.chapterLabel ? <span>{job.chapterLabel}</span> : null}
+        {typeof job.currentPage === 'number' ? <span>Page {job.currentPage}</span> : null}
+        {job.message ? <span>{job.message}</span> : null}
       </div>
 
-      <div className="download-queue-progress-label">
-        {progressPercent}% termine
-      </div>
+      {job.folderPath ? (
+        <div className="download-queue-card__path" title={job.folderPath}>
+          <FolderExternalLinkIcon aria-hidden="true" /> <span>{job.folderPath}</span>
+        </div>
+      ) : null}
+      {job.error ? <div className="download-queue-card__error">{job.error}</div> : null}
 
-      <div className="ocr-queue-actions">
-        {canCancel ? (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => onCancel(job.id)}
-          >
-            Annuler
-          </button>
-        ) : null}
-      </div>
-    </div>
+      {canCancel ? (
+        <button type="button" className="download-queue-card__cancel" onClick={() => onCancel(job.id)}>
+          <CloseXIcon aria-hidden="true" /> Annuler
+        </button>
+      ) : null}
+    </article>
   );
 };
 
@@ -185,45 +196,69 @@ const ScraperDownloadQueueModalContent: React.FC = () => {
   const summaryItems = useMemo(() => ([
     { label: 'Actifs', value: queue.counts?.active || 0 },
     { label: 'En attente', value: queue.counts?.queued || 0 },
-    { label: 'En cours', value: queue.counts?.running || 0 },
     { label: 'Termines', value: queue.counts?.completed || 0 },
     { label: 'Erreurs', value: queue.counts?.error || 0 },
-    { label: 'Annules', value: queue.counts?.cancelled || 0 },
   ]), [queue.counts]);
 
   return (
-    <div className="ocr-modal-content download-queue-modal-content">
+    <div className="download-queue-modal-content">
       <div className="download-queue-top">
-        {loading ? <div>Chargement de la file de telechargements...</div> : null}
-        {error ? <div className="ocr-feedback">{error}</div> : null}
+        <div className="download-queue-overview">
+          <div className="download-queue-overview__copy">
+            <span>File de telechargement</span>
+            <h3>
+              {queue.counts.active > 0
+                ? `${queue.counts.active} telechargement${queue.counts.active > 1 ? 's' : ''} actif${queue.counts.active > 1 ? 's' : ''}`
+                : 'Aucun telechargement actif'}
+            </h3>
+            <p>Les nouveaux telechargements demarrent automatiquement et apparaissent ici.</p>
+          </div>
+          <div className="download-queue-controls">
+            <button type="button" onClick={() => { void loadQueue(); }}>
+              {loading ? <LoadingSpinnerIcon className="is-spinning" aria-hidden="true" /> : null}
+              Actualiser
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => { void handleCancelAll(); }}
+              disabled={(queue.counts?.active || 0) === 0}
+            >
+              <CloseXIcon aria-hidden="true" /> Tout annuler
+              {queue.counts.active > 0 ? <span>{queue.counts.active}</span> : null}
+            </button>
+          </div>
+        </div>
 
-        <div className="ocr-status-grid download-queue-summary-grid">
+        <div className="download-queue-summary" aria-label="Resume des telechargements">
           {summaryItems.map((item) => (
-            <div key={item.label} className="ocr-status-card download-queue-summary-card">
-              <strong>{item.label}</strong>
-              <span>{item.value}</span>
+            <div key={item.label}>
+              <strong>{item.value}</strong>
+              <span>{item.label}</span>
             </div>
           ))}
         </div>
 
-        <div className="ocr-queue-actions">
-          <button type="button" className="secondary" onClick={() => { void loadQueue(); }}>
-            Actualiser
-          </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => { void handleCancelAll(); }}
-            disabled={(queue.counts?.active || 0) === 0}
-          >
-            Tout annuler ({queue.counts?.active || 0})
-          </button>
-        </div>
+        {loading && queue.jobs.length === 0 ? (
+          <div className="download-queue-feedback"><LoadingSpinnerIcon className="is-spinning" aria-hidden="true" /> Chargement de la file...</div>
+        ) : null}
+        {error ? <div className="download-queue-feedback is-error">{error}</div> : null}
       </div>
 
-      <div className="ocr-queue-list">
+      <section className="download-queue-activity">
+        <div className="download-queue-activity__heading">
+          <div>
+            <h3>Activite recente</h3>
+            <span>{queue.jobs.length} telechargement{queue.jobs.length > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div className="download-queue-list">
         {queue.jobs.length === 0 ? (
-          <div className="ocr-status-card">Aucun telechargement dans la file.</div>
+          <div className="download-queue-empty">
+            <span><DownloadArrowIcon aria-hidden="true" /></span>
+            <strong>Aucun telechargement pour le moment</strong>
+            <p>Les mangas et chapitres ajoutes a la file apparaitront ici.</p>
+          </div>
         ) : (
           queue.jobs.map((job) => (
             <DownloadQueueJobCard
@@ -233,7 +268,8 @@ const ScraperDownloadQueueModalContent: React.FC = () => {
             />
           ))
         )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 };
