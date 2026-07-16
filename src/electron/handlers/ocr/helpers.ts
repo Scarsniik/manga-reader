@@ -27,9 +27,11 @@ export const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve
 
 const OCR_TEXT_SEGMENT_SPLIT_RE = /[\s\u3000、。．，,・･…‥！？!?：:；;「」『』（）()［］\[\]【】〈〉《》]+/u;
 const OCR_WORD_LIKE_CHAR_RE = /[0-9A-Za-z\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff々〆ヵヶ]/u;
+const normalizeOcrAnalysisText = (text: string) => text.normalize("NFKC");
 
 export const countMeaningfulOcrChars = (text: string) => (
-  Array.from(text).reduce((count, char) => count + (OCR_WORD_LIKE_CHAR_RE.test(char) ? 1 : 0), 0)
+  Array.from(normalizeOcrAnalysisText(text))
+    .reduce((count, char) => count + (OCR_WORD_LIKE_CHAR_RE.test(char) ? 1 : 0), 0)
 );
 
 const getSuspiciousRepeatedSegment = (text: string): string | null => {
@@ -112,7 +114,7 @@ const isUnknownShortFragmentWithPunctuation = (
 };
 
 export const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | null => {
-  const compactText = block.text.replace(/\s+/g, "");
+  const compactText = normalizeOcrAnalysisText(block.text).replace(/\s+/g, "");
   if (!compactText) {
     return "empty-text";
   }
@@ -372,7 +374,7 @@ export function normalizeMangaOcrProgressMode(value: unknown): OcrQueueJobMode {
 }
 
 export function countJapaneseChars(text: string) {
-  return Array.from(text).reduce((count, char) => {
+  return Array.from(normalizeOcrAnalysisText(text)).reduce((count, char) => {
     const code = char.codePointAt(0) || 0;
     const isHiragana = code >= 0x3040 && code <= 0x309f;
     const isKatakana = code >= 0x30a0 && code <= 0x30ff;
@@ -382,7 +384,8 @@ export function countJapaneseChars(text: string) {
 }
 
 export function countLatinChars(text: string) {
-  return Array.from(text).reduce((count, char) => count + (/[A-Za-z]/.test(char) ? 1 : 0), 0);
+  return Array.from(normalizeOcrAnalysisText(text))
+    .reduce((count, char) => count + (/[A-Za-z]/.test(char) ? 1 : 0), 0);
 }
 
 export async function mapWithConcurrency<T, R>(

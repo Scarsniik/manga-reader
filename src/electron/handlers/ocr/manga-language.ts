@@ -7,6 +7,7 @@ import {
   toLocalFileUrl,
 } from "./helpers";
 import { ensureMangaOcrFile, writeMangaOcrFile } from "./manga-storage";
+import { withMangaOcrFileMutationLock } from "./ocr-file-mutation-lock";
 import { callWorkerRecognize } from "./worker";
 import type {
   MangaOcrFile,
@@ -130,6 +131,19 @@ async function applyAutoJapaneseLanguageIfNeeded(mangaId: string, detection: Ocr
   return true;
 }
 
+async function persistLanguageDetection(
+  manga: any,
+  totalPages: number,
+  detection: OcrLanguageDetection,
+) {
+  return withMangaOcrFileMutationLock(manga.path, async () => {
+    const latestFile = await ensureMangaOcrFile(manga, totalPages);
+    latestFile.languageDetection = detection;
+    await writeMangaOcrFile(manga.path, latestFile);
+    return detection;
+  });
+}
+
 export async function detectLanguageForManga(
   manga: any,
   pageFiles: string[],
@@ -145,10 +159,8 @@ export async function detectLanguageForManga(
 
   const metadataDetection = getMetadataLanguageDetection(manga);
   if (metadataDetection && !forceResample) {
-    file.languageDetection = metadataDetection;
-    file.languageDetection.appliedLanguageTag = metadataDetection.status === "likely_japanese";
-    await writeMangaOcrFile(manga.path, file);
-    return file.languageDetection;
+    metadataDetection.appliedLanguageTag = metadataDetection.status === "likely_japanese";
+    return persistLanguageDetection(manga, totalPages, metadataDetection);
   }
 
   const sampleIndices = pickSamplePageIndices(totalPages, `${manga.id}:${manga.path}`);
@@ -190,9 +202,7 @@ export async function detectLanguageForManga(
   });
 
   detection.appliedLanguageTag = await applyAutoJapaneseLanguageIfNeeded(manga.id, detection, settings);
-  file.languageDetection = detection;
-  await writeMangaOcrFile(manga.path, file);
-  return detection;
+  return persistLanguageDetection(manga, totalPages, detection);
 }
 
 export async function updateLanguageDetectionFromRecognizedPage(

@@ -191,6 +191,7 @@ Impact sur le comportement du reader :
 - le panneau OCR distingue maintenant aussi le cas `fichier OCR du manga`
 - le reader permet maintenant de dessiner une zone manuelle sur l'image pour ajouter des selections OCR persistantes
 - ces selections manuelles sont stockees separement des bulles detectees automatiquement dans le fichier OCR du manga
+- les textes corriges par l'utilisateur et les selections manuelles sont conserves lors d'un recalcul, y compris si les identifiants des bulles changent ou si un OCR complet est relance en mode ecrasement
 - le panneau OCR affiche une section `Selections manuelles` distincte, avec suppression individuelle
 - l'OCR de selection manuelle passe maintenant par un mode crop dedie cote worker Python :
   - lecture directe du crop via `manga-ocr`
@@ -210,9 +211,16 @@ Impact sur le comportement du reader :
   - cela aide a recuperer des bulles trop faibles ou trop petites a l'echelle de la page entiere
   - les blocs regionaux sont reprojetes dans les coordonnees de page puis fusionnes avec les blocs existants
 - l'OCR des petites lignes verticales de bulles essaie maintenant plusieurs variantes du crop de ligne et garde la lecture la plus plausible
-- les resultats OCR persistants par page sont maintenant invalides en douceur via `manga-ocr-page-v4` :
+- la passe d'optimisation OCR de juillet 2026 reduit le travail redondant sans retirer la seconde detection :
+  - le detecteur travaille en `1280` pour mieux conserver les petits textes, avec un seuil de confiance ajuste a `0.35`
+  - les variantes de page ne relisent plus les blocs deja reconnus correctement ; elles se concentrent sur les zones nouvelles ou faibles
+  - les variantes de ligne couteuses ne sont plus lancees systematiquement sur les longues lignes verticales deja lisibles
+  - les crops OpenCV sont convertis de BGR vers RGB avant `manga-ocr`
+  - l'ordre de lecture reste stable lorsqu'une variante remplace un bloc
+- l'analyse et le filtrage normalisent maintenant les caracteres pleine largeur en NFKC sans modifier le texte affiche
+- les resultats OCR persistants par page sont maintenant invalides en douceur via `manga-ocr-page-v5` et le cache applicatif via `mokuro-page-v8` :
   - une page deja stockee est recalculee a sa prochaine visite
-  - les selections manuelles existantes sont conservees pendant ce recalcul
+  - les selections manuelles et les corrections de texte existantes sont conservees pendant ce recalcul
 
 Impact sur l'import :
 
@@ -242,11 +250,36 @@ Commandes passees avec succes :
 - `npm run build:electron`
 - `npm run prestart`
 - `npm run build`
+- `npm run test:ocr-edited-overrides`
+- `npm run test:ocr-unicode-analysis`
+- `npm run test:ocr-worker-heuristics`
 
 Resultat :
 
 - la partie TypeScript/Electron compile
 - le build renderer passe aussi
+
+### Benchmark de non-regression OCR du 2026-07-16
+
+Le script reproductible `scripts/benchmark_ocr.py` utilise les corrections et selections manuelles deja presentes dans la bibliotheque comme annotations :
+
+- 56 pages issues de plusieurs mangas
+- 50 zones manuelles pour le rappel de detection
+- 53 textes corriges pour la precision de lecture
+- meme liste de pages pour le baseline et le candidat
+- profil `standard`, execution CUDA sur la machine de test
+
+Resultats baseline -> candidat final :
+
+- rappel des zones manuelles : `100 %` -> `100 %`
+- rappel des zones corrigees : `100 %` -> `100 %`
+- taux d'erreur caractere : `16,27 %` -> `12,86 %`
+- textes exactement reconnus : `18,87 %` -> `45,28 %`
+- temps moyen par page : `7 553 ms` -> `4 659 ms`
+- p90 par page : `11 236 ms` -> `6 231 ms`
+- appels moyens a `manga-ocr` : `80,38` -> `40,48`
+
+Le seuil detecteur `0.35` a aussi ete compare a `0.40` a resolution `1280` constante. Les annotations donnent la meme qualite, mais `0.35` conserve une vraie zone SFX supplementaire sans avantage de precision ou de temps observe pour `0.40`. Le seuil final reste donc `0.35`.
 
 ### Test du worker Python
 

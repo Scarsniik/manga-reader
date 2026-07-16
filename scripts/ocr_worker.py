@@ -5,11 +5,14 @@ import os
 import sys
 import time
 import traceback
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
 
 ENGINE = None
+DETECTOR_INPUT_SIZE = 1280
+DETECTOR_CONFIDENCE_THRESHOLD = 0.35
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -118,7 +121,14 @@ def build_engine():
     ENGINE = MangaPageOcr(
         pretrained_model_name_or_path=pretrained_model_name_or_path,
         force_cpu=force_cpu,
+        detector_input_size=DETECTOR_INPUT_SIZE,
     )
+    text_detector = getattr(ENGINE, "text_detector", None)
+    if text_detector is not None and hasattr(text_detector, "conf_thresh"):
+        text_detector.conf_thresh = min(
+            float(text_detector.conf_thresh),
+            DETECTOR_CONFIDENCE_THRESHOLD,
+        )
     return ENGINE
 
 
@@ -257,23 +267,27 @@ def safe_aspect_ratio(blk):
 
 
 def count_meaningful_chars(text: str) -> int:
-    return sum(1 for ch in text if ch.isalnum() or "\u3040" <= ch <= "\u9fff")
+    normalized = unicodedata.normalize("NFKC", text)
+    return sum(1 for ch in normalized if ch.isalnum() or "\u3040" <= ch <= "\u9fff")
 
 
 def normalize_compare_text(text: str) -> str:
-    return "".join(ch for ch in text if ch.isalnum() or "\u3040" <= ch <= "\u9fff")
+    normalized = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in normalized if ch.isalnum() or "\u3040" <= ch <= "\u9fff")
 
 
 def count_japanese_chars(text: str) -> int:
+    normalized = unicodedata.normalize("NFKC", text)
     return sum(
         1
-        for ch in text
+        for ch in normalized
         if ("\u3040" <= ch <= "\u30ff") or ("\u3400" <= ch <= "\u9fff")
     )
 
 
 def count_latin_chars(text: str) -> int:
-    return sum(1 for ch in text if ("A" <= ch <= "Z") or ("a" <= ch <= "z"))
+    normalized = unicodedata.normalize("NFKC", text)
+    return sum(1 for ch in normalized if ("A" <= ch <= "Z") or ("a" <= ch <= "z"))
 
 
 def has_suspicious_repeated_char_run(text: str) -> bool:
@@ -295,7 +309,7 @@ def has_suspicious_repeated_char_run(text: str) -> bool:
 
 
 def score_text_quality(text: str) -> float:
-    compact = "".join(ch for ch in text if not ch.isspace())
+    compact = "".join(ch for ch in unicodedata.normalize("NFKC", text) if not ch.isspace())
     if not compact:
         return -100.0
 
@@ -338,7 +352,7 @@ def score_raw_result(result: dict[str, Any]) -> float:
 
 
 def compact_text(text: str) -> str:
-    return "".join(ch for ch in text if not ch.isspace())
+    return "".join(ch for ch in unicodedata.normalize("NFKC", text) if not ch.isspace())
 
 
 def score_block_candidate(block: dict[str, Any]) -> float:
@@ -366,6 +380,10 @@ def score_block_candidate(block: dict[str, Any]) -> float:
         score -= min(japanese, latin) * 1.15
     if japanese == 0 and latin > 0:
         score -= 6.0
+    if meaningful == 0:
+        score -= 12.0
+    if has_suspicious_repeated_char_run(compact):
+        score -= 8.0
     if mask_score is not None:
         score += mask_score * 8.0
 
@@ -396,6 +414,19 @@ def box_overlap_metrics(left_box, right_box):
     return intersection / min(left_area, right_area), intersection / union
 
 
+def should_recognize_variant_block(candidate_box, existing_blocks) -> bool:
+    overlapping_blocks = []
+    for existing in existing_blocks or []:
+        overlap_on_smaller, iou = box_overlap_metrics(candidate_box, block_box_tuple(existing))
+        if iou >= 0.80 or overlap_on_smaller >= 0.72:
+            overlapping_blocks.append(existing)
+
+    if not overlapping_blocks:
+        return True
+
+    return any(score_block_candidate(block) < 6.0 for block in overlapping_blocks)
+
+
 def estimate_page_colorfulness(img) -> float:
     import numpy as np
 
@@ -411,7 +442,7 @@ def build_line_crop_variants(line_crop, pass_profile: str = "standard"):
     if line_crop.ndim == 2:
         gray = line_crop
     else:
-        gray = cv2.cvtColor(line_crop, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(line_crop, cv2.COLOR_BGR2GRAY)
 
     normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
     adaptive = cv2.adaptiveThreshold(
@@ -425,7 +456,7 @@ def build_line_crop_variants(line_crop, pass_profile: str = "standard"):
     adaptive_inv = cv2.bitwise_not(adaptive)
 
     variants = [
-        ("orig", line_crop if line_crop.ndim == 3 else cv2.cvtColor(line_crop, cv2.COLOR_GRAY2RGB)),
+        ("orig", convert_crop_to_rgb(line_crop)),
         ("adaptive_inv", cv2.cvtColor(adaptive_inv, cv2.COLOR_GRAY2RGB)),
     ]
 
@@ -436,17 +467,21 @@ def build_line_crop_variants(line_crop, pass_profile: str = "standard"):
     return variants
 
 
+def convert_crop_to_rgb(line_crop):
+    import cv2
+
+    if line_crop.ndim == 2:
+        return cv2.cvtColor(line_crop, cv2.COLOR_GRAY2RGB)
+    return cv2.cvtColor(line_crop, cv2.COLOR_BGR2RGB)
+
+
 def should_try_line_variants(blk, line_crop, baseline_text: str) -> bool:
     font_size = safe_float(getattr(blk, "font_size", None)) or 0.0
     baseline_score = score_text_quality(baseline_text)
-    height, width = line_crop.shape[:2]
-    crop_ratio = (max(height, width) / max(1, min(height, width)))
 
     if baseline_score < 18.0:
         return True
-    if getattr(blk, "vertical", False) and font_size <= 32:
-        return True
-    if getattr(blk, "vertical", False) and crop_ratio >= 2.2:
+    if getattr(blk, "vertical", False) and font_size <= 24:
         return True
     return False
 
@@ -455,7 +490,7 @@ def recognize_line_crop_best(engine, blk, line_crop, profile=None, pass_profile:
     from PIL import Image
 
     line_profile = profile.get("line_variants") if isinstance(profile, dict) else None
-    baseline_text = engine.mocr(Image.fromarray(line_crop))
+    baseline_text = engine.mocr(Image.fromarray(convert_crop_to_rgb(line_crop)))
     baseline_score = score_text_quality(baseline_text)
 
     if line_profile is not None:
@@ -721,19 +756,19 @@ def upscale_for_manual_crop(img):
     return cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
 
 
-def ensure_three_channels(img):
+def ensure_rgb(img):
     import cv2
 
     if img.ndim == 2:
         return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    return img
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 
 def build_manual_crop_variants(img):
     import cv2
 
     base = upscale_for_manual_crop(img)
-    base_rgb = ensure_three_channels(base)
+    base_rgb = ensure_rgb(base)
     gray = cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY)
     gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
     _otsu_threshold, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -826,7 +861,7 @@ def build_page_detection_variants(img, base_block_count: int, pass_profile: str 
     import cv2
 
     normalized_profile = normalize_pass_profile(pass_profile)
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     normalized = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
     adaptive = cv2.adaptiveThreshold(
         normalized,
@@ -861,6 +896,8 @@ def recognize_blocks_for_variant(
     pass_name: str = "base",
     origin_name: str | None = None,
     pass_profile: str = "standard",
+    existing_blocks=None,
+    existing_block_offset=(0, 0),
 ):
     if recognition_img is None:
         recognition_img = detect_img
@@ -871,6 +908,16 @@ def recognize_blocks_for_variant(
     profile_origin = origin_name or pass_name
 
     for blk in blk_list:
+        offset_x, offset_y = existing_block_offset
+        candidate_box = (
+            int(blk.xyxy[0]) + int(offset_x),
+            int(blk.xyxy[1]) + int(offset_y),
+            int(blk.xyxy[2]) + int(offset_x),
+            int(blk.xyxy[3]) + int(offset_y),
+        )
+        if existing_blocks is not None and not should_recognize_variant_block(candidate_box, existing_blocks):
+            continue
+
         result_blk = {
             "box": list(blk.xyxy),
             "vertical": blk.vertical,
@@ -913,7 +960,7 @@ def recognize_blocks_for_variant(
 
         result_blocks.append(result_blk)
 
-    pass_entry = build_pass_profile_entry(pass_kind, pass_name, elapsed_ms(pass_start), len(result_blocks))
+    pass_entry = build_pass_profile_entry(pass_kind, pass_name, elapsed_ms(pass_start), len(blk_list))
     if isinstance(profile, dict):
         profile["passes"].append(pass_entry)
 
@@ -952,6 +999,7 @@ def merge_variant_blocks(base_blocks, variant_blocks):
             stats["skipped_candidates"] += 1
             continue
 
+        replacement_index = min(replace_indexes) if replace_indexes else None
         for idx in reversed(replace_indexes):
             merged_blocks.pop(idx)
 
@@ -962,7 +1010,10 @@ def merge_variant_blocks(base_blocks, variant_blocks):
         else:
             stats["added_candidates"] += 1
 
-        merged_blocks.append(candidate)
+        if replacement_index is None:
+            merged_blocks.append(candidate)
+        else:
+            merged_blocks.insert(replacement_index, candidate)
 
     stats["final_blocks"] = len(merged_blocks)
     return merged_blocks, stats
@@ -1074,6 +1125,7 @@ def recognize_with_metadata(image_path: str, profile=None, pass_profile: str = "
                 pass_name=variant_name,
                 origin_name=variant_name,
                 pass_profile=pass_profile,
+                existing_blocks=merged_blocks,
             )
             merged_blocks, merge_stats = merge_variant_blocks(merged_blocks, variant_blocks)
             merge_pass_profile_entry(pass_entry, merge_stats, len(merged_blocks))
@@ -1094,6 +1146,8 @@ def recognize_with_metadata(image_path: str, profile=None, pass_profile: str = "
                 pass_name=region_name,
                 origin_name=region_name,
                 pass_profile=pass_profile,
+                existing_blocks=merged_blocks,
+                existing_block_offset=(x1, y1),
             )
             shifted_blocks = offset_block_coordinates(region_blocks, x1, y1)
             merged_blocks, merge_stats = merge_variant_blocks(merged_blocks, shifted_blocks)

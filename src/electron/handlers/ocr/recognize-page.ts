@@ -92,8 +92,9 @@ export async function recognizePageInternal(
   };
   await writeCache(cacheKey, normalized);
 
+  let returnedResult = normalized;
   if (options?.manga && typeof options.pageIndex === "number") {
-    await persistPageResultForManga(
+    returnedResult = await persistPageResultForManga(
       options.manga,
       imagePath,
       options.pageIndex,
@@ -106,7 +107,7 @@ export async function recognizePageInternal(
   }
 
   return {
-    result: normalized,
+    result: returnedResult,
     fingerprint,
     workerProfile: raw.profile || null,
   };
