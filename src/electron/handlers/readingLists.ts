@@ -8,6 +8,7 @@ import type {
   SavedReadingListSourceTarget,
 } from "../../shared/readingList";
 import { ensureDataDir, savedReadingListsFilePath } from "../utils";
+import { applyReadingListSave } from "./readingListCollection";
 
 const SAVED_READING_LISTS_DOCUMENT_VERSION = 1;
 
@@ -330,15 +331,20 @@ export const saveReadingList = async (request: SaveReadingListRequest): Promise<
       throw new Error("La liste de lecture contient un manga invalide.");
     }
 
-    const lists = await readSavedReadingListsFileUnlocked();
-    const savedList: SavedReadingList = {
-      id: randomUUID(),
-      items,
-      createdAt: new Date().toISOString(),
-    };
+    const savedListId = normalizeRequiredText(request.savedListId);
+    if (request.savedListId !== undefined && !savedListId) {
+      throw new Error("L'identifiant de la liste de lecture est invalide.");
+    }
 
-    await writeSavedReadingListsFileUnlocked([savedList, ...lists]);
-    return savedList;
+    const lists = await readSavedReadingListsFileUnlocked();
+    const result = applyReadingListSave(lists, items, {
+      createId: randomUUID,
+      createdAt: new Date().toISOString(),
+      ...(savedListId ? { savedListId } : {}),
+    });
+
+    await writeSavedReadingListsFileUnlocked(result.lists);
+    return result.savedList;
   })
 );
 

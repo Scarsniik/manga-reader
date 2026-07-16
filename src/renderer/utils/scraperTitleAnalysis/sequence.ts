@@ -10,15 +10,23 @@ const SEQUENCE_PATTERNS: Array<{
 }> = [
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep)\s*\.?\s*(?<value>[0-9]+(?:[.,][0-9]+)?(?:\s*-\s*[0-9]+(?:[.,][0-9]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+  },
+  {
+    kind: "chapter",
+    pattern: /(?<label>第)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?)\s*(?:話|章)\s*[\])}.]*$/i,
   },
   {
     kind: "volume",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>vol(?:ume)?|tome|book)\s*\.?\s*(?<value>[0-9]+(?:[.,][0-9]+)?(?:\s*-\s*[0-9]+(?:[.,][0-9]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>vol(?:ume)?|tome|book)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+  },
+  {
+    kind: "volume",
+    pattern: /(?<label>第)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?)\s*巻\s*[\])}.]*$/i,
   },
   {
     kind: "part",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>part(?:ie)?|pt)\s*\.?\s*(?<value>[0-9]+(?:[.,][0-9]+)?(?:\s*-\s*[0-9]+(?:[.,][0-9]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>part(?:ie)?|pt)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
 ];
 
@@ -63,7 +71,9 @@ export const extractTitleSequenceMarkers = (
     markers.unshift({
       kind: matchedPattern.kind,
       label: normalizeTitleAnalysisText(match.groups.label),
-      value: normalizeTitleAnalysisText(match.groups.value).replace(/\s*-\s*/g, "-"),
+      value: normalizeTitleAnalysisText(match.groups.value)
+        .normalize("NFKC")
+        .replace(/\s*-\s*/g, "-"),
     });
     remainingTitle = normalizeTitleAnalysisText(remainingTitle.slice(0, match.index));
   }
@@ -73,4 +83,3 @@ export const extractTitleSequenceMarkers = (
     sequenceMarkers: markers,
   };
 };
-

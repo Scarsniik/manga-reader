@@ -14,6 +14,7 @@ import {
   reorderReadingListItems,
   type ReadingListDropEdge,
 } from "@/renderer/components/ReadingList/readingListOrdering";
+import useReadingListTitleAnalysisConfigs from "@/renderer/components/ReadingList/useReadingListTitleAnalysisConfigs";
 import useSaveReadingList from "@/renderer/components/ReadingList/useSaveReadingList";
 import useAuthors from "@/renderer/hooks/useAuthors";
 import useTags from "@/renderer/hooks/useTags";
@@ -38,6 +39,7 @@ import "@/renderer/components/ReadingList/style.scss";
 type Props = {
   initialItems: ReadingListItem[];
   autoStart?: boolean;
+  savedListId?: string;
 };
 
 type ReadingListPhase = "setup" | "reading" | "summary";
@@ -48,7 +50,7 @@ const DEFAULT_OPTIONS: ReadingListOptions = {
   resumeProgress: true,
 };
 
-export default function ReadingListView({ initialItems, autoStart = false }: Props) {
+export default function ReadingListView({ initialItems, autoStart = false, savedListId }: Props) {
   const { authors } = useAuthors();
   const { tags } = useTags();
   const [items, setItems] = useState<ReadingListItem[]>(initialItems);
@@ -62,7 +64,8 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
   const [statuses, setStatuses] = useState<Record<string, ReadingListItemStatus>>({});
   const requestIdRef = useRef(0);
   const autoStartHandledRef = useRef(false);
-  const readingListSave = useSaveReadingList(items);
+  const readingListSave = useSaveReadingList(items, savedListId);
+  const titleAnalysisConfigs = useReadingListTitleAnalysisConfigs();
 
   const handleOpenDetails = useCallback(async (item: ReadingListItem) => {
     try {
@@ -269,9 +272,14 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
     }));
   }, []);
 
-  const handleAutoSort = useCallback(() => {
-    setItems((currentItems) => autoSortReadingListItems(currentItems));
-  }, []);
+  const handleAutoSort = useCallback((): boolean => {
+    const sortedItems = autoSortReadingListItems(items, titleAnalysisConfigs.configsByScraperId);
+    const orderChanged = sortedItems.some((item, index) => item.id !== items[index]?.id);
+    if (orderChanged) {
+      setItems(sortedItems);
+    }
+    return orderChanged;
+  }, [items, titleAnalysisConfigs.configsByScraperId]);
 
   const handleMove = useCallback((itemId: string, offset: number) => {
     setItems((currentItems) => moveReadingListItem(currentItems, itemId, offset));
@@ -358,6 +366,7 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
   return (
     <ReadingListSetup
       items={items}
+      autoSortLoading={titleAnalysisConfigs.loading}
       loading={loading}
       options={options}
       saved={readingListSave.saved}

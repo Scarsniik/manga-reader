@@ -78,6 +78,7 @@ type ReadingListWorkspaceTarget = {
         sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
     }>;
     autoStart?: boolean;
+    savedListId?: string;
     title?: string;
 };
 
@@ -196,6 +197,11 @@ const isOptionalBoolean = (value: unknown): boolean => (
     value === undefined || typeof value === "boolean"
 );
 
+const isOptionalNonEmptyString = (value: unknown): boolean => (
+    value === undefined
+    || (typeof value === "string" && value.trim().length > 0)
+);
+
 const isReadingListItem = (value: unknown): boolean => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         return false;
@@ -308,6 +314,7 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
             && readingListTarget.items.length > 0
             && readingListTarget.items.every(isReadingListItem)
             && isOptionalBoolean(readingListTarget.autoStart)
+            && isOptionalNonEmptyString(readingListTarget.savedListId)
         );
     }
 

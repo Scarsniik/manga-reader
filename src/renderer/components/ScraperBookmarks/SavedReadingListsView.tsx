@@ -191,6 +191,7 @@ export default function SavedReadingListsView() {
       items: list.items,
       title: getSavedListWorkspaceTitle(list),
       autoStart,
+      savedListId: list.id,
     }, { activate: true }).then((opened) => {
       if (!opened && mountedRef.current) {
         setError("Impossible d'ouvrir cette liste de lecture dans le workspace.");

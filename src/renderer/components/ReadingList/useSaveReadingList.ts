@@ -10,13 +10,30 @@ type ReadingListSaveState = {
 
 const getItemsSignature = (items: ReadingListItem[]): string => JSON.stringify(items);
 
-export default function useSaveReadingList(items: ReadingListItem[]): ReadingListSaveState {
+export default function useSaveReadingList(
+  items: ReadingListItem[],
+  initialSavedListId?: string,
+): ReadingListSaveState {
   const itemsSignature = useMemo(() => getItemsSignature(items), [items]);
-  const [savedItemsSignature, setSavedItemsSignature] = useState<string | null>(null);
+  const [savedItemsSignature, setSavedItemsSignature] = useState<string | null>(() => (
+    initialSavedListId ? itemsSignature : null
+  ));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestInFlightRef = useRef(false);
+  const savedListIdRef = useRef(initialSavedListId);
+  const initialSavedListIdRef = useRef(initialSavedListId);
   const saved = savedItemsSignature === itemsSignature;
+
+  useEffect(() => {
+    if (initialSavedListIdRef.current === initialSavedListId) {
+      return;
+    }
+
+    initialSavedListIdRef.current = initialSavedListId;
+    savedListIdRef.current = initialSavedListId;
+    setSavedItemsSignature(initialSavedListId ? itemsSignature : null);
+  }, [initialSavedListId, itemsSignature]);
 
   useEffect(() => {
     setError(null);
@@ -37,8 +54,14 @@ export default function useSaveReadingList(items: ReadingListItem[]): ReadingLis
     setError(null);
 
     try {
-      await window.api.saveReadingList({ items });
-      setSavedItemsSignature(itemsSignature);
+      const requestItemsSignature = itemsSignature;
+      const requestedSavedListId = savedListIdRef.current;
+      const savedList = await window.api.saveReadingList({
+        items,
+        ...(requestedSavedListId ? { savedListId: requestedSavedListId } : {}),
+      });
+      savedListIdRef.current = savedList.id;
+      setSavedItemsSignature(requestItemsSignature);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d'enregistrer la liste.");
     } finally {

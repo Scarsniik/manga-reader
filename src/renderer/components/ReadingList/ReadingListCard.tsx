@@ -37,7 +37,7 @@ export default function ReadingListCard({
           type="button"
           className="reading-list-card__open"
           aria-label={`Ouvrir la fiche de ${item.metadata.title} dans un nouvel onglet`}
-          title="Ouvrir la fiche dans un nouvel onglet"
+          title={item.metadata.title}
           onClick={() => onOpenDetails(item)}
         />
       ) : null}

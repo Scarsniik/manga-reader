@@ -1,12 +1,36 @@
 import type { ReadingListItem } from "@/renderer/types/readingList";
+import {
+  getMangaTitleMergeMatchKind,
+  getMangaTitleRomanizationTargets,
+} from "@/renderer/utils/mangaMatching/titleProfiles";
+import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
+import {
+  analyzeScraperTitle,
+  extractTitleSequenceMarkers,
+} from "@/renderer/utils/scraperTitleAnalysis";
+import type {
+  ScraperTitleAnalysisConfig,
+  ScraperTitleSequenceKind,
+  ScraperTitleSequenceMarker,
+} from "@/shared/scraper";
 
 export type ReadingListDropEdge = "after" | "before";
 
+export type ReadingListTitleAnalysisConfigs = ReadonlyMap<string, ScraperTitleAnalysisConfig>;
+
+type SequenceValue = {
+  end: number;
+  start: number;
+};
+
 type ReadingListSequence = {
-  chapter: number | null;
-  generic: number | null;
-  groupKey: string;
-  volume: number | null;
+  authorNames: string[];
+  chapter: SequenceValue | null;
+  family: ScraperTitleSequenceKind | "generic";
+  generic: SequenceValue | null;
+  matchTitle: string;
+  part: SequenceValue | null;
+  volume: SequenceValue | null;
 };
 
 type IndexedReadingListItem = {
@@ -15,112 +39,219 @@ type IndexedReadingListItem = {
   sequence: ReadingListSequence;
 };
 
-const CHAPTER_PATTERN = /(?:^|[\s()[\]{}_\-–—:;,.])(?:chap(?:it(?:re)?)?|chapter|ch|episode|ep)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*([0-9]+(?:[.,][0-9]+)?)/iu;
-const CHAPTER_PATTERN_GLOBAL = new RegExp(CHAPTER_PATTERN.source, "giu");
-const JAPANESE_CHAPTER_PATTERN = /第\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:話|章)/u;
-const JAPANESE_CHAPTER_PATTERN_GLOBAL = new RegExp(JAPANESE_CHAPTER_PATTERN.source, "gu");
-const VOLUME_PATTERN = /(?:^|[\s()[\]{}_\-–—:;,.])(?:vol(?:ume)?|tome|book)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*([0-9]+(?:[.,][0-9]+)?)/iu;
-const VOLUME_PATTERN_GLOBAL = new RegExp(VOLUME_PATTERN.source, "giu");
-const JAPANESE_VOLUME_PATTERN = /第\s*([0-9]+(?:[.,][0-9]+)?)\s*巻/u;
-const JAPANESE_VOLUME_PATTERN_GLOBAL = new RegExp(JAPANESE_VOLUME_PATTERN.source, "gu");
 const TRAILING_NUMBER_PATTERN = /([0-9]+(?:[.,][0-9]+)?)\s*[\])}._-]*$/u;
+const ROMAN_NUMERAL_PATTERN = /^[ivxlcdm]+$/iu;
+const ROMAN_NUMERAL_VALUES: Record<string, number> = {
+  c: 100,
+  d: 500,
+  i: 1,
+  l: 50,
+  m: 1000,
+  v: 5,
+  x: 10,
+};
 
 const parseSequenceNumber = (value: string | undefined): number | null => {
   if (!value) {
     return null;
   }
 
-  const parsedValue = Number(value.replace(",", "."));
-  return Number.isFinite(parsedValue) ? parsedValue : null;
+  const normalizedValue = value.normalize("NFKC").trim().toLocaleLowerCase("en");
+  if (!ROMAN_NUMERAL_PATTERN.test(normalizedValue)) {
+    const parsedValue = Number(normalizedValue.replace(",", "."));
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  return Array.from(normalizedValue).reduceRight((total, character, index, characters) => {
+    const currentValue = ROMAN_NUMERAL_VALUES[character] ?? 0;
+    const nextValue = ROMAN_NUMERAL_VALUES[characters[index + 1]] ?? 0;
+    return total + (currentValue < nextValue ? -currentValue : currentValue);
+  }, 0);
 };
 
-const extractSequenceNumber = (title: string, patterns: RegExp[]): number | null => {
-  for (const pattern of patterns) {
-    const sequenceNumber = parseSequenceNumber(title.match(pattern)?.[1]);
-    if (sequenceNumber !== null) {
-      return sequenceNumber;
+const parseSequenceValue = (value: string | undefined): SequenceValue | null => {
+  const [startValue, endValue] = String(value ?? "").split("-", 2);
+  const start = parseSequenceNumber(startValue);
+  if (start === null) {
+    return null;
+  }
+
+  return {
+    start,
+    end: parseSequenceNumber(endValue) ?? start,
+  };
+};
+
+const getMarkerValue = (
+  markers: ScraperTitleSequenceMarker[],
+  kind: ScraperTitleSequenceKind,
+): SequenceValue | null => (
+  parseSequenceValue(markers.find((marker) => marker.kind === kind)?.value)
+);
+
+const getItemAuthorNames = (
+  item: ReadingListItem,
+  analyzedAuthorNames: string[] = [],
+): string[] => {
+  if (analyzedAuthorNames.length) {
+    return analyzedAuthorNames;
+  }
+
+  if (item.metadata.authors?.length) {
+    return item.metadata.authors;
+  }
+
+  return extractTentativeAuthorNamesFromTitle(item.metadata.title);
+};
+
+const getItemTitleAnalysisConfig = (
+  item: ReadingListItem,
+  configs: ReadingListTitleAnalysisConfigs,
+): ScraperTitleAnalysisConfig | null => (
+  item.sourceTarget.kind === "scraper.details"
+    ? configs.get(item.sourceTarget.scraperId) ?? null
+    : null
+);
+
+const buildSequence = (
+  item: ReadingListItem,
+  matchTitle: string,
+  markers: ScraperTitleSequenceMarker[],
+  analyzedAuthorNames: string[] = [],
+): ReadingListSequence | null => {
+  const volume = getMarkerValue(markers, "volume");
+  const chapter = getMarkerValue(markers, "chapter");
+  const part = getMarkerValue(markers, "part");
+  if (!matchTitle.trim() || (!volume && !chapter && !part)) {
+    return null;
+  }
+
+  return {
+    authorNames: getItemAuthorNames(item, analyzedAuthorNames),
+    chapter,
+    family: volume ? "volume" : part ? "part" : "chapter",
+    generic: null,
+    matchTitle,
+    part,
+    volume,
+  };
+};
+
+const extractConfiguredSequence = (
+  item: ReadingListItem,
+  configs: ReadingListTitleAnalysisConfigs,
+): ReadingListSequence | null => {
+  const config = getItemTitleAnalysisConfig(item, configs);
+  if (!config?.enabled) {
+    return null;
+  }
+
+  const result = analyzeScraperTitle(item.metadata.title, config);
+  if (!result.matched || !result.sequenceMarkers.length) {
+    return null;
+  }
+
+  return buildSequence(
+    item,
+    [result.title, ...result.alternativeTitles].filter(Boolean).join(" | "),
+    result.sequenceMarkers,
+    result.authors,
+  );
+};
+
+const extractGenericSequence = (item: ReadingListItem): ReadingListSequence | null => {
+  const candidates = [
+    item.metadata.title.normalize("NFKC"),
+    ...getMangaTitleRomanizationTargets(item.metadata.title),
+  ].map((target) => extractTitleSequenceMarkers(target));
+  const sequenceCandidate = candidates.find(({ sequenceMarkers }) => sequenceMarkers.length > 0);
+  if (sequenceCandidate) {
+    return buildSequence(
+      item,
+      candidates.map(({ title }) => title).filter(Boolean).join(" | "),
+      sequenceCandidate.sequenceMarkers,
+    );
+  }
+
+  for (const candidate of candidates) {
+    const genericMatch = candidate.title.match(TRAILING_NUMBER_PATTERN);
+    const generic = parseSequenceValue(genericMatch?.[1]);
+    if (generic && genericMatch?.index !== undefined) {
+      return {
+        authorNames: getItemAuthorNames(item),
+        chapter: null,
+        family: "generic",
+        generic,
+        matchTitle: candidate.title.slice(0, genericMatch.index).trim(),
+        part: null,
+        volume: null,
+      };
     }
   }
 
   return null;
 };
 
-const normalizeGroupKey = (value: string): string => value
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLocaleLowerCase("fr")
-  .replace(/[\s()[\]{}_\-–—:;,.#]+/g, " ")
-  .trim();
+const extractReadingListSequence = (
+  item: ReadingListItem,
+  configs: ReadingListTitleAnalysisConfigs,
+): ReadingListSequence | null => (
+  extractConfiguredSequence(item, configs) ?? extractGenericSequence(item)
+);
 
-const extractReadingListSequence = (title: string): ReadingListSequence => {
-  const normalizedTitle = title.normalize("NFKC");
-  const volume = extractSequenceNumber(normalizedTitle, [VOLUME_PATTERN, JAPANESE_VOLUME_PATTERN]);
-  const chapter = extractSequenceNumber(normalizedTitle, [CHAPTER_PATTERN, JAPANESE_CHAPTER_PATTERN]);
-  let titleWithoutSequence = normalizedTitle
-    .replace(VOLUME_PATTERN_GLOBAL, " ")
-    .replace(JAPANESE_VOLUME_PATTERN_GLOBAL, " ")
-    .replace(CHAPTER_PATTERN_GLOBAL, " ")
-    .replace(JAPANESE_CHAPTER_PATTERN_GLOBAL, " ");
-  const genericMatch = volume === null && chapter === null
-    ? titleWithoutSequence.match(TRAILING_NUMBER_PATTERN)
-    : null;
-  const generic = parseSequenceNumber(genericMatch?.[1]);
-
-  if (genericMatch?.index !== undefined) {
-    titleWithoutSequence = titleWithoutSequence.slice(0, genericMatch.index);
+const compareOptionalSequenceValues = (
+  left: SequenceValue | null,
+  right: SequenceValue | null,
+): number => {
+  if (left && right) {
+    return left.start - right.start || left.end - right.end;
   }
 
-  const sequenceKind = volume !== null
-    ? chapter !== null ? "volume-and-chapter" : "volume"
-    : chapter !== null ? "chapter" : "generic";
-
-  return {
-    chapter,
-    generic,
-    groupKey: `${normalizeGroupKey(titleWithoutSequence)}|${sequenceKind}`,
-    volume,
-  };
-};
-
-const compareOptionalNumbers = (left: number | null, right: number | null): number => {
-  if (left !== null && right !== null) {
-    return left - right;
+  if (!left) {
+    return right ? -1 : 0;
   }
 
-  if (left !== null) {
-    return -1;
-  }
-
-  return right !== null ? 1 : 0;
+  return 1;
 };
 
 const compareSequences = (left: IndexedReadingListItem, right: IndexedReadingListItem): number => (
-  compareOptionalNumbers(left.sequence.volume, right.sequence.volume)
-  || compareOptionalNumbers(left.sequence.chapter, right.sequence.chapter)
-  || compareOptionalNumbers(left.sequence.generic, right.sequence.generic)
+  compareOptionalSequenceValues(left.sequence.volume, right.sequence.volume)
+  || compareOptionalSequenceValues(left.sequence.part, right.sequence.part)
+  || compareOptionalSequenceValues(left.sequence.chapter, right.sequence.chapter)
+  || compareOptionalSequenceValues(left.sequence.generic, right.sequence.generic)
   || left.index - right.index
 );
 
-const hasSequenceNumber = (sequence: ReadingListSequence): boolean => (
-  sequence.volume !== null || sequence.chapter !== null || sequence.generic !== null
+const doSequencesBelongTogether = (
+  left: ReadingListSequence,
+  right: ReadingListSequence,
+): boolean => (
+  left.family === right.family
+  && getMangaTitleMergeMatchKind(
+    { title: left.matchTitle, authorNames: left.authorNames },
+    { title: right.matchTitle, authorNames: right.authorNames },
+  ) !== null
 );
 
-export const autoSortReadingListItems = (items: ReadingListItem[]): ReadingListItem[] => {
-  const indexedItems = items.map((item, index): IndexedReadingListItem => ({
-    index,
-    item,
-    sequence: extractReadingListSequence(item.metadata.title),
-  }));
-  const groups = new Map<string, IndexedReadingListItem[]>();
+export const autoSortReadingListItems = (
+  items: ReadingListItem[],
+  configs: ReadingListTitleAnalysisConfigs = new Map(),
+): ReadingListItem[] => {
+  const indexedItems = items.flatMap((item, index): IndexedReadingListItem[] => {
+    const sequence = extractReadingListSequence(item, configs);
+    return sequence ? [{ index, item, sequence }] : [];
+  });
+  const groups: IndexedReadingListItem[][] = [];
 
   indexedItems.forEach((indexedItem) => {
-    if (!hasSequenceNumber(indexedItem.sequence)) {
-      return;
+    const groupItems = groups.find((candidateItems) => candidateItems.some((candidateItem) => (
+      doSequencesBelongTogether(candidateItem.sequence, indexedItem.sequence)
+    )));
+    if (groupItems) {
+      groupItems.push(indexedItem);
+    } else {
+      groups.push([indexedItem]);
     }
-
-    const groupItems = groups.get(indexedItem.sequence.groupKey) ?? [];
-    groupItems.push(indexedItem);
-    groups.set(indexedItem.sequence.groupKey, groupItems);
   });
 
   const sortedItems = [...items];

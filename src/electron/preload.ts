@@ -128,6 +128,7 @@ type ReadingListWorkspaceTarget = {
         sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
     }>;
     autoStart?: boolean;
+    savedListId?: string;
     title?: string;
 };
 

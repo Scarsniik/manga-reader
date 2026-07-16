@@ -427,7 +427,13 @@ export default function WorkspaceTargetPanel({
   }
 
   if (target.kind === "reading-list") {
-    return <ReadingListView initialItems={target.items} autoStart={target.autoStart} />;
+    return (
+      <ReadingListView
+        initialItems={target.items}
+        autoStart={target.autoStart}
+        savedListId={target.savedListId}
+      />
+    );
   }
 
   if (target.kind === "scraper.config") {

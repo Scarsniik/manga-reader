@@ -1,6 +1,6 @@
 {
   "name": "scaramanga",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "A lightweight desktop application for learning Japanese through manga.",
   "author": "",
   "repository": {
@@ -20,6 +20,7 @@
     "load:user-data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/load-user-data.ps1",
     "scrapers:test": "node scripts/test-configured-scrapers.cjs",
     "test:reading-list-ordering": "npm run prestart && node --test scripts/reading-list-ordering.test.cjs",
+    "test:saved-reading-list-update": "npm run build:electron && node --test scripts/saved-reading-list-update.test.cjs",
     "package:all": "npm run package:app:installer && npm run package:ocr-runtime",
     "package:app": "npm run package:app:installer",
     "package:app:installer": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win nsis --publish never",

@@ -39,4 +39,5 @@ export type SavedReadingList<TReaderLocationState = unknown> = {
 
 export type SaveReadingListRequest<TReaderLocationState = unknown> = {
   items: SavedReadingListItem<TReaderLocationState>[];
+  savedListId?: string;
 };

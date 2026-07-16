@@ -11,9 +11,10 @@ type DropTarget = ReadingListDropPosition & {
 };
 
 type Props = {
+  autoSortLoading: boolean;
   items: ReadingListItem[];
   loading: boolean;
-  onAutoSort: () => void;
+  onAutoSort: () => boolean;
   onMove: (itemId: string, offset: number) => void;
   onOpenDetails: (item: ReadingListItem) => void;
   onOptionChange: (option: keyof ReadingListOptions, checked: boolean) => void;
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export default function ReadingListSetup({
+  autoSortLoading,
   items,
   loading,
   onAutoSort,
@@ -118,13 +120,15 @@ export default function ReadingListSetup({
         <button
           type="button"
           className="reading-list-secondary-action"
-          disabled={items.length < 2}
+          disabled={items.length < 2 || autoSortLoading}
           onClick={() => {
-            onAutoSort();
-            setOrderAnnouncement("Tri automatique appliqué à la liste.");
+            const orderChanged = onAutoSort();
+            setOrderAnnouncement(orderChanged
+              ? "Tri automatique appliqué à la liste."
+              : "La liste est déjà dans l'ordre détecté.");
           }}
         >
-          Tri automatique
+          {autoSortLoading ? "Analyse des titres..." : "Tri automatique"}
         </button>
       </div>
 
