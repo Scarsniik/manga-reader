@@ -652,8 +652,11 @@ La V1 du multi-search repose sur les choix suivants :
 - Une recherche peut aussi etre arretee pour un scraper precis depuis son statut detaille. Les resultats deja charges sont conserves et la pagination de ce scraper est fermee pour cette recherche.
 - La section de resultats expose un bouton `Extraire auteurs`. Il deduplique les auteurs par couple scraper + URL auteur normalisee, jamais par nom affiche.
 - L'extraction d'auteurs utilise d'abord les informations deja presentes dans les cards de resultat (`authorUrlSelector` de la recherche). Elle ne charge la fiche detaillee que pour les sources qui n'ont pas donne d'auteur via la card et seulement si la fiche fournit un selecteur d'URL auteur.
-- A la fin de l'extraction, une dialog affiche les auteurs trouves avec leur nom et leur scraper. Chaque auteur est ouvrable en onglet auteur workspace quand le composant Auteur est configure, avec un fallback vers l'ouverture externe du lien. La dialog propose aussi `Tout ouvrir`.
-- Dans cette dialog, un auteur deja present dans un favori auteur affiche un pictogramme bookmark jaune a droite de sa ligne.
+- Le resultat de l'extraction est conserve dans la session avec une empreinte des sources chargees. Tant que ces sources et leurs metadonnees auteur ne changent pas, le bouton devient `Voir auteurs` et rouvre immediatement la derniere liste sans nouvelle requete. L'ajout ou la modification d'un resultat invalide ce cache.
+- Quand l'option de recuperation des metadonnees depuis les fiches est active, les auteurs et l'etat des fiches deja traitees alimentent directement ce cache. Une fiche deja chargee n'est pas demandee une seconde fois, y compris quand elle ne contient aucun auteur.
+- A la fin de l'extraction, une dialog affiche les auteurs trouves avec leur nom et leur scraper. Chaque auteur est ouvrable en onglet auteur workspace quand le composant Auteur est configure, avec un fallback vers l'ouverture externe du lien.
+- La dialog propose un filtre local insensible a la casse et aux accents. `Tout ouvrir` agit uniquement sur les auteurs visibles quand ce filtre est actif.
+- Dans cette dialog, un auteur deja present dans un favori auteur affiche une etoile jaune a droite de sa ligne.
 - Depuis une page auteur ou un auteur favori, une action peut pre-remplir le champ de recherche
   multi-sources avec les noms auteur uniques connus, joints par `, `. Cette action ne lance pas la
   recherche automatiquement.

@@ -39,7 +39,7 @@ type RunSearchOptions = {
   includedLanguageCodes: string[];
 };
 
-export default function useMultiSearch() {
+export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
   const [runs, setRuns] = useState<MultiSearchScraperRun[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export default function useMultiSearch() {
   const searchTokenRef = useRef(0);
   const cancelledScraperIdsRef = useRef(new Set<string>());
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
-  const lastScrapeDetailsWithCardsRef = useRef(false);
+  const lastScrapeDetailsWithCardsRef = useRef(scrapeDetailsWithCards);
   const lastIncludedLanguageCodesRef = useRef<string[]>([]);
   const {
     clearRunUpdates,
@@ -73,6 +73,10 @@ export default function useMultiSearch() {
     }
   }, [hasActiveRuns]);
 
+  useEffect(() => {
+    lastScrapeDetailsWithCardsRef.current = scrapeDetailsWithCards;
+  }, [scrapeDetailsWithCards]);
+
   const isRunCancelled = useCallback((token: number, scraperId: string): boolean => (
     token !== searchTokenRef.current || cancelledScraperIdsRef.current.has(scraperId)
   ), []);
@@ -81,12 +85,13 @@ export default function useMultiSearch() {
     restoredRuns: MultiSearchScraperRun[],
     paceMode: MultiSearchPaceMode,
     includedLanguageCodes: string[],
+    scrapeDetailsWithCards: boolean,
   ) => {
     clearRunUpdates();
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     lastPaceModeRef.current = paceMode;
-    lastScrapeDetailsWithCardsRef.current = false;
+    lastScrapeDetailsWithCardsRef.current = scrapeDetailsWithCards;
     lastIncludedLanguageCodesRef.current = includedLanguageCodes;
     setRuns(restoredRuns.map((run) => (
       isMultiSearchRunActive(run) ? cancelMultiSearchRun(run) : run

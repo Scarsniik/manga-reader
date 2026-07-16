@@ -71,6 +71,7 @@ const mergeCardWithDetails = (
   return {
     ...item,
     title: optionalText(item.title) || optionalText(details.title) || item.title,
+    detailsMetadataFetched: true,
     authorUrl: optionalText(item.authorUrl) || authorUrls[0],
     authorUrls: authorUrls.length ? authorUrls : item.authorUrls,
     authorNames: authorNames.length ? authorNames : item.authorNames,

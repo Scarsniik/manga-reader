@@ -79,11 +79,8 @@ import {
   buildMultiSearchMergedResultsExportPayload,
 } from "@/renderer/components/MultiSearch/multiSearchExport";
 import { openMultiSearchJsonDocument } from "@/renderer/components/MultiSearch/multiSearchJsonExport";
-import {
-  extractMultiSearchAuthors,
-  type MultiSearchAuthorExtractionProgress,
-  type MultiSearchAuthorResult,
-} from "@/renderer/components/MultiSearch/multiSearchAuthors";
+import type { MultiSearchAuthorResult } from "@/renderer/components/MultiSearch/multiSearchAuthors";
+import useMultiSearchAuthors from "@/renderer/components/MultiSearch/useMultiSearchAuthors";
 import type {
   MultiSearchAdvancedPages,
   MultiSearchDepthMode,
@@ -169,8 +166,6 @@ export default function MultiSearchBrowser({
   const [viewMode, setViewMode] = useState<MultiSearchViewMode>("merged");
   const [openError, setOpenError] = useState<string | null>(null);
   const [isExportingJson, setIsExportingJson] = useState(false);
-  const [isExtractingAuthors, setIsExtractingAuthors] = useState(false);
-  const [authorExtractionProgress, setAuthorExtractionProgress] = useState<MultiSearchAuthorExtractionProgress | null>(null);
   const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
   const [mergeRefreshKey, setMergeRefreshKey] = useState(0);
   const [resultLanguageFilterModes, setResultLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
@@ -203,7 +198,7 @@ export default function MultiSearchBrowser({
     stopScraperSearch,
     loadMoreForAll,
     loadMoreForScraper,
-  } = useMultiSearch();
+  } = useMultiSearch(params?.multiSearchScrapeDetailsWithCards === true);
   const { bookmarkMap } = useScraperBookmarks();
   const {
     loaded: viewHistoryLoaded,
@@ -373,8 +368,12 @@ export default function MultiSearchBrowser({
       setNewSourceHistoryIds(new Set());
       setSplitMergedResultIds(new Set());
       setOpenError(null);
-      setAuthorExtractionProgress(null);
-      restoreRuns([], persistentSettings.paceMode, persistentSettings.includedLanguageCodes);
+      restoreRuns(
+        [],
+        persistentSettings.paceMode,
+        persistentSettings.includedLanguageCodes,
+        params?.multiSearchScrapeDetailsWithCards === true,
+      );
       return;
     }
 
@@ -396,6 +395,7 @@ export default function MultiSearchBrowser({
           restoredState.runs,
           persistentSettings.paceMode,
           persistentSettings.includedLanguageCodes,
+          params?.multiSearchScrapeDetailsWithCards === true,
         );
         return;
       }
@@ -417,6 +417,7 @@ export default function MultiSearchBrowser({
     multiSearchPrefillKey,
     multiSearchPrefillQuery,
     paramsLoading,
+    params?.multiSearchScrapeDetailsWithCards,
     persistentSettings,
     restoreRuns,
     searchableScrapers,
@@ -480,6 +481,12 @@ export default function MultiSearchBrowser({
     () => flattenMultiSearchSources(runs),
     [runs],
   );
+  const {
+    authorExtractionProgress,
+    cachedAuthorCount,
+    getAuthors,
+    isExtractingAuthors,
+  } = useMultiSearchAuthors(allSources, paceMode);
   const allSourceHistoryIds = useMemo(
     () => allSources
       .map((source) => buildScraperViewHistoryCardId(
@@ -666,7 +673,6 @@ export default function MultiSearchBrowser({
     setDebouncedResultTextFilter("");
     setNewSourceHistoryIds(new Set());
     setSplitMergedResultIds(new Set());
-    setAuthorExtractionProgress(null);
     void runSearch({
       query,
       scrapers: selectedScrapers,
@@ -903,25 +909,17 @@ export default function MultiSearchBrowser({
   };
 
   const handleExtractAuthors = async () => {
-    const sourcesSnapshot = allSources;
-    if (!sourcesSnapshot.length || isExtractingAuthors) {
+    if (!allSources.length || isExtractingAuthors) {
       return;
     }
 
-    setIsExtractingAuthors(true);
-    setAuthorExtractionProgress({
-      processedSourceCount: 0,
-      totalSourceCount: sourcesSnapshot.length,
-      detailsSourceCount: 0,
-    });
     setOpenError(null);
 
     try {
-      const extractionResult = await extractMultiSearchAuthors(
-        sourcesSnapshot,
-        paceMode,
-        setAuthorExtractionProgress,
-      );
+      const extractionResult = await getAuthors();
+      if (!extractionResult) {
+        return;
+      }
 
       openModal({
         title: "Auteurs trouves",
@@ -940,8 +938,6 @@ export default function MultiSearchBrowser({
           ? extractError.message
           : "Impossible d'extraire les auteurs des resultats charges.",
       );
-    } finally {
-      setIsExtractingAuthors(false);
     }
   };
 
@@ -1077,6 +1073,7 @@ export default function MultiSearchBrowser({
         isExtractingAuthors={isExtractingAuthors}
         canExtractAuthors={allSources.length > 0}
         authorExtractionProgress={authorExtractionProgress}
+        cachedAuthorCount={cachedAuthorCount}
         showMergeReloadButton={showMergeReloadButton}
         onOpenSource={handleOpenSource}
         onOpenSourceInWorkspace={handleOpenSourceInWorkspace}

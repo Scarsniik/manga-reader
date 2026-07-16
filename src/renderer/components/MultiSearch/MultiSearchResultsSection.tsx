@@ -62,6 +62,7 @@ type Props = {
   isExtractingAuthors: boolean;
   canExtractAuthors: boolean;
   authorExtractionProgress: MultiSearchAuthorExtractionProgress | null;
+  cachedAuthorCount: number | null;
   showMergeReloadButton: boolean;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
@@ -118,9 +119,12 @@ const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
 const getAuthorExtractionButtonLabel = (
   isExtractingAuthors: boolean,
   progress: MultiSearchAuthorExtractionProgress | null,
+  cachedAuthorCount: number | null,
 ): string => {
   if (!isExtractingAuthors) {
-    return "Extraire auteurs";
+    return cachedAuthorCount === null
+      ? "Extraire auteurs"
+      : `Voir auteurs (${cachedAuthorCount})`;
   }
 
   if (!progress || progress.totalSourceCount === 0) {
@@ -156,6 +160,7 @@ export default function MultiSearchResultsSection({
   isExtractingAuthors,
   canExtractAuthors,
   authorExtractionProgress,
+  cachedAuthorCount,
   showMergeReloadButton,
   onOpenSource,
   onOpenSourceInWorkspace,
@@ -287,12 +292,18 @@ export default function MultiSearchResultsSection({
               className="multi-search__export-json-button"
               onClick={onExtractAuthors}
               disabled={!canExtractAuthors || isExtractingAuthors}
-              title="Extraire les auteurs depuis les resultats charges"
+              title={cachedAuthorCount === null
+                ? "Extraire les auteurs depuis les resultats charges"
+                : "Rouvrir les derniers auteurs extraits"}
             >
               {isExtractingAuthors ? (
                 <LoadingSpinnerIcon className="multi-search__button-spinner" aria-hidden="true" focusable="false" />
               ) : null}
-              <span>{getAuthorExtractionButtonLabel(isExtractingAuthors, authorExtractionProgress)}</span>
+              <span>{getAuthorExtractionButtonLabel(
+                isExtractingAuthors,
+                authorExtractionProgress,
+                cachedAuthorCount,
+              )}</span>
             </button>
             {showMergeReloadButton ? (
               <>
@@ -397,12 +408,18 @@ export default function MultiSearchResultsSection({
             className="multi-search__export-json-button"
             onClick={onExtractAuthors}
             disabled={!canExtractAuthors || isExtractingAuthors}
-            title="Extraire les auteurs depuis les resultats charges"
+            title={cachedAuthorCount === null
+              ? "Extraire les auteurs depuis les resultats charges"
+              : "Rouvrir les derniers auteurs extraits"}
           >
             {isExtractingAuthors ? (
               <LoadingSpinnerIcon className="multi-search__button-spinner" aria-hidden="true" focusable="false" />
             ) : null}
-            <span>{getAuthorExtractionButtonLabel(isExtractingAuthors, authorExtractionProgress)}</span>
+            <span>{getAuthorExtractionButtonLabel(
+              isExtractingAuthors,
+              authorExtractionProgress,
+              cachedAuthorCount,
+            )}</span>
           </button>
           <button
             type="button"

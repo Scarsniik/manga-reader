@@ -474,6 +474,7 @@ export interface AddScraperTagListCacheItemsRequest {
 export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
+  detailsMetadataFetched?: boolean;
   authorUrl?: string;
   authorUrls?: string[];
   authorNames?: string[];

@@ -80,6 +80,43 @@ const normalizeAuthorName = (name: string | null | undefined, url: string): stri
   return trimmedName || getFallbackAuthorName(url) || url;
 };
 
+const getSourceAuthorUrls = (source: MultiSearchSourceResult): string[] => (
+  source.result.authorUrls?.length
+    ? source.result.authorUrls
+    : source.result.authorUrl
+      ? [source.result.authorUrl]
+      : []
+);
+
+const sortAuthorResults = (authors: MultiSearchAuthorResult[]): MultiSearchAuthorResult[] => (
+  authors.sort((left, right) => (
+    left.name.localeCompare(right.name) || left.scraperName.localeCompare(right.scraperName)
+  ))
+);
+
+export const buildMultiSearchAuthorsSourceFingerprint = (
+  sources: MultiSearchSourceResult[],
+): string => JSON.stringify(
+  sources.map((source) => {
+    const authorEntries = getSourceAuthorUrls(source).map((authorUrl, index) => ([
+      normalizeAuthorUrl(authorUrl),
+      String(source.result.authorNames?.[index] ?? source.result.authorNames?.[0] ?? "").trim(),
+    ])).sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]));
+
+    return JSON.stringify({
+      scraperId: source.scraper.id,
+      scraperName: source.scraper.name,
+      scraperBaseUrl: source.scraper.baseUrl,
+      scraperUpdatedAt: source.scraper.updatedAt,
+      detailUrl: normalizeAuthorUrl(source.result.detailUrl),
+      title: source.result.title,
+      authorEntries,
+      authorNames: [...(source.result.authorNames ?? [])].sort(),
+      detailsMetadataFetched: source.result.detailsMetadataFetched === true,
+    });
+  }).sort(),
+);
+
 const buildAuthorKey = (scraperId: string, url: string): string => (
   `${scraperId}::${normalizeAuthorUrl(url)}`
 );
@@ -116,11 +153,7 @@ const addCardAuthors = (
   authorsByKey: Map<string, MultiSearchAuthorResult>,
   source: MultiSearchSourceResult,
 ): boolean => {
-  const authorUrls = source.result.authorUrls?.length
-    ? source.result.authorUrls
-    : source.result.authorUrl
-      ? [source.result.authorUrl]
-      : [];
+  const authorUrls = getSourceAuthorUrls(source);
 
   if (!authorUrls.length) {
     return false;
@@ -138,7 +171,7 @@ const addCardAuthors = (
 };
 
 const canExtractDetailsAuthors = (source: MultiSearchSourceResult): boolean => {
-  if (!source.result.detailUrl) {
+  if (!source.result.detailUrl || source.result.detailsMetadataFetched === true) {
     return false;
   }
 
@@ -150,6 +183,49 @@ const canExtractDetailsAuthors = (source: MultiSearchSourceResult): boolean => {
     && hasScraperFieldSelectorValue(detailsConfig.titleSelector)
     && hasScraperFieldSelectorValue(detailsConfig.authorUrlSelector),
   );
+};
+
+type CollectedMultiSearchAuthors = {
+  authorsByKey: Map<string, MultiSearchAuthorResult>;
+  sourcesRequiringDetails: MultiSearchSourceResult[];
+};
+
+const collectMultiSearchCardAuthors = (
+  sources: MultiSearchSourceResult[],
+): CollectedMultiSearchAuthors => {
+  const authorsByKey = new Map<string, MultiSearchAuthorResult>();
+  const sourcesRequiringDetails: MultiSearchSourceResult[] = [];
+
+  sources.forEach((source) => {
+    const hasCardAuthor = addCardAuthors(authorsByKey, source);
+    if (!hasCardAuthor && canExtractDetailsAuthors(source)) {
+      sourcesRequiringDetails.push(source);
+    }
+  });
+
+  return {
+    authorsByKey,
+    sourcesRequiringDetails,
+  };
+};
+
+export const buildMultiSearchAuthorExtractionFromLoadedMetadata = (
+  sources: MultiSearchSourceResult[],
+): MultiSearchAuthorExtractionResult | null => {
+  const {
+    authorsByKey,
+    sourcesRequiringDetails,
+  } = collectMultiSearchCardAuthors(sources);
+
+  if (sourcesRequiringDetails.length > 0) {
+    return null;
+  }
+
+  return {
+    authors: sortAuthorResults(Array.from(authorsByKey.values())),
+    detailsSourceCount: 0,
+    failedDetailsSourceCount: 0,
+  };
 };
 
 const fetchDetailsAuthors = async (
@@ -234,19 +310,11 @@ export const extractMultiSearchAuthors = async (
   paceMode: MultiSearchPaceMode,
   onProgress?: (progress: MultiSearchAuthorExtractionProgress) => void,
 ): Promise<MultiSearchAuthorExtractionResult> => {
-  const authorsByKey = new Map<string, MultiSearchAuthorResult>();
-  const sourcesWithoutCardAuthors: MultiSearchSourceResult[] = [];
-  let processedSourceCount = 0;
-
-  sources.forEach((source) => {
-    const hasCardAuthor = addCardAuthors(authorsByKey, source);
-    if (!hasCardAuthor && canExtractDetailsAuthors(source)) {
-      sourcesWithoutCardAuthors.push(source);
-      return;
-    }
-
-    processedSourceCount += 1;
-  });
+  const {
+    authorsByKey,
+    sourcesRequiringDetails,
+  } = collectMultiSearchCardAuthors(sources);
+  let processedSourceCount = sources.length - sourcesRequiringDetails.length;
 
   const paceConfig = getPaceConfig(paceMode);
   const totalSourceCount = sources.length;
@@ -254,11 +322,11 @@ export const extractMultiSearchAuthors = async (
   onProgress?.({
     processedSourceCount,
     totalSourceCount,
-    detailsSourceCount: sourcesWithoutCardAuthors.length,
+    detailsSourceCount: sourcesRequiringDetails.length,
   });
 
   await runWithConcurrency(
-    sourcesWithoutCardAuthors.map((source) => async () => {
+    sourcesRequiringDetails.map((source) => async () => {
       if (paceConfig.pageDelayMs > 0) {
         await wait(paceConfig.pageDelayMs);
       }
@@ -272,17 +340,15 @@ export const extractMultiSearchAuthors = async (
       onProgress?.({
         processedSourceCount,
         totalSourceCount,
-        detailsSourceCount: sourcesWithoutCardAuthors.length,
+        detailsSourceCount: sourcesRequiringDetails.length,
       });
     }),
     paceConfig.concurrency,
   );
 
   return {
-    authors: Array.from(authorsByKey.values()).sort((left, right) => (
-      left.name.localeCompare(right.name) || left.scraperName.localeCompare(right.scraperName)
-    )),
-    detailsSourceCount: sourcesWithoutCardAuthors.length,
+    authors: sortAuthorResults(Array.from(authorsByKey.values())),
+    detailsSourceCount: sourcesRequiringDetails.length,
     failedDetailsSourceCount,
   };
 };
