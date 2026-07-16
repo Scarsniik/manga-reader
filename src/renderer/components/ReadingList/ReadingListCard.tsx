@@ -31,17 +31,17 @@ export default function ReadingListCard({
         onOpenDetails ? "is-clickable" : "",
         status?.completed ? "is-completed" : "",
       ].filter(Boolean).join(" ")}
-      role={onOpenDetails ? "button" : undefined}
-      tabIndex={onOpenDetails ? 0 : undefined}
-      onClick={onOpenDetails ? () => onOpenDetails(item) : undefined}
-      onKeyDown={onOpenDetails ? (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpenDetails(item);
-        }
-      } : undefined}
-      title={onOpenDetails ? "Ouvrir la fiche dans un nouvel onglet" : undefined}
     >
+      {onOpenDetails ? (
+        <button
+          type="button"
+          className="reading-list-card__open"
+          aria-label={`Ouvrir la fiche de ${item.metadata.title} dans un nouvel onglet`}
+          title="Ouvrir la fiche dans un nouvel onglet"
+          onClick={() => onOpenDetails(item)}
+        />
+      ) : null}
+
       <div className="reading-list-card__cover">
         {coverSrc ? (
           <img src={coverSrc} alt={`Couverture de ${item.metadata.title}`} />

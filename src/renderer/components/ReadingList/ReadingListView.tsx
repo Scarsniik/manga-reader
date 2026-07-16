@@ -8,6 +8,12 @@ import {
   resolveReadingListReaderTarget,
 } from "@/renderer/components/ReadingList/readingListReader";
 import { shuffleReadingListItems } from "@/renderer/components/ReadingList/readingListItems";
+import {
+  autoSortReadingListItems,
+  moveReadingListItem,
+  reorderReadingListItems,
+  type ReadingListDropEdge,
+} from "@/renderer/components/ReadingList/readingListOrdering";
 import useSaveReadingList from "@/renderer/components/ReadingList/useSaveReadingList";
 import useAuthors from "@/renderer/hooks/useAuthors";
 import useTags from "@/renderer/hooks/useTags";
@@ -263,6 +269,27 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
     }));
   }, []);
 
+  const handleAutoSort = useCallback(() => {
+    setItems((currentItems) => autoSortReadingListItems(currentItems));
+  }, []);
+
+  const handleMove = useCallback((itemId: string, offset: number) => {
+    setItems((currentItems) => moveReadingListItem(currentItems, itemId, offset));
+  }, []);
+
+  const handleReorder = useCallback((
+    sourceItemId: string,
+    targetItemId: string,
+    dropEdge: ReadingListDropEdge,
+  ) => {
+    setItems((currentItems) => reorderReadingListItems(
+      currentItems,
+      sourceItemId,
+      targetItemId,
+      dropEdge,
+    ));
+  }, []);
+
   if (phase === "reading") {
     if (loading) {
       return <div className="reading-list-state">Chargement du manga...</div>;
@@ -336,6 +363,8 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
       saved={readingListSave.saved}
       saving={readingListSave.saving}
       saveError={readingListSave.error}
+      onAutoSort={handleAutoSort}
+      onMove={handleMove}
       onOpenDetails={(item) => {
         void handleOpenDetails(item);
       }}
@@ -346,6 +375,7 @@ export default function ReadingListView({ initialItems, autoStart = false }: Pro
       onSave={() => {
         void readingListSave.save();
       }}
+      onReorder={handleReorder}
       onStart={handleStart}
     />
   );

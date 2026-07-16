@@ -51,6 +51,21 @@ La page de liste propose trois options avant le lancement :
 Les éléments peuvent être retirés de la liste avant le lancement.
 Les cards de préparation et de résumé ouvrent leur fiche manga dans un nouvel onglet workspace au clic ou au clavier.
 
+## Ordre des mangas
+
+Dans la page de préparation, chaque card possède une poignée permettant de déplacer le manga par glisser-déposer.
+Lorsque la poignée a le focus, les flèches du clavier déplacent aussi le manga d'une position. Le nouvel ordre est utilisé
+au lancement et conservé lors de l'enregistrement de la liste.
+
+Le bouton `Tri automatique` recherche des numéros de tome ou de chapitre dans les titres similaires. Il reconnaît les
+libellés français et anglais courants (`tome`, `volume`, `vol`, `chapitre`, `chapter`, `ch`), les nombres décimaux, les
+numéros placés à la fin d'un titre ainsi que les marqueurs japonais de chapitre et de tome. Le tome est trié avant le
+chapitre lorsqu'un titre contient les deux informations. Les titres non reconnus et les séries différentes conservent
+leur emplacement afin de limiter les déplacements erronés ; l'ordre peut ensuite être corrigé manuellement.
+
+L'option `Lecture aléatoire` mélange toujours la liste au lancement et prend donc la priorité sur l'ordre manuel ou
+automatique pour la session concernée.
+
 ## Lecture
 
 Le lecteur normal est réutilisé. En mode liste de lecture, l'enchaînement de la liste prend la priorité sur les chapitres
