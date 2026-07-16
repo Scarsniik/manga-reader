@@ -4,10 +4,9 @@ import { ScraperBookmarkMetadataField } from "@/shared/scraper";
 import ScraperBookmarkButton from "@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton";
 import useModal from "@/renderer/hooks/useModal";
 import buildSettingsModal from "@/renderer/components/Modal/modales/SettingsModal";
-import { ChevronLeftIcon, ImageExpandIcon } from "@/renderer/components/icons";
+import { ChevronLeftIcon, ImageExpandIcon, SettingsIcon } from "@/renderer/components/icons";
 import CopyImageIcon from "./icons/copy-image.svg?react";
 import OcrScanIcon from "./icons/ocr-scan.svg?react";
-import ReaderSettingsIcon from "./icons/settings.svg?react";
 import { ReaderCopyFeedback } from "./types";
 
 type Props = {
@@ -92,7 +91,7 @@ const ReaderHeader = React.forwardRef<HTMLDivElement, Props>(({
                     title="Ouvrir les paramètres"
                     aria-label="Ouvrir les paramètres"
                 >
-                    <ReaderSettingsIcon aria-hidden="true" focusable="false" />
+                    <SettingsIcon aria-hidden="true" focusable="false" />
                 </button>
                 <button
                     type="button"

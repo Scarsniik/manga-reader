@@ -3,6 +3,7 @@ import {
     DownloadArrowIcon,
     EditPencilIcon,
     PlusSignIcon,
+    SettingsIcon,
 } from "@/renderer/components/icons";
 import MangaManagerViewMenu, {
     type MangaManagerViewOption,
@@ -10,7 +11,6 @@ import MangaManagerViewMenu, {
 import OcrScanIcon from "@/renderer/components/MangaManger/icons/ocr-scan.svg?react";
 import ScrapersIcon from "@/renderer/components/MangaManger/icons/scrapers.svg?react";
 import SelectionIcon from "@/renderer/components/MangaManger/icons/selection.svg?react";
-import SettingsIcon from "@/renderer/components/MangaManger/icons/settings.svg?react";
 import TagsIcon from "@/renderer/components/MangaManger/icons/tags.svg?react";
 
 type Props = {

@@ -6,10 +6,10 @@ import {
   FilterRemoveIcon,
   LoadingSpinnerIcon,
   OpenBookIcon,
+  SettingsIcon,
 } from '@/renderer/components/icons';
 import OcrScanIcon from '@/renderer/components/MangaManger/icons/ocr-scan.svg?react';
 import SelectionIcon from '@/renderer/components/MangaManger/icons/selection.svg?react';
-import SettingsIcon from '@/renderer/components/MangaManger/icons/settings.svg?react';
 import { useModal } from '@/renderer/hooks/useModal';
 import { notifyOcrRuntimeMissing, openOcrRuntimeStatus } from '@/renderer/utils/ocrRuntimeUi';
 import './OcrModalContent.scss';
