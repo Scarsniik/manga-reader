@@ -1,6 +1,6 @@
 # Procedure de test - Mise a jour automatique application
 
-Date de mise a jour : 2026-04-22
+Date de mise a jour : 2026-07-16
 
 ## Objectif
 
@@ -152,6 +152,24 @@ Resultat attendu :
 - `latest.yml` est cree dans `build/` ;
 - les fichiers `.blockmap` sont crees si `electron-builder` les genere ;
 - aucun artefact OCR lourd n'est present dans les assets application.
+
+### Benchmark local du deploiement
+
+Chaque build Vite nettoie `dist/renderer` avant de produire les assets. Les
+dependances frontend et de build restent dans `devDependencies` : Vite les
+integre aux bundles renderer, et elles ne sont donc pas copiees comme
+dependances du package runtime.
+
+Pour mesurer localement une version deja publiee sans creer de tag ni publier
+de release :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-app.ps1 -DryRun -AllowExistingTag
+```
+
+Si des modifications locales sont volontairement incluses dans le benchmark,
+ajouter `-AllowDirty`. Le script affiche les durees par phase et un recapitulatif
+final afin de comparer les executions.
 
 ## Test 1 - Installeur
 

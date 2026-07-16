@@ -9,6 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$dryRunWasExplicitlyRequested = $PSBoundParameters.ContainsKey("DryRun") -and [bool]$DryRun
 
 if (-not $DryRun -and -not $Publish) {
     $DryRun = $true
@@ -16,10 +17,89 @@ if (-not $DryRun -and -not $Publish) {
 
 $workspace = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $workspace
+$script:ReleaseStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$script:ReleaseTimings = [System.Collections.Generic.List[object]]::new()
+$script:ReleaseOutcome = "failed"
 
 function Write-Step {
     param([string]$Message)
     Write-Host "==> $Message"
+}
+
+function Format-PhaseDuration {
+    param([Parameter(Mandatory = $true)][timespan]$Duration)
+
+    return [string]::Format(
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        "{0:0.000} s",
+        $Duration.TotalSeconds
+    )
+}
+
+function Invoke-TimedPhase {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][scriptblock]$Action,
+        [switch]$HideStepHeading
+    )
+
+    if (-not $HideStepHeading) {
+        Write-Step $Name
+    }
+
+    $startedAtMilliseconds = $script:ReleaseStopwatch.Elapsed.TotalMilliseconds
+    $phaseStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $succeeded = $false
+
+    try {
+        & $Action
+        $succeeded = $true
+    } finally {
+        $phaseStopwatch.Stop()
+        $status = if ($succeeded) { "ok" } else { "failed" }
+        $script:ReleaseTimings.Add([pscustomobject]@{
+            Name = $Name
+            StartedAtMilliseconds = $startedAtMilliseconds
+            Duration = $phaseStopwatch.Elapsed
+            Status = $status
+        })
+        Write-Host ("<== {0}: {1} [{2}]" -f $Name, (Format-PhaseDuration -Duration $phaseStopwatch.Elapsed), $status)
+    }
+}
+
+function Write-ReleaseTimingSummary {
+    $script:ReleaseStopwatch.Stop()
+
+    Write-Host ""
+    Write-Host "==> Release timing summary"
+    foreach ($timing in ($script:ReleaseTimings | Sort-Object StartedAtMilliseconds)) {
+        Write-Host ("  {0,-48} {1,12}  {2}" -f `
+            $timing.Name, `
+            (Format-PhaseDuration -Duration $timing.Duration), `
+            $timing.Status)
+    }
+
+    Write-Host ("  {0,-48} {1,12}" -f "Total", (Format-PhaseDuration -Duration $script:ReleaseStopwatch.Elapsed))
+    Write-Host "  Outcome                                          $script:ReleaseOutcome"
+}
+
+function Invoke-NpmScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptName,
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    & npm run $ScriptName
+    if ($LASTEXITCODE -ne 0) {
+        throw $FailureMessage
+    }
+}
+
+function Invoke-ElectronBuilderInstaller {
+    & npx electron-builder --config electron-builder.config.cjs --win nsis --publish never
+    if ($LASTEXITCODE -ne 0) {
+        throw "Building the NSIS installer failed."
+    }
 }
 
 function Read-PackageJson {
@@ -102,8 +182,10 @@ function Test-CommandAvailable {
 }
 
 function Assert-Tooling {
-    if (-not (Test-CommandAvailable -CommandName "git")) {
-        throw "Git is required to publish the release."
+    foreach ($commandName in @("git", "npm", "npx")) {
+        if (-not (Test-CommandAvailable -CommandName $commandName)) {
+            throw "$commandName is required to build or publish the release."
+        }
     }
 }
 
@@ -736,104 +818,186 @@ function Publish-GitHubRelease {
         -AllowExisting:$AllowExisting
 }
 
-Assert-Tooling
-$packageJson = Read-PackageJson
-
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = [string]$packageJson.version
-}
-
-if ($Version -notmatch "^\d+\.\d+\.\d+$") {
-    throw "Version must follow MAJOR.MINOR.PATCH."
-}
-
-if ([string]$packageJson.version -ne $Version) {
-    throw "package.json version '$($packageJson.version)' does not match requested version '$Version'."
-}
-
-$tagName = "v$Version"
-$repository = Resolve-GitHubRepository -PackageJson $packageJson
-$releaseUrl = "https://github.com/$($repository.Owner)/$($repository.Repo)/releases/tag/$tagName"
-
-Assert-RepoState
-
-if ((Test-TagExists -TagName $tagName) -and -not $AllowExistingTag) {
-    throw "Git tag $tagName already exists. Use -AllowExistingTag only for explicit test scenarios."
-}
-
-$latestPublishedVersion = Get-LatestPublishedVersion -Owner $repository.Owner -Repo $repository.Repo
-if ($latestPublishedVersion -and (Compare-SemVer -Left $Version -Right $latestPublishedVersion) -le 0) {
-    throw "Requested version $Version must be greater than the latest published app version $latestPublishedVersion."
-}
-
-Write-Step "Building installer assets"
-Invoke-WithoutPublishCredentials {
-    & npm run package:app:installer
-    if ($LASTEXITCODE -ne 0) {
-        throw "Packaging the installer failed."
+try {
+    Invoke-TimedPhase -Name "Preflight / Tooling" -Action {
+        Assert-Tooling
     }
-}
 
-$assets = Get-ReleaseAssets
-Assert-NoOcrArtifacts -AssetPaths $assets
-$latestManifestPath = $assets |
-    Where-Object { [System.IO.Path]::GetFileName($_) -eq "latest.yml" } |
-    Select-Object -First 1
-$installerPath = $assets |
-    Where-Object { [System.IO.Path]::GetExtension($_) -eq ".exe" } |
-    Select-Object -First 1
-
-if ([string]::IsNullOrWhiteSpace($latestManifestPath) -or [string]::IsNullOrWhiteSpace($installerPath)) {
-    throw "Unable to locate the installer or latest.yml in build/."
-}
-
-Assert-LatestManifestMatchesInstaller -LatestFilePath $latestManifestPath -InstallerPath $installerPath
-
-$releaseNotesFile = New-ReleaseNotesFile -TagName $tagName -VersionNumber $Version -SourcePath $ReleaseNotesPath
-
-Write-Host ""
-Write-Host "Repository   : $($repository.Owner)/$($repository.Repo)"
-Write-Host "Version      : $Version"
-Write-Host "Tag          : $tagName"
-Write-Host "Assets       :"
-foreach ($asset in $assets) {
-    Write-Host "  - $asset"
-}
-Write-Host "Release URL  : $releaseUrl"
-Write-Host "Mode         : $(if ($Publish) { 'publish' } else { 'dry-run' })"
-
-if ($DryRun -and -not $Publish) {
-    Write-Step "Dry run completed"
-    exit 0
-}
-
-Write-Step "Creating git tag"
-if (-not (Test-TagExists -TagName $tagName)) {
-    git tag -a $tagName -m "feat: release $tagName"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to create git tag $tagName."
+    $packageJson = Invoke-TimedPhase -Name "Preflight / Read package metadata" -Action {
+        Read-PackageJson
     }
+
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        $Version = [string]$packageJson.version
+    }
+
+    if ($Version -notmatch "^\d+\.\d+\.\d+$") {
+        throw "Version must follow MAJOR.MINOR.PATCH."
+    }
+
+    if ([string]$packageJson.version -ne $Version) {
+        throw "package.json version '$($packageJson.version)' does not match requested version '$Version'."
+    }
+
+    $tagName = "v$Version"
+    $repository = Resolve-GitHubRepository -PackageJson $packageJson
+    $releaseUrl = "https://github.com/$($repository.Owner)/$($repository.Repo)/releases/tag/$tagName"
+
+    Invoke-TimedPhase -Name "Preflight / Repository state" -Action {
+        Assert-RepoState
+    }
+
+    $tagExists = Invoke-TimedPhase -Name "Preflight / Tag lookup" -Action {
+        Test-TagExists -TagName $tagName
+    }
+
+    if ($tagExists -and -not $AllowExistingTag) {
+        throw "Git tag $tagName already exists. Use -AllowExistingTag only for explicit test scenarios."
+    }
+
+    $latestPublishedVersion = Invoke-TimedPhase -Name "Preflight / Latest published version" -Action {
+        Get-LatestPublishedVersion -Owner $repository.Owner -Repo $repository.Repo
+    }
+
+    $requestedVersionIsNotNewer = $latestPublishedVersion `
+        -and (Compare-SemVer -Left $Version -Right $latestPublishedVersion) -le 0
+    if ($requestedVersionIsNotNewer) {
+        $canBenchmarkPublishedVersion = $dryRunWasExplicitlyRequested `
+            -and $DryRun `
+            -and -not $Publish `
+            -and $AllowExistingTag
+        if (-not $canBenchmarkPublishedVersion) {
+            throw "Requested version $Version must be greater than the latest published app version $latestPublishedVersion."
+        }
+
+        $existingPublishedRelease = Invoke-TimedPhase -Name "Preflight / Existing release lookup" -Action {
+            $headers = Get-GitHubApiHeaders
+            Get-ExistingRelease `
+                -Owner $repository.Owner `
+                -Repo $repository.Repo `
+                -TagName $tagName `
+                -Headers $headers
+        }
+
+        if ($null -eq $existingPublishedRelease -or $existingPublishedRelease.draft -or $existingPublishedRelease.prerelease) {
+            throw "Dry-run benchmarking is only allowed for a published release when -AllowExistingTag is used."
+        }
+
+        Write-Warning "Benchmarking already published release $tagName. Publish safeguards remain enabled."
+    }
+
+    Invoke-TimedPhase -Name "Packaging / Complete installer pipeline (aggregate)" -Action {
+        Invoke-WithoutPublishCredentials {
+            Invoke-TimedPhase -Name "Packaging / Compile Electron" -Action {
+                Invoke-NpmScript `
+                    -ScriptName "build:electron" `
+                    -FailureMessage "Compiling Electron failed."
+            }
+
+            Invoke-TimedPhase -Name "Packaging / Build renderer" -Action {
+                Invoke-NpmScript `
+                    -ScriptName "build" `
+                    -FailureMessage "Building the renderer failed."
+            }
+
+            Invoke-TimedPhase -Name "Packaging / Clean package outputs" -Action {
+                Invoke-NpmScript `
+                    -ScriptName "clean:package" `
+                    -FailureMessage "Cleaning package outputs failed."
+            }
+
+            Invoke-TimedPhase -Name "Packaging / Electron Builder NSIS" -Action {
+                Invoke-ElectronBuilderInstaller
+            }
+        }
+    }
+
+    $assets = @(Invoke-TimedPhase -Name "Artifacts / Discover release assets" -Action {
+        Get-ReleaseAssets
+    })
+
+    Invoke-TimedPhase -Name "Artifacts / Reject OCR assets" -Action {
+        Assert-NoOcrArtifacts -AssetPaths $assets
+    }
+
+    $latestManifestPath = $assets |
+        Where-Object { [System.IO.Path]::GetFileName($_) -eq "latest.yml" } |
+        Select-Object -First 1
+    $installerPath = $assets |
+        Where-Object { [System.IO.Path]::GetExtension($_) -eq ".exe" } |
+        Select-Object -First 1
+
+    if ([string]::IsNullOrWhiteSpace($latestManifestPath) -or [string]::IsNullOrWhiteSpace($installerPath)) {
+        throw "Unable to locate the installer or latest.yml in build/."
+    }
+
+    Invoke-TimedPhase -Name "Artifacts / Validate latest.yml" -Action {
+        Assert-LatestManifestMatchesInstaller `
+            -LatestFilePath $latestManifestPath `
+            -InstallerPath $installerPath
+    }
+
+    $releaseNotesFile = Invoke-TimedPhase -Name "Artifacts / Validate release notes" -Action {
+        New-ReleaseNotesFile `
+            -TagName $tagName `
+            -VersionNumber $Version `
+            -SourcePath $ReleaseNotesPath
+    }
+
+    Write-Host ""
+    Write-Host "Repository   : $($repository.Owner)/$($repository.Repo)"
+    Write-Host "Version      : $Version"
+    Write-Host "Tag          : $tagName"
+    Write-Host "Assets       :"
+    foreach ($asset in $assets) {
+        Write-Host "  - $asset"
+    }
+    Write-Host "Release URL  : $releaseUrl"
+    Write-Host "Mode         : $(if ($Publish) { 'publish' } else { 'dry-run' })"
+
+    if ($DryRun -and -not $Publish) {
+        $script:ReleaseOutcome = "dry-run completed"
+        Write-Step "Dry run completed"
+        return
+    }
+
+    Invoke-TimedPhase -Name "Publish / Create git tag" -Action {
+        if (-not (Test-TagExists -TagName $tagName)) {
+            git tag -a $tagName -m "feat: release $tagName"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Unable to create git tag $tagName."
+            }
+        }
+    }
+
+    Invoke-TimedPhase -Name "Publish / Push git tag" -Action {
+        git push origin $tagName
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to push git tag $tagName to origin."
+        }
+    }
+
+    Invoke-TimedPhase -Name "Publish / Create GitHub release" -Action {
+        Publish-GitHubRelease `
+            -Owner $repository.Owner `
+            -Repo $repository.Repo `
+            -TagName $tagName `
+            -ReleaseNotesFile $releaseNotesFile `
+            -AssetPaths $assets `
+            -AllowExisting:$AllowExistingTag
+    }
+
+    Invoke-TimedPhase -Name "Publish / Verify remote assets" -Action {
+        Assert-ReleaseAssetsMatchLocalBuild `
+            -Owner $repository.Owner `
+            -Repo $repository.Repo `
+            -TagName $tagName `
+            -AssetPaths $assets
+    }
+
+    $script:ReleaseOutcome = "published"
+    Write-Step "Release published"
+    Write-Host "Release URL: $releaseUrl"
+} finally {
+    Write-ReleaseTimingSummary
 }
-
-Write-Step "Pushing git tag"
-git push origin $tagName
-if ($LASTEXITCODE -ne 0) {
-    throw "Unable to push git tag $tagName to origin."
-}
-
-Publish-GitHubRelease `
-    -Owner $repository.Owner `
-    -Repo $repository.Repo `
-    -TagName $tagName `
-    -ReleaseNotesFile $releaseNotesFile `
-    -AssetPaths $assets `
-    -AllowExisting:$AllowExistingTag
-
-Assert-ReleaseAssetsMatchLocalBuild `
-    -Owner $repository.Owner `
-    -Repo $repository.Repo `
-    -TagName $tagName `
-    -AssetPaths $assets
-
-Write-Step "Release published"
-Write-Host "Release URL: $releaseUrl"
