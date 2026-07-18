@@ -221,6 +221,12 @@ Impact sur le comportement du reader :
 - les resultats OCR persistants par page sont maintenant invalides en douceur via `manga-ocr-page-v5` et le cache applicatif via `mokuro-page-v8` :
   - une page deja stockee est recalculee a sa prochaine visite
   - les selections manuelles et les corrections de texte existantes sont conservees pendant ce recalcul
+- le retour terrain du 18 juillet 2026 a montre que le filtre `low-mask-coverage` supprimait des bulles pourtant correctement detectees :
+  - sur les pages 9 et 10 de `Shojo ga Doutei to no Hatsutaiken de Mezamechau Hanashi 2`, trois bulles reelles etaient reconnues par le worker puis retirees cote Electron
+  - un audit des 55 fichiers OCR disponibles dans la bibliotheque a retrouve 794 blocs retires par cette seule regle, dont de nombreux dialogues manifestement valides
+  - la couverture du masque n'est donc plus utilisee seule comme motif de rejet ; les filtres de ponctuation, repetitions, densite incoherente et petits fragments inconnus restent actifs
+  - ce changement ne lance aucun appel OCR supplementaire et n'augmente donc pas le temps de traitement du worker
+- les schemas passent a `manga-ocr-page-v6` et `mokuro-page-v9` afin que les pages deja filtrees soient recalculees sans perdre les corrections ou selections manuelles
 
 Impact sur l'import :
 

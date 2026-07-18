@@ -58,3 +58,45 @@ test("OCR filtering analyzes normalized text without changing displayed text", (
   assert.equal(block.text, displayedText);
   assert.equal(block.lines[0].text, displayedText);
 });
+
+const createFilterBlock = (text, overrides = {}) => ({
+  id: "b0001",
+  text,
+  bboxPx: { x1: 0, y1: 0, x2: 200, y2: 200 },
+  bbox: { x: 0, y: 0, w: 0.14, h: 0.15 },
+  vertical: true,
+  fontSize: undefined,
+  angle: 0,
+  detectorConfidence: 1,
+  language: "jpn",
+  aspectRatio: 1,
+  maskScore: 0.07,
+  lines: [{ text }],
+  confidence: null,
+  ...overrides,
+});
+
+test("OCR filtering keeps real multi-column bubbles with low mask coverage", () => {
+  const page9Bubble = createFilterBlock(
+    "い．．いや．．．それは元々苦手なとこだったし．．．",
+    {
+      bbox: { x: 0.7195, y: 0.3723, w: 0.1352, h: 0.1467 },
+      maskScore: 0.102,
+    },
+  );
+  const page10Bubble = createFilterBlock(
+    "でも一緒にいるとイチャイチャしたくなっちゃうからだからしょうがなくて",
+    {
+      bbox: { x: 0.3141, y: 0.0498, w: 0.2258, h: 0.1288 },
+      maskScore: 0.074,
+    },
+  );
+
+  assert.equal(getOcrBlockFilterReason(page9Bubble), null);
+  assert.equal(getOcrBlockFilterReason(page10Bubble), null);
+});
+
+test("OCR filtering still rejects obvious punctuation and repeated-character noise", () => {
+  assert.equal(getOcrBlockFilterReason(createFilterBlock("．．．．．．")), "punctuation-only");
+  assert.equal(getOcrBlockFilterReason(createFilterBlock("ああああああ")), "repeated-char-run");
+});

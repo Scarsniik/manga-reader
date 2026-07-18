@@ -87,15 +87,6 @@ const isTextDensitySuspicious = (block: NormalizedPageBlock, meaningfulChars: nu
   return meaningfulChars > Math.max(14, expectedChars * 2.75);
 };
 
-const isMaskCoverageSuspicious = (block: NormalizedPageBlock, meaningfulChars: number) => {
-  if (block.maskScore == null || meaningfulChars < 10) {
-    return false;
-  }
-
-  const blockAreaRatio = block.bbox.w * block.bbox.h;
-  return block.maskScore < 0.12 && blockAreaRatio < 0.08;
-};
-
 const isUnknownShortFragmentWithPunctuation = (
   block: NormalizedPageBlock,
   meaningfulChars: number,
@@ -140,10 +131,6 @@ export const getOcrBlockFilterReason = (block: NormalizedPageBlock): string | nu
 
   if (isTextDensitySuspicious(block, meaningfulChars)) {
     return "text-density-mismatch";
-  }
-
-  if (isMaskCoverageSuspicious(block, meaningfulChars)) {
-    return "low-mask-coverage";
   }
 
   if (isUnknownShortFragmentWithPunctuation(block, meaningfulChars)) {

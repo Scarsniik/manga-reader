@@ -4,10 +4,10 @@ import type { OcrQueueJobPriority } from "./types";
 
 export const OCR_CACHE_DIR = path.join(dataDir, "ocr-cache");
 export const OCR_TEMP_DIR = path.join(dataDir, "ocr-temp");
-export const CACHE_SCHEMA_VERSION = "mokuro-page-v8";
+export const CACHE_SCHEMA_VERSION = "mokuro-page-v9";
 export const MANGA_OCR_FILE_NAME = ".manga-helper.ocr.json";
 export const MANGA_OCR_SCHEMA_VERSION = "manga-ocr-file-v1";
-export const MANGA_OCR_PAGE_SCHEMA_VERSION = "manga-ocr-page-v5";
+export const MANGA_OCR_PAGE_SCHEMA_VERSION = "manga-ocr-page-v6";
 export const MANGA_OCR_PROFILE_FILE_NAME = ".manga-helper.ocr.profile.json";
 export const MANGA_OCR_PROFILE_SCHEMA_VERSION = "manga-ocr-profile-v1";
 export const MANGA_VOCABULARY_FILE_NAME = ".manga-helper.vocabulary.json";
