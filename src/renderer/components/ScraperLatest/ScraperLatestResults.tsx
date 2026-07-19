@@ -373,7 +373,7 @@ export default function ScraperLatestResults({
           <p>{summary}</p>
           {preserveStoredResults ? (
             <p>
-              {sources.length} source(s) enregistree(s) · {mergedCardCount} card(s) fusionnee(s) · {displayedResults.length} affichee(s)
+              {sources.length} résultat(s) avant fusion · {mergedCardCount} card(s) fusionnée(s) · {displayedResults.length} affichée(s)
               {shouldHideBlacklistedCards && blacklistedCardCount > 0
                 ? ` · ${blacklistedCardCount} masquee(s) par la blacklist`
                 : ""}

@@ -54,7 +54,7 @@ const formatResultCount = (job: BackgroundSearchJobMetadata): string => {
   if (job.kind === "mangaCorrespondence") {
     return `${count} correspondance(s)`;
   }
-  return `${count} source(s) brute(s)`;
+  return `${count} résultat(s) avant fusion`;
 };
 
 const getProgressPercent = (job: BackgroundSearchJobMetadata): number | null => {
