@@ -99,6 +99,14 @@ export type AppParams = {
     scraperViewHistoryMaxRecords?: number;
     scraperViewHistorySeenRetentionDays?: number;
     scraperViewHistoryReadRetentionDays?: number;
+    backgroundSearchStorageMode?: 'memory' | 'temporaryFile';
+    backgroundSearchTemporaryRetentionHours?: number;
+    backgroundSearchMaxConcurrent?: number;
+    multiSearchBackgroundEnabled?: boolean;
+    scraperAuthorBackgroundEnabled?: boolean;
+    scraperLatestSourcesBackgroundEnabled?: boolean;
+    scraperLatestAuthorsBackgroundEnabled?: boolean;
+    scraperAuthorFavoriteRefreshBackgroundEnabled?: boolean;
     mangaListFilters?: LibrarySearchFilterState | null;
     [key: string]: any;
 };

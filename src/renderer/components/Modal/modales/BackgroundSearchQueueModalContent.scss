@@ -1,0 +1,58 @@
+.background-search-dialog {
+  width: min(900px, 94vw);
+  max-width: 900px;
+  height: min(760px, 88vh);
+  max-height: 88vh;
+  border-color: #343941;
+  border-radius: 14px;
+  background: #17191c;
+}
+
+.background-search-dialog__body { padding: 0; overflow: hidden; }
+.background-search-modal-title { display: flex; align-items: center; gap: 11px; }
+.background-search-modal-title__icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 8px; background: rgba(139, 105, 210, .15); color: #b79be9; }
+.background-search-modal-title__icon svg { width: 18px; height: 18px; }
+.background-search-modal-title > span:last-child { display: grid; gap: 3px; }
+.background-search-modal-title strong { color: #f5f7fa; font-size: .9rem; }
+.background-search-modal-title small { color: #8f99a6; font-size: .68rem; }
+.background-search-modal-content { display: grid; height: 100%; min-height: 0; box-sizing: border-box; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 12px; padding: 18px 20px 20px; background: radial-gradient(circle at 88% -10%, rgba(139, 105, 210, .09), transparent 34%), #17191c; }
+.background-search-overview { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.background-search-overview > div > span { color: #aa8ee0; font-size: .62rem; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.background-search-overview h3 { margin: 4px 0 3px; color: #f4f6f8; font-size: 1.15rem; }
+.background-search-overview p { margin: 0; color: #929ca8; font-size: .73rem; }
+.background-search-overview button, .background-search-card__actions button { display: inline-flex; min-height: 30px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid #383e46; border-radius: 6px; background: transparent; color: #aab2bc; cursor: pointer; font: inherit; font-size: .66rem; }
+.background-search-overview button:hover, .background-search-card__actions button:hover { background: rgba(255,255,255,.065); color: #fff; }
+.background-search-overview svg, .background-search-card__actions svg { width: 14px; height: 14px; }
+.background-search-overview .is-spinning { animation: background-search-spin .8s linear infinite; }
+.background-search-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.background-search-summary > div { display: flex; align-items: baseline; justify-content: space-between; padding: 9px 11px; border: 1px solid #30353c; border-radius: 8px; background: rgba(9,11,13,.3); }
+.background-search-summary strong { color: #f3f5f7; font-size: 1rem; }
+.background-search-summary span { color: #808a96; font-size: .64rem; }
+.background-search-list { display: grid; min-height: 0; align-content: start; gap: 8px; overflow-y: auto; padding-right: 5px; scrollbar-color: #414852 transparent; scrollbar-width: thin; }
+.background-search-card { position: relative; display: grid; gap: 7px; padding: 9px 11px; border: 1px solid #30353c; border-radius: 9px; background: linear-gradient(145deg, rgba(34,38,43,.72), rgba(25,28,32,.75)); }
+.background-search-card.is-unopened { border-color: rgba(139, 105, 210, .58); background: linear-gradient(145deg, rgba(54,45,72,.8), rgba(27,29,35,.82)); box-shadow: inset 0 0 0 1px rgba(139,105,210,.08); }
+.background-search-card::before { position: absolute; inset: 0 auto 0 0; width: 2px; background: #9977d4; content: ""; }
+.background-search-card.status-completed::before { background: #55ad72; }
+.background-search-card.status-error::before, .background-search-card.status-cancelled::before, .background-search-card.status-interrupted::before { background: #c45b55; }
+.background-search-card__open { display: flex; width: 100%; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.background-search-card__icon { position: relative; display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 7px; background: rgba(139,105,210,.13); color: #b99ae9; }
+.background-search-card__icon svg { width: 16px; height: 16px; }
+.background-search-card__unopened-dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border: 2px solid #24242c; border-radius: 50%; background: #b794f4; box-shadow: 0 0 8px rgba(183,148,244,.8); }
+.background-search-card__copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.background-search-card__copy > strong { overflow: hidden; color: #eef0f3; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.background-search-card__copy > small { color: #808a96; font-size: .61rem; }
+.background-search-card__meta { display: flex; flex-wrap: wrap; gap: 8px; color: #9aa3ad; font-size: .62rem; }
+.background-search-badge { flex: 0 0 auto; padding: 4px 8px; border: 1px solid rgba(139,105,210,.25); border-radius: 999px; background: rgba(139,105,210,.12); color: #cfbaf0; font-size: .6rem; font-weight: 650; }
+.background-search-badge.completed { border-color: rgba(67,156,96,.25); background: rgba(67,156,96,.12); color: #a9dfba; }
+.background-search-badge.error, .background-search-badge.cancelled, .background-search-badge.interrupted { border-color: rgba(196,75,68,.25); background: rgba(196,75,68,.12); color: #e8aaa6; }
+.background-search-progress { height: 3px; overflow: hidden; border-radius: 99px; background: #292e35; }
+.background-search-progress span { display: block; height: 100%; border-radius: inherit; background: #9977d4; transition: width .2s ease; }
+.background-search-card__actions { display: flex; justify-content: flex-end; gap: 5px; }
+.background-search-card__actions button.danger { color: #dca09d; }
+.background-search-feedback { padding: 7px 9px; border-radius: 7px; color: #cbd5df; font-size: .68rem; }
+.background-search-feedback.is-error { border: 1px solid rgba(196,64,57,.4); background: rgba(196,64,57,.1); color: #f1b0ac; }
+.background-search-empty { display: grid; min-height: 220px; place-items: center; align-content: center; gap: 8px; color: #858f9b; text-align: center; }
+.background-search-empty > svg { width: 30px; height: 30px; color: #9d80d6; }
+.background-search-empty strong { color: #dfe3e8; font-size: .8rem; }
+.background-search-empty p { margin: 0; font-size: .7rem; }
+@keyframes background-search-spin { to { transform: rotate(360deg); } }

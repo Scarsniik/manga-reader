@@ -22,6 +22,7 @@ import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components
 import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperAuthorCombinedView';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import ScraperTagListView from '@/renderer/components/ScraperBrowser/components/ScraperTagListView';
+import MangaCorrespondenceDialog from '@/renderer/components/MangaCorrespondence/MangaCorrespondenceDialog';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
 import useScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
@@ -116,7 +117,7 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
-import { getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
+import { analyzeScraperTitle, getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import {
   buildScraperTagBlacklistEntry,
@@ -135,9 +136,14 @@ import useParams from '@/renderer/hooks/useParams';
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import './style.scss';
+import useBackgroundSearchJob from '@/renderer/backgroundSearch/useBackgroundSearchJob';
+import { enqueueBackgroundSearch } from '@/renderer/backgroundSearch/backgroundSearchClient';
+import type { ListingBackgroundInput } from '@/shared/backgroundSearch';
+import type { ListingBackgroundResult } from '@/renderer/backgroundSearch/types';
 
 type Props = {
   scraper: ScraperRecord;
+  backgroundSearchJobId?: string;
   initialState?: ScraperBrowserInitialState | null;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
@@ -234,6 +240,7 @@ const normalizeSavedScraperSearches = (value: unknown): SavedScraperSearch[] => 
 
 export default function ScraperBrowser({
   scraper,
+  backgroundSearchJobId,
   initialState = null,
   onOpenReaderTarget,
   onOpenWorkspaceTarget,
@@ -244,6 +251,8 @@ export default function ScraperBrowser({
   const locationState = location.state as ScraperBrowserLocationState | null;
   const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
+  const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
+  const effectiveRouteSyncEnabled = routeSyncEnabled && !backgroundSearchJobId;
   const { favorites: tagFavorites } = useScraperTagFavorites();
   const scraperTagBlacklistEntries = useMemo(
     () => getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, scraper.id),
@@ -407,6 +416,33 @@ export default function ScraperBrowser({
   const scrollRestoreFrameRef = useRef<number | null>(null);
   const nestedScrollRestoreFrameRef = useRef<number | null>(null);
   const historySourceKind = locationState?.scraperBrowserHistorySource?.kind ?? null;
+
+  useEffect(() => {
+    const job = attachedSearch.job;
+    if (!job || job.metadata.kind !== 'scraperAuthor') return;
+    const input = job.input as ListingBackgroundInput;
+    const source = input.sources.find((candidate) => candidate.scraper.id === scraper.id) ?? input.sources[0];
+    const result = job.result as ListingBackgroundResult | undefined;
+    const run = result?.runs.find((candidate) => candidate.key === source?.id) ?? result?.runs[0];
+    if (!source) return;
+    setMode('author');
+    setQuery(source.query);
+    setAuthorTemplateContext(source.templateContext ?? null);
+    setListingResults(run?.results.map((item) => item.result) ?? []);
+    setListingPage(run ? {
+      items: run.results.map((item) => item.result),
+      currentPageUrl: run.currentPageUrl ?? source.query,
+      nextPageUrl: run.nextPageUrl,
+    } : null);
+    setListingPageIndex(Math.max(0, (run?.loadedPages ?? 1) - 1));
+    setListingVisitedPageUrls(run?.currentPageUrl ? [run.currentPageUrl] : []);
+    setHasExecutedListing(Boolean(run));
+    setLoading(job.metadata.status === 'queued' || job.metadata.status === 'running');
+    setRuntimeError(attachedSearch.error || job.metadata.error || null);
+    setRuntimeMessage(job.metadata.status === 'queued' || job.metadata.status === 'running'
+      ? 'Recherche auteur en arrière-plan en cours.'
+      : `Recherche en arrière-plan chargée · ${job.metadata.progress.resultCount} résultat(s).`);
+  }, [attachedSearch.error, attachedSearch.job, scraper.id]);
   const titleMultiSearchQuery = useMemo(() => {
     const rawTitle = detailsResult?.title?.trim() ?? '';
     if (!rawTitle) {
@@ -415,6 +451,10 @@ export default function ScraperBrowser({
 
     return getScraperTitleAnalysisSearchTitle(rawTitle, titleAnalysisConfig).trim();
   }, [detailsResult?.title, titleAnalysisConfig]);
+  const correspondenceTitleAnalysis = useMemo(() => analyzeScraperTitle(
+    detailsResult?.title?.trim() ?? '',
+    titleAnalysisConfig,
+  ), [detailsResult?.title, titleAnalysisConfig]);
   const potentialMatchMergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
@@ -604,7 +644,7 @@ export default function ScraperBrowser({
   } = useScraperBrowserSearch({
     scraper,
     scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-    routeSyncEnabled,
+    routeSyncEnabled: effectiveRouteSyncEnabled,
     locationPathname: location.pathname,
     locationSearch: location.search,
     locationState,
@@ -656,7 +696,7 @@ export default function ScraperBrowser({
   });
 
   useScraperBrowserRouteSync({
-    enabled: routeSyncEnabled,
+    enabled: effectiveRouteSyncEnabled,
     scraperId: scraper.id,
     initialState,
     locationPathname: location.pathname,
@@ -762,6 +802,39 @@ export default function ScraperBrowser({
     }
 
     if (mode === 'author') {
+      if (params?.scraperAuthorBackgroundEnabled === true) {
+        if (!trimmedQuery) {
+          setRuntimeError('Saisis un auteur avant de lancer la recherche.');
+          return;
+        }
+        const input: ListingBackgroundInput = {
+          sources: [{
+            id: `${scraper.id}::${trimmedQuery}`,
+            name: trimmedQuery,
+            scraper,
+            query: trimmedQuery,
+            templateContext: authorTemplateContext,
+          }],
+          maxPages: Math.max(1, params?.scraperAuthorFavoritePageCount ?? 1),
+          paceMode: 'careful',
+          includedLanguageCodes: [],
+          scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        };
+        try {
+          await enqueueBackgroundSearch({
+            kind: 'scraperAuthor',
+            title: `Auteur · ${trimmedQuery}`,
+            primaryTerm: trimmedQuery,
+            input,
+            params,
+          });
+          setRuntimeMessage('Recherche auteur ajoutée aux recherches en arrière-plan.');
+          setRuntimeError(null);
+        } catch (enqueueError) {
+          setRuntimeError(enqueueError instanceof Error ? enqueueError.message : "Impossible de lancer la recherche en arrière-plan.");
+        }
+        return;
+      }
       await runAuthorLookup(trimmedQuery);
       return;
     }
@@ -781,7 +854,7 @@ export default function ScraperBrowser({
     }
 
     await runDetailsLookup(trimmedQuery);
-  }, [mode, query, recordScraperSearchHistory, runAuthorLookup, runDetailsLookup, runHomepageLookup, runSearchLookup, runTagLookup, setQuery]);
+  }, [authorTemplateContext, mode, params, query, recordScraperSearchHistory, runAuthorLookup, runDetailsLookup, runHomepageLookup, runSearchLookup, runTagLookup, scraper, setQuery]);
 
   const canSaveScraperSearch = showSavedScraperSearches
     && (mode === 'search' || mode === 'author')
@@ -1275,6 +1348,38 @@ export default function ScraperBrowser({
         setRuntimeError(error instanceof Error ? error.message : 'Impossible d\'ouvrir la recherche multi-sources dans un onglet workspace.');
       });
   }, [buildTitleMultiSearchTarget, setRuntimeError]);
+  const handleOpenCorrespondenceSearch = useCallback(() => {
+    if (!detailsResult?.title?.trim()) {
+      setRuntimeError('Aucun titre exploitable n\'est disponible.');
+      return;
+    }
+    const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl || '';
+    const chapter = correspondenceTitleAnalysis.sequenceMarkers.find((marker) => marker.kind === 'chapter')?.value;
+    openModal({
+      title: 'Rechercher des correspondances',
+      content: (
+        <MangaCorrespondenceDialog
+          scraperId={scraper.id}
+          sourceUrl={sourceUrl}
+          rawTitle={detailsResult.title}
+          initialTitle={correspondenceTitleAnalysis.title || detailsResult.title}
+          initialAlternativeTitles={correspondenceTitleAnalysis.alternativeTitles}
+          initialAuthors={Array.from(new Set([
+            ...correspondenceTitleAnalysis.authors,
+            ...detailsResult.authors,
+          ]))}
+          initialAuthorUrls={detailsResult.authorUrls}
+          initialChapter={chapter}
+          onCancel={closeModal}
+          onQueued={(message) => {
+            closeModal();
+            setRuntimeMessage(message);
+          }}
+        />
+      ),
+      className: 'manga-correspondence-modal-shell',
+    });
+  }, [closeModal, correspondenceTitleAnalysis, detailsResult, openModal, scraper.id, setRuntimeError]);
   const buildLibrarySearchTarget = useCallback((title: string): WorkspaceTarget => ({
     kind: 'manga-manager.view',
     viewId: 'library',
@@ -1458,6 +1563,7 @@ export default function ScraperBrowser({
   );
   const shouldShowAuthorCombinedView = Boolean(
     mode === 'author'
+    && !backgroundSearchJobId
     && scraperAuthorCombinedViewEnabled
     && hasExecutedListing
     && query.trim().length > 0,
@@ -2226,12 +2332,16 @@ export default function ScraperBrowser({
           activePlaceholder={activePlaceholder}
           helperText={helperText}
           loading={loading}
+          backgroundEnabled={attachedSearch.attached || params?.scraperAuthorBackgroundEnabled === true}
+          backgroundOptionAvailable={mode === 'author'}
+          backgroundAttached={attachedSearch.attached}
           canSaveSearch={canSaveScraperSearch}
           savedSearchesList={savedScraperSearchesList}
           onSubmit={handleSubmit}
           onSaveSearch={handleSaveScraperSearch}
           onModeChange={(nextMode) => void handleModeChange(nextMode)}
           onQueryChange={setQuery}
+          onBackgroundEnabledChange={(value) => setParams({ scraperAuthorBackgroundEnabled: value }, { remount: false })}
         />
       )}
 
@@ -2271,7 +2381,7 @@ export default function ScraperBrowser({
           favoriteAction={authorFavoriteAction}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
-          onOpenSourceDetails={routeSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
+          onOpenSourceDetails={effectiveRouteSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
         />
       ) : (
         <ScraperSearchResultsSection
@@ -2357,6 +2467,7 @@ export default function ScraperBrowser({
         onOpenPotentialMatchInWorkspace={handleOpenPotentialMatchInWorkspace}
         onOpenTitleMultiSearch={handleOpenTitleMultiSearch}
         onOpenTitleMultiSearchInWorkspace={handleOpenTitleMultiSearchInWorkspace}
+        onOpenCorrespondenceSearch={handleOpenCorrespondenceSearch}
         onDownload={(chapter) => {
           const linkedManga = getLinkedMangaForSource(chapter);
           void handleDownload(chapter, {

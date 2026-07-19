@@ -45,6 +45,17 @@ export type MultiSearchAuthorExtractionResult = {
   failedDetailsSourceCount: number;
 };
 
+export type MultiSearchAuthorExtractionRuntimeOptions = {
+  concurrency?: number;
+  signal?: AbortSignal;
+};
+
+const throwIfAuthorExtractionAborted = (signal?: AbortSignal): void => {
+  if (signal?.aborted) {
+    throw new DOMException("Extraction des auteurs annulée", "AbortError");
+  }
+};
+
 const wait = (delayMs: number): Promise<void> => (
   delayMs > 0
     ? new Promise((resolve) => window.setTimeout(resolve, delayMs))
@@ -283,10 +294,12 @@ const fetchDetailsAuthorsWithRetry = async (
   authorsByKey: Map<string, MultiSearchAuthorResult>,
   source: MultiSearchSourceResult,
   paceConfig: PaceConfig,
+  signal?: AbortSignal,
 ): Promise<boolean> => {
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
+    throwIfAuthorExtractionAborted(signal);
     try {
       if (attempt > 0) {
         await wait(paceConfig.pageDelayMs);
@@ -309,6 +322,7 @@ export const extractMultiSearchAuthors = async (
   sources: MultiSearchSourceResult[],
   paceMode: MultiSearchPaceMode,
   onProgress?: (progress: MultiSearchAuthorExtractionProgress) => void,
+  runtimeOptions?: MultiSearchAuthorExtractionRuntimeOptions,
 ): Promise<MultiSearchAuthorExtractionResult> => {
   const {
     authorsByKey,
@@ -316,7 +330,10 @@ export const extractMultiSearchAuthors = async (
   } = collectMultiSearchCardAuthors(sources);
   let processedSourceCount = sources.length - sourcesRequiringDetails.length;
 
-  const paceConfig = getPaceConfig(paceMode);
+  const paceConfig = {
+    ...getPaceConfig(paceMode),
+    concurrency: Math.max(1, Math.floor(runtimeOptions?.concurrency ?? getPaceConfig(paceMode).concurrency)),
+  };
   const totalSourceCount = sources.length;
   let failedDetailsSourceCount = 0;
   onProgress?.({
@@ -327,11 +344,17 @@ export const extractMultiSearchAuthors = async (
 
   await runWithConcurrency(
     sourcesRequiringDetails.map((source) => async () => {
+      throwIfAuthorExtractionAborted(runtimeOptions?.signal);
       if (paceConfig.pageDelayMs > 0) {
         await wait(paceConfig.pageDelayMs);
       }
 
-      const foundDetailsAuthor = await fetchDetailsAuthorsWithRetry(authorsByKey, source, paceConfig);
+      const foundDetailsAuthor = await fetchDetailsAuthorsWithRetry(
+        authorsByKey,
+        source,
+        paceConfig,
+        runtimeOptions?.signal,
+      );
       if (!foundDetailsAuthor) {
         failedDetailsSourceCount += 1;
       }

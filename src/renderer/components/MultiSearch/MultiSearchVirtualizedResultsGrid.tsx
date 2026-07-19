@@ -228,15 +228,18 @@ export default function MultiSearchVirtualizedResultsGrid({
     [localSplitResultIds, results],
   );
 
-  // On évite les doublons de résultats lors du rendu
+  // Avoid rendering the same logical result twice when a source returns duplicates.
   const usedResults = React.useMemo(() => {
-    return splitResults.reduce<MultiSearchMergedResult[]>((acc, result) => {
-      if (acc.some((r) => r.id === result.id)) {
-        return acc;
+    const usedResultIds = new Set<string>();
+
+    return splitResults.filter((result) => {
+      if (usedResultIds.has(result.id)) {
+        return false;
       }
 
-      return [...acc, result];
-    }, []);
+      usedResultIds.add(result.id);
+      return true;
+    });
   }, [splitResults]);
 
   resultsRef.current = usedResults;
@@ -458,6 +461,10 @@ export default function MultiSearchVirtualizedResultsGrid({
   });
   const renderedRows = useStaticLayout ? rows : visibleRows;
 
+  const buildRowKey = (row: (typeof rows)[number]): string => (
+    row.results.map((result) => `${result.id.length}:${result.id}`).join("")
+  );
+
   return (
     <div
       ref={containerRef}
@@ -469,11 +476,15 @@ export default function MultiSearchVirtualizedResultsGrid({
     >
       {renderedRows.map((row) => (
         <div
-          key={row.index}
-          className="multi-search__virtual-row"
+          key={buildRowKey(row)}
+          className={[
+            "multi-search__virtual-row",
+            row.isMeasured ? "is-measured" : "",
+          ].filter(Boolean).join(" ")}
           style={{
             gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
             top: row.top,
+            height: useStaticLayout ? undefined : row.height,
             zIndex: row.results.some((result) => stickyResultIds.has(result.id)) ? 2 : undefined,
           }}
         >

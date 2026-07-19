@@ -1,0 +1,40 @@
+.background-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 10px;
+  color: #d9dde3;
+  cursor: pointer;
+  text-align: left;
+}
+
+.background-search-toggle > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  justify-items: start;
+  text-align: left;
+}
+
+.background-search-toggle strong {
+  font-size: .74rem;
+}
+
+.background-search-toggle small {
+  color: #89939f;
+  font-size: .64rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.background-search-toggle input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #8f70ca;
+}

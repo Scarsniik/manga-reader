@@ -6,6 +6,8 @@ import OcrRuntimeGlobalUi from "@/renderer/components/OcrRuntime/OcrRuntimeGloba
 import './styles/main.scss';
 import useRefresh from '@/renderer/hooks/useRefresh';
 import usePreventMiddleClickAutoScroll from "@/renderer/hooks/usePreventMiddleClickAutoScroll";
+import BackgroundSearchRunner from "@/renderer/backgroundSearch/BackgroundSearchRunner";
+import "@/renderer/backgroundSearch/style.scss";
 
 type DefaultComponentModule = {
     default: React.ComponentType<any>;
@@ -48,6 +50,7 @@ const App: React.FC = () => {
             </main>
             <OcrRuntimeFirstLaunchGate />
             <OcrRuntimeGlobalUi />
+            <BackgroundSearchRunner />
         </div>
     );
 };

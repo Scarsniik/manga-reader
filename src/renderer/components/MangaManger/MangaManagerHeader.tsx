@@ -2,6 +2,7 @@ import React from "react";
 import {
     DownloadArrowIcon,
     EditPencilIcon,
+    MagnifyingGlassIcon,
     PlusSignIcon,
     SettingsIcon,
 } from "@/renderer/components/icons";
@@ -15,11 +16,13 @@ import TagsIcon from "@/renderer/components/MangaManger/icons/tags.svg?react";
 
 type Props = {
     activeDownloadJobCount: number;
+    activeBackgroundSearchCount: number;
     activeViewId: string;
     isLibraryView: boolean;
     onAdd: () => void;
     onEditSelection: () => void;
     onOpenDownloads: () => void;
+    onOpenBackgroundSearches: () => void;
     onOpenOcr: () => void;
     onOpenScrapers: () => void;
     onOpenSettings: () => void;
@@ -65,11 +68,13 @@ function HeaderButton({
 
 export default function MangaManagerHeader({
     activeDownloadJobCount,
+    activeBackgroundSearchCount,
     activeViewId,
     isLibraryView,
     onAdd,
     onEditSelection,
     onOpenDownloads,
+    onOpenBackgroundSearches,
     onOpenOcr,
     onOpenScrapers,
     onOpenSettings,
@@ -105,6 +110,12 @@ export default function MangaManagerHeader({
                         Telechargements
                         {activeDownloadJobCount > 0 ? (
                             <span className="mangaManager-header__count">{activeDownloadJobCount}</span>
+                        ) : null}
+                    </HeaderButton>
+                    <HeaderButton icon={<MagnifyingGlassIcon />} onClick={onOpenBackgroundSearches}>
+                        Recherches
+                        {activeBackgroundSearchCount > 0 ? (
+                            <span className="mangaManager-header__count">{activeBackgroundSearchCount}</span>
                         ) : null}
                     </HeaderButton>
                     <HeaderButton icon={<SettingsIcon />} onClick={onOpenSettings}>Parametres</HeaderButton>

@@ -46,25 +46,32 @@ import { formatAuthorMultiSearchQuery } from "@/renderer/utils/authorSearchNames
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "./style.scss";
+import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
+import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
+import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
+import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 
 type Props = {
   scrapers: ScraperRecord[];
+  backgroundSearchJobId?: string;
 };
 
 const RESULT_TEXT_FILTER_DELAY_MS = 350;
 
 export default function ScraperAuthorFavoritesView({
   scrapers,
+  backgroundSearchJobId,
 }: Props) {
   const { openModal } = useModal();
-  const { params } = useParams();
+  const { params, setParams } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
   const { favorites: tagFavorites } = useScraperTagFavorites();
+  const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const {
     location,
     navigate,
-    selectedFavoriteId,
-    selectedFavorite,
+    selectedFavoriteId: routeSelectedFavoriteId,
+    selectedFavorite: routeSelectedFavorite,
     scrapersById,
     handleSelectFavorite,
   } = useScraperSourceFavoriteSelection({
@@ -74,9 +81,14 @@ export default function ScraperAuthorFavoritesView({
     readFavoriteRouteId: readScraperAuthorFavoriteRouteId,
     writeFavoriteRouteState: writeScraperAuthorFavoriteRouteState,
   });
+  const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
+  const selectedFavoriteId = attachedInput?.favoriteId ?? routeSelectedFavoriteId;
+  const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId)
+    ?? routeSelectedFavorite;
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
+  const automaticallyStartedFavoriteIdRef = React.useRef<string | null>(null);
   const selectedFavoriteMultiSearchQuery = useMemo(() => (
     selectedFavorite
       ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
@@ -95,7 +107,7 @@ export default function ScraperAuthorFavoritesView({
     loadAllForAll,
     loadMoreForRun,
   } = useAuthorFavoriteRuns(
-    selectedFavorite,
+    attachedSearch.attached ? null : selectedFavorite,
     scrapersById,
     {
       initialPageCount: params?.scraperAuthorFavoritePageCount ?? 1,
@@ -103,7 +115,32 @@ export default function ScraperAuthorFavoritesView({
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     },
   );
-  const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
+  const attachedResult = attachedSearch.job?.result as ListingBackgroundResult | undefined;
+  const attachedRuns = useMemo(() => {
+    if (!selectedFavorite || !attachedResult?.runs) return [];
+    return attachedResult.runs.map((run) => ({
+      key: run.key,
+      favoriteSource: selectedFavorite.sources.find((source) => (
+        source.scraperId === run.scraper.id && source.authorUrl === run.query
+      )) ?? {
+        scraperId: run.scraper.id,
+        authorUrl: run.query,
+        name: run.name,
+        createdAt: attachedSearch.job?.metadata.createdAt ?? new Date().toISOString(),
+        updatedAt: attachedSearch.job?.metadata.updatedAt ?? new Date().toISOString(),
+      },
+      scraper: run.scraper,
+      status: run.status === "cancelled" ? "done" as const : run.status,
+      results: run.results,
+      loadedPages: run.loadedPages,
+      hasNextPage: run.hasNextPage,
+      currentPageUrl: run.currentPageUrl,
+      nextPageUrl: run.nextPageUrl,
+      error: run.error,
+    }));
+  }, [attachedResult?.runs, attachedSearch.job?.metadata.createdAt, attachedSearch.job?.metadata.updatedAt, selectedFavorite]);
+  const effectiveRuns = attachedSearch.attached ? attachedRuns : runs;
+  const loadedSources = useMemo(() => flattenMultiSearchSources(effectiveRuns), [effectiveRuns]);
   const {
     libraryMangas,
     bookmarkedSourceKeys,
@@ -242,17 +279,66 @@ export default function ScraperAuthorFavoritesView({
     );
   }, [location.pathname, location.search, navigate, selectedFavoriteMultiSearchQuery]);
 
+  const enqueueSelectedFavoriteRefresh = useCallback(async () => {
+    if (!selectedFavorite) return;
+    const input: ListingBackgroundInput = {
+      favoriteId: selectedFavorite.id,
+      favoriteUpdatedAt: selectedFavorite.updatedAt,
+      sources: selectedFavorite.sources.flatMap((source) => {
+        const scraper = scrapersById.get(source.scraperId);
+        return scraper ? [{
+          id: `${source.scraperId}::${source.authorUrl}`,
+          name: source.name,
+          scraper,
+          query: source.authorUrl,
+          templateContext: source.templateContext ?? null,
+        }] : [];
+      }),
+      maxPages: null,
+      paceMode: "careful",
+      includedLanguageCodes: [],
+      scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+    };
+    await enqueueBackgroundSearch({
+      kind: "authorFavoriteRefresh",
+      title: `Auteur favori · ${selectedFavorite.name}`,
+      primaryTerm: selectedFavorite.name,
+      input,
+      params,
+    });
+  }, [params, scrapersById, selectedFavorite]);
+
   useEffect(() => {
     if (!selectedFavorite) {
+      automaticallyStartedFavoriteIdRef.current = null;
       return;
     }
-
+    if (attachedSearch.attached || automaticallyStartedFavoriteIdRef.current === selectedFavorite.id) return;
+    automaticallyStartedFavoriteIdRef.current = selectedFavorite.id;
     setLanguageFilterModes({});
     setReadingStatusFilters([]);
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
-    void start();
-  }, [selectedFavorite, start]);
+    if (params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
+      void enqueueSelectedFavoriteRefresh().catch((enqueueError) => {
+        console.warn("Failed to enqueue author favorite refresh", enqueueError);
+      });
+    } else {
+      void start();
+    }
+  }, [attachedSearch.attached, enqueueSelectedFavoriteRefresh, params?.scraperAuthorFavoriteRefreshBackgroundEnabled, selectedFavorite, start]);
+
+  const handleReloadSelectedFavorite = useCallback(() => {
+    if (attachedSearch.attached) {
+      void attachedSearch.reload();
+    } else if (params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
+      void enqueueSelectedFavoriteRefresh().catch((enqueueError) => {
+        console.warn("Failed to enqueue author favorite refresh", enqueueError);
+      });
+    } else {
+      void start();
+    }
+  }, [attachedSearch, enqueueSelectedFavoriteRefresh, params?.scraperAuthorFavoriteRefreshBackgroundEnabled, start]);
 
   const handleRemoveFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
     openModal(buildConfirmActionModal({
@@ -281,9 +367,24 @@ export default function ScraperAuthorFavoritesView({
 
   if (selectedFavorite) {
     return (
+      <>
+        <label className="background-search-toggle scraper-author-favorite__background-toggle">
+          <input
+            type="checkbox"
+            checked={attachedSearch.attached || params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true}
+            disabled={attachedSearch.attached}
+            onChange={(event) => setParams({
+              scraperAuthorFavoriteRefreshBackgroundEnabled: event.target.checked,
+            }, { remount: false })}
+          />
+          <span>
+            <strong>Mettre à jour en arrière-plan</strong>
+            <small>{attachedSearch.attached ? "Rattaché à une mise à jour existante" : "Charge toutes les pages et actualise le cache de cet auteur"}</small>
+          </span>
+        </label>
       <ScraperAuthorFavoriteResults
         favorite={selectedFavorite}
-        runs={runs}
+        runs={effectiveRuns}
         displayedResults={displayedMergedResults}
         visibleResultCount={visibleMergedResults.length}
         loadedSourceCount={loadedSources.length}
@@ -291,10 +392,14 @@ export default function ScraperAuthorFavoritesView({
         languageFilterModes={languageFilterModes}
         readingStatusFilters={readingStatusFilters}
         textFilter={resultTextFilter}
-        loading={loadingRuns}
-        message={runMessage}
-        error={runError || openError}
-        canLoadMore={canLoadMore}
+        loading={attachedSearch.attached
+          ? attachedSearch.status === "queued" || attachedSearch.status === "running"
+          : loadingRuns}
+        message={attachedSearch.attached
+          ? `Recherche en arrière-plan ${attachedSearch.status === "running" ? "en cours" : "chargée"}.`
+          : runMessage}
+        error={attachedSearch.error || attachedSearch.job?.metadata.error || runError || openError}
+        canLoadMore={!attachedSearch.attached && canLoadMore}
         selectedFavoriteMultiSearchQuery={selectedFavoriteMultiSearchQuery}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
@@ -305,7 +410,7 @@ export default function ScraperAuthorFavoritesView({
         tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         onBack={() => handleSelectFavorite(null)}
-        onReload={() => void start()}
+        onReload={handleReloadSelectedFavorite}
         onOpenMultiSearch={handleOpenSelectedFavoriteMultiSearch}
         onLoadMoreForAll={() => void loadMoreForAll()}
         onLoadAllForAll={() => void loadAllForAll()}
@@ -327,6 +432,7 @@ export default function ScraperAuthorFavoritesView({
         )}
         onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
       />
+      </>
     );
   }
 

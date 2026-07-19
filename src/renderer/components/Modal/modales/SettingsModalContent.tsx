@@ -249,6 +249,43 @@ export default function SettingsModalContent() {
     },
     {
       type: 'section',
+      id: 'background-searches',
+      title: 'Recherches en arrière-plan',
+      description: 'Le cache mémoire est supprimé à la fermeture. Les fichiers temporaires survivent aux redémarrages jusqu’à expiration.',
+      fields: [
+        {
+          name: 'backgroundSearchStorageMode',
+          label: 'Stockage des résultats',
+          type: 'select',
+          options: [
+            { value: 'memory', label: 'Cache mémoire' },
+            { value: 'temporaryFile', label: 'Fichier temporaire' },
+          ],
+        },
+        {
+          name: 'backgroundSearchTemporaryRetentionHours',
+          label: 'Conservation des fichiers temporaires (heures)',
+          type: 'number',
+          min: 1,
+          max: 8760,
+          step: 1,
+          disabledWhen: {
+            field: 'backgroundSearchStorageMode',
+            notEquals: 'temporaryFile',
+          },
+        },
+        {
+          name: 'backgroundSearchMaxConcurrent',
+          label: 'Recherches simultanées',
+          type: 'number',
+          min: 1,
+          max: 8,
+          step: 1,
+        },
+      ],
+    },
+    {
+      type: 'section',
       id: 'external-services',
       title: 'Services externes',
       fields: [
@@ -350,6 +387,17 @@ export default function SettingsModalContent() {
       showSavedLibrarySearches,
       showSavedScraperSearches,
       readingListKeepSourceTabs: !!values.readingListKeepSourceTabs,
+      backgroundSearchStorageMode: values.backgroundSearchStorageMode === 'temporaryFile'
+        ? 'temporaryFile'
+        : 'memory',
+      backgroundSearchTemporaryRetentionHours: Math.min(8760, Math.max(
+        1,
+        Math.floor(Number(values.backgroundSearchTemporaryRetentionHours) || 24),
+      )),
+      backgroundSearchMaxConcurrent: Math.min(8, Math.max(
+        1,
+        Math.floor(Number(values.backgroundSearchMaxConcurrent) || 3),
+      )),
       multiSearchEnableRomajiPhoneticMerge: !!values.multiSearchEnableRomajiPhoneticMerge,
       multiSearchScrapeDetailsWithCards: !!values.multiSearchScrapeDetailsWithCards,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,

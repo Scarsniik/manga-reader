@@ -164,6 +164,7 @@ type Props = {
   onOpenPotentialMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
   onOpenTitleMultiSearch?: () => void;
   onOpenTitleMultiSearchInWorkspace?: () => void;
+  onOpenCorrespondenceSearch?: () => void;
 };
 
 export default function ScraperDetailsPanel({
@@ -205,6 +206,7 @@ export default function ScraperDetailsPanel({
   onOpenPotentialMatchInWorkspace,
   onOpenTitleMultiSearch,
   onOpenTitleMultiSearchInWorkspace,
+  onOpenCorrespondenceSearch,
 }: Props) {
   const { openModal } = useModal();
   const potentialActionMatchCount = potentialReadingMatches.length + potentialBookmarkMatches.length;
@@ -416,6 +418,17 @@ export default function ScraperDetailsPanel({
                     >
                       <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
                       <span>Recherche multi-source</span>
+                    </button>
+                  ) : null}
+                  {onOpenCorrespondenceSearch ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__author-multi-search"
+                      onClick={onOpenCorrespondenceSearch}
+                      title="Rechercher automatiquement ce manga et ses autres chapitres"
+                    >
+                      <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+                      <span>Rechercher des correspondances</span>
                     </button>
                   ) : null}
                   <button

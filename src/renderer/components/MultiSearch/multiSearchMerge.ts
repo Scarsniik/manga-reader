@@ -113,7 +113,7 @@ const getSourceDetailUrlKey = (source: MultiSearchSourceResult): string => (
   normalizeScraperViewHistorySourceUrl(source.result.detailUrl)
 );
 
-const getSourceIdentityKey = (source: MultiSearchSourceResult): string => {
+export const buildMultiSearchSourceIdentityKey = (source: MultiSearchSourceResult): string => {
   const detailUrl = getSourceDetailUrlKey(source);
   if (detailUrl) {
     return `${source.scraper.id}::${detailUrl}`;
@@ -127,7 +127,7 @@ const getSourceIdentityKey = (source: MultiSearchSourceResult): string => {
 };
 
 const buildMergedResultId = (source: MultiSearchSourceResult): string => (
-  `${source.scraper.id}::${getSourceDetailUrlKey(source) || source.result.title}`
+  `multi-search::${buildMultiSearchSourceIdentityKey(source)}`
 );
 
 const buildMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
@@ -229,8 +229,8 @@ const appendSourceToGroup = (
   group: MultiSearchMergedResult,
   source: MultiSearchSourceResult,
 ): boolean => {
-  const sourceIdentityKey = getSourceIdentityKey(source);
-  if (group.sources.some((groupSource) => getSourceIdentityKey(groupSource) === sourceIdentityKey)) {
+  const sourceIdentityKey = buildMultiSearchSourceIdentityKey(source);
+  if (group.sources.some((groupSource) => buildMultiSearchSourceIdentityKey(groupSource) === sourceIdentityKey)) {
     return false;
   }
 

@@ -24,6 +24,7 @@ import * as readingLists from "./handlers/readingLists";
 import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import * as japaneseInflection from "./handlers/japaneseInflection";
 import * as voicevox from "./handlers/voicevox";
+import * as backgroundSearch from "./handlers/backgroundSearch";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -96,6 +97,39 @@ ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => 
 ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
 ipcMain.handle("open-json-document", async (_event: IpcMainInvokeEvent, request: any) => (
     jsonDocuments.openJsonDocument(request)
+));
+
+// Background searches
+ipcMain.handle("background-search-create", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.createBackgroundSearch(request)
+));
+ipcMain.handle("background-search-list", async () => backgroundSearch.getBackgroundSearchQueue());
+ipcMain.handle("background-search-get", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.getBackgroundSearchJob(jobId)
+));
+ipcMain.handle("background-search-claim", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.claimBackgroundSearchJob(jobId)
+));
+ipcMain.handle("background-search-update", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.updateBackgroundSearch(request)
+));
+ipcMain.handle("background-search-complete", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.completeBackgroundSearch(request)
+));
+ipcMain.handle("background-search-fail", async (_event: IpcMainInvokeEvent, jobId: string, error: string) => (
+    backgroundSearch.failBackgroundSearch(jobId, error)
+));
+ipcMain.handle("background-search-cancel", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.cancelBackgroundSearch(jobId)
+));
+ipcMain.handle("background-search-retry", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.retryBackgroundSearch(jobId)
+));
+ipcMain.handle("background-search-mark-opened", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.markBackgroundSearchOpened(jobId)
+));
+ipcMain.handle("background-search-delete", async (_event: IpcMainInvokeEvent, jobId: string) => (
+    backgroundSearch.deleteBackgroundSearch(jobId)
 ));
 
 // Window controls

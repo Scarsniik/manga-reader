@@ -10,11 +10,15 @@ type Props = {
   helperText?: string;
   loading: boolean;
   canSaveSearch?: boolean;
+  backgroundEnabled?: boolean;
+  backgroundOptionAvailable?: boolean;
+  backgroundAttached?: boolean;
   savedSearchesList?: React.ReactNode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSaveSearch?: () => void;
   onModeChange: (mode: ScraperBrowseMode) => void;
   onQueryChange: (value: string) => void;
+  onBackgroundEnabledChange?: (value: boolean) => void;
 };
 
 export default function ScraperBrowserToolbar({
@@ -25,11 +29,15 @@ export default function ScraperBrowserToolbar({
   helperText,
   loading,
   canSaveSearch = false,
+  backgroundEnabled = false,
+  backgroundOptionAvailable = false,
+  backgroundAttached = false,
   savedSearchesList = null,
   onSubmit,
   onSaveSearch,
   onModeChange,
   onQueryChange,
+  onBackgroundEnabledChange,
 }: Props) {
   const modeLabels: Record<ScraperBrowseMode, string> = {
     homepage: 'Homepage',
@@ -82,10 +90,25 @@ export default function ScraperBrowserToolbar({
           </button>
         ) : null}
 
-        <button type="submit" className="scraper-browser__submit" disabled={loading}>
-          {loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : isTagListMode ? 'Filtrer' : 'Lancer'}
+        <button type="submit" className="scraper-browser__submit" disabled={loading || backgroundAttached}>
+          {backgroundAttached ? 'Attaché' : loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : isTagListMode ? 'Filtrer' : 'Lancer'}
         </button>
       </form>
+
+      {backgroundOptionAvailable ? (
+        <label className="background-search-toggle">
+          <input
+            type="checkbox"
+            checked={backgroundEnabled}
+            disabled={backgroundAttached}
+            onChange={(event) => onBackgroundEnabledChange?.(event.target.checked)}
+          />
+          <span>
+            <strong>En arrière-plan</strong>
+            <small>{backgroundAttached ? "Rattaché à la recherche en cours" : "La page auteur continue à se charger en changeant de vue"}</small>
+          </span>
+        </label>
+      ) : null}
 
       {savedSearchesList}
       {helperText &&

@@ -108,10 +108,15 @@ import useParams from "@/renderer/hooks/useParams";
 import type { AppParams } from "@/renderer/hooks/useParams";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import "./style.scss";
+import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
+import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
+import type { MultiSearchBackgroundInput } from "@/shared/backgroundSearch";
+import type { MultiSearchBackgroundResult } from "@/renderer/backgroundSearch/types";
 
 type Props = {
   initialPrefillQuery?: string;
   scrapers: ScraperRecord[];
+  backgroundSearchJobId?: string;
 };
 
 const RESULT_TEXT_FILTER_DELAY_MS = 350;
@@ -146,6 +151,7 @@ const buildMultiSearchSettingsParamsPatch = (
 export default function MultiSearchBrowser({
   initialPrefillQuery = "",
   scrapers,
+  backgroundSearchJobId,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -176,6 +182,10 @@ export default function MultiSearchBrowser({
   const [readerProgressRecords, setReaderProgressRecords] = useState<ScraperReaderProgressRecord[]>([]);
   const [newSourceHistoryIds, setNewSourceHistoryIds] = useState<Set<string>>(() => new Set());
   const [splitMergedResultIds, setSplitMergedResultIds] = useState<Set<string>>(() => new Set());
+  const [backgroundMessage, setBackgroundMessage] = useState<string | null>(null);
+  const [attachedSearchDetached, setAttachedSearchDetached] = useState(false);
+  const attachedSearchDetachedRef = useRef(false);
+  const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const viewHistoryRecordsByIdRef = useRef<Map<string, ScraperViewHistoryRecord>>(new Map());
   const searchableScrapers = useMemo(
     () => scrapers.filter(isSearchableScraper).sort((left, right) => left.name.localeCompare(right.name)),
@@ -193,12 +203,61 @@ export default function MultiSearchBrowser({
     canLoadMore,
     canStopSearch,
     restoreRuns,
+    replaceRuns,
     runSearch,
     stopSearch,
     stopScraperSearch,
     loadMoreForAll,
     loadMoreForScraper,
   } = useMultiSearch(params?.multiSearchScrapeDetailsWithCards === true);
+
+  const isFollowingAttachedSearch = attachedSearch.attached && !attachedSearchDetached;
+
+  const detachFromAttachedSearch = React.useCallback(() => {
+    if (!attachedSearch.attached || attachedSearchDetachedRef.current) return;
+    attachedSearchDetachedRef.current = true;
+    setAttachedSearchDetached(true);
+    setBackgroundMessage(null);
+    restoreRuns(
+      runs,
+      paceMode,
+      includedLanguageCodes,
+      params?.multiSearchScrapeDetailsWithCards === true,
+    );
+  }, [
+    attachedSearch.attached,
+    includedLanguageCodes,
+    paceMode,
+    params?.multiSearchScrapeDetailsWithCards,
+    restoreRuns,
+    runs,
+  ]);
+
+  useEffect(() => {
+    attachedSearchDetachedRef.current = false;
+    setAttachedSearchDetached(false);
+  }, [backgroundSearchJobId]);
+
+  useEffect(() => {
+    if (attachedSearchDetachedRef.current) return;
+    const job = attachedSearch.job;
+    if (!job || job.metadata.kind !== "multiSearch") return;
+    const input = job.input as MultiSearchBackgroundInput;
+    const result = job.result as MultiSearchBackgroundResult | undefined;
+    setQuery(input.query);
+    setSelectedScraperIds(input.scrapers.map((scraper) => scraper.id));
+    setSelectedLanguageCodes(input.selectedLanguageCodes ?? []);
+    setSelectedContentTypes(input.selectedContentTypes ?? []);
+    setIncludedLanguageCodes(input.includedLanguageCodes);
+    setDepthMode(input.depthMode ?? (input.maxPages === 1 ? "quick" : input.maxPages === 3 ? "extended" : "advanced"));
+    setAdvancedPages(input.advancedPages ?? (input.maxPages === null ? "maximum" : input.maxPages));
+    setPaceMode(input.paceMode);
+    setViewMode(input.viewMode);
+    replaceRuns(result?.runs ?? []);
+    setBackgroundMessage(job.metadata.status === "running" || job.metadata.status === "queued"
+      ? "Recherche en arrière-plan en cours. Les résultats sont actualisés automatiquement."
+      : `Recherche en arrière-plan chargée · ${job.metadata.progress.resultCount} résultat(s).`);
+  }, [attachedSearch.job, replaceRuns]);
   const { bookmarkMap } = useScraperBookmarks();
   const {
     loaded: viewHistoryLoaded,
@@ -243,48 +302,61 @@ export default function MultiSearchBrowser({
   }, [setParams]);
 
   const handleSelectedScraperIdsChange = React.useCallback((value: string[]) => {
+    detachFromAttachedSearch();
     const normalizedValue = normalizeMultiSearchSelectedScraperIds(value, searchableScrapers);
     setSelectedScraperIds(normalizedValue);
     persistMultiSearchSettings({ selectedScraperIds: normalizedValue });
-  }, [persistMultiSearchSettings, searchableScrapers]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings, searchableScrapers]);
 
   const handleSelectedLanguageCodesChange = React.useCallback((value: string[]) => {
+    detachFromAttachedSearch();
     const normalizedValue = normalizeMultiSearchSelectedLanguageCodes(value);
     setSelectedLanguageCodes(normalizedValue);
     persistMultiSearchSettings({ selectedLanguageCodes: normalizedValue });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleIncludedLanguageCodesChange = React.useCallback((value: string[]) => {
+    detachFromAttachedSearch();
     const normalizedValue = normalizeMultiSearchIncludedLanguageCodes(value);
     setIncludedLanguageCodes(normalizedValue);
     persistMultiSearchSettings({ includedLanguageCodes: normalizedValue });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleSelectedContentTypesChange = React.useCallback((value: string[]) => {
+    detachFromAttachedSearch();
     const normalizedValue = normalizeMultiSearchSelectedContentTypes(value);
     setSelectedContentTypes(normalizedValue);
     persistMultiSearchSettings({ selectedContentTypes: normalizedValue });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleDepthModeChange = React.useCallback((value: MultiSearchDepthMode) => {
+    detachFromAttachedSearch();
     setDepthMode(value);
     persistMultiSearchSettings({ depthMode: value });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleAdvancedPagesChange = React.useCallback((value: MultiSearchAdvancedPages) => {
+    detachFromAttachedSearch();
     setAdvancedPages(value);
     persistMultiSearchSettings({ advancedPages: value });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handlePaceModeChange = React.useCallback((value: MultiSearchPaceMode) => {
+    detachFromAttachedSearch();
     setPaceMode(value);
     persistMultiSearchSettings({ paceMode: value });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleViewModeChange = React.useCallback((value: MultiSearchViewMode) => {
+    detachFromAttachedSearch();
     setViewMode(value);
     persistMultiSearchSettings({ viewMode: value });
-  }, [persistMultiSearchSettings]);
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
+
+  const handleQueryChange = React.useCallback((value: string) => {
+    detachFromAttachedSearch();
+    setQuery(value);
+  }, [detachFromAttachedSearch]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -350,6 +422,11 @@ export default function MultiSearchBrowser({
   }, []);
 
   useEffect(() => {
+    if (backgroundSearchJobId) {
+      restoredStateRef.current = true;
+      initializedSelectionRef.current = true;
+      return;
+    }
     if (paramsLoading) {
       return;
     }
@@ -414,6 +491,7 @@ export default function MultiSearchBrowser({
     applyPersistentSettings(persistentSettings);
   }, [
     applyPersistentSettings,
+    backgroundSearchJobId,
     multiSearchPrefillKey,
     multiSearchPrefillQuery,
     paramsLoading,
@@ -664,6 +742,8 @@ export default function MultiSearchBrowser({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    detachFromAttachedSearch();
+    setBackgroundMessage(null);
     const searchTerms = parseMultiSearchTerms(query);
 
     setOpenError(null);
@@ -673,14 +753,34 @@ export default function MultiSearchBrowser({
     setDebouncedResultTextFilter("");
     setNewSourceHistoryIds(new Set());
     setSplitMergedResultIds(new Set());
-    void runSearch({
+    const searchInput: MultiSearchBackgroundInput = {
       query,
       scrapers: selectedScrapers,
       maxPages: getDepthPages(depthMode, advancedPages),
       paceMode,
       includedLanguageCodes,
       scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
-    });
+      viewMode,
+      selectedLanguageCodes,
+      selectedContentTypes,
+      depthMode,
+      advancedPages,
+    };
+    if (params?.multiSearchBackgroundEnabled === true) {
+      void enqueueBackgroundSearch({
+        kind: "multiSearch",
+        title: `Recherche multi-sources · ${query.trim()}`,
+        primaryTerm: query.trim(),
+        input: searchInput,
+        params,
+      }).then(() => {
+        setBackgroundMessage("Recherche ajoutée à la liste des recherches en arrière-plan.");
+      }).catch((enqueueError) => {
+        setOpenError(enqueueError instanceof Error ? enqueueError.message : "Impossible de lancer la recherche en arrière-plan.");
+      });
+    } else {
+      void runSearch(searchInput);
+    }
 
     if (searchTerms.length && selectedScrapers.length) {
       void recordSearchHistorySafe({
@@ -986,12 +1086,20 @@ export default function MultiSearchBrowser({
         advancedPages={advancedPages}
         paceMode={paceMode}
         viewMode={viewMode}
-        isSearching={isSearching}
+        isSearching={isFollowingAttachedSearch ? false : isSearching}
         canSubmit={selectedScrapers.length > 0}
-        canStopSearch={canStopSearch}
+        canStopSearch={isFollowingAttachedSearch
+          ? attachedSearch.status === "queued" || attachedSearch.status === "running"
+          : canStopSearch}
+        backgroundEnabled={isFollowingAttachedSearch || params?.multiSearchBackgroundEnabled === true}
+        backgroundAttached={isFollowingAttachedSearch}
         onSubmit={handleSubmit}
-        onStopSearch={stopSearch}
-        onQueryChange={setQuery}
+        onStopSearch={isFollowingAttachedSearch ? () => { void attachedSearch.cancel(); } : stopSearch}
+        onBackgroundEnabledChange={(value) => {
+          detachFromAttachedSearch();
+          setParams({ multiSearchBackgroundEnabled: value }, { remount: false });
+        }}
+        onQueryChange={handleQueryChange}
         onDepthModeChange={handleDepthModeChange}
         onAdvancedPagesChange={handleAdvancedPagesChange}
         onPaceModeChange={handlePaceModeChange}
@@ -1028,12 +1136,12 @@ export default function MultiSearchBrowser({
         </div>
       </section>
 
-      {error || openError || message ? (
+      {error || openError || backgroundMessage || attachedSearch.error || message ? (
         <div className={[
           "multi-search__message",
-          error || openError ? "is-error" : "is-info",
+          error || openError || attachedSearch.error ? "is-error" : "is-info",
         ].join(" ")}>
-          {error || openError || message}
+          {error || openError || attachedSearch.error || backgroundMessage || message}
         </div>
       ) : null}
 

@@ -17,6 +17,7 @@ import {
     clearScraperRouteState,
     parseScraperRouteState,
     SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
+    SCRAPER_CORRESPONDENCE_VIEW_ID,
     SCRAPER_HISTORY_VIEW_ID,
     SCRAPER_LATEST_VIEW_ID,
     SCRAPER_MULTI_SEARCH_VIEW_ID,
@@ -29,6 +30,13 @@ import {
 } from '@/renderer/utils/readerNavigation';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import type { MangaManagerViewWorkspaceTarget } from '@/renderer/types/workspace';
+import type { BackgroundSearchJob, BackgroundSearchQueueSummary, ListingBackgroundInput } from '@/shared/backgroundSearch';
+import {
+    BACKGROUND_SEARCH_OPEN_EVENT,
+    consumePendingBackgroundSearchOpen,
+    getBackgroundSearchViewId,
+} from '@/renderer/backgroundSearch/backgroundSearchNavigation';
+import { writeScraperAuthorFavoriteRouteState } from '@/renderer/utils/scraperBrowserNavigation';
 
 type DefaultComponentModule = {
     default: React.ComponentType<any>;
@@ -60,6 +68,7 @@ const ScraperTagFavoritesView = React.lazy(() => loadDefaultComponent(() => impo
 const HistoryView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/History/HistoryView.js')));
 const MultiSearchBrowser = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/MultiSearch/MultiSearchBrowser.js')));
 const ScraperLatestView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperLatest/ScraperLatestView.js')));
+const MangaCorrespondenceView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/MangaCorrespondence/MangaCorrespondenceView.js')));
 
 declare global {
     interface Window {
@@ -95,6 +104,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
     const [activeDownloadJobCount, setActiveDownloadJobCount] = useState(0);
+    const [activeBackgroundSearchCount, setActiveBackgroundSearchCount] = useState(0);
     const [scraperBrowserSeed, setScraperBrowserSeed] = useState<ScraperBrowserReturnState | null>(null);
     const { tags } = useTags();
     const { params, loading: paramsLoading, setParams } = useParams();
@@ -155,6 +165,19 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             setActiveDownloadJobCount(Number(queueStatus?.counts?.active || 0));
         } catch (err) {
             console.warn('Failed to load scraper download queue status', err);
+        }
+    }, []);
+
+    const loadBackgroundSearchSummary = useCallback(async () => {
+        if (typeof window.api?.getBackgroundSearchQueue !== 'function') {
+            setActiveBackgroundSearchCount(0);
+            return;
+        }
+        try {
+            const queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
+            setActiveBackgroundSearchCount(queue?.counts?.active ?? 0);
+        } catch (summaryError) {
+            console.warn('Failed to load background search summary', summaryError);
         }
     }, []);
 
@@ -341,6 +364,14 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         return () => window.clearInterval(timer);
     }, [loadDownloadQueueSummary]);
 
+    useEffect(() => {
+        void loadBackgroundSearchSummary();
+        const unsubscribe = window.api?.onBackgroundSearchChanged?.(() => {
+            void loadBackgroundSearchSummary();
+        });
+        return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
+    }, [loadBackgroundSearchSummary]);
+
     const onAddClick = async () => {
         // Use native folder picker to ensure we get an absolute path
         let pickedPath: string | null = null;
@@ -403,6 +434,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const isTagFavoritesView = activeViewId === SCRAPER_TAG_FAVORITES_VIEW_ID;
     const isHistoryView = activeViewId === SCRAPER_HISTORY_VIEW_ID;
     const isLatestView = activeViewId === SCRAPER_LATEST_VIEW_ID;
+    const isCorrespondenceView = activeViewId === SCRAPER_CORRESPONDENCE_VIEW_ID;
     const forcedMultiSearchPrefillQuery = typeof forcedLocationState?.multiSearchPrefillQuery === 'string'
         ? forcedLocationState.multiSearchPrefillQuery.trim()
         : '';
@@ -413,8 +445,17 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const forcedBookmarksFilterScraperId = typeof forcedLocationState?.bookmarksFilterScraperId === 'string'
         ? forcedLocationState.bookmarksFilterScraperId
         : null;
+    const locationState = location.state && typeof location.state === 'object'
+        ? location.state as { backgroundSearchJobId?: string }
+        : null;
+    const backgroundSearchJobId = typeof forcedLocationState?.backgroundSearchJobId === 'string'
+        ? forcedLocationState.backgroundSearchJobId
+        : typeof locationState?.backgroundSearchJobId === 'string'
+            ? locationState.backgroundSearchJobId
+            : undefined;
     const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
         { id: 'library', label: 'Bibliotheque', group: 'navigation', icon: 'library' },
+        ...(isCorrespondenceView ? [{ id: SCRAPER_CORRESPONDENCE_VIEW_ID, label: 'Correspondances', group: 'navigation' as const, icon: 'search' as const }] : []),
         { id: SCRAPER_MULTI_SEARCH_VIEW_ID, label: 'Recherche multi-sources', group: 'navigation', icon: 'search' },
         { id: SCRAPER_LATEST_VIEW_ID, label: 'Nouveautes', group: 'navigation', icon: 'latest' },
         { id: SCRAPER_HISTORY_VIEW_ID, label: 'Historique', group: 'navigation', icon: 'history' },
@@ -428,7 +469,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             icon: 'source' as const,
             baseUrl: scraper.baseUrl,
         })),
-    ], [sortedScrapers]);
+    ], [isCorrespondenceView, sortedScrapers]);
 
     const openTagsModal = useCallback(async () => {
         const buildTagsModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/TagsModal.js'));
@@ -446,6 +487,11 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const openScraperDownloadQueueModal = useCallback(async () => {
         const buildScraperDownloadQueueModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/ScraperDownloadQueueModal.js'));
         openModal(buildScraperDownloadQueueModal());
+    }, [openModal]);
+
+    const openBackgroundSearchQueueModal = useCallback(async () => {
+        const buildBackgroundSearchQueueModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/BackgroundSearchQueueModal.js'));
+        openModal(buildBackgroundSearchQueueModal());
     }, [openModal]);
 
     const openSettingsModal = useCallback(async () => {
@@ -568,6 +614,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             || activeViewId === SCRAPER_TAG_FAVORITES_VIEW_ID
             || activeViewId === SCRAPER_HISTORY_VIEW_ID
             || activeViewId === SCRAPER_LATEST_VIEW_ID
+            || activeViewId === SCRAPER_CORRESPONDENCE_VIEW_ID
         ) {
             return;
         }
@@ -680,6 +727,53 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         });
     }, [viewOptions]);
 
+    const openBackgroundSearchJob = useCallback((job: BackgroundSearchJob) => {
+        const nextViewId = getBackgroundSearchViewId(job);
+        const listingInput = job.input as ListingBackgroundInput;
+        const firstSource = listingInput?.sources?.[0];
+        let nextSearch = writeScraperRouteState(location.search, {
+            scraperId: nextViewId,
+            mode: job.metadata.kind === 'scraperAuthor' ? 'author' : 'search',
+            homepageActive: false,
+            homepagePage: 1,
+            searchActive: false,
+            searchQuery: '',
+            searchPage: 1,
+            authorActive: job.metadata.kind === 'scraperAuthor',
+            authorQuery: job.metadata.kind === 'scraperAuthor' ? firstSource?.query ?? '' : '',
+            authorPage: 1,
+            mangaQuery: '',
+            mangaUrl: '',
+            bookmarksFilterScraperId: null,
+        });
+        if (job.metadata.kind === 'authorFavoriteRefresh') {
+            nextSearch = writeScraperAuthorFavoriteRouteState(nextSearch, listingInput.favoriteId);
+        }
+        navigate(
+            { pathname: location.pathname, search: nextSearch },
+            { replace: true, state: { backgroundSearchJobId: job.metadata.id } },
+        );
+    }, [location.pathname, location.search, navigate]);
+
+    useEffect(() => {
+        const handleOpenEvent = (event: Event) => {
+            const job = event instanceof CustomEvent
+                ? (event.detail as { job?: BackgroundSearchJob } | undefined)?.job
+                : undefined;
+            if (job) openBackgroundSearchJob(job);
+        };
+        window.addEventListener(BACKGROUND_SEARCH_OPEN_EVENT, handleOpenEvent);
+        const pendingJobId = consumePendingBackgroundSearchOpen();
+        if (pendingJobId) {
+            void window.api?.getBackgroundSearchJob?.(pendingJobId).then((job: BackgroundSearchJob | null) => {
+                if (job?.input) openBackgroundSearchJob(job);
+            });
+        }
+        return () => {
+            window.removeEventListener(BACKGROUND_SEARCH_OPEN_EVENT, handleOpenEvent);
+        };
+    }, [openBackgroundSearchJob]);
+
     useEffect(() => {
         if (!hasLoadedMangas) return;
         if (hasRestoredViewRef.current) return;
@@ -740,12 +834,14 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         <div className="mangaManager">
             {showHeader ? (
                 <MangaManagerHeader
+                    activeBackgroundSearchCount={activeBackgroundSearchCount}
                     activeDownloadJobCount={activeDownloadJobCount}
                     activeViewId={activeViewId}
                     isLibraryView={isLibraryView}
                     onAdd={onAddClick}
                     onEditSelection={() => { void openBatchEditModal(); }}
                     onOpenDownloads={() => { void openScraperDownloadQueueModal(); }}
+                    onOpenBackgroundSearches={() => { void openBackgroundSearchQueueModal(); }}
                     onOpenOcr={() => { void openOcrQueueModal(); }}
                     onOpenScrapers={() => { void openScraperConfigModal(); }}
                     onOpenSettings={() => { void openSettingsModal(); }}
@@ -799,13 +895,16 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                             <MultiSearchBrowser
                                 scrapers={sortedScrapers}
                                 initialPrefillQuery={forcedMultiSearchPrefillQuery}
+                                backgroundSearchJobId={backgroundSearchJobId}
                             />
+                        ) : isCorrespondenceView ? (
+                            <MangaCorrespondenceView backgroundSearchJobId={backgroundSearchJobId} />
                         ) : isLatestView ? (
-                            <ScraperLatestView scrapers={sortedScrapers} />
+                            <ScraperLatestView scrapers={sortedScrapers} backgroundSearchJobId={backgroundSearchJobId} />
                         ) : isHistoryView ? (
                             <HistoryView scrapers={sortedScrapers} />
                         ) : isAuthorFavoritesView ? (
-                            <ScraperAuthorFavoritesView scrapers={sortedScrapers} />
+                            <ScraperAuthorFavoritesView scrapers={sortedScrapers} backgroundSearchJobId={backgroundSearchJobId} />
                         ) : isTagFavoritesView ? (
                             <ScraperTagFavoritesView scrapers={sortedScrapers} />
                         ) : isBookmarksView ? (
@@ -818,6 +917,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                             />
                         ) : activeScraper ? (
                             <ScraperBrowser
+                                backgroundSearchJobId={backgroundSearchJobId}
                                 scraper={activeScraper}
                                 initialState={scraperBrowserSeed && scraperBrowserSeed.scraperId === activeScraper.id
                                     ? scraperBrowserSeed

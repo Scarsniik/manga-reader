@@ -379,6 +379,26 @@
   background: #5d9cff;
 }
 
+.multi-search__merge-waiting {
+  display: flex;
+  min-height: 110px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  border: 1px dashed rgba(93, 156, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(93, 156, 255, 0.05);
+  color: #cfe0ff;
+  text-align: center;
+}
+
+.multi-search__merge-waiting svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
 .multi-search__text-filter-bar {
   display: grid;
   grid-template-columns: auto minmax(180px, 420px) auto;
@@ -615,6 +635,11 @@
   display: grid;
   gap: 14px;
   align-items: start;
+}
+
+.multi-search__virtual-grid:not(.is-static) .multi-search__virtual-row:not(.is-measured) {
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .multi-search__virtual-grid.is-static .multi-search__virtual-row {

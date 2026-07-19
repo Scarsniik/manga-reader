@@ -17,6 +17,7 @@ type MangaManagerViewWorkspaceTarget = {
         multiSearchPrefillQuery?: string;
         bookmarkFilters?: Record<string, unknown>;
         bookmarksFilterScraperId?: string | null;
+        backgroundSearchJobId?: string;
     };
     title?: string;
 };
@@ -166,6 +167,7 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
         bookmarksFilterScraperId?: unknown;
         librarySearchQuery?: unknown;
         multiSearchPrefillQuery?: unknown;
+        backgroundSearchJobId?: unknown;
     };
     return (
         candidate.multiSearchPrefillQuery === undefined
@@ -174,6 +176,10 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
     && (
         candidate.librarySearchQuery === undefined
         || typeof candidate.librarySearchQuery === "string"
+    )
+    && (
+        candidate.backgroundSearchJobId === undefined
+        || typeof candidate.backgroundSearchJobId === "string"
     )
     && isOptionalObject(candidate.bookmarkFilters)
     && isOptionalStringOrNull(candidate.bookmarksFilterScraperId);

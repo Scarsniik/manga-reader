@@ -48,9 +48,14 @@ import { useLocalBlacklistedCardsDisplay } from "@/renderer/components/Blacklist
 import "@/renderer/components/History/style.scss";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/ScraperLatest/style.scss";
+import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
+import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
+import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
+import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 
 type Props = {
   scrapers: ScraperRecord[];
+  backgroundSearchJobId?: string;
 };
 
 type LatestTabId = "authors" | "scrapers";
@@ -243,8 +248,10 @@ const formatIncludeValuesSummary = (
   return `${includedLabels.join(", ")} sauf ${excludedLabels.join(", ")}`;
 };
 
-export default function ScraperLatestView({ scrapers }: Props) {
+export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: Props) {
   const { params, setParams } = useParams();
+  const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
+  const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
   const { openModal } = useModal();
   const hideBlacklistedLatestCards = params?.scraperHideBlacklistedTagCards === true;
   const {
@@ -254,6 +261,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
   } = useLocalBlacklistedCardsDisplay(hideBlacklistedLatestCards);
   const lastAppliedLatestBlacklistModeRef = React.useRef(shouldHideBlacklistedLatestCards ? "hide" : "show");
   const [activeTab, setActiveTab] = React.useState<LatestTabId>("scrapers");
+
+  React.useEffect(() => {
+    if (attachedSearch.job?.metadata.kind === "latestAuthors") setActiveTab("authors");
+    if (attachedSearch.job?.metadata.kind === "latestSources") setActiveTab("scrapers");
+  }, [attachedSearch.job?.metadata.kind]);
   const [authorRefreshKey, setAuthorRefreshKey] = React.useState(0);
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
   const [scraperSearchMode, setScraperSearchMode] = React.useState<ScraperLatestSearchMode>("quick");
@@ -283,11 +295,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [authorFavorites],
   );
   const authorIncludedFavoriteIds = React.useMemo(
-    () => normalizeLatestIncludedAuthorFavoriteIds(
-      params?.scraperLatestIncludedAuthorFavoriteIds,
-      authorFavoritesLoaded ? authorFavoriteIds : undefined,
-    ),
-    [authorFavoriteIds, authorFavoritesLoaded, params?.scraperLatestIncludedAuthorFavoriteIds],
+    () => attachedSearch.job?.metadata.kind === "latestAuthors"
+      ? attachedInput?.selectedFavoriteIds ?? []
+      : normalizeLatestIncludedAuthorFavoriteIds(
+        params?.scraperLatestIncludedAuthorFavoriteIds,
+        authorFavoritesLoaded ? authorFavoriteIds : undefined,
+      ),
+    [attachedInput?.selectedFavoriteIds, attachedSearch.job?.metadata.kind, authorFavoriteIds, authorFavoritesLoaded, params?.scraperLatestIncludedAuthorFavoriteIds],
   );
   const authorIncludedFavorites = React.useMemo(
     () => getIncludedLatestAuthorFavorites(authorFavorites, authorIncludedFavoriteIds),
@@ -312,8 +326,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
   );
   const authorPageCount = getAuthorPageCount(params?.scraperAuthorFavoritePageCount);
   const authorIncludedLanguageCodes = React.useMemo(
-    () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestAuthorIncludedLanguageCodes),
-    [params?.scraperLatestAuthorIncludedLanguageCodes],
+    () => attachedSearch.job?.metadata.kind === "latestAuthors"
+      ? attachedInput?.includedLanguageCodes ?? []
+      : normalizeLatestIncludedLanguageCodes(params?.scraperLatestAuthorIncludedLanguageCodes),
+    [attachedInput?.includedLanguageCodes, attachedSearch.job?.metadata.kind, params?.scraperLatestAuthorIncludedLanguageCodes],
   );
   const authorIncludedLanguagesKey = authorIncludedLanguageCodes.join("|");
   const defaultScraperResultLimit = getScraperResultLimit(
@@ -337,8 +353,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
   const scraperLatestConcurrency = scraperSessionSettings?.concurrency ?? defaultScraperLatestConcurrency;
   const hasScraperSessionSettingsOverride = scraperSessionSettings !== null;
   const scraperIncludedLanguageCodes = React.useMemo(
-    () => normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
-    [params?.scraperLatestIncludedLanguageCodes],
+    () => attachedSearch.job?.metadata.kind === "latestSources"
+      ? attachedInput?.includedLanguageCodes ?? []
+      : normalizeLatestIncludedLanguageCodes(params?.scraperLatestIncludedLanguageCodes),
+    [attachedInput?.includedLanguageCodes, attachedSearch.job?.metadata.kind, params?.scraperLatestIncludedLanguageCodes],
   );
   const scraperIncludedLanguagesKey = scraperIncludedLanguageCodes.join("|");
   const enabledLatestScrapers = React.useMemo(
@@ -350,8 +368,10 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [enabledLatestScrapers],
   );
   const scraperIncludedScraperIds = React.useMemo(
-    () => normalizeLatestIncludedScraperIds(params?.scraperLatestIncludedScraperIds),
-    [params?.scraperLatestIncludedScraperIds],
+    () => attachedSearch.job?.metadata.kind === "latestSources"
+      ? attachedInput?.selectedScraperIds ?? []
+      : normalizeLatestIncludedScraperIds(params?.scraperLatestIncludedScraperIds),
+    [attachedInput?.selectedScraperIds, attachedSearch.job?.metadata.kind, params?.scraperLatestIncludedScraperIds],
   );
   const scraperIncludedScrapersKey = scraperIncludedScraperIds.join("|");
   const scraperIncludesNoScrapers = scraperIncludedScraperIds.includes(LATEST_NO_SCRAPERS_VALUE);
@@ -373,11 +393,13 @@ export default function ScraperLatestView({ scrapers }: Props) {
     [tagFavorites],
   );
   const scraperIncludedTagFavoriteIds = React.useMemo(
-    () => normalizeLatestIncludedTagFavoriteIds(
-      params?.scraperLatestIncludedTagFavoriteIds,
-      tagFavoritesLoaded ? tagFavoriteIds : undefined,
-    ),
-    [params?.scraperLatestIncludedTagFavoriteIds, tagFavoriteIds, tagFavoritesLoaded],
+    () => attachedSearch.job?.metadata.kind === "latestSources"
+      ? attachedInput?.selectedTagFavoriteIds ?? []
+      : normalizeLatestIncludedTagFavoriteIds(
+        params?.scraperLatestIncludedTagFavoriteIds,
+        tagFavoritesLoaded ? tagFavoriteIds : undefined,
+      ),
+    [attachedInput?.selectedTagFavoriteIds, attachedSearch.job?.metadata.kind, params?.scraperLatestIncludedTagFavoriteIds, tagFavoriteIds, tagFavoritesLoaded],
   );
   const scraperIncludedTagFavorites = React.useMemo(
     () => getIncludedLatestTagFavorites(tagFavorites, scraperIncludedTagFavoriteIds),
@@ -413,7 +435,14 @@ export default function ScraperLatestView({ scrapers }: Props) {
     () => scraperRuns.runs.flatMap((run) => [...run.results].reverse()),
     [scraperRuns.runs],
   );
-  const baseActiveSources: MultiSearchSourceResult[] = activeTab === "authors" ? authorSources : scraperSources;
+  const attachedResult = attachedSearch.job?.result as ListingBackgroundResult | undefined;
+  const attachedSources = React.useMemo(
+    () => attachedResult?.runs.flatMap((run) => run.results) ?? [],
+    [attachedResult?.runs],
+  );
+  const baseActiveSources: MultiSearchSourceResult[] = attachedSearch.attached
+    ? attachedSources
+    : activeTab === "authors" ? authorSources : scraperSources;
   const [blacklistEnrichedSourcesByKey, setBlacklistEnrichedSourcesByKey] = React.useState<
     Map<string, MultiSearchSourceResult>
   >(() => new Map());
@@ -562,6 +591,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
 
   React.useEffect(() => {
     if (
+      attachedSearch.attached
+      ||
       activeTab !== "authors"
       || !authorFavoritesLoaded
       || authorActionsDisabled
@@ -573,7 +604,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
 
     lastStartedAuthorRefreshKeyRef.current = authorRefreshKey;
     void authorRuns.start();
-  }, [activeTab, authorActionsDisabled, authorFavoritesLoaded, authorRefreshKey, authorRuns.start]);
+  }, [activeTab, attachedSearch.attached, authorActionsDisabled, authorFavoritesLoaded, authorRefreshKey, authorRuns.start]);
 
   const startScraperScan = React.useCallback(async (
     options: {
@@ -622,6 +653,8 @@ export default function ScraperLatestView({ scrapers }: Props) {
 
   React.useEffect(() => {
     if (
+      attachedSearch.attached
+      ||
       activeTab !== "scrapers"
       || !sourceResults.viewHistoryLoaded
       || shouldWaitForIncludedTagFavorites
@@ -638,6 +671,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
     });
   }, [
     activeTab,
+    attachedSearch.attached,
     latestScrapersKey,
     latestTagFavoritesKey,
     scraperIncludedLanguageCodes,
@@ -668,7 +702,16 @@ export default function ScraperLatestView({ scrapers }: Props) {
   }, []);
 
   const statusItems = React.useMemo(() => (
-    activeTab === "authors"
+    attachedSearch.attached
+      ? (attachedResult?.runs ?? []).map((run) => ({
+        key: run.key,
+        name: `${run.name} - ${run.scraper.name}`,
+        status: run.status,
+        state: getStatusState(run.status === "cancelled" ? "done" : run.status),
+        detail: `${run.results.length} résultat(s), ${run.loadedPages} page(s) chargée(s)`,
+        error: run.error,
+      }))
+      : activeTab === "authors"
       ? authorRuns.runs.map((run) => ({
         key: run.key,
         name: `${run.favoriteSource.name} - ${run.scraper.name}`,
@@ -704,7 +747,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
           error: run.error,
         };
       })
-  ), [activeTab, authorRuns.runs, getStatusState, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
+  ), [activeTab, attachedResult?.runs, attachedSearch.attached, authorRuns.runs, getStatusState, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
 
   const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
     setParams({
@@ -938,6 +981,89 @@ export default function ScraperLatestView({ scrapers }: Props) {
     tagResultLimit,
   ]);
 
+  const enqueueLatestBackgroundSearch = React.useCallback(async (
+    tab: LatestTabId,
+    searchMode: ScraperLatestSearchMode = "quick",
+  ) => {
+    const isAuthors = tab === "authors";
+    const sources = isAuthors
+      ? authorIncludedFavorites.flatMap((favorite) => favorite.sources.flatMap((source) => {
+        const scraper = scrapersById.get(source.scraperId);
+        return scraper ? [{
+          id: `${favorite.id}::${source.scraperId}::${source.authorUrl}`,
+          name: `${favorite.name} · ${source.name}`,
+          scraper,
+          query: source.authorUrl,
+          mode: "author" as const,
+          templateContext: source.templateContext ?? null,
+        }] : [];
+      }))
+      : [
+        ...includedLatestScrapers.map((scraper) => ({
+          id: scraper.id,
+          name: scraper.name,
+          scraper,
+          query: scraper.globalConfig.latest.module === "search"
+            ? scraper.globalConfig.homeSearch.query ?? ""
+            : "",
+          mode: scraper.globalConfig.latest.module,
+          resultLimit: scraperResultLimit,
+        })),
+        ...scraperIncludedTagFavorites.flatMap((favorite) => favorite.sources.flatMap((source) => {
+          const scraper = scrapersById.get(source.scraperId);
+          return scraper ? [{
+            id: `tag:${favorite.id}:${source.scraperId}:${source.tagUrl}`,
+            name: `${favorite.name} · ${source.name} · ${scraper.name}`,
+            scraper,
+            query: source.tagUrl,
+            mode: "tag" as const,
+            resultLimit: tagResultLimit,
+            resultTag: {
+              name: source.name || favorite.name,
+              url: source.tagUrl,
+            },
+          }] : [];
+        })),
+      ];
+    const input: ListingBackgroundInput = {
+      sources,
+      maxPages: isAuthors
+        ? authorPageCount
+        : searchMode === "deep"
+          ? scraperDeepPageLimit > 0 ? scraperDeepPageLimit : null
+          : 1,
+      resultLimit: scraperResultLimit,
+      paceMode: "careful",
+      includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
+      scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+      selectedFavoriteIds: isAuthors ? authorIncludedFavorites.map((favorite) => favorite.id) : undefined,
+      selectedScraperIds: isAuthors ? undefined : scraperIncludedScraperIds,
+      selectedTagFavoriteIds: isAuthors ? undefined : scraperIncludedTagFavoriteIds,
+      searchMode,
+    };
+    await enqueueBackgroundSearch({
+      kind: isAuthors ? "latestAuthors" : "latestSources",
+      title: isAuthors ? "Nouveautés · auteurs favoris" : "Nouveautés · sources",
+      primaryTerm: isAuthors ? "Auteurs favoris" : "Nouveautés",
+      input,
+      params,
+    });
+  }, [
+    authorIncludedFavorites,
+    authorIncludedLanguageCodes,
+    authorPageCount,
+    includedLatestScrapers,
+    params,
+    scraperDeepPageLimit,
+    scraperIncludedLanguageCodes,
+    scraperIncludedScraperIds,
+    scraperIncludedTagFavoriteIds,
+    scraperIncludedTagFavorites,
+    scraperResultLimit,
+    scrapersById,
+    tagResultLimit,
+  ]);
+
   const handleReload = React.useCallback(async () => {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
@@ -947,7 +1073,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
         return;
       }
 
-      setAuthorRefreshKey((currentKey) => currentKey + 1);
+      if (params?.scraperLatestAuthorsBackgroundEnabled === true) {
+        await enqueueLatestBackgroundSearch("authors");
+      } else {
+        setAuthorRefreshKey((currentKey) => currentKey + 1);
+      }
       return;
     }
 
@@ -955,10 +1085,14 @@ export default function ScraperLatestView({ scrapers }: Props) {
       return;
     }
 
-    await refreshViewHistorySnapshot();
-    setScraperSearchMode("quick");
-    setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, authorActionsDisabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
+    if (params?.scraperLatestSourcesBackgroundEnabled === true) {
+      await enqueueLatestBackgroundSearch("scrapers", "quick");
+    } else {
+      await refreshViewHistorySnapshot();
+      setScraperSearchMode("quick");
+      setScraperRefreshKey((currentKey) => currentKey + 1);
+    }
+  }, [activeTab, authorActionsDisabled, enqueueLatestBackgroundSearch, params?.scraperLatestAuthorsBackgroundEnabled, params?.scraperLatestSourcesBackgroundEnabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
   React.useEffect(() => {
     const nextMode = shouldHideBlacklistedLatestCards ? "hide" : "show";
@@ -979,12 +1113,16 @@ export default function ScraperLatestView({ scrapers }: Props) {
       return;
     }
 
+    if (params?.scraperLatestSourcesBackgroundEnabled === true) {
+      await enqueueLatestBackgroundSearch("scrapers", "deep");
+      return;
+    }
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
     await refreshViewHistorySnapshot();
     setScraperSearchMode("deep");
     setScraperRefreshKey((currentKey) => currentKey + 1);
-  }, [activeTab, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
+  }, [activeTab, enqueueLatestBackgroundSearch, params?.scraperLatestSourcesBackgroundEnabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
   const handleContinueScan = React.useCallback(async (repeatCount: number) => {
     if (activeTab !== "scrapers" || scraperActionsDisabled) {
@@ -1039,18 +1177,24 @@ export default function ScraperLatestView({ scrapers }: Props) {
   ]);
 
   const hasIncludedTagFavoriteSelection = scraperIncludedTagFavoriteIds.length > 0;
-  const loading = activeTab === "authors"
+  const loading = attachedSearch.attached
+    ? attachedSearch.status === "queued" || attachedSearch.status === "running"
+    : activeTab === "authors"
     ? authorFavoritesLoading || authorRuns.loading
     : scraperRuns.loading || (hasIncludedTagFavoriteSelection && tagFavoritesLoading && scraperRefreshKey > 0);
-  const message = activeTab === "authors"
+  const message = attachedSearch.attached
+    ? attachedSearch.status === "queued" || attachedSearch.status === "running"
+      ? "Recherche en arrière-plan en cours. Les résultats sont actualisés automatiquement."
+      : "Résultats de la recherche en arrière-plan chargés."
+    : activeTab === "authors"
     ? authorRuns.message
     : scraperRuns.message;
-  const error = activeTab === "authors"
+  const error = attachedSearch.error || attachedSearch.job?.metadata.error || (activeTab === "authors"
     ? authorSelectionError || authorFavoritesError || authorRuns.error
-    : scraperSelectionError || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null) || scraperRuns.error;
-  const activeTabHasStarted = activeTab === "authors"
+    : scraperSelectionError || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null) || scraperRuns.error);
+  const activeTabHasStarted = attachedSearch.attached || (activeTab === "authors"
     ? authorRefreshKey > 0
-    : scraperRefreshKey > 0;
+    : scraperRefreshKey > 0);
   const canContinueScraperScan = activeTab === "scrapers"
     && scraperRuns.runs.some((run) => run.canContinue === true);
   const hiddenBlacklistedLatestCardCount = React.useMemo(
@@ -1070,7 +1214,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         <HistoryTabs
           tabs={LATEST_TABS}
           activeTab={activeTab}
-          onChange={setActiveTab}
+          onChange={attachedSearch.attached ? () => {} : setActiveTab}
           ariaLabel="Sections des nouveautes"
         />
       </div>
@@ -1087,11 +1231,11 @@ export default function ScraperLatestView({ scrapers }: Props) {
           <ScraperLatestAuthorFavoriteIncludeBar
             favorites={authorFavorites}
             value={authorIncludedFavoriteIds}
-            onChange={handleAuthorIncludedFavoriteIdsChange}
+            onChange={attachedSearch.attached ? () => {} : handleAuthorIncludedFavoriteIdsChange}
           />
           <ScraperLatestLanguageIncludeBar
             value={authorIncludedLanguageCodes}
-            onChange={handleAuthorIncludedLanguageCodesChange}
+            onChange={attachedSearch.attached ? () => {} : handleAuthorIncludedLanguageCodesChange}
           />
         </div>
       ) : null}
@@ -1101,19 +1245,36 @@ export default function ScraperLatestView({ scrapers }: Props) {
           <ScraperLatestScraperIncludeBar
             scrapers={enabledLatestScrapers}
             value={scraperIncludedScraperIds}
-            onChange={handleScraperIncludedScraperIdsChange}
+            onChange={attachedSearch.attached ? () => {} : handleScraperIncludedScraperIdsChange}
           />
           <ScraperLatestTagFavoriteIncludeBar
             favorites={tagFavorites}
             value={scraperIncludedTagFavoriteIds}
-            onChange={handleScraperIncludedTagFavoriteIdsChange}
+            onChange={attachedSearch.attached ? () => {} : handleScraperIncludedTagFavoriteIdsChange}
           />
           <ScraperLatestLanguageIncludeBar
             value={scraperIncludedLanguageCodes}
-            onChange={handleScraperIncludedLanguageCodesChange}
+            onChange={attachedSearch.attached ? () => {} : handleScraperIncludedLanguageCodesChange}
           />
         </div>
       ) : null}
+
+      <label className="background-search-toggle scraper-latest__background-toggle">
+        <input
+          type="checkbox"
+          checked={attachedSearch.attached || (activeTab === "authors"
+            ? params?.scraperLatestAuthorsBackgroundEnabled === true
+            : params?.scraperLatestSourcesBackgroundEnabled === true)}
+          disabled={attachedSearch.attached}
+          onChange={(event) => setParams(activeTab === "authors"
+            ? { scraperLatestAuthorsBackgroundEnabled: event.target.checked }
+            : { scraperLatestSourcesBackgroundEnabled: event.target.checked }, { remount: false })}
+        />
+        <span>
+          <strong>En arrière-plan</strong>
+          <small>{attachedSearch.attached ? "Rattaché à ce scan" : "Le scan continue en changeant de vue"}</small>
+        </span>
+      </label>
 
       <ScraperLatestResults
         title={activeTab === "authors" ? "Auteurs favoris" : "Sources"}
@@ -1168,7 +1329,7 @@ export default function ScraperLatestView({ scrapers }: Props) {
         onShowBlacklistedCardsLocallyChange={activeTab === "scrapers"
           ? setShowBlacklistedLatestCardsLocally
           : undefined}
-        onReload={handleReload}
+        onReload={attachedSearch.attached ? () => { void attachedSearch.reload(); } : handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
         onContinueCountChange={setScraperContinueCount}

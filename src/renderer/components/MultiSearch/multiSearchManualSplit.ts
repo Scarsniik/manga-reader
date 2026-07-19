@@ -2,11 +2,11 @@ import type {
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
-import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import { getMultiSearchSourceLanguageValues } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 
 const buildSingleSourceResultId = (source: MultiSearchSourceResult): string => (
-  `${source.scraper.id}::${normalizeScraperViewHistorySourceUrl(source.result.detailUrl) || source.result.title}`
+  `multi-search::${buildMultiSearchSourceIdentityKey(source)}`
 );
 
 const buildSingleSourceResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({

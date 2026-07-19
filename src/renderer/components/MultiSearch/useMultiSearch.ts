@@ -101,6 +101,16 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     setMessage(restoredRuns.length ? "Recherche multi-sources restauree." : null);
   }, [clearRunUpdates]);
 
+  const replaceRuns = useCallback((nextRuns: MultiSearchScraperRun[]) => {
+    clearRunUpdates();
+    searchTokenRef.current += 1;
+    cancelledScraperIdsRef.current.clear();
+    setRuns(nextRuns);
+    setIsSearching(nextRuns.some(isMultiSearchRunActive));
+    setError(null);
+    setMessage(null);
+  }, [clearRunUpdates]);
+
   const loadNextPageForRun = useCallback(async (
     run: MultiSearchScraperRun,
     termRun: MultiSearchTermRun,
@@ -420,6 +430,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     canLoadMore,
     canStopSearch,
     restoreRuns,
+    replaceRuns,
     runSearch,
     stopSearch,
     stopScraperSearch,

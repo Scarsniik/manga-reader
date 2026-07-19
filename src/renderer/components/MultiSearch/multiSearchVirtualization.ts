@@ -4,6 +4,7 @@ export type VirtualRow = {
   index: number;
   top: number;
   height: number;
+  isMeasured: boolean;
   results: MultiSearchMergedResult[];
 };
 
@@ -143,6 +144,7 @@ export const buildVirtualRows = (
       index: rows.length,
       top,
       height: rowHeight,
+      isMeasured: !hasMissingExactHeight,
       results: rowResults,
     });
 

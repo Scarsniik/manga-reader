@@ -33,6 +33,12 @@ import type {
 import type { JapaneseRomanizationRequest } from "../shared/japaneseRomanization";
 import type { JapaneseInflectionRequest } from "../shared/japaneseInflection";
 import type {
+    BackgroundSearchChangeEvent,
+    CompleteBackgroundSearchRequest,
+    CreateBackgroundSearchRequest,
+    UpdateBackgroundSearchRequest,
+} from "../shared/backgroundSearch";
+import type {
     SaveReadingListRequest,
     SavedReadingList,
 } from "../shared/readingList";
@@ -67,6 +73,7 @@ type MangaManagerViewWorkspaceTarget = {
         multiSearchPrefillQuery?: string;
         bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
         bookmarksFilterScraperId?: string | null;
+        backgroundSearchJobId?: string;
     };
     title?: string;
 };
@@ -328,6 +335,23 @@ contextBridge.exposeInMainWorld('api', {
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
     openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
     openJsonDocument: (request: { filename?: string; content: string }) => ipcRenderer.invoke("open-json-document", request),
+    createBackgroundSearch: (request: CreateBackgroundSearchRequest) => ipcRenderer.invoke("background-search-create", request),
+    getBackgroundSearchQueue: () => ipcRenderer.invoke("background-search-list"),
+    getBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-get", jobId),
+    claimBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-claim", jobId),
+    updateBackgroundSearch: (request: UpdateBackgroundSearchRequest) => ipcRenderer.invoke("background-search-update", request),
+    completeBackgroundSearch: (request: CompleteBackgroundSearchRequest) => ipcRenderer.invoke("background-search-complete", request),
+    failBackgroundSearch: (jobId: string, error: string) => ipcRenderer.invoke("background-search-fail", jobId, error),
+    cancelBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-cancel", jobId),
+    retryBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-retry", jobId),
+    markBackgroundSearchOpened: (jobId: string) => ipcRenderer.invoke("background-search-mark-opened", jobId),
+    deleteBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-delete", jobId),
+    onBackgroundSearchChanged: (callback: (event: BackgroundSearchChangeEvent) => void) => (
+        createIpcSubscription("background-search-changed", callback)
+    ),
+    onBackgroundSearchOpenRequested: (callback: (event: { jobId: string }) => void) => (
+        createIpcSubscription("background-search-open-requested", callback)
+    ),
     // Window controls
     getAppRuntimeInfo: () => ipcRenderer.invoke("app-runtime-info"),
     getWindowState: () => ipcRenderer.invoke("window-get-state"),

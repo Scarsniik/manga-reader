@@ -16,8 +16,11 @@ type Props = {
   isSearching: boolean;
   canSubmit: boolean;
   canStopSearch: boolean;
+  backgroundEnabled: boolean;
+  backgroundAttached?: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onStopSearch: () => void;
+  onBackgroundEnabledChange: (value: boolean) => void;
   onQueryChange: (value: string) => void;
   onDepthModeChange: (value: MultiSearchDepthMode) => void;
   onAdvancedPagesChange: (value: MultiSearchAdvancedPages) => void;
@@ -51,8 +54,11 @@ export default function MultiSearchControls({
   isSearching,
   canSubmit,
   canStopSearch,
+  backgroundEnabled,
+  backgroundAttached = false,
   onSubmit,
   onStopSearch,
+  onBackgroundEnabledChange,
   onQueryChange,
   onDepthModeChange,
   onAdvancedPagesChange,
@@ -80,6 +86,18 @@ export default function MultiSearchControls({
           Arreter
         </button>
       </div>
+
+      <label className="background-search-toggle">
+        <input
+          type="checkbox"
+          checked={backgroundEnabled}
+          onChange={(event) => onBackgroundEnabledChange(event.target.checked)}
+        />
+        <span>
+          <strong>En arrière-plan</strong>
+          <small>{backgroundAttached ? "Rattaché à une recherche existante" : "La recherche continue en changeant de vue"}</small>
+        </span>
+      </label>
 
       <div className="multi-search__controls-grid">
         <div className="multi-search__control">

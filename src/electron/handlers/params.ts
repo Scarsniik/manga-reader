@@ -84,6 +84,8 @@ const DEFAULT_MULTI_SEARCH_DEPTH_MODE = "quick";
 const DEFAULT_MULTI_SEARCH_ADVANCED_PAGES = 3;
 const DEFAULT_MULTI_SEARCH_PACE_MODE = "fast";
 const DEFAULT_MULTI_SEARCH_VIEW_MODE = "merged";
+const DEFAULT_BACKGROUND_SEARCH_RETENTION_HOURS = 24;
+const DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT = 3;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
@@ -671,6 +673,14 @@ const defaultSettings = {
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
+    backgroundSearchStorageMode: "memory" as "memory" | "temporaryFile",
+    backgroundSearchTemporaryRetentionHours: DEFAULT_BACKGROUND_SEARCH_RETENTION_HOURS,
+    backgroundSearchMaxConcurrent: DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT,
+    multiSearchBackgroundEnabled: false,
+    scraperAuthorBackgroundEnabled: false,
+    scraperLatestSourcesBackgroundEnabled: false,
+    scraperLatestAuthorsBackgroundEnabled: false,
+    scraperAuthorFavoriteRefreshBackgroundEnabled: false,
     stackMangaInSeries: true,
     mangaListFilters: null,
     appUpdateAutoCheck: true,
@@ -801,6 +811,21 @@ const normalizeSettings = (value: unknown) => {
         merged.scraperLatestIncludedTagFavoriteIds,
     );
     Object.assign(merged, normalizeScraperViewHistorySettings(merged));
+    merged.backgroundSearchStorageMode = merged.backgroundSearchStorageMode === "temporaryFile"
+        ? "temporaryFile"
+        : "memory";
+    merged.backgroundSearchTemporaryRetentionHours = normalizeIntegerSetting(
+        merged.backgroundSearchTemporaryRetentionHours,
+        DEFAULT_BACKGROUND_SEARCH_RETENTION_HOURS,
+        1,
+        24 * 365,
+    );
+    merged.backgroundSearchMaxConcurrent = normalizeIntegerSetting(
+        merged.backgroundSearchMaxConcurrent,
+        DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT,
+        1,
+        8,
+    );
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
         : defaultSettings.multiSearchShowUnseenFirst;

@@ -10,6 +10,7 @@ export type MangaManagerViewWorkspaceTarget = {
     multiSearchPrefillQuery?: string;
     bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
     bookmarksFilterScraperId?: string | null;
+    backgroundSearchJobId?: string;
   };
   title?: string;
 };

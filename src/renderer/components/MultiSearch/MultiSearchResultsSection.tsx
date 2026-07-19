@@ -35,6 +35,7 @@ import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBl
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -90,7 +91,7 @@ type Props = {
 };
 
 const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
-  id: `${source.scraper.id}-${source.result.detailUrl || source.result.title}`,
+  id: `multi-search::${buildMultiSearchSourceIdentityKey(source)}`,
   title: source.result.title,
   coverUrl: source.result.thumbnailUrl,
   summary: source.result.summary,
@@ -212,6 +213,8 @@ export default function MultiSearchResultsSection({
     "multi-search__merge-progress",
     mergeProgress.isActive ? "is-visible" : "",
   ].filter(Boolean).join(" ");
+  const isMergePending = mergeProgress.isActive || loadedSourceCount > mergeProgress.sourceCount;
+  const isWaitingForMergedCards = isMergePending && displayedMergedResults.length === 0;
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
       ? runs.map((run) => {
@@ -242,10 +245,13 @@ export default function MultiSearchResultsSection({
           <div>
             <h3>Resultats fusionnes</h3>
             <p>
-              {displayedMergedResults.length} carte(s), {visibleSourceCount} source(s) chargee(s)
-              {shouldHideBlacklistedCards && blacklistedMergedResultCount > 0
-                ? `, ${blacklistedMergedResultCount} masquee(s)`
-                : ""}.
+              {isWaitingForMergedCards
+                ? `Preparation des cartes depuis ${visibleSourceCount} source(s) chargee(s)...`
+                : `${displayedMergedResults.length} carte(s), ${visibleSourceCount} source(s) chargee(s)${
+                  shouldHideBlacklistedCards && blacklistedMergedResultCount > 0
+                    ? `, ${blacklistedMergedResultCount} masquee(s)`
+                    : ""
+                }.`}
             </p>
             <div
               className={mergeProgressClassName}
@@ -341,23 +347,34 @@ export default function MultiSearchResultsSection({
           </div>
         </div>
 
-        <MultiSearchVirtualizedResultsGrid
-          results={displayedMergedResults}
-          libraryMangas={libraryMangas}
-          bookmarkedSourceKeys={bookmarkedSourceKeys}
-          sourceProgressIndex={sourceProgressIndex}
-          viewHistoryRecordsById={viewHistoryRecordsById}
-          newViewHistoryIds={newViewHistoryIds}
-          tagBlacklistByScraper={tagBlacklistByScraper}
-          tagFavorites={tagFavorites}
-          viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
-          onOpenSource={onOpenSource}
-          onOpenSourceInWorkspace={onOpenSourceInWorkspace}
-          onOpenProgressReader={onOpenProgressReader}
-          onSetSourcesRead={onSetSourcesRead}
-          onSplitResult={onSplitResult}
-        />
-        {!displayedMergedResults.length && mergedResults.length ? (
+        {isWaitingForMergedCards ? (
+          <div className="multi-search__merge-waiting" role="status" aria-live="polite">
+            <LoadingSpinnerIcon
+              className="multi-search__button-spinner"
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>Fusion des resultats en cours. Les cartes vont apparaitre une fois la liste stabilisee.</span>
+          </div>
+        ) : (
+          <MultiSearchVirtualizedResultsGrid
+            results={displayedMergedResults}
+            libraryMangas={libraryMangas}
+            bookmarkedSourceKeys={bookmarkedSourceKeys}
+            sourceProgressIndex={sourceProgressIndex}
+            viewHistoryRecordsById={viewHistoryRecordsById}
+            newViewHistoryIds={newViewHistoryIds}
+            tagBlacklistByScraper={tagBlacklistByScraper}
+            tagFavorites={tagFavorites}
+            viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
+            onOpenSource={onOpenSource}
+            onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+            onOpenProgressReader={onOpenProgressReader}
+            onSetSourcesRead={onSetSourcesRead}
+            onSplitResult={onSplitResult}
+          />
+        )}
+        {!mergeProgress.isActive && !displayedMergedResults.length && mergedResults.length ? (
           <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
         ) : null}
       </section>
