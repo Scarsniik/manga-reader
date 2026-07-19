@@ -252,6 +252,8 @@ export default function ScraperLatestResults({
     [shouldHideBlacklistedCards, tagBlacklistByScraper, visibleResults],
   );
   const blacklistedCardCount = Math.max(0, hiddenBlacklistedCardCount) + visibleBlacklistedResultCount;
+  const mergedCardCount = manuallySplitResults.length;
+  const languageHiddenCardCount = Math.max(0, mergedCardCount - languageFilteredResults.length);
   const visibleSourceCount = React.useMemo(
     () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
     [displayedResults],
@@ -369,12 +371,24 @@ export default function ScraperLatestResults({
         </div>
         <div className="scraper-latest-results__summary">
           <p>{summary}</p>
-          <p>
-            {displayedResults.length} carte(s), {visibleSourceCount} source(s) {preserveStoredResults ? "enregistree(s)" : "non vue(s)"}
-            {shouldHideBlacklistedCards && blacklistedCardCount > 0
-              ? `, ${blacklistedCardCount} masquee(s)`
-              : ""}.
-          </p>
+          {preserveStoredResults ? (
+            <p>
+              {sources.length} source(s) enregistree(s) · {mergedCardCount} card(s) fusionnee(s) · {displayedResults.length} affichee(s)
+              {shouldHideBlacklistedCards && blacklistedCardCount > 0
+                ? ` · ${blacklistedCardCount} masquee(s) par la blacklist`
+                : ""}
+              {languageHiddenCardCount > 0
+                ? ` · ${languageHiddenCardCount} exclue(s) par le filtre de langue`
+                : ""}.
+            </p>
+          ) : (
+            <p>
+              {displayedResults.length} card(s), {visibleSourceCount} source(s) non vue(s)
+              {shouldHideBlacklistedCards && blacklistedCardCount > 0
+                ? `, ${blacklistedCardCount} masquee(s)`
+                : ""}.
+            </p>
+          )}
           <div
             className={mergeProgressClassName}
             role={mergeProgress.isActive ? "status" : undefined}

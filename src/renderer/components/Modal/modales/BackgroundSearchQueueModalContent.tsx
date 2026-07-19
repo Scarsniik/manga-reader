@@ -49,6 +49,14 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat("fr-FR", {
   timeStyle: "short",
 }).format(new Date(value));
 
+const formatResultCount = (job: BackgroundSearchJobMetadata): string => {
+  const count = job.progress.resultCount;
+  if (job.kind === "mangaCorrespondence") {
+    return `${count} correspondance(s)`;
+  }
+  return `${count} source(s) brute(s)`;
+};
+
 const getProgressPercent = (job: BackgroundSearchJobMetadata): number | null => {
   if (!job.progress.totalUnits) return null;
   return Math.max(0, Math.min(100, Math.round(
@@ -177,7 +185,7 @@ export default function BackgroundSearchQueueModalContent() {
                   <strong>{job.primaryTerm}</strong>
                   <small>{formatKind(job.kind)} · {formatDate(job.createdAt)}</small>
                   <span className="background-search-card__meta">
-                    <span>{job.progress.resultCount} résultat(s)</span>
+                    <span>{formatResultCount(job)}</span>
                     {job.progress.currentLabel ? <span>{job.progress.currentLabel}</span> : null}
                     <span>{job.storageMode === "temporaryFile" ? "Fichier temporaire" : "Cache mémoire"}</span>
                   </span>
