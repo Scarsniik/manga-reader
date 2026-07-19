@@ -1319,6 +1319,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
         sourceProgressIndex={sourceResults.sourceProgressIndex}
         viewHistoryRecordsById={sourceResults.viewHistoryRecordsById}
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
+        preserveStoredResults={attachedSearch.attached}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
         hideBlacklistedCards={activeTab === "scrapers" ? hideBlacklistedLatestCards : false}

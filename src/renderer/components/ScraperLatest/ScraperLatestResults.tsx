@@ -64,6 +64,7 @@ type Props = {
   sourceProgressIndex: MultiSearchProgressIndex;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
+  preserveStoredResults?: boolean;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
@@ -184,6 +185,7 @@ export default function ScraperLatestResults({
   sourceProgressIndex,
   viewHistoryRecordsById,
   newViewHistoryIds,
+  preserveStoredResults = false,
   tagBlacklistByScraper,
   tagFavorites = [],
   hideBlacklistedCards = false,
@@ -225,14 +227,16 @@ export default function ScraperLatestResults({
     [languageFilterModes, manuallySplitResults],
   );
   const visibleResults = React.useMemo(
-    () => languageFilteredResults.filter((result) => (
-      isScraperViewHistoryCardNew(
-        viewHistoryRecordsById,
-        result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-        newViewHistoryIds,
-      )
-    )),
-    [languageFilteredResults, newViewHistoryIds, viewHistoryRecordsById],
+    () => preserveStoredResults
+      ? languageFilteredResults
+      : languageFilteredResults.filter((result) => (
+        isScraperViewHistoryCardNew(
+          viewHistoryRecordsById,
+          result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+          newViewHistoryIds,
+        )
+      )),
+    [languageFilteredResults, newViewHistoryIds, preserveStoredResults, viewHistoryRecordsById],
   );
   const visibleBlacklistedResultCount = React.useMemo(
     () => countBlacklistedMultiSearchResults(visibleResults, tagBlacklistByScraper),
@@ -366,7 +370,7 @@ export default function ScraperLatestResults({
         <div className="scraper-latest-results__summary">
           <p>{summary}</p>
           <p>
-            {displayedResults.length} carte(s), {visibleSourceCount} source(s) non vue(s)
+            {displayedResults.length} carte(s), {visibleSourceCount} source(s) {preserveStoredResults ? "enregistree(s)" : "non vue(s)"}
             {shouldHideBlacklistedCards && blacklistedCardCount > 0
               ? `, ${blacklistedCardCount} masquee(s)`
               : ""}.
