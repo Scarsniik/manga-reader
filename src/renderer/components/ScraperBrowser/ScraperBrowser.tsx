@@ -148,6 +148,7 @@ type Props = {
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   routeSyncEnabled?: boolean;
+  resultOnly?: boolean;
 };
 
 const buildBackLabel = (
@@ -245,6 +246,7 @@ export default function ScraperBrowser({
   onOpenReaderTarget,
   onOpenWorkspaceTarget,
   routeSyncEnabled = true,
+  resultOnly = false,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -2308,7 +2310,7 @@ export default function ScraperBrowser({
 
   return (
     <section className="scraper-browser" ref={browserRootRef}>
-      <ScraperBrowserHero
+      {!resultOnly ? <ScraperBrowserHero
         scraper={scraper}
         capabilities={capabilities}
         bookmarkCount={scraperBookmarkCount}
@@ -2318,9 +2320,9 @@ export default function ScraperBrowser({
           kind: 'edit',
           scraperId: scraper.id,
         }))}
-      />
+      /> : null}
 
-      {availableModes.length === 0 ? (
+      {!resultOnly && availableModes.length === 0 ? (
         <div className="scraper-browser__panel scraper-browser__message is-warning">
           Aucun composant executable n&apos;est encore configure sur ce scrapper. Configure au moins `Fiche`,
           `Recherche`, `Auteur`, `Tag` ou `Liste de tags` pour afficher une vue temporaire ici.
@@ -2366,7 +2368,7 @@ export default function ScraperBrowser({
           onRuntimeMessage={setRuntimeMessage}
           onRuntimeError={setRuntimeError}
         />
-      ) : shouldShowAuthorCombinedView ? (
+      ) : shouldShowAuthorCombinedView && !resultOnly ? (
         <ScraperAuthorCombinedView
           scraper={scraper}
           authorUrl={query.trim()}
@@ -2384,23 +2386,23 @@ export default function ScraperBrowser({
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
           onOpenSourceDetails={effectiveRouteSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
         />
-      ) : (
+      ) : !resultOnly ? (
         <ScraperSearchResultsSection
           scraperId={scraper.id}
           mode={mode === 'author' ? 'author' : mode === 'tag' ? 'tag' : mode === 'homepage' ? 'homepage' : 'search'}
-          backLabel={authorResultsBackLabel}
+          backLabel={resultOnly ? null : authorResultsBackLabel}
           authorTitle={mode === 'tag' ? tagResultsTitle : authorResultsTitle}
           visibleSearchResults={visibleSearchResults}
           searchResultsCount={listingResults.length}
           query={query}
           searchPage={listingPage}
           searchPageIndex={listingPageIndex}
-          shouldShowSearchPagination={shouldShowSearchPagination}
+          shouldShowSearchPagination={resultOnly ? false : shouldShowSearchPagination}
           currentSearchPageLabel={currentSearchPageLabel}
           paginationInfoLabel={paginationInfoLabel}
           loading={loading}
           usesSearchTemplatePaging={usesActiveTemplatePaging}
-          headerAction={listingHeaderAction}
+          headerAction={resultOnly ? undefined : listingHeaderAction}
           canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
           canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
           viewHistoryRecordsById={viewHistoryRecordsById}
@@ -2423,7 +2425,7 @@ export default function ScraperBrowser({
           onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
           onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
         />
-      )}
+      ) : null}
 
       <ScraperDetailsPanel
         scraperId={scraper.id}

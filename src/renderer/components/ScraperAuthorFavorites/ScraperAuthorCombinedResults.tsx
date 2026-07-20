@@ -54,6 +54,7 @@ type Props = {
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
+  readOnly?: boolean;
   backLabel?: string | null;
   sourceSectionTitle?: string;
   resultsSectionTitle?: string;
@@ -114,6 +115,7 @@ export default function ScraperAuthorCombinedResults({
   tagBlacklistByScraper,
   tagFavorites = [],
   hideBlacklistedCards = false,
+  readOnly = false,
   backLabel = null,
   sourceSectionTitle = "Sources",
   resultsSectionTitle = "Resultats combines",
@@ -179,7 +181,7 @@ export default function ScraperAuthorCombinedResults({
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
-        <div className="scraper-author-favorites-view__header-actions">
+        {!readOnly ? <div className="scraper-author-favorites-view__header-actions">
           {viewModeAction}
           <button
             type="button"
@@ -202,7 +204,7 @@ export default function ScraperAuthorCombinedResults({
           >
             Recharger
           </button>
-        </div>
+        </div> : null}
       </div>
 
       {message ? <div className="multi-search__message is-info">{message}</div> : null}
@@ -214,7 +216,7 @@ export default function ScraperAuthorCombinedResults({
             <h3>{sourceSectionTitle}</h3>
             <p>{runs.length} source(s), {loadedSourceCount} resultat(s) charge(s).</p>
           </div>
-          <div className="scraper-author-favorites-view__source-actions">
+          {!readOnly ? <div className="scraper-author-favorites-view__source-actions">
             <button
               type="button"
               className="multi-search__export-json-button"
@@ -231,7 +233,7 @@ export default function ScraperAuthorCombinedResults({
             >
               Charger tout
             </button>
-          </div>
+          </div> : null}
         </div>
         <div className="scraper-author-favorites-view__source-list">
           {runs.map((run) => (
@@ -251,14 +253,14 @@ export default function ScraperAuthorCombinedResults({
               </button>
               <div>
                 <span>{run.loadedPages} page(s)</span>
-                <button
+                {!readOnly ? <button
                   type="button"
                   className="scraper-author-favorites-view__source-more"
                   onClick={() => onLoadMoreForRun(run.key)}
                   disabled={loading || !run.hasNextPage || run.status === "loading"}
                 >
                   Plus
-                </button>
+                </button> : null}
               </div>
             </div>
           ))}

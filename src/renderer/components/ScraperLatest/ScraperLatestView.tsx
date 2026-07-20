@@ -56,6 +56,7 @@ import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types"
 type Props = {
   scrapers: ScraperRecord[];
   backgroundSearchJobId?: string;
+  resultOnly?: boolean;
 };
 
 type LatestTabId = "authors" | "scrapers";
@@ -248,7 +249,7 @@ const formatIncludeValuesSummary = (
   return `${includedLabels.join(", ")} sauf ${excludedLabels.join(", ")}`;
 };
 
-export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: Props) {
+export default function ScraperLatestView({ scrapers, backgroundSearchJobId, resultOnly = false }: Props) {
   const { params, setParams } = useParams();
   const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
@@ -1212,7 +1213,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
 
   return (
     <section ref={rootRef} className="scraper-latest">
-      <div className="scraper-latest__header">
+      {!resultOnly ? <div className="scraper-latest__header">
         <div>
           <h2>Nouveautes</h2>
           <p>Cartes non vues trouvees dans les sources incluses.</p>
@@ -1223,16 +1224,16 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
           onChange={attachedSearch.attached ? () => {} : setActiveTab}
           ariaLabel="Sections des nouveautes"
         />
-      </div>
+      </div> : null}
 
-      {shouldWarnAboutLimitedViewHistory ? (
+      {!resultOnly && shouldWarnAboutLimitedViewHistory ? (
         <div className="multi-search__message is-warning">
           L'historique des cards vues n'est pas illimite. Les nouveautes peuvent reafficher des cards deja vues
           apres nettoyage ; mets la limite et les deux conservations a 0 pour un suivi complet.
         </div>
       ) : null}
 
-      {activeTab === "authors" ? (
+      {!resultOnly && activeTab === "authors" ? (
         <div className="scraper-latest__filters">
           <ScraperLatestAuthorFavoriteIncludeBar
             favorites={authorFavorites}
@@ -1246,7 +1247,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
         </div>
       ) : null}
 
-      {activeTab === "scrapers" ? (
+      {!resultOnly && activeTab === "scrapers" ? (
         <div className="scraper-latest__filters">
           <ScraperLatestScraperIncludeBar
             scrapers={enabledLatestScrapers}
@@ -1265,7 +1266,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
         </div>
       ) : null}
 
-      <label className="background-search-toggle scraper-latest__background-toggle">
+      {!resultOnly ? <label className="background-search-toggle scraper-latest__background-toggle">
         <input
           type="checkbox"
           checked={attachedSearch.attached || (activeTab === "authors"
@@ -1280,7 +1281,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
           <strong>En arrière-plan</strong>
           <small>{attachedSearch.attached ? "Rattaché à ce scan" : "Le scan continue en changeant de vue"}</small>
         </span>
-      </label>
+      </label> : null}
 
       <ScraperLatestResults
         title={activeTab === "authors" ? "Auteurs favoris" : "Sources"}
@@ -1336,7 +1337,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
         onShowBlacklistedCardsLocallyChange={activeTab === "scrapers"
           ? setShowBlacklistedLatestCardsLocally
           : undefined}
-        onReload={attachedSearch.attached ? () => { void attachedSearch.reload(); } : handleReload}
+        onReload={resultOnly ? undefined : attachedSearch.attached ? () => { void attachedSearch.reload(); } : handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
         onContinueCountChange={setScraperContinueCount}

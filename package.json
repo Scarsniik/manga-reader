@@ -20,7 +20,7 @@
     "load:user-data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/load-user-data.ps1",
     "scrapers:test": "node scripts/test-configured-scrapers.cjs",
     "test:reading-list-ordering": "npm run prestart && node --test scripts/reading-list-ordering.test.cjs",
-    "test:background-search": "npm run build:electron && node --test scripts/background-listing-execution.test.cjs scripts/background-search-metadata.test.cjs scripts/global-scraper-concurrency.test.cjs scripts/manga-correspondence-matching.test.cjs",
+    "test:background-search": "npm run build:electron && node --test scripts/background-listing-execution.test.cjs scripts/background-search-metadata.test.cjs scripts/background-search-navigation.test.cjs scripts/global-scraper-concurrency.test.cjs scripts/manga-correspondence-matching.test.cjs",
     "test:saved-reading-list-update": "npm run build:electron && node --test scripts/saved-reading-list-update.test.cjs",
     "test:ocr-edited-overrides": "npm run build:electron && node --test scripts/ocr-edited-box-overrides.test.cjs scripts/ocr-page-preservation.test.cjs",
     "test:ocr-unicode-analysis": "npm run build:electron && node --test scripts/ocr-unicode-analysis.test.cjs",

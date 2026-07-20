@@ -16,6 +16,7 @@ import type { ScraperBrowserReturnState } from '@/renderer/components/ScraperBro
 import {
     clearScraperRouteState,
     parseScraperRouteState,
+    BACKGROUND_SEARCH_RESULTS_VIEW_ID,
     SCRAPER_AUTHOR_FAVORITES_VIEW_ID,
     SCRAPER_CORRESPONDENCE_VIEW_ID,
     SCRAPER_HISTORY_VIEW_ID,
@@ -34,14 +35,12 @@ import type {
     BackgroundSearchChangeEvent,
     BackgroundSearchJob,
     BackgroundSearchQueueSummary,
-    ListingBackgroundInput,
 } from '@/shared/backgroundSearch';
 import {
     BACKGROUND_SEARCH_OPEN_EVENT,
     consumePendingBackgroundSearchOpen,
     getBackgroundSearchViewId,
 } from '@/renderer/backgroundSearch/backgroundSearchNavigation';
-import { writeScraperAuthorFavoriteRouteState } from '@/renderer/utils/scraperBrowserNavigation';
 
 type DefaultComponentModule = {
     default: React.ComponentType<any>;
@@ -74,6 +73,7 @@ const HistoryView = React.lazy(() => loadDefaultComponent(() => import('@/render
 const MultiSearchBrowser = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/MultiSearch/MultiSearchBrowser.js')));
 const ScraperLatestView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/ScraperLatest/ScraperLatestView.js')));
 const MangaCorrespondenceView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/MangaCorrespondence/MangaCorrespondenceView.js')));
+const BackgroundSearchResultView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/backgroundSearch/BackgroundSearchResultView.js')));
 
 declare global {
     interface Window {
@@ -440,6 +440,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const isHistoryView = activeViewId === SCRAPER_HISTORY_VIEW_ID;
     const isLatestView = activeViewId === SCRAPER_LATEST_VIEW_ID;
     const isCorrespondenceView = activeViewId === SCRAPER_CORRESPONDENCE_VIEW_ID;
+    const isBackgroundSearchResultView = activeViewId === BACKGROUND_SEARCH_RESULTS_VIEW_ID;
     const forcedMultiSearchPrefillQuery = typeof forcedLocationState?.multiSearchPrefillQuery === 'string'
         ? forcedLocationState.multiSearchPrefillQuery.trim()
         : '';
@@ -460,6 +461,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             : undefined;
     const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
         { id: 'library', label: 'Bibliotheque', group: 'navigation', icon: 'library' },
+        ...(isBackgroundSearchResultView ? [{ id: BACKGROUND_SEARCH_RESULTS_VIEW_ID, label: 'Résultat enregistré', group: 'navigation' as const, icon: 'search' as const }] : []),
         ...(isCorrespondenceView ? [{ id: SCRAPER_CORRESPONDENCE_VIEW_ID, label: 'Correspondances', group: 'navigation' as const, icon: 'search' as const }] : []),
         { id: SCRAPER_MULTI_SEARCH_VIEW_ID, label: 'Recherche multi-sources', group: 'navigation', icon: 'search' },
         { id: SCRAPER_LATEST_VIEW_ID, label: 'Nouveautes', group: 'navigation', icon: 'latest' },
@@ -474,7 +476,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             icon: 'source' as const,
             baseUrl: scraper.baseUrl,
         })),
-    ], [isCorrespondenceView, sortedScrapers]);
+    ], [isBackgroundSearchResultView, isCorrespondenceView, sortedScrapers]);
 
     const openTagsModal = useCallback(async () => {
         const buildTagsModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/TagsModal.js'));
@@ -620,6 +622,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             || activeViewId === SCRAPER_HISTORY_VIEW_ID
             || activeViewId === SCRAPER_LATEST_VIEW_ID
             || activeViewId === SCRAPER_CORRESPONDENCE_VIEW_ID
+            || activeViewId === BACKGROUND_SEARCH_RESULTS_VIEW_ID
         ) {
             return;
         }
@@ -734,26 +737,21 @@ const MangaManager: React.FC<MangaManagerProps> = ({
 
     const openBackgroundSearchJob = useCallback((job: BackgroundSearchJob) => {
         const nextViewId = getBackgroundSearchViewId(job);
-        const listingInput = job.input as ListingBackgroundInput;
-        const firstSource = listingInput?.sources?.[0];
-        let nextSearch = writeScraperRouteState(location.search, {
+        const nextSearch = writeScraperRouteState(location.search, {
             scraperId: nextViewId,
-            mode: job.metadata.kind === 'scraperAuthor' ? 'author' : 'search',
+            mode: 'search',
             homepageActive: false,
             homepagePage: 1,
             searchActive: false,
             searchQuery: '',
             searchPage: 1,
-            authorActive: job.metadata.kind === 'scraperAuthor',
-            authorQuery: job.metadata.kind === 'scraperAuthor' ? firstSource?.query ?? '' : '',
+            authorActive: false,
+            authorQuery: '',
             authorPage: 1,
             mangaQuery: '',
             mangaUrl: '',
             bookmarksFilterScraperId: null,
         });
-        if (job.metadata.kind === 'authorFavoriteRefresh') {
-            nextSearch = writeScraperAuthorFavoriteRouteState(nextSearch, listingInput.favoriteId);
-        }
         navigate(
             { pathname: location.pathname, search: nextSearch },
             { replace: true, state: { backgroundSearchJobId: job.metadata.id } },
@@ -896,6 +894,11 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                     <React.Suspense fallback={<div className="app-route-loading" aria-label="Chargement de la vue" aria-busy="true" />}>
                         {!hasLoadedScrapers ? (
                             <div className="app-route-loading" aria-label={isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees' : 'Chargement du scrapper'} aria-busy="true" />
+                        ) : isBackgroundSearchResultView ? (
+                            <BackgroundSearchResultView
+                                backgroundSearchJobId={backgroundSearchJobId}
+                                scrapers={sortedScrapers}
+                            />
                         ) : isMultiSearchView ? (
                             <MultiSearchBrowser
                                 scrapers={sortedScrapers}

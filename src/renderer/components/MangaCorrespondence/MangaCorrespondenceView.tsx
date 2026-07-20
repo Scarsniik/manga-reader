@@ -23,7 +23,7 @@ import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigatio
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
-type Props = { backgroundSearchJobId?: string };
+type Props = { backgroundSearchJobId?: string; resultOnly?: boolean };
 type DisplayMode = "chapters" | "classic";
 
 const EMPTY_PROGRESS_INDEX: MultiSearchProgressIndex = {
@@ -63,7 +63,7 @@ const buildChapterCard = (
   };
 };
 
-export default function MangaCorrespondenceView({ backgroundSearchJobId }: Props) {
+export default function MangaCorrespondenceView({ backgroundSearchJobId, resultOnly = false }: Props) {
   const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("chapters");
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
@@ -158,14 +158,14 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId }: Props
   const displayedCards = displayMode === "chapters" ? visibleChapterCards : visibleClassicGroups;
   return (
     <section className="manga-correspondence-view">
-      <header className="manga-correspondence-view__summary">
+      {!resultOnly ? <header className="manga-correspondence-view__summary">
         <div>
           <p className="manga-correspondence-view__eyebrow">Recherche intelligente</p>
           <h2>{job.metadata.primaryTerm}</h2>
           <p>{displayedCards.length} card(s) · {result?.matches.length ?? 0} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
-      </header>
+      </header> : null}
       <details className="manga-correspondence-view__trace">
         <summary>Déroulé de la recherche ({result?.trace.length ?? 0} étapes)</summary>
         <ol>{result?.trace.map((step) => <li key={step.id}><strong>{step.label}</strong><span>{step.term}</span>{typeof step.resultCount === "number" ? <small>{step.resultCount} nouveau(x) résultat(s)</small> : null}</li>)}</ol>

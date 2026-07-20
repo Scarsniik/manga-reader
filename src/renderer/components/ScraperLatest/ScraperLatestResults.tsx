@@ -73,7 +73,7 @@ type Props = {
   languageFilterModes: MultiSearchLanguageFilterModes;
   enableRomajiPhoneticMerge?: boolean;
   onShowBlacklistedCardsLocallyChange?: (showBlacklistedCards: boolean) => void;
-  onReload: () => void;
+  onReload?: () => void;
   onSecondaryAction?: () => void;
   onContinue?: (count: number) => void;
   onContinueCountChange?: (count: number) => void;
@@ -352,17 +352,19 @@ export default function ScraperLatestResults({
                 </span>
               </div>
             ) : null}
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setMergeRefreshKey((currentKey) => currentKey + 1);
-                onReload();
-              }}
-              disabled={loading || actionsDisabled}
-            >
-              {loading ? "Chargement..." : actionLabel}
-            </button>
+            {onReload ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setMergeRefreshKey((currentKey) => currentKey + 1);
+                  onReload();
+                }}
+                disabled={loading || actionsDisabled}
+              >
+                {loading ? "Chargement..." : actionLabel}
+              </button>
+            ) : null}
             {secondaryActionLabel && onSecondaryAction ? (
               <button
                 type="button"

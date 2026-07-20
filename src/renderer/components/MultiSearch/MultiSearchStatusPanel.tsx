@@ -6,6 +6,7 @@ type Props = {
   query: string;
   isSearching: boolean;
   canLoadMore: boolean;
+  readOnly?: boolean;
   onLoadMoreForAll: (query: string) => void;
   onLoadMoreForScraper: (scraperId: string, query: string) => void;
   onStopScraperSearch: (scraperId: string) => void;
@@ -38,6 +39,7 @@ export default function MultiSearchStatusPanel({
   query,
   isSearching,
   canLoadMore,
+  readOnly = false,
   onLoadMoreForAll,
   onLoadMoreForScraper,
   onStopScraperSearch,
@@ -55,13 +57,13 @@ export default function MultiSearchStatusPanel({
             Resultats fusionnes a partir des pages actuellement chargees.
           </p>
         </div>
-        <button
+        {!readOnly ? <button
           type="button"
           onClick={() => onLoadMoreForAll(query)}
           disabled={!canLoadMore || isSearching}
         >
           Charger plus
-        </button>
+        </button> : null}
       </div>
 
       <div className="multi-search__status-list">
@@ -80,7 +82,7 @@ export default function MultiSearchStatusPanel({
               ) : null}
             </div>
             {run.error ? <p>{run.error}</p> : null}
-            <div className="multi-search__status-actions">
+            {!readOnly ? <div className="multi-search__status-actions">
               <button
                 type="button"
                 onClick={() => onLoadMoreForScraper(run.scraper.id, query)}
@@ -96,7 +98,7 @@ export default function MultiSearchStatusPanel({
               >
                 Arreter ce scrapper
               </button>
-            </div>
+            </div> : null}
           </div>
         ))}
       </div>

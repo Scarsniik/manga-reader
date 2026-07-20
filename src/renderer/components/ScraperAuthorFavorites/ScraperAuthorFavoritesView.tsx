@@ -54,6 +54,7 @@ import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types"
 type Props = {
   scrapers: ScraperRecord[];
   backgroundSearchJobId?: string;
+  resultOnly?: boolean;
 };
 
 const RESULT_TEXT_FILTER_DELAY_MS = 350;
@@ -61,6 +62,7 @@ const RESULT_TEXT_FILTER_DELAY_MS = 350;
 export default function ScraperAuthorFavoritesView({
   scrapers,
   backgroundSearchJobId,
+  resultOnly = false,
 }: Props) {
   const { openModal } = useModal();
   const { params, setParams } = useParams();
@@ -369,7 +371,7 @@ export default function ScraperAuthorFavoritesView({
   if (selectedFavorite) {
     return (
       <>
-        <label className="background-search-toggle scraper-author-favorite__background-toggle">
+        {!resultOnly ? <label className="background-search-toggle scraper-author-favorite__background-toggle">
           <input
             type="checkbox"
             checked={attachedSearch.attached || params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true}
@@ -382,7 +384,7 @@ export default function ScraperAuthorFavoritesView({
             <strong>Mettre à jour en arrière-plan</strong>
             <small>{attachedSearch.attached ? "Rattaché à une mise à jour existante" : "Charge toutes les pages et actualise le cache de cet auteur"}</small>
           </span>
-        </label>
+        </label> : null}
       <ScraperAuthorFavoriteResults
         favorite={selectedFavorite}
         runs={effectiveRuns}
@@ -410,6 +412,7 @@ export default function ScraperAuthorFavoritesView({
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
+        resultOnly={resultOnly}
         onBack={() => handleSelectFavorite(null)}
         onReload={handleReloadSelectedFavorite}
         onOpenMultiSearch={handleOpenSelectedFavoriteMultiSearch}

@@ -117,6 +117,7 @@ type Props = {
   initialPrefillQuery?: string;
   scrapers: ScraperRecord[];
   backgroundSearchJobId?: string;
+  resultOnly?: boolean;
 };
 
 const RESULT_TEXT_FILTER_DELAY_MS = 350;
@@ -152,6 +153,7 @@ export default function MultiSearchBrowser({
   initialPrefillQuery = "",
   scrapers,
   backgroundSearchJobId,
+  resultOnly = false,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1069,7 +1071,7 @@ export default function MultiSearchBrowser({
 
   return (
     <section className="multi-search">
-      <div className="multi-search__hero">
+      {!resultOnly ? <div className="multi-search__hero">
         <div>
           <span className="multi-search__eyebrow">Recherche multi-sources</span>
           <h2>Rechercher sur plusieurs scrappers</h2>
@@ -1078,9 +1080,9 @@ export default function MultiSearchBrowser({
             sur le scrapper de ton choix.
           </p>
         </div>
-      </div>
+      </div> : null}
 
-      <MultiSearchControls
+      {!resultOnly ? <MultiSearchControls
         query={query}
         depthMode={depthMode}
         advancedPages={advancedPages}
@@ -1104,9 +1106,9 @@ export default function MultiSearchBrowser({
         onAdvancedPagesChange={handleAdvancedPagesChange}
         onPaceModeChange={handlePaceModeChange}
         onViewModeChange={handleViewModeChange}
-      />
+      /> : null}
 
-      <MultiSearchFilters
+      {!resultOnly ? <MultiSearchFilters
         scraperOptions={scraperOptions}
         languageOptions={languageOptions}
         contentTypeOptions={contentTypeOptions}
@@ -1118,7 +1120,7 @@ export default function MultiSearchBrowser({
         onSelectedLanguageCodesChange={handleSelectedLanguageCodesChange}
         onIncludedLanguageCodesChange={handleIncludedLanguageCodesChange}
         onSelectedContentTypesChange={handleSelectedContentTypesChange}
-      />
+      /> : null}
 
       <section className="multi-search__panel multi-search__summary">
         <div className="multi-search__summary-main">
@@ -1150,6 +1152,7 @@ export default function MultiSearchBrowser({
         query={query}
         isSearching={isSearching}
         canLoadMore={canLoadMore}
+        readOnly={resultOnly}
         onLoadMoreForAll={(nextQuery) => void loadMoreForAll(nextQuery)}
         onLoadMoreForScraper={(scraperId, nextQuery) => void loadMoreForScraper(scraperId, nextQuery)}
         onStopScraperSearch={stopScraperSearch}
