@@ -35,6 +35,10 @@ import type {
   MangaCorrespondenceBackgroundResult,
   MangaCorrespondenceMatch,
 } from "@/renderer/backgroundSearch/types";
+import {
+  doesCorrespondenceTitleContainKnownTitle,
+  extractCorrespondenceBareHashChapter,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -67,7 +71,7 @@ const uniqueText = (values: Array<string | undefined>): string[] => {
 const getChapter = (title: string, scraper: ScraperRecord): string | undefined => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(scraper, "titleAnalysis"));
   const marker = analyzeCorrespondenceTitle(title, config).sequenceMarkers.find((entry) => entry.kind === "chapter");
-  return marker?.value;
+  return marker?.value ?? extractCorrespondenceBareHashChapter(title);
 };
 
 const analyzeCorrespondenceTitle = (
@@ -165,16 +169,19 @@ const sourceMatchesReference = (
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
-  const matchedTerm = knownTitles.find((title) => getMangaTitleMergeMatchKind(
-    { title, authorNames: input.reference.authors },
-    candidate,
-    { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
-  ) !== null);
+  const matchedTerm = knownTitles.find((title) => (
+    doesCorrespondenceTitleContainKnownTitle(source.result.title, title)
+    || getMangaTitleMergeMatchKind(
+      { title, authorNames: input.reference.authors },
+      candidate,
+      { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
+    ) !== null
+  ));
   return {
     analyzedTitle: analysis.title,
     alternativeTitles: analysis.alternativeTitles,
     authors,
-    chapter: analysis.sequenceMarkers.find((entry) => entry.kind === "chapter")?.value,
+    chapter: getChapter(source.result.title, source.scraper),
     matchedTerm,
   };
 };

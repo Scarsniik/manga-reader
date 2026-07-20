@@ -182,4 +182,5 @@ export type BackgroundSearchChangeEvent = {
   revision: number;
   status: BackgroundSearchStatus;
   progress: BackgroundSearchProgress;
+  resultChanged?: boolean;
 };

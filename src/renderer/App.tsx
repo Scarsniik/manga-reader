@@ -7,6 +7,7 @@ import './styles/main.scss';
 import useRefresh from '@/renderer/hooks/useRefresh';
 import usePreventMiddleClickAutoScroll from "@/renderer/hooks/usePreventMiddleClickAutoScroll";
 import BackgroundSearchRunner from "@/renderer/backgroundSearch/BackgroundSearchRunner";
+import BackgroundSearchOpenCoordinator from "@/renderer/backgroundSearch/BackgroundSearchOpenCoordinator";
 import "@/renderer/backgroundSearch/style.scss";
 
 type DefaultComponentModule = {
@@ -29,7 +30,7 @@ const RouteLoadingFallback = () => (
     <div className="app-route-loading" aria-label="Chargement de la vue" aria-busy="true" />
 );
 
-const App: React.FC = () => {
+const MainApplication: React.FC = () => {
     const {refreshKey} = useRefresh();
     usePreventMiddleClickAutoScroll();
 
@@ -50,9 +51,17 @@ const App: React.FC = () => {
             </main>
             <OcrRuntimeFirstLaunchGate />
             <OcrRuntimeGlobalUi />
-            <BackgroundSearchRunner />
+            <BackgroundSearchOpenCoordinator />
         </div>
     );
 };
+
+const BackgroundSearchWorkerApplication: React.FC = () => <BackgroundSearchRunner />;
+
+const App: React.FC = () => (
+    window.location.hash.startsWith('#/background-search-runner')
+        ? <BackgroundSearchWorkerApplication />
+        : <MainApplication />
+);
 
 export default App;

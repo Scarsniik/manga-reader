@@ -30,7 +30,12 @@ import {
 } from '@/renderer/utils/readerNavigation';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import type { MangaManagerViewWorkspaceTarget } from '@/renderer/types/workspace';
-import type { BackgroundSearchJob, BackgroundSearchQueueSummary, ListingBackgroundInput } from '@/shared/backgroundSearch';
+import type {
+    BackgroundSearchChangeEvent,
+    BackgroundSearchJob,
+    BackgroundSearchQueueSummary,
+    ListingBackgroundInput,
+} from '@/shared/backgroundSearch';
 import {
     BACKGROUND_SEARCH_OPEN_EVENT,
     consumePendingBackgroundSearchOpen,
@@ -366,8 +371,8 @@ const MangaManager: React.FC<MangaManagerProps> = ({
 
     useEffect(() => {
         void loadBackgroundSearchSummary();
-        const unsubscribe = window.api?.onBackgroundSearchChanged?.(() => {
-            void loadBackgroundSearchSummary();
+        const unsubscribe = window.api?.onBackgroundSearchChanged?.((event: BackgroundSearchChangeEvent) => {
+            if (event.status !== 'running') void loadBackgroundSearchSummary();
         });
         return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
     }, [loadBackgroundSearchSummary]);

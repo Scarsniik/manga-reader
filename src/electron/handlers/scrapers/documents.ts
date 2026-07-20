@@ -117,7 +117,7 @@ export async function validateScraperAccess(
 }
 
 export async function fetchScraperDocument(
-  _event: IpcMainInvokeEvent,
+  event: IpcMainInvokeEvent,
   request: FetchScraperDocumentRequest,
 ): Promise<FetchScraperDocumentResult> {
   const checkedAt = new Date().toISOString();
@@ -136,7 +136,7 @@ export async function fetchScraperDocument(
   }
 
   const controller = new AbortController();
-  const releaseRequestSlot = await acquireScraperRequestSlot(request);
+  const releaseRequestSlot = await acquireScraperRequestSlot(event, request);
   const timeout = setTimeout(() => {
     controller.abort();
   }, DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS);

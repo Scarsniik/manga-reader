@@ -1,5 +1,6 @@
 import React from "react";
 import type {
+  BackgroundSearchChangeEvent,
   BackgroundSearchJob,
   BackgroundSearchJobMetadata,
   BackgroundSearchQueueSummary,
@@ -84,7 +85,31 @@ export default function BackgroundSearchQueueModalContent() {
 
   React.useEffect(() => {
     void loadQueue();
-    const unsubscribe = window.api?.onBackgroundSearchChanged?.(() => { void loadQueue(); });
+    const unsubscribe = window.api?.onBackgroundSearchChanged?.((event: BackgroundSearchChangeEvent) => {
+      if (event.status !== "running") {
+        void loadQueue();
+        return;
+      }
+      setQueue((current) => {
+        const existing = current.jobs.find((job) => job.id === event.jobId);
+        if (!existing) return current;
+        const changedFromQueued = existing.status === "queued";
+        return {
+          ...current,
+          jobs: current.jobs.map((job) => job.id === event.jobId ? {
+            ...job,
+            revision: event.revision,
+            status: event.status,
+            progress: event.progress,
+          } : job),
+          counts: changedFromQueued ? {
+            ...current.counts,
+            queued: Math.max(0, current.counts.queued - 1),
+            running: current.counts.running + 1,
+          } : current.counts,
+        };
+      });
+    });
     return () => { if (typeof unsubscribe === "function") unsubscribe(); };
   }, [loadQueue]);
 

@@ -9,16 +9,12 @@ import { executeBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import type { BackgroundSearchExecutionResult, ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ScraperAuthorFavoriteCacheRecord } from "@/shared/scraper";
-import {
-  queuePendingBackgroundSearchOpen,
-  requestBackgroundSearchOpenInCurrentView,
-} from "@/renderer/backgroundSearch/backgroundSearchNavigation";
-
-const UPDATE_THROTTLE_MS = 450;
+const PROGRESS_UPDATE_THROTTLE_MS = 1000;
+const RESULT_CHECKPOINT_THROTTLE_MS = 5000;
 
 type PendingSnapshot = {
   progress: BackgroundSearchProgress;
-  result: BackgroundSearchExecutionResult;
+  result?: BackgroundSearchExecutionResult;
 };
 
 const persistAuthorFavoriteCache = async (
@@ -58,7 +54,9 @@ const persistAuthorFavoriteCache = async (
   await api.saveScraperAuthorFavoriteCache({ favoriteId: input.favoriteId, cache });
 };
 
-const isMainApplicationWindow = (): boolean => !window.location.hash.startsWith("#/workspace");
+const isBackgroundSearchRunnerWindow = (): boolean => (
+  window.location.hash.startsWith("#/background-search-runner")
+);
 
 const getCompletedProgress = (result: BackgroundSearchExecutionResult): BackgroundSearchProgress => {
   if ("runs" in result) {
@@ -82,6 +80,7 @@ export default function BackgroundSearchRunner() {
   const runningRef = React.useRef(new Set<string>());
   const pendingSnapshotsRef = React.useRef(new Map<string, PendingSnapshot>());
   const updateTimersRef = React.useRef(new Map<string, number>());
+  const lastResultCheckpointAtRef = React.useRef(new Map<string, number>());
   const maxConcurrentRef = React.useRef(3);
 
   const flushSnapshot = React.useCallback(async (jobId: string) => {
@@ -101,11 +100,19 @@ export default function BackgroundSearchRunner() {
     result: BackgroundSearchExecutionResult,
     progress: BackgroundSearchProgress,
   ): Promise<void> => {
-    pendingSnapshotsRef.current.set(jobId, { result, progress });
+    const now = Date.now();
+    const lastCheckpointAt = lastResultCheckpointAtRef.current.get(jobId) ?? 0;
+    const shouldCheckpointResult = now - lastCheckpointAt >= RESULT_CHECKPOINT_THROTTLE_MS;
+    const previous = pendingSnapshotsRef.current.get(jobId);
+    pendingSnapshotsRef.current.set(jobId, {
+      progress,
+      result: shouldCheckpointResult ? result : previous?.result,
+    });
+    if (shouldCheckpointResult) lastResultCheckpointAtRef.current.set(jobId, now);
     if (!updateTimersRef.current.has(jobId)) {
       const timer = window.setTimeout(() => {
         void flushSnapshot(jobId);
-      }, UPDATE_THROTTLE_MS);
+      }, PROGRESS_UPDATE_THROTTLE_MS);
       updateTimersRef.current.set(jobId, timer);
     }
     return Promise.resolve();
@@ -140,12 +147,18 @@ export default function BackgroundSearchRunner() {
     } finally {
       controllersRef.current.delete(jobId);
       runningRef.current.delete(jobId);
+      lastResultCheckpointAtRef.current.delete(jobId);
       window.dispatchEvent(new CustomEvent("background-search-runner-slot-available"));
     }
   }, [flushSnapshot, queueSnapshot]);
 
   const claimAvailableJobs = React.useCallback(async () => {
-    if (!isMainApplicationWindow() || typeof window.api?.getBackgroundSearchQueue !== "function") return;
+    if (!isBackgroundSearchRunnerWindow() || typeof window.api?.getBackgroundSearchQueue !== "function") return;
+    const settings = await window.api?.getSettings?.();
+    maxConcurrentRef.current = Math.min(8, Math.max(
+      1,
+      Math.floor(settings?.backgroundSearchMaxConcurrent ?? maxConcurrentRef.current),
+    ));
     const availableSlots = Math.max(0, maxConcurrentRef.current - runningRef.current.size);
     if (availableSlots === 0) return;
     const queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
@@ -160,7 +173,7 @@ export default function BackgroundSearchRunner() {
   }, [runClaimedJob]);
 
   React.useEffect(() => {
-    if (!isMainApplicationWindow()) return undefined;
+    if (!isBackgroundSearchRunnerWindow()) return undefined;
     let disposed = false;
     void (async () => {
       try {
@@ -181,17 +194,6 @@ export default function BackgroundSearchRunner() {
       if (event.status === "queued") void claimAvailableJobs();
     };
     const unsubscribe = window.api?.onBackgroundSearchChanged?.(handleChange);
-    const unsubscribeOpen = window.api?.onBackgroundSearchOpenRequested?.(async (request: { jobId?: string }) => {
-      if (!request?.jobId) return;
-      const job = await window.api?.getBackgroundSearchJob?.(request.jobId) as BackgroundSearchJob | null;
-      if (!job?.input) return;
-      if (window.location.hash === "#/" || window.location.hash === "") {
-        requestBackgroundSearchOpenInCurrentView(job);
-        return;
-      }
-      queuePendingBackgroundSearchOpen(request.jobId);
-      window.location.hash = "#/";
-    });
     const handleSlot = () => { void claimAvailableJobs(); };
     const handleSettingsUpdated = (event: Event) => {
       const settings = event instanceof CustomEvent ? event.detail?.settings : null;
@@ -207,7 +209,6 @@ export default function BackgroundSearchRunner() {
     return () => {
       disposed = true;
       if (typeof unsubscribe === "function") unsubscribe();
-      if (typeof unsubscribeOpen === "function") unsubscribeOpen();
       window.removeEventListener("background-search-runner-slot-available", handleSlot);
       window.removeEventListener("settings-updated", handleSettingsUpdated);
     };

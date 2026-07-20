@@ -3,6 +3,10 @@ export {
   validateScraperAccess,
 } from "./scrapers/documents";
 export {
+  invalidateScraperRequestLimitCache,
+  setGlobalScraperRequestConcurrency,
+} from "./scrapers/requestLimiter";
+export {
   cancelAllScraperDownloadJobs,
   cancelScraperDownloadJob,
   getScraperDownloadQueueStatus,

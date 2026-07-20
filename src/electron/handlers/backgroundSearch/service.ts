@@ -54,12 +54,13 @@ const serializeMutation = async <T>(mutation: () => Promise<T>): Promise<T> => {
   }
 };
 
-const broadcastChange = (job: BackgroundSearchJobMetadata): void => {
+const broadcastChange = (job: BackgroundSearchJobMetadata, resultChanged = false): void => {
   const payload: BackgroundSearchChangeEvent = {
     jobId: job.id,
     revision: job.revision,
     status: job.status,
     progress: job.progress,
+    resultChanged,
   };
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
@@ -170,8 +171,12 @@ const notifyFinished = (job: BackgroundSearchJobMetadata, title = "Recherche ter
     void markBackgroundSearchOpened(job.id);
     const windows = BrowserWindow.getAllWindows();
     const target = windows.find((window) => (
-      !window.isDestroyed() && !window.webContents.getURL().includes("#/workspace")
-    )) ?? windows.find((window) => !window.isDestroyed());
+      !window.isDestroyed()
+      && !window.webContents.getURL().includes("#/workspace")
+      && !window.webContents.getURL().includes("#/background-search-runner")
+    )) ?? windows.find((window) => (
+      !window.isDestroyed() && !window.webContents.getURL().includes("#/background-search-runner")
+    ));
     if (target) {
       if (target.isMinimized()) target.restore();
       target.show();
@@ -232,7 +237,7 @@ export const getBackgroundSearchQueue = async (): Promise<BackgroundSearchQueueS
         resultAvailable: false,
       } : job);
       await persistMetadata();
-      metadata.filter((job) => expiredIds.has(job.id)).forEach(broadcastChange);
+      metadata.filter((job) => expiredIds.has(job.id)).forEach((job) => broadcastChange(job, true));
     }
     return buildBackgroundSearchQueueSummary(metadata);
   })
@@ -274,8 +279,8 @@ export const updateBackgroundSearch = async (
   await initialize();
   const current = findMetadata(request.jobId);
   if (!current || current.status !== "running") return false;
-  const job = await loadJob(request.jobId);
-  if (!job) return false;
+  const job = request.result !== undefined ? await loadJob(request.jobId) : null;
+  if (request.result !== undefined && !job) return false;
   const next = {
     ...current,
     updatedAt: nowIso(),
@@ -284,13 +289,15 @@ export const updateBackgroundSearch = async (
     resultAvailable: request.result !== undefined || current.resultAvailable,
   };
   replaceMetadata(next);
-  await persistJobPayload({
-    ...job,
-    metadata: next,
-    result: request.result === undefined ? job.result : request.result,
-  });
+  if (request.result !== undefined && job) {
+    await persistJobPayload({
+      ...job,
+      metadata: next,
+      result: request.result,
+    });
+  }
   await persistMetadata();
-  broadcastChange(next);
+  broadcastChange(next, request.result !== undefined);
   return true;
 });
 
@@ -316,7 +323,7 @@ export const completeBackgroundSearch = async (
   replaceMetadata(next);
   await persistJobPayload({ ...job, metadata: next, result: request.result });
   await persistMetadata();
-  broadcastChange(next);
+  broadcastChange(next, true);
   notifyFinished(next);
   return true;
 });
@@ -328,6 +335,39 @@ export const failBackgroundSearch = async (jobId: string, error: string): Promis
 export const cancelBackgroundSearch = async (jobId: string): Promise<boolean> => (
   finishWithStatus(jobId, "cancelled")
 );
+
+export const requeueRunningBackgroundSearches = async (): Promise<number> => serializeMutation(async () => {
+  await initialize();
+  const runningJobs = metadata.filter((job) => job.status === "running");
+  if (runningJobs.length === 0) return 0;
+
+  const timestamp = nowIso();
+  const nextJobs = runningJobs.map((job) => ({
+    ...job,
+    status: "queued" as const,
+    startedAt: undefined,
+    updatedAt: timestamp,
+    revision: job.revision + 1,
+    progress: { completedUnits: 0, resultCount: 0 },
+    resultAvailable: false,
+    error: undefined,
+  }));
+  const nextById = new Map(nextJobs.map((job) => [job.id, job]));
+  metadata = metadata.map((job) => nextById.get(job.id) ?? job);
+
+  await Promise.all(nextJobs.map(async (next) => {
+    const currentJob = await loadJob(next.id);
+    if (!currentJob) return;
+    await persistJobPayload({
+      metadata: next,
+      input: currentJob.input,
+      result: undefined,
+    });
+  }));
+  await persistMetadata();
+  nextJobs.forEach((job) => broadcastChange(job, true));
+  return nextJobs.length;
+});
 
 const finishWithStatus = async (
   jobId: string,
@@ -391,6 +431,6 @@ export const deleteBackgroundSearch = async (jobId: string): Promise<boolean> =>
   await removeBackgroundSearchResult(jobId);
   await removeBackgroundSearchInput(jobId);
   await persistMetadata();
-  broadcastChange({ ...current, status: "expired", revision: current.revision + 1 });
+  broadcastChange({ ...current, status: "expired", revision: current.revision + 1 }, true);
   return true;
 });

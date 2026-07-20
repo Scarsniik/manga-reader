@@ -195,7 +195,7 @@ export default function SettingsModalContent() {
         },
         {
           name: 'scraperLatestConcurrency',
-          label: 'Scrapings nouveautés simultanés',
+          label: 'Scrapings simultanés (limite globale)',
           type: 'number',
           min: 1,
           step: 1,

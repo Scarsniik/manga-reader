@@ -6,7 +6,9 @@ import { attachWindowStateListeners } from "./handlers/windowControls";
 import { resolveLocalProtocolPath } from "./utils/localProtocol";
 
 let mainWindow: BrowserWindow | null;
+let backgroundSearchWorkerWindow: BrowserWindow | null = null;
 let startupWindowShowTimer: NodeJS.Timeout | null = null;
+let applicationIsQuitting = false;
 
 // Configure identity and profile paths before Chromium initializes session/cache storage.
 configureApplicationIdentity();
@@ -70,6 +72,76 @@ const startOcrPrewarmInBackground = () => {
                 console.warn('[ocr] Engine prewarm skipped or failed during startup:', error);
             });
     }, 250);
+};
+
+const createBackgroundSearchWorkerWindow = () => {
+    if (backgroundSearchWorkerWindow && !backgroundSearchWorkerWindow.isDestroyed()) {
+        return backgroundSearchWorkerWindow;
+    }
+
+    const basePath = app.getAppPath();
+    const preloadPath = path.join(basePath, "dist", "electron", "preload.js");
+    const packagedIndexPath = path.join(app.getAppPath(), "dist", "renderer", "index.html");
+    const workerWindow = new BrowserWindow({
+        width: 320,
+        height: 240,
+        show: false,
+        skipTaskbar: true,
+        webPreferences: {
+            preload: preloadPath,
+            contextIsolation: true,
+            webSecurity: false,
+            sandbox: false,
+            backgroundThrottling: false,
+        },
+    });
+    backgroundSearchWorkerWindow = workerWindow;
+    let workerCrashed = false;
+    workerWindow.setMenuBarVisibility(false);
+    workerWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    workerWindow.webContents.on("will-navigate", (event, targetUrl) => {
+        const currentUrl = workerWindow.webContents.getURL();
+        if (!isSameWindowOrigin(targetUrl, currentUrl)) event.preventDefault();
+    });
+    workerWindow.webContents.on("render-process-gone", (_event, details) => {
+        console.error("backgroundSearchWorkerWindow render-process-gone", details);
+        if (workerCrashed || applicationIsQuitting) return;
+        workerCrashed = true;
+        const backgroundSearch = require("./handlers/backgroundSearch/service") as typeof import("./handlers/backgroundSearch/service");
+        void backgroundSearch.requeueRunningBackgroundSearches()
+            .catch((error) => {
+                console.error("Failed to requeue searches after worker crash", error);
+            })
+            .finally(() => {
+                if (!workerWindow.isDestroyed()) workerWindow.destroy();
+            });
+    });
+    workerWindow.on("closed", () => {
+        if (backgroundSearchWorkerWindow === workerWindow) {
+            backgroundSearchWorkerWindow = null;
+        }
+        if (!applicationIsQuitting && mainWindow && !mainWindow.isDestroyed()) {
+            setTimeout(() => createBackgroundSearchWorkerWindow(), 500);
+        }
+    });
+
+    const loadWorkerApplication = () => {
+        if (workerWindow.isDestroyed()) return;
+        if (app.isPackaged) {
+            void workerWindow.loadFile(packagedIndexPath, { hash: "/background-search-runner" });
+        } else {
+            const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:3000";
+            void workerWindow.loadURL(`${devServerUrl}/#/background-search-runner`);
+        }
+    };
+    workerWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+        if (errorCode === -3 || applicationIsQuitting || workerWindow.isDestroyed()) return;
+        console.error("backgroundSearchWorkerWindow did-fail-load", { errorCode, errorDescription });
+        setTimeout(loadWorkerApplication, 1000);
+    });
+    loadWorkerApplication();
+
+    return workerWindow;
 };
 
 const createWindow = () => {
@@ -152,6 +224,9 @@ const createWindow = () => {
             startupWindowShowTimer = null;
         }
         mainWindow = null;
+        if (backgroundSearchWorkerWindow && !backgroundSearchWorkerWindow.isDestroyed()) {
+            backgroundSearchWorkerWindow.destroy();
+        }
     });
 
     startupWindowShowTimer = setTimeout(() => {
@@ -191,6 +266,7 @@ if (!singleInstanceLock) {
     app.on("second-instance", () => {
         if (mainWindow === null) {
             createWindow();
+            createBackgroundSearchWorkerWindow();
             return;
         }
 
@@ -222,6 +298,7 @@ app.whenReady()
         void appUpdate.initializeAppUpdate();
 
         createWindow();
+        createBackgroundSearchWorkerWindow();
         appUpdate.scheduleStartupUpdateCheck(mainWindow);
         startOcrPrewarmInBackground();
     })
@@ -235,9 +312,14 @@ app.on("window-all-closed", () => {
     }
 });
 
+app.on("before-quit", () => {
+    applicationIsQuitting = true;
+});
+
 app.on("activate", () => {
     if (mainWindow === null) {
         createWindow();
+        createBackgroundSearchWorkerWindow();
     }
 });
 

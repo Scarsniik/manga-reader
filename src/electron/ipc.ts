@@ -31,6 +31,7 @@ import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 migrateExistingFiles().catch(() => { /* swallow */ });
 
 const notifyScrapersUpdated = () => {
+    scrapers.invalidateScraperRequestLimitCache();
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("scrapers-updated");
     }
@@ -314,7 +315,11 @@ ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries:
 
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
-ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => params.saveSettings(event, settings));
+ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => {
+    const savedSettings = await params.saveSettings(event, settings);
+    scrapers.setGlobalScraperRequestConcurrency(savedSettings.scraperLatestConcurrency);
+    return savedSettings;
+});
 ipcMain.handle("app-update-status", async () => appUpdate.getAppUpdateStatus());
 ipcMain.handle("app-update-check", async () => appUpdate.checkForAppUpdates());
 ipcMain.handle("app-update-download", async () => appUpdate.downloadAppUpdate());
