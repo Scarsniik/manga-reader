@@ -46,6 +46,7 @@ import type {
   MultiSearchBackgroundResult,
 } from "@/renderer/backgroundSearch/types";
 import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
+import { resolveBackgroundListingConcurrency } from "@/renderer/backgroundSearch/backgroundListingExecution";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -216,6 +217,7 @@ const runListings = async (
   const filterHistory = kind === "latestSources" || kind === "latestAuthors";
   const knownHistoryIds = filterHistory ? await getKnownHistoryIds() : new Set<string>();
   const pace = getPaceConfig(input.paceMode);
+  const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
   const runs: BackgroundListingRun[] = input.sources.map((source) => ({
     key: source.id,
@@ -337,7 +339,7 @@ const runListings = async (
     }
     runs[runIndex] = run;
     await emit(run.name);
-  }), pace.concurrency);
+  }), concurrency);
 
   throwIfAborted(signal);
   return { runs };

@@ -296,6 +296,7 @@ export default function ScraperAuthorFavoritesView({
       }),
       maxPages: null,
       paceMode: "careful",
+      concurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
       includedLanguageCodes: [],
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     };

@@ -817,6 +817,7 @@ export default function ScraperBrowser({
           }],
           maxPages: Math.max(1, params?.scraperAuthorFavoritePageCount ?? 1),
           paceMode: 'careful',
+          concurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
           includedLanguageCodes: [],
           scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
         };

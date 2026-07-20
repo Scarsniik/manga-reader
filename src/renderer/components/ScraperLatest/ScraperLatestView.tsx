@@ -689,8 +689,12 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
   const getStatusState = React.useCallback((
     status: "waiting" | "loading" | "done" | "error",
     canContinue = false,
-  ): "loading" | "continuable" | "complete" | "error" => {
-    if (status === "waiting" || status === "loading") {
+  ): "waiting" | "loading" | "continuable" | "complete" | "error" => {
+    if (status === "waiting") {
+      return "waiting";
+    }
+
+    if (status === "loading") {
       return "loading";
     }
 
@@ -1034,6 +1038,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
           : 1,
       resultLimit: scraperResultLimit,
       paceMode: "careful",
+      concurrency: scraperLatestConcurrency,
       includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
       selectedFavoriteIds: isAuthors ? authorIncludedFavorites.map((favorite) => favorite.id) : undefined,
@@ -1059,6 +1064,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId }: P
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
     scraperIncludedTagFavorites,
+    scraperLatestConcurrency,
     scraperResultLimit,
     scrapersById,
     tagResultLimit,

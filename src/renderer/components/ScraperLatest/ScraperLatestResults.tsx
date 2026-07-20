@@ -32,7 +32,7 @@ type StatusItem = {
   key: string;
   name: string;
   status: string;
-  state?: "loading" | "continuable" | "complete" | "error";
+  state?: "waiting" | "loading" | "continuable" | "complete" | "error";
   detail: string;
   error?: string;
 };
@@ -117,6 +117,7 @@ const buildStatusSummary = (items: StatusItem[]): string => {
     return result;
   }, {});
   const parts = [
+    counts.waiting ? `${counts.waiting} en attente` : "",
     counts.loading ? `${counts.loading} en cours` : "",
     counts.continuable ? `${counts.continuable} avec suite` : "",
     counts.complete ? `${counts.complete} sans suite` : "",
@@ -131,7 +132,11 @@ const resolveStatusItemState = (item: StatusItem): NonNullable<StatusItem["state
     return item.state;
   }
 
-  if (item.status === "waiting" || item.status === "loading") {
+  if (item.status === "waiting") {
+    return "waiting";
+  }
+
+  if (item.status === "loading") {
     return "loading";
   }
 
@@ -143,6 +148,10 @@ const resolveStatusItemState = (item: StatusItem): NonNullable<StatusItem["state
 };
 
 const getStatusItemStateLabel = (state: NonNullable<StatusItem["state"]>): string => {
+  if (state === "waiting") {
+    return "En attente";
+  }
+
   if (state === "loading") {
     return "En cours";
   }

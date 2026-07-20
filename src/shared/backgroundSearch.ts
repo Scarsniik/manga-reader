@@ -169,6 +169,7 @@ export type ListingBackgroundInput = {
   maxPages: number | null;
   resultLimit?: number;
   paceMode: "fast" | "careful";
+  concurrency?: number;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
   selectedFavoriteIds?: string[];
