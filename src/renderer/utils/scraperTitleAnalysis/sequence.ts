@@ -10,11 +10,11 @@ const SEQUENCE_PATTERNS: Array<{
 }> = [
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>#)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>#|№)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep|track)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)(?:\s*(?::|[-–—])\s*.+|\s*\([^)]*\)(?:\s*\+.*)?)?\s*[\])}.]*$/i,
   },
   {
     kind: "chapter",
@@ -79,7 +79,11 @@ export const extractTitleSequenceMarkers = (
         .normalize("NFKC")
         .replace(/\s*[-–—~〜～]\s*/g, "-"),
     });
-    remainingTitle = normalizeTitleAnalysisText(remainingTitle.slice(0, match.index));
+    remainingTitle = normalizeTitleAnalysisText(
+      remainingTitle
+        .slice(0, match.index)
+        .replace(/\s*[-–—:;,.]+\s*$/u, ""),
+    );
   }
 
   return {

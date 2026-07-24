@@ -141,7 +141,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         input?.reference.title ?? "",
         ...(input?.reference.alternativeTitles ?? []),
       ]);
-      const chapter = titleAnalysis.chapter || match.chapter || inferredFirstChapter || "Non renseigné";
+      const chapter = titleAnalysis.chapter || inferredFirstChapter || "Non renseigné";
       byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())

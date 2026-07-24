@@ -66,6 +66,35 @@ export const partitionCorrespondenceAlternativeTitles = (
   return { titleAlternatives, authorAlternatives };
 };
 
+export const selectCorrespondenceDiscoverableTitles = (
+  candidateTitles: string[],
+  knownTitles: string[],
+  matchedByContainment: boolean,
+  matchedByMerge: boolean,
+): string[] => {
+  const knownTitleKeys = new Set(
+    knownTitles.map(normalizeCorrespondenceTitle).filter(Boolean),
+  );
+  const seen = new Set<string>();
+  const candidates = candidateTitles.filter((title) => {
+    const key = normalizeCorrespondenceTitle(title);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const hasExactKnownTitle = candidates.some((title) => (
+    knownTitleKeys.has(normalizeCorrespondenceTitle(title))
+  ));
+
+  if (hasExactKnownTitle) {
+    return candidates.filter((title) => (
+      !knownTitleKeys.has(normalizeCorrespondenceTitle(title))
+    ));
+  }
+
+  return matchedByMerge && !matchedByContainment ? candidates : [];
+};
+
 export const extractCorrespondenceBareHashChapter = (value: string): string | undefined => {
   const chapters = Array.from(value.matchAll(/#\s*([0-9０-９]+(?:[.,][0-9０-９]+)?)/gu))
     .map((match) => match[1].normalize("NFKC").replace(",", "."));

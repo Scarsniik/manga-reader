@@ -25,11 +25,27 @@ export const stripMangaCorrespondenceTrailingKnownAuthor = (
     if (!authorPattern) continue;
 
     const match = title.match(new RegExp(
-      `^(?<title>.*\\S)\\s*(?<chapter>[0-9０-９]{1,4}(?:[.,][0-9０-９]+)?)\\s*${authorPattern}\\s*$`,
+      `^(?<title>.*?\\S)\\s*(?<chapter>[0-9０-９]{1,4}(?:[.,][0-9０-９]+)?)\\s*(?:[-–—:]\\s*)?${authorPattern}\\s*$`,
       "iu",
     ));
     if (match?.groups?.title && match.groups.chapter) {
       return `${match.groups.title} ${match.groups.chapter}`;
+    }
+
+    const leadingMatch = title.match(new RegExp(
+      `^\\s*(?:\\[|\\()?\\s*${authorPattern}\\s*(?:\\]|\\))?\\s*[-–—:]\\s*(?<title>.+\\S)\\s*$`,
+      "iu",
+    ));
+    if (leadingMatch?.groups?.title) {
+      return leadingMatch.groups.title.trim();
+    }
+
+    const trailingMatch = title.match(new RegExp(
+      `^(?<title>.+\\S)\\s*[-–—:]\\s*${authorPattern}\\s*$`,
+      "iu",
+    ));
+    if (trailingMatch?.groups?.title) {
+      return trailingMatch.groups.title.trim();
     }
   }
 

@@ -73,13 +73,17 @@ export default function MangaCorrespondenceDialog({
         : "quick") as MultiSearchDepthMode;
       const advancedPages = (params?.multiSearchAdvancedPages ?? 3) as MultiSearchAdvancedPages;
       const paceMode = (params?.multiSearchPaceMode === "careful" ? "careful" : "fast") as MultiSearchPaceMode;
+      const enteredTitle = title.trim();
+      const preservedAlternativeTitles = enteredTitle === initialTitle.trim()
+        ? initialAlternativeTitles
+        : [];
       const input: MangaCorrespondenceBackgroundInput = {
         reference: {
           scraperId,
           sourceUrl,
           rawTitle,
-          title: title.trim(),
-          alternativeTitles: Array.from(new Set([title.trim(), ...initialAlternativeTitles])).filter(Boolean),
+          title: enteredTitle,
+          alternativeTitles: Array.from(new Set([enteredTitle, ...preservedAlternativeTitles])).filter(Boolean),
           authors: normalizeList(authors),
           authorUrls: initialAuthorUrls,
           chapter: chapter.trim() || undefined,

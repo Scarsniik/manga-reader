@@ -43,6 +43,7 @@ import type {
 import {
   doesCorrespondenceAnalyzedTitleMatchKnownTitle,
   partitionCorrespondenceAlternativeTitles,
+  selectCorrespondenceDiscoverableTitles,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
@@ -123,7 +124,14 @@ const sourceMatchesReference = (
   knownTitles: string[],
   knownAuthors: string[],
   romanizedTitleVariantsByKey: Map<string, string[]>,
-): { analyzedTitle: string; alternativeTitles: string[]; authors: string[]; chapter?: string; matchedTerm?: string } => {
+): {
+  analyzedTitle: string;
+  alternativeTitles: string[];
+  authors: string[];
+  chapter?: string;
+  matchedTerm?: string;
+  discoverableTitles: string[];
+} => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
   const analysis = analyzeMangaCorrespondenceTitle(
     stripMangaCorrespondenceTrailingKnownAuthor(source.result.title, knownAuthors),
@@ -144,15 +152,16 @@ const sourceMatchesReference = (
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
-  const matchedTerm = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title)
+  const analyzedTitleFields = uniqueText([analysis.title, ...titleAlternatives]);
+  const match = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title)
     ? undefined
-    : knownTitles.find((title) => (
-      doesCorrespondenceAnalyzedTitleMatchKnownTitle(
+    : knownTitles.map((title) => {
+      const directMatch = doesCorrespondenceAnalyzedTitleMatchKnownTitle(
         analysis.title,
         titleAlternatives,
         title,
-      )
-      || getMangaTitleMergeMatchKind(
+      );
+      const mergeMatchKind = getMangaTitleMergeMatchKind(
         {
           title,
           authorNames: input.reference.authors,
@@ -160,8 +169,15 @@ const sourceMatchesReference = (
         },
         candidate,
         { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
-      ) !== null
-    ));
+      );
+      return { title, directMatch, mergeMatchKind };
+    }).find((entry) => entry.directMatch || entry.mergeMatchKind !== null);
+  const discoverableTitles = selectCorrespondenceDiscoverableTitles(
+    analyzedTitleFields,
+    knownTitles,
+    match?.directMatch === true,
+    Boolean(match && match.mergeMatchKind !== null),
+  );
   const chapter = analysis.chapter
     ?? inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
   return {
@@ -169,7 +185,8 @@ const sourceMatchesReference = (
     alternativeTitles: titleAlternatives,
     authors,
     chapter,
-    matchedTerm,
+    matchedTerm: match?.title,
+    discoverableTitles,
   };
 };
 
@@ -317,7 +334,7 @@ export const runMangaCorrespondenceSearch = async (
           directTargets: directAuthorUrls.map((url) => ({ scraper: source.scraper, url })),
         });
       }
-      uniqueText([analyzed.analyzedTitle, ...analyzed.alternativeTitles]).forEach((title) => {
+      analyzed.discoverableTitles.forEach((title) => {
         if (knownTitles.length >= MAX_DISCOVERED_TITLES || knownTitles.some((value) => normalizeKey(value) === normalizeKey(title))) return;
         knownTitles.push(title);
         const titleStep = addTrace("titleDiscovered", "Titre correspondant trouvé", title, step.id);

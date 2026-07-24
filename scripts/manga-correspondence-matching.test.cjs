@@ -8,6 +8,7 @@ const source = `
   export { doesCorrespondenceAnalyzedTitleMatchKnownTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractCorrespondenceBareHashChapter } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { partitionCorrespondenceAlternativeTitles } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
+  export { selectCorrespondenceDiscoverableTitles } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -45,6 +46,7 @@ const {
   doesCorrespondenceAnalyzedTitleMatchKnownTitle,
   extractCorrespondenceBareHashChapter,
   partitionCorrespondenceAlternativeTitles,
+  selectCorrespondenceDiscoverableTitles,
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
   inferMangaCorrespondenceFirstChapter,
@@ -82,6 +84,36 @@ test("correspondence containment does not accept unrelated or incidental short t
     false,
   );
   assert.equal(doesCorrespondenceTitleContainKnownTitle("The Gal Story", "Gal"), false);
+});
+
+test("correspondence only expands explicit or merge-backed alternative titles", () => {
+  assert.deepEqual(
+    selectCorrespondenceDiscoverableTitles(
+      ["The Rock Cocks - Special Edition"],
+      ["The Rock Cocks"],
+      true,
+      true,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    selectCorrespondenceDiscoverableTitles(
+      ["Original Series", "Translated Series"],
+      ["Translated Series"],
+      true,
+      true,
+    ),
+    ["Original Series"],
+  );
+  assert.deepEqual(
+    selectCorrespondenceDiscoverableTitles(
+      ["日本語の題名"],
+      ["Nihongo no Daimoku"],
+      false,
+      true,
+    ),
+    ["日本語の題名"],
+  );
 });
 
 test("correspondence only validates titles found in parsed title fields", () => {
@@ -292,6 +324,102 @@ test("correspondence recognizes chapter ranges and normalizes wave separators", 
   assert.deepEqual(
     extractTitleSequenceMarkers("Example Chapter 1～6").sequenceMarkers,
     [{ kind: "chapter", label: "Chapter", value: "1-6" }],
+  );
+});
+
+test("correspondence removes generic chapter subtitles from bilingual titles", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Minazuki Mikka] Sex Shinai to Shinu Yamai 6 ～ Gakuen Houkai Hen～ | Fuck-or-Die 6 ~School Collapse Edition~ [English] [Chalklog]",
+    null,
+  );
+
+  assert.equal(result.title, "Sex Shinai to Shinu Yamai");
+  assert.deepEqual(result.alternativeTitles, ["Fuck-or-Die"]);
+  assert.deepEqual(result.authors, ["Minazuki Mikka"]);
+  assert.equal(result.chapter, "6");
+  assert.equal(result.languageCode, "en");
+});
+
+test("correspondence infers the first chapter after removing an unnumbered subtitle", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Example Author] Example Series ~The Beginning~ [English]",
+    null,
+  );
+
+  assert.equal(result.title, "Example Series");
+  assert.equal(result.chapter, undefined);
+  assert.equal(inferMangaCorrespondenceFirstChapter(result, ["Example Series"]), "1");
+});
+
+test("correspondence recognizes generic sequence labels followed by subtitles", () => {
+  const track = analyzeMangaCorrespondenceTitle(
+    "[Brad & Leslie Brown] The Rock Cocks - Track 21: The First Sin [English] [Ongoing]",
+    null,
+  );
+  const numberedEdition = analyzeMangaCorrespondenceTitle(
+    "The Rock Cocks - 2 - Highway To Hell [French]",
+    null,
+  );
+
+  assert.equal(track.title, "The Rock Cocks");
+  assert.deepEqual(track.authors, ["Brad", "Leslie Brown"]);
+  assert.equal(track.chapter, "21");
+  assert.equal(numberedEdition.title, "The Rock Cocks");
+  assert.equal(numberedEdition.chapter, "2");
+});
+
+test("correspondence keeps generic ranges and status metadata out of the series title", () => {
+  const range = analyzeMangaCorrespondenceTitle(
+    "[Leslie Brown] The Rock Cocks ch. 1 - 21 [Ongoing] (HQ)",
+    null,
+  );
+  const inlineStatus = analyzeMangaCorrespondenceTitle(
+    "[Leslie Brown] The Rock Cocks [Ongoing] Track 1-2 [Chinese]",
+    null,
+  );
+  const numero = analyzeMangaCorrespondenceTitle(
+    "[Leslie Brown] The Rock Cocks №1 [Russian]",
+    null,
+  );
+
+  assert.equal(range.title, "The Rock Cocks");
+  assert.equal(range.chapter, "1-21");
+  assert.equal(inlineStatus.title, "The Rock Cocks");
+  assert.equal(inlineStatus.chapter, "1-2");
+  assert.equal(numero.title, "The Rock Cocks");
+  assert.equal(numero.chapter, "1");
+});
+
+test("correspondence strips generic compilation descriptors from discovered titles", () => {
+  const covered = analyzeMangaCorrespondenceTitle(
+    "[Example Author] Example Series Soushuuhen【1〜4＋】 [Chinese]",
+    null,
+  );
+  const unnumbered = analyzeMangaCorrespondenceTitle(
+    "[Example Author] Example Series Compilation",
+    null,
+  );
+
+  assert.equal(covered.title, "Example Series");
+  assert.equal(covered.chapter, "Compilation 1-4");
+  assert.equal(unnumbered.title, "Example Series");
+  assert.equal(unnumbered.chapter, "Compilation");
+});
+
+test("correspondence removes known authors around generic title separators", () => {
+  assert.equal(
+    stripMangaCorrespondenceTrailingKnownAuthor(
+      "The Rock Cocks 15- Leslie Brown",
+      ["Leslie Brown"],
+    ),
+    "The Rock Cocks 15",
+  );
+  assert.equal(
+    stripMangaCorrespondenceTrailingKnownAuthor(
+      "Leslie Brown - The Rock Cocks",
+      ["Leslie Brown"],
+    ),
+    "The Rock Cocks",
   );
 });
 
