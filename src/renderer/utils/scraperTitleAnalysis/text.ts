@@ -53,7 +53,7 @@ export const appendUniqueTitleAnalysisValue = (
 
 export const splitTitleAnalysisAlternatives = (value: string): string[] => {
   const alternatives = value
-    .split(/(?:[|/]+|\s+[ー–—]\s+)/g)
+    .split(/(?:[|｜/]+|\s+[ー–—]\s+)/g)
     .map(normalizeTitleAnalysisText)
     .filter(Boolean);
 

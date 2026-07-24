@@ -231,6 +231,19 @@ test("correspondence parsing tolerates alternate titles with punctuated chapters
   assert.equal(result.parody, "Kanojo, Okarishimasu");
 });
 
+test("correspondence parsing recognizes fullwidth translated-title separators", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Karuwani (Rama)] Boku no Ie ga Class no Furyou Musume ni Iribitararete iru Ken. 3 ｜ 關於班上的不良少女賴在我家這檔事3 [Chinese] [Decensored]",
+    null,
+  );
+
+  assert.equal(result.title, "Boku no Ie ga Class no Furyou Musume ni Iribitararete iru Ken.");
+  assert.deepEqual(result.alternativeTitles, ["關於班上的不良少女賴在我家這檔事3"]);
+  assert.deepEqual(result.authors, ["Rama"]);
+  assert.equal(result.chapter, "3");
+  assert.equal(result.languageCode, "zh");
+});
+
 test("a plain known title is treated as chapter 1 but an extra release is not", () => {
   const knownTitles = ["Rental Kanojo Osawari Shimasu"];
   const plain = analyzeMangaCorrespondenceTitle(

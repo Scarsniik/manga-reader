@@ -522,44 +522,65 @@
 .manga-correspondence-view__result {
   display: grid;
   min-width: 0;
-  gap: 7px;
+  gap: 0;
+}
+
+.manga-correspondence-view__result .scraper-card {
+  position: relative;
+  z-index: 1;
 }
 
 .manga-correspondence-view__list-preparation {
+  position: relative;
+  z-index: 0;
   display: flex;
-  min-height: 34px;
+  min-height: 43px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 7px 5px 10px;
+  margin: -9px 8px 0;
+  padding: 14px 7px 5px 10px;
   border: 1px solid #303030;
-  border-radius: 9px;
-  background: #141414;
-  color: #a8a8a8;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, #101010 0, #181818 13px, #151515 100%);
+  color: #9f9f9f;
   font-size: 12px;
   font-weight: 700;
 }
 
 .manga-correspondence-view__list-preparation button {
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid rgba(214, 98, 98, .42);
-  border-radius: 7px;
-  background: rgba(214, 98, 98, .09);
-  color: #ffc1c1;
+  min-height: 25px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(214, 98, 98, .15);
+  color: #f0b5b5;
   font: inherit;
   cursor: pointer;
+  transition: background .14s ease, color .14s ease, box-shadow .14s ease;
 }
 
 .manga-correspondence-view__list-preparation button:hover {
-  border-color: rgba(214, 98, 98, .7);
-  background: rgba(214, 98, 98, .16);
+  background: rgba(214, 98, 98, .25);
+  color: #ffd0d0;
+  box-shadow: 0 0 0 1px rgba(214, 98, 98, .34);
 }
 
 .manga-correspondence-view__list-preparation button.is-excluded {
-  border-color: rgba(88, 185, 135, .48);
-  background: rgba(88, 185, 135, .1);
+  background: rgba(88, 185, 135, .15);
   color: #c8f2da;
+}
+
+.manga-correspondence-view__list-preparation button.is-excluded:hover {
+  background: rgba(88, 185, 135, .24);
+  color: #e0ffed;
+  box-shadow: 0 0 0 1px rgba(88, 185, 135, .34);
+}
+
+.manga-correspondence-view__list-preparation.is-unassigned {
+  border-color: rgba(222, 169, 65, .34);
+  background: linear-gradient(180deg, #101010 0, rgba(222, 169, 65, .09) 13px, rgba(222, 169, 65, .06) 100%);
+  color: #d9c18f;
 }
 
 .manga-correspondence-view__result.is-reading-list-excluded .scraper-card {
@@ -569,7 +590,7 @@
 
 .manga-correspondence-view__result.is-reading-list-excluded .manga-correspondence-view__list-preparation {
   border-color: rgba(214, 98, 98, .4);
-  background: rgba(214, 98, 98, .07);
+  background: linear-gradient(180deg, #101010 0, rgba(214, 98, 98, .1) 13px, rgba(214, 98, 98, .07) 100%);
   color: #dda4a4;
 }
 

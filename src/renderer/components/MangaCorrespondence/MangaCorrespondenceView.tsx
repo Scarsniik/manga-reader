@@ -166,8 +166,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     [excludedReadingListChapters, readingListChapters],
   );
   const chapterByResultId = useMemo(
-    () => new Map(readingListChapters.map((entry) => [entry.result.id, entry.chapter])),
-    [readingListChapters],
+    () => new Map(chapterEntries.map((entry) => [entry.result.id, entry.chapter])),
+    [chapterEntries],
   );
   const resultLanguageCodes = useMemo(() => buildMultiSearchResultLanguageFilterCodes(allSources), [allSources]);
   const visibleClassicGroups = useMemo(
@@ -264,7 +264,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         const chapter = withReadingListPreparation
           ? chapterByResultId.get(item.id)
           : undefined;
-        const isExcluded = chapter
+        const isReadingListChapter = Boolean(chapter && chapter !== "Non renseigné");
+        const isExcluded = isReadingListChapter && chapter
           ? excludedReadingListChapters.has(chapter)
           : false;
         return (
@@ -275,19 +276,6 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
               isExcluded ? "is-reading-list-excluded" : "",
             ].join(" ").trim()}
           >
-            {chapter ? (
-              <div className="manga-correspondence-view__list-preparation">
-                <span>Chapitre {chapter}</span>
-                <button
-                  type="button"
-                  className={isExcluded ? "is-excluded" : ""}
-                  aria-pressed={isExcluded}
-                  onClick={() => toggleReadingListChapter(chapter)}
-                >
-                  {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
-                </button>
-              </div>
-            ) : null}
             <MultiSearchResultCard
               result={item}
               libraryMangas={[]}
@@ -301,6 +289,30 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
               onOpenProgressReader={() => undefined}
               onSetSourcesRead={() => undefined}
             />
+            {chapter ? (
+              <div
+                className={[
+                  "manga-correspondence-view__list-preparation",
+                  isReadingListChapter ? "" : "is-unassigned",
+                ].join(" ").trim()}
+              >
+                <span>
+                  {isReadingListChapter
+                    ? `Liste de lecture · chapitre ${chapter}`
+                    : "Hors liste · numéro de chapitre non déterminé"}
+                </span>
+                {isReadingListChapter ? (
+                  <button
+                    type="button"
+                    className={isExcluded ? "is-excluded" : ""}
+                    aria-pressed={isExcluded}
+                    onClick={() => toggleReadingListChapter(chapter)}
+                  >
+                    {isExcluded ? "Réintégrer" : "Invalider"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         );
       })}
