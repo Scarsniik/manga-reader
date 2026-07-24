@@ -538,11 +538,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: -9px 0 0;
-  padding: 14px 7px 5px 10px;
+  margin: 0 0 -9px;
+  padding: 5px 7px 14px 10px;
   border: 1px solid #303030;
-  border-radius: 0 0 10px 10px;
-  background: linear-gradient(180deg, #101010 0, #181818 13px, #151515 100%);
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(0deg, #101010 0, #181818 13px, #151515 100%);
   color: #9f9f9f;
   font-size: 12px;
   font-weight: 700;
@@ -579,7 +579,7 @@
 
 .manga-correspondence-view__list-preparation.is-unassigned {
   border-color: rgba(222, 169, 65, .34);
-  background: linear-gradient(180deg, #101010 0, rgba(222, 169, 65, .09) 13px, rgba(222, 169, 65, .06) 100%);
+  background: linear-gradient(0deg, #101010 0, rgba(222, 169, 65, .09) 13px, rgba(222, 169, 65, .06) 100%);
   color: #d9c18f;
 }
 
@@ -590,7 +590,7 @@
 
 .manga-correspondence-view__result.is-reading-list-excluded .manga-correspondence-view__list-preparation {
   border-color: rgba(214, 98, 98, .4);
-  background: linear-gradient(180deg, #101010 0, rgba(214, 98, 98, .1) 13px, rgba(214, 98, 98, .07) 100%);
+  background: linear-gradient(0deg, #101010 0, rgba(214, 98, 98, .1) 13px, rgba(214, 98, 98, .07) 100%);
   color: #dda4a4;
 }
 

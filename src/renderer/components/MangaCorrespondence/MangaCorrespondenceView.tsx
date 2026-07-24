@@ -276,19 +276,6 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
               isExcluded ? "is-reading-list-excluded" : "",
             ].join(" ").trim()}
           >
-            <MultiSearchResultCard
-              result={item}
-              libraryMangas={[]}
-              bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
-              sourceProgressIndex={EMPTY_PROGRESS_INDEX}
-              viewHistoryRecordsById={EMPTY_HISTORY}
-              newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
-              viewHistoryRecordingDisabled
-              onOpenSource={(source) => openSource(source)}
-              onOpenSourceInWorkspace={(source) => openSource(source, true)}
-              onOpenProgressReader={() => undefined}
-              onSetSourcesRead={() => undefined}
-            />
             {chapter ? (
               <div
                 className={[
@@ -313,6 +300,19 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                 ) : null}
               </div>
             ) : null}
+            <MultiSearchResultCard
+              result={item}
+              libraryMangas={[]}
+              bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
+              sourceProgressIndex={EMPTY_PROGRESS_INDEX}
+              viewHistoryRecordsById={EMPTY_HISTORY}
+              newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
+              viewHistoryRecordingDisabled
+              onOpenSource={(source) => openSource(source)}
+              onOpenSourceInWorkspace={(source) => openSource(source, true)}
+              onOpenProgressReader={() => undefined}
+              onSetSourcesRead={() => undefined}
+            />
           </div>
         );
       })}
