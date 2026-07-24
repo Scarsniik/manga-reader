@@ -11,6 +11,10 @@ const source = `
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { compareMangaCorrespondenceChapters } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { describeMangaCorrespondenceChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { doMangaCorrespondenceChaptersOverlap } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { formatMangaCorrespondenceChapterLabel } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { filterIncludedMangaCorrespondenceChapters } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
@@ -18,6 +22,8 @@ const source = `
   export { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getTokenBasedRomanizationVariants } from "@/electron/handlers/japaneseRomanizationTokenVariants";
   export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
+  export { isClearlyDerivativeMangaCorrespondenceTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
+  export { stripMangaCorrespondenceTrailingKnownAuthor } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -42,6 +48,10 @@ const {
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
   inferMangaCorrespondenceFirstChapter,
+  compareMangaCorrespondenceChapters,
+  describeMangaCorrespondenceChapter,
+  doMangaCorrespondenceChaptersOverlap,
+  formatMangaCorrespondenceChapterLabel,
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
   mergeMultiSearchResults,
@@ -49,6 +59,8 @@ const {
   getMangaTitleMergeMatchKind,
   getTokenBasedRomanizationVariants,
   applyCommonReadingAlternatives,
+  isClearlyDerivativeMangaCorrespondenceTitle,
+  stripMangaCorrespondenceTrailingKnownAuthor,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -246,10 +258,119 @@ test("correspondence parsing recognizes fullwidth translated-title separators", 
   );
 
   assert.equal(result.title, "Boku no Ie ga Class no Furyou Musume ni Iribitararete iru Ken.");
-  assert.deepEqual(result.alternativeTitles, ["關於班上的不良少女賴在我家這檔事3"]);
+  assert.deepEqual(result.alternativeTitles, ["關於班上的不良少女賴在我家這檔事"]);
   assert.deepEqual(result.authors, ["Rama"]);
   assert.equal(result.chapter, "3");
   assert.equal(result.languageCode, "zh");
+});
+
+test("correspondence parses adjacent Japanese chapters after a nested creator prefix", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "(のり御膳（のり伍郎）)今泉ん家はどうやらギャルの溜まり場になってるらしい5",
+    null,
+  );
+
+  assert.equal(result.title, "今泉ん家はどうやらギャルの溜まり場になってるらしい");
+  assert.equal(result.circle, "のり御膳");
+  assert.deepEqual(result.authors, ["のり伍郎"]);
+  assert.equal(result.chapter, "5");
+});
+
+test("correspondence recognizes chapter ranges and normalizes wave separators", () => {
+  const compiled = analyzeMangaCorrespondenceTitle(
+    "Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii 1-6 + Bonus",
+    null,
+  );
+  const translatedRange = analyzeMangaCorrespondenceTitle(
+    "[Nori5rou] Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii 1~2 [Chinese]",
+    null,
+  );
+
+  assert.equal(compiled.title, "Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii");
+  assert.equal(compiled.chapter, "1-6");
+  assert.equal(translatedRange.chapter, "1-2");
+  assert.deepEqual(
+    extractTitleSequenceMarkers("Example Chapter 1～6").sequenceMarkers,
+    [{ kind: "chapter", label: "Chapter", value: "1-6" }],
+  );
+});
+
+test("correspondence keeps compilations separate from identically numbered chapters", () => {
+  const numbered = analyzeMangaCorrespondenceTitle(
+    "[Norigoro] Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii - Soushuuhen 2 [English]",
+    null,
+  );
+  const unnumbered = analyzeMangaCorrespondenceTitle(
+    "(のり御膳（のり伍郎）)今泉ん家はどうやらギャルの溜まり場になってるらしい 総集編",
+    null,
+  );
+
+  assert.equal(numbered.chapter, "Compilation 2");
+  assert.equal(unnumbered.chapter, "Compilation");
+});
+
+test("correspondence gives unnumbered bonus releases their own chapter group", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "Imaizumi Brings All The Gyarus To His House Succubus OMAKE",
+    null,
+  );
+
+  assert.equal(result.chapter, "Bonus");
+});
+
+test("parenthesized release metadata does not hide the preceding chapter", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Nori5rou] Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii 4 [English] (Uncensored)",
+    null,
+  );
+
+  assert.equal(result.chapter, "4");
+  assert.equal(result.languageCode, "en");
+  assert.ok(result.suffixTags.includes("Uncensored"));
+});
+
+test("correspondence recovers a chapter glued to a known trailing author", () => {
+  assert.equal(
+    stripMangaCorrespondenceTrailingKnownAuthor(
+      "今泉ん家はどうやらギャルの溜まり場になってるらしい 4のり伍郎",
+      ["のり伍郎", "nori gorou"],
+    ),
+    "今泉ん家はどうやらギャルの溜まり場になってるらしい 4",
+  );
+});
+
+test("correspondence rejects clearly derivative image and animation results", () => {
+  [
+    "[Konoha Waifus] Risa Hamazaki - Imaizumin Chi wa Douyara Gal no Tamariba ni Natteru Rashii (Patreon) [AI Generated]",
+    "Jelly Ray - Reina Hamazaki (Imaizumi Brings All The Gyarus To His House) [68 images]",
+    "Imaizumin Chi wa Douyara Gal no Tamariba ni Natteru Rashii (OAV 01) (Censured)",
+  ].forEach((title) => {
+    assert.equal(isClearlyDerivativeMangaCorrespondenceTitle(title), true, title);
+  });
+  assert.equal(
+    isClearlyDerivativeMangaCorrespondenceTitle(
+      "[Nori5rou] Imaizumin-chi wa Douyara Gal no Tamariba ni Natteru Rashii 5",
+    ),
+    false,
+  );
+});
+
+test("chapter ranges and compilations have explicit labels and stable ordering", () => {
+  assert.deepEqual(describeMangaCorrespondenceChapter("1-6"), {
+    kind: "range",
+    value: "1-6",
+    start: 1,
+    end: 6,
+  });
+  assert.equal(formatMangaCorrespondenceChapterLabel("1-6"), "chapitres 1 à 6");
+  assert.equal(formatMangaCorrespondenceChapterLabel("Compilation 2", true), "Compilation 2");
+  assert.deepEqual(
+    ["Compilation 2", "1-6", "3", "1"].sort(compareMangaCorrespondenceChapters),
+    ["1", "3", "1-6", "Compilation 2"],
+  );
+  assert.equal(doMangaCorrespondenceChaptersOverlap("5", "1-6"), true);
+  assert.equal(doMangaCorrespondenceChaptersOverlap("7", "1-6"), false);
+  assert.equal(doMangaCorrespondenceChaptersOverlap("2", "Compilation 2"), false);
 });
 
 test("correspondence selects a bounded pair of readable romaji title searches", () => {

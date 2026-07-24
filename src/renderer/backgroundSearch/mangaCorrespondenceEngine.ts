@@ -25,7 +25,10 @@ import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/componen
 import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advancedJapaneseRomanization";
 import { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
-import { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+import {
+  doMangaCorrespondenceChaptersOverlap,
+  inferMangaCorrespondenceFirstChapter,
+} from "@/renderer/utils/mangaCorrespondenceChapter";
 import {
   getScraperFeature,
   getScraperTitleAnalysisFeatureConfig,
@@ -44,6 +47,10 @@ import {
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
 import { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
+import {
+  isClearlyDerivativeMangaCorrespondenceTitle,
+  stripMangaCorrespondenceTrailingKnownAuthor,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -118,7 +125,10 @@ const sourceMatchesReference = (
   romanizedTitleVariantsByKey: Map<string, string[]>,
 ): { analyzedTitle: string; alternativeTitles: string[]; authors: string[]; chapter?: string; matchedTerm?: string } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
-  const analysis = analyzeMangaCorrespondenceTitle(source.result.title, config);
+  const analysis = analyzeMangaCorrespondenceTitle(
+    stripMangaCorrespondenceTrailingKnownAuthor(source.result.title, knownAuthors),
+    config,
+  );
   const {
     titleAlternatives,
     authorAlternatives,
@@ -134,22 +144,24 @@ const sourceMatchesReference = (
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
-  const matchedTerm = knownTitles.find((title) => (
-    doesCorrespondenceAnalyzedTitleMatchKnownTitle(
-      analysis.title,
-      titleAlternatives,
-      title,
-    )
-    || getMangaTitleMergeMatchKind(
-      {
+  const matchedTerm = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title)
+    ? undefined
+    : knownTitles.find((title) => (
+      doesCorrespondenceAnalyzedTitleMatchKnownTitle(
+        analysis.title,
+        titleAlternatives,
         title,
-        authorNames: input.reference.authors,
-        advancedRomanizedTitleVariants: romanizedTitleVariantsByKey.get(normalizeKey(title)) ?? [],
-      },
-      candidate,
-      { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
-    ) !== null
-  ));
+      )
+      || getMangaTitleMergeMatchKind(
+        {
+          title,
+          authorNames: input.reference.authors,
+          advancedRomanizedTitleVariants: romanizedTitleVariantsByKey.get(normalizeKey(title)) ?? [],
+        },
+        candidate,
+        { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
+      ) !== null
+    ));
   const chapter = analysis.chapter
     ?? inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
   return {
@@ -270,7 +282,12 @@ export const runMangaCorrespondenceSearch = async (
         romanizedTitleVariantsByKey,
       );
       if (!analyzed.matchedTerm) return;
-      if (input.request === "sameManga" && referenceChapter && analyzed.chapter && referenceChapter !== analyzed.chapter) return;
+      if (
+        input.request === "sameManga"
+        && referenceChapter
+        && analyzed.chapter
+        && !doMangaCorrespondenceChaptersOverlap(referenceChapter, analyzed.chapter)
+      ) return;
       const key = buildMultiSearchSourceIdentityKey(source);
       const existing = matches.get(key);
       matches.set(key, {

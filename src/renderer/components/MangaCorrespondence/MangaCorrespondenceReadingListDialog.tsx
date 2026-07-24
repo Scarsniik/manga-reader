@@ -13,6 +13,7 @@ import {
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
+import { formatMangaCorrespondenceChapterLabel } from "@/renderer/utils/mangaCorrespondenceChapter";
 import generateId from "@/utils/id";
 
 export type MangaCorrespondenceReadingListChapter = {
@@ -272,14 +273,14 @@ export default function MangaCorrespondenceReadingListDialog({
                 onClick={() => toggleChapter(chapter.chapter)}
                 disabled={creating}
                 title={isExcluded
-                  ? `Réintégrer le chapitre ${chapter.chapter}`
-                  : `Invalider le chapitre ${chapter.chapter} pour cette liste`}
+                  ? `Réintégrer ${formatMangaCorrespondenceChapterLabel(chapter.chapter)}`
+                  : `Invalider ${formatMangaCorrespondenceChapterLabel(chapter.chapter)} pour cette liste`}
               >
                 <span className="manga-correspondence-reading-list-dialog__chapter-state" aria-hidden="true">
                   {isExcluded ? "×" : "✓"}
                 </span>
                 <span>
-                  <strong>Chapitre {chapter.chapter}</strong>
+                  <strong>{formatMangaCorrespondenceChapterLabel(chapter.chapter, true)}</strong>
                   <small>{chapter.result.title}</small>
                 </span>
                 <em>{isExcluded ? "Invalidé" : "Inclus"}</em>
@@ -326,7 +327,9 @@ export default function MangaCorrespondenceReadingListDialog({
                 <strong>Liste incomplète dans cette langue</strong>
                 <p>
                   {selectedChapterCount}/{totalChapterCount} chapitres sont disponibles directement.
-                  Chapitre(s) manquant(s) : {selectedCoverage.missingChapters.map((chapter) => chapter.chapter).join(", ")}.
+                  Élément(s) manquant(s) : {selectedCoverage.missingChapters
+                    .map((chapter) => formatMangaCorrespondenceChapterLabel(chapter.chapter))
+                    .join(", ")}.
                 </p>
                 <small>Tu peux choisir une source de remplacement pour chaque chapitre manquant.</small>
               </div>
@@ -346,7 +349,7 @@ export default function MangaCorrespondenceReadingListDialog({
                       className="manga-correspondence-reading-list-dialog__replacement-item"
                     >
                       <label htmlFor={`replacement-source-${chapter.chapter}`}>
-                        Chapitre {chapter.chapter}
+                        {formatMangaCorrespondenceChapterLabel(chapter.chapter, true)}
                       </label>
                       <div className="manga-correspondence-reading-list-dialog__source-control">
                         <select

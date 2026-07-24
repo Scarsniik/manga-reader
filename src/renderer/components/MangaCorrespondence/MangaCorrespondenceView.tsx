@@ -32,7 +32,11 @@ import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigatio
 import useParams from "@/renderer/hooks/useParams";
 import useModal from "@/renderer/hooks/useModal";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
-import { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+import {
+  compareMangaCorrespondenceChapters,
+  formatMangaCorrespondenceChapterLabel,
+  inferMangaCorrespondenceFirstChapter,
+} from "@/renderer/utils/mangaCorrespondenceChapter";
 import { getLanguageLabel } from "@/renderer/utils/languageDetection";
 import {
   getScraperFeature,
@@ -46,6 +50,10 @@ import {
   toggleMangaCorrespondenceChapterExclusion,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
 import type { ReadingListItem } from "@/renderer/types/readingList";
+import {
+  isClearlyDerivativeMangaCorrespondenceTitle,
+  stripMangaCorrespondenceTrailingKnownAuthor,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -59,11 +67,6 @@ const EMPTY_PROGRESS_INDEX: MultiSearchProgressIndex = {
 const EMPTY_SOURCE_KEYS = new Set<string>();
 const EMPTY_HISTORY = new Map();
 const EMPTY_NEW_HISTORY_IDS = new Set<string>();
-
-const chapterSortValue = (value: string): number => {
-  const parsed = Number(value.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
-};
 
 const buildChapterCard = (
   chapter: string,
@@ -115,13 +118,22 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     enableRomajiPhoneticMerge: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
   }), [params?.multiSearchMergedTitleLanguagePriority]);
-  const allSources = useMemo(() => result?.matches.map((match) => match.source) ?? [], [result?.matches]);
+  const eligibleMatches = useMemo(
+    () => (result?.matches ?? []).filter((match) => (
+      !isClearlyDerivativeMangaCorrespondenceTitle(match.source.result.title)
+    )),
+    [result?.matches],
+  );
+  const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
   const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => {
     const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
-    (result?.matches ?? []).forEach((match) => {
+    eligibleMatches.forEach((match) => {
       const titleAnalysis = analyzeMangaCorrespondenceTitle(
-        match.source.result.title,
+        stripMangaCorrespondenceTrailingKnownAuthor(
+          match.source.result.title,
+          input?.reference.authors ?? [],
+        ),
         getScraperTitleAnalysisFeatureConfig(getScraperFeature(match.source.scraper, "titleAnalysis")),
       );
       const inferredFirstChapter = inferMangaCorrespondenceFirstChapter(titleAnalysis, [
@@ -133,7 +145,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())
-      .sort(([left], [right]) => chapterSortValue(left) - chapterSortValue(right) || left.localeCompare(right))
+      .sort(([left], [right]) => compareMangaCorrespondenceChapters(left, right))
       .flatMap(([chapter, matches]) => {
         const resultCard = buildChapterCard(
           chapter,
@@ -145,10 +157,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       });
   }, [
     input?.reference.alternativeTitles,
+    input?.reference.authors,
     input?.reference.title,
     job?.metadata.primaryTerm,
     mergeOptions,
-    result?.matches,
+    eligibleMatches,
   ]);
   const chapterCards = useMemo(
     () => chapterEntries.map((entry) => entry.result),
@@ -285,7 +298,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
               >
                 <span>
                   {isReadingListChapter
-                    ? `Liste de lecture · chapitre ${chapter}`
+                    ? `Liste de lecture · ${formatMangaCorrespondenceChapterLabel(chapter)}`
                     : "Hors liste · numéro de chapitre non déterminé"}
                 </span>
                 {isReadingListChapter ? (
@@ -333,7 +346,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         <div>
           <p className="manga-correspondence-view__eyebrow">Recherche intelligente</p>
           <h2>{job.metadata.primaryTerm}</h2>
-          <p>{displayedCards.length} card(s) · {result?.matches.length ?? 0} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
+          <p>{displayedCards.length} card(s) · {eligibleMatches.length} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}

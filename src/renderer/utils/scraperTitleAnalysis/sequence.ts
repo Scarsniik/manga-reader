@@ -10,11 +10,11 @@ const SEQUENCE_PATTERNS: Array<{
 }> = [
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>#)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>#)\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
   {
     kind: "chapter",
@@ -22,7 +22,7 @@ const SEQUENCE_PATTERNS: Array<{
   },
   {
     kind: "volume",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>vol(?:ume)?|tome|book)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>vol(?:ume)?|tome|book)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
   {
     kind: "volume",
@@ -30,7 +30,7 @@ const SEQUENCE_PATTERNS: Array<{
   },
   {
     kind: "part",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>part(?:ie)?|pt)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>part(?:ie)?|pt)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)\s*[\])}.]*$/i,
   },
 ];
 
@@ -77,7 +77,7 @@ export const extractTitleSequenceMarkers = (
       label: normalizeTitleAnalysisText(match.groups.label),
       value: normalizeTitleAnalysisText(match.groups.value)
         .normalize("NFKC")
-        .replace(/\s*-\s*/g, "-"),
+        .replace(/\s*[-–—~〜～]\s*/g, "-"),
     });
     remainingTitle = normalizeTitleAnalysisText(remainingTitle.slice(0, match.index));
   }
