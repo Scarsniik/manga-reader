@@ -89,11 +89,13 @@ export const applyCommonReadingAlternatives = (value: string): string => (
   value
     .replace(/\bichi nin\b/gi, "hitori")
     .replace(/\bni nin\b/gi, "futari")
+    .replace(/\bgyaru\b/gi, "gal")
     .replace(/\bki ta\b/gi, "kita")
     .replace(/\bshi ta\b/gi, "shita")
     .replace(/\bi tta\b/gi, "itta")
     .replace(/ichinin/gi, "hitori")
     .replace(/ninin/gi, "futari")
+    .replace(/gyaru/gi, "gal")
 );
 
 export const isRomanizedVariant = (value: string): boolean => (

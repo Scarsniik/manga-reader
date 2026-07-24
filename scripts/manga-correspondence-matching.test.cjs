@@ -14,6 +14,10 @@ const source = `
   export { filterIncludedMangaCorrespondenceChapters } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
+  export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
+  export { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
+  export { getTokenBasedRomanizationVariants } from "@/electron/handlers/japaneseRomanizationTokenVariants";
+  export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -41,6 +45,10 @@ const {
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
   mergeMultiSearchResults,
+  selectMangaCorrespondenceRomanizedSearchTerms,
+  getMangaTitleMergeMatchKind,
+  getTokenBasedRomanizationVariants,
+  applyCommonReadingAlternatives,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -242,6 +250,72 @@ test("correspondence parsing recognizes fullwidth translated-title separators", 
   assert.deepEqual(result.authors, ["Rama"]);
   assert.equal(result.chapter, "3");
   assert.equal(result.languageCode, "zh");
+});
+
+test("correspondence selects a bounded pair of readable romaji title searches", () => {
+  const terms = selectMangaCorrespondenceRomanizedSearchTerms([
+    "imaizumin-chi wa dōyara gal no tamariba ni natteru rashii",
+    "imaizumin-chi wa dōyara gyaru no tamariba ni natteru rashii",
+    "imaizumin-chi wa douyara gal no tamariba ni natteru rashii",
+    "imaizuminchiwadouyaragyarunotamaribaninatterurashii",
+  ]);
+
+  assert.deepEqual(terms, [
+    "imaizumin-chi wa douyara gal no tamariba ni natteru rashii",
+    "imaizumin-chi wa douyara gyaru no tamariba ni natteru rashii",
+  ]);
+});
+
+test("advanced reference romanization matches a Japanese title to its romaji title", () => {
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title: "今泉ん家はどうやらギャルの溜まり場になってるらしい",
+        authorNames: ["のり伍郎", "nori gorou"],
+        advancedRomanizedTitleVariants: [
+          "imaizumin-chi wa douyara gyaru no tamariba ni natteru rashii",
+        ],
+      },
+      {
+        title: "Imaizumin Chi wa Douyara Gyaru no Tamariba ni Natteru Rashii",
+        authorNames: ["Nori Gorou"],
+      },
+      { enableRomajiPhoneticMerge: false },
+    ),
+    "heavy",
+  );
+});
+
+test("Japanese colloquial n-chi house suffix gets a searchable token variant", async () => {
+  const kanaToRomaji = (value) => ({
+    イマイズミ: "imaizumi",
+    ン: "n",
+    イエ: "ie",
+    今泉: "imaizumi",
+    ん: "n",
+    家: "ie",
+  })[value] ?? value;
+  const variants = await getTokenBasedRomanizationVariants(
+    {
+      _analyzer: {
+        parse: async () => [
+          { surface_form: "今泉", reading: "イマイズミ" },
+          { surface_form: "ん", reading: "ン" },
+          { surface_form: "家", reading: "イエ" },
+        ],
+      },
+    },
+    kanaToRomaji,
+    "今泉ん家",
+  );
+
+  assert.ok(variants.includes("imaizumin-chi"));
+  assert.equal(
+    applyCommonReadingAlternatives(
+      "imaizumin-chi wa douyara gyaru no tamariba ni natteru rashii",
+    ),
+    "imaizumin-chi wa douyara gal no tamariba ni natteru rashii",
+  );
 });
 
 test("a plain known title is treated as chapter 1 but an extra release is not", () => {

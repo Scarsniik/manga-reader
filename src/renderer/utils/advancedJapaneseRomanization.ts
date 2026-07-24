@@ -2,7 +2,10 @@ import type {
   JapaneseRomanizationRequest,
   JapaneseRomanizationResult,
 } from "@/shared/japaneseRomanization";
-import { hasJapaneseKanji } from "@/renderer/utils/japaneseRomanization";
+import {
+  hasJapaneseKana,
+  hasJapaneseKanji,
+} from "@/renderer/utils/japaneseRomanization";
 
 type JapaneseRomanizationApi = {
   romanizeJapaneseTexts?: (request: JapaneseRomanizationRequest) => Promise<JapaneseRomanizationResult>;
@@ -69,10 +72,14 @@ const readRomanizationBatch = async (
 
 export const loadAdvancedJapaneseRomanizationVariants = async (
   values: string[],
+  options: { includeKanaOnly?: boolean } = {},
 ): Promise<Map<string, string[]>> => {
   const targets = uniqueValues(values)
     .map(normalizeRomanizationText)
-    .filter(shouldUseAdvancedJapaneseRomanization);
+    .filter((value) => (
+      shouldUseAdvancedJapaneseRomanization(value)
+      || (options.includeKanaOnly && hasJapaneseKana(value))
+    ));
   if (!targets.length) {
     return new Map<string, string[]>();
   }

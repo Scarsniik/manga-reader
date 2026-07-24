@@ -22,6 +22,7 @@ import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSear
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
+import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advancedJapaneseRomanization";
 import { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
 import { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -42,6 +43,7 @@ import {
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
+import { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -52,6 +54,7 @@ type DiscoveryTask = {
   kind: "title" | "author";
   term: string;
   parentId?: string;
+  initialGeneratedVariant?: boolean;
   directTargets?: Array<{
     scraper: ScraperRecord;
     url: string;
@@ -112,6 +115,7 @@ const sourceMatchesReference = (
   source: MultiSearchSourceResult,
   knownTitles: string[],
   knownAuthors: string[],
+  romanizedTitleVariantsByKey: Map<string, string[]>,
 ): { analyzedTitle: string; alternativeTitles: string[]; authors: string[]; chapter?: string; matchedTerm?: string } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
   const analysis = analyzeMangaCorrespondenceTitle(source.result.title, config);
@@ -137,7 +141,11 @@ const sourceMatchesReference = (
       title,
     )
     || getMangaTitleMergeMatchKind(
-      { title, authorNames: input.reference.authors },
+      {
+        title,
+        authorNames: input.reference.authors,
+        advancedRomanizedTitleVariants: romanizedTitleVariantsByKey.get(normalizeKey(title)) ?? [],
+      },
       candidate,
       { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
     ) !== null
@@ -176,6 +184,7 @@ export const runMangaCorrespondenceSearch = async (
   const trace: MangaCorrespondenceTraceStep[] = [];
   const matches = new Map<string, MangaCorrespondenceMatch>();
   const knownAuthors = uniqueText(input.reference.authors);
+  const romanizedTitleVariantsByKey = new Map<string, string[]>();
   const searchedTitles: string[] = [];
   const searchedAuthors: string[] = [];
   const queuedKeys = new Set<string>();
@@ -191,12 +200,6 @@ export const runMangaCorrespondenceSearch = async (
     queuedKeys.add(key);
     queue.push(task);
   };
-  knownTitles.forEach((term) => addTask({ kind: "title", term }));
-  knownAuthors.forEach((term) => addTask({ kind: "author", term }));
-  input.reference.authorUrls.forEach((url) => {
-    const scraper = scrapers.find((entry) => entry.id === input.reference.scraperId);
-    if (scraper) addTask({ kind: "author", term: knownAuthors[0] || url, directTargets: [{ scraper, url }] });
-  });
 
   const addTrace = (
     kind: MangaCorrespondenceTraceStep["kind"],
@@ -208,6 +211,41 @@ export const runMangaCorrespondenceSearch = async (
     trace.push(step);
     return step;
   };
+  const initialRomanizedVariants = await loadAdvancedJapaneseRomanizationVariants(
+    knownTitles,
+    { includeKanaOnly: true },
+  );
+  knownTitles.forEach((title) => {
+    const variants = initialRomanizedVariants.get(title) ?? [];
+    if (variants.length) {
+      romanizedTitleVariantsByKey.set(normalizeKey(title), variants);
+    }
+  });
+
+  knownTitles.forEach((term) => addTask({ kind: "title", term }));
+  knownTitles.forEach((title) => {
+    selectMangaCorrespondenceRomanizedSearchTerms(
+      romanizedTitleVariantsByKey.get(normalizeKey(title)) ?? [],
+    ).forEach((term) => {
+      const romanizedStep = addTrace(
+        "titleDiscovered",
+        "Variante rōmaji générée",
+        term,
+      );
+      addTask({
+        kind: "title",
+        term,
+        parentId: romanizedStep.id,
+        initialGeneratedVariant: true,
+      });
+    });
+  });
+  knownAuthors.forEach((term) => addTask({ kind: "author", term }));
+  input.reference.authorUrls.forEach((url) => {
+    const scraper = scrapers.find((entry) => entry.id === input.reference.scraperId);
+    if (scraper) addTask({ kind: "author", term: knownAuthors[0] || url, directTargets: [{ scraper, url }] });
+  });
+
   const emit = async (label?: string): Promise<void> => onSnapshot(
     buildResult(input, matches, trace, searchedTitles, searchedAuthors),
     {
@@ -224,7 +262,13 @@ export const runMangaCorrespondenceSearch = async (
     let accepted = 0;
     const acceptedSources: MultiSearchSourceResult[] = [];
     sources.forEach((source) => {
-      const analyzed = sourceMatchesReference(input, source, knownTitles, knownAuthors);
+      const analyzed = sourceMatchesReference(
+        input,
+        source,
+        knownTitles,
+        knownAuthors,
+        romanizedTitleVariantsByKey,
+      );
       if (!analyzed.matchedTerm) return;
       if (input.request === "sameManga" && referenceChapter && analyzed.chapter && referenceChapter !== analyzed.chapter) return;
       const key = buildMultiSearchSourceIdentityKey(source);
@@ -389,7 +433,11 @@ export const runMangaCorrespondenceSearch = async (
     if (input.strategy === "titleFirst") index = Math.max(0, queue.findIndex((task) => task.kind === "title"));
     if (input.strategy === "authorFirst") index = Math.max(0, queue.findIndex((task) => task.kind === "author"));
     if (input.strategy === "balanced") {
-      const discoveredTitle = queue.findIndex((task) => task.kind === "title" && Boolean(task.parentId));
+      const discoveredTitle = queue.findIndex((task) => (
+        task.kind === "title"
+        && Boolean(task.parentId)
+        && !task.initialGeneratedVariant
+      ));
       const preferred = discoveredTitle >= 0
         ? discoveredTitle
         : queue.findIndex((task) => task.kind === balancedKind);

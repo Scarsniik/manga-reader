@@ -45,11 +45,30 @@ const getParticleReadingValues = (token: JapaneseAnalyzerToken): string[] => {
   }
 };
 
+const getContextualReadingValues = (
+  tokens: JapaneseAnalyzerToken[],
+  tokenIndex: number,
+): string[] => {
+  const token = tokens[tokenIndex];
+  const previousToken = tokens[tokenIndex - 1];
+
+  // In colloquial possessive forms such as 今泉ん家 or 俺ん家, 家 is commonly
+  // read "-n-chi" rather than the standalone "ie" returned by Kuromoji.
+  if (token.surface_form === "家" && previousToken?.surface_form === "ん") {
+    return ["chi"];
+  }
+
+  return [];
+};
+
 const getTokenRomanizationAlternatives = (
+  tokens: JapaneseAnalyzerToken[],
+  tokenIndex: number,
   token: JapaneseAnalyzerToken,
   kanaToRomaji: KanaToRomaji | null,
 ): string[] => (
   uniqueValues([
+    ...getContextualReadingValues(tokens, tokenIndex),
     ...getParticleReadingValues(token),
     ...getTokenReadingValues(token, kanaToRomaji),
   ]).slice(0, 8)
@@ -70,6 +89,29 @@ const joinTokenValues = (
 
   const parts: string[] = [];
   values.forEach((value, index) => {
+    const token = tokens[index];
+    const previousToken = tokens[index - 1];
+    const nextToken = tokens[index + 1];
+
+    if (
+      token.surface_form === "ん"
+      && nextToken?.surface_form === "家"
+      && parts.length
+    ) {
+      parts[parts.length - 1] += value;
+      return;
+    }
+
+    if (
+      token.surface_form === "家"
+      && previousToken?.surface_form === "ん"
+      && value.toLowerCase() === "chi"
+      && parts.length
+    ) {
+      parts[parts.length - 1] += `-${value}`;
+      return;
+    }
+
     if (mode === "spacedMergedAuxiliary" && isAuxiliaryToken(tokens[index]) && parts.length) {
       parts[parts.length - 1] += value;
       return;
@@ -122,7 +164,9 @@ export const getTokenBasedRomanizationVariants = async (
     return [];
   }
 
-  const alternativesByToken = tokens.map((token) => getTokenRomanizationAlternatives(token, kanaToRomaji));
+  const alternativesByToken = tokens.map((token, tokenIndex) => (
+    getTokenRomanizationAlternatives(tokens, tokenIndex, token, kanaToRomaji)
+  ));
   if (alternativesByToken.some((alternatives) => !alternatives.length)) {
     return [];
   }

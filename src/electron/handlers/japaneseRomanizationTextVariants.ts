@@ -55,6 +55,19 @@ export type { KanaToRomaji };
 
 const MAX_VARIANTS_PER_TEXT = 120;
 
+const getContextualRomanizationVariants = (
+  text: string,
+  variants: string[],
+): string[] => {
+  if (!text.includes("ん家")) {
+    return [];
+  }
+
+  return uniqueValues(variants
+    .map((variant) => variant.replace(/(\S+)\s+n\s+ie\b/gi, "$1n-chi"))
+    .filter((variant, index) => variant !== variants[index]));
+};
+
 export const createJapaneseRomanizationVariants = async (
   text: string,
   kuroshiro: KuroshiroInstance,
@@ -95,12 +108,20 @@ export const createJapaneseRomanizationVariants = async (
     ...JAPANESE_ROMAJI_SYSTEMS.map((system) => romanizeKana(hiraganaNormal, kanaToRomaji, system)),
     ...JAPANESE_ROMAJI_SYSTEMS.map((system) => romanizeKana(hiraganaSpaced, kanaToRomaji, system)),
   ];
+  const contextualRomanizationVariants = getContextualRomanizationVariants(
+    text,
+    kuroshiroRomajiVariants,
+  );
   const baseVariants = addLongVowelShapeVariants([
+    ...contextualRomanizationVariants,
     ...kuroshiroRomajiVariants,
     ...kanaCharacterVariants,
     ...tokenBasedVariants,
   ]);
-  const commonReadingVariants = uniqueValues(baseVariants.map(applyCommonReadingAlternatives));
+  const commonReadingVariants = uniqueValues(baseVariants.flatMap((variant) => {
+    const alternative = applyCommonReadingAlternatives(variant);
+    return alternative === variant ? [variant] : [alternative, variant];
+  }));
   const bracketedNameVariants = await getBracketedJapaneseNameVariants(
     kuroshiro,
     kanaToRomaji,
@@ -113,7 +134,6 @@ export const createJapaneseRomanizationVariants = async (
   ].map(toReadableTitleCase));
 
   return uniqueValues([
-    ...baseVariants,
     ...commonReadingVariants,
     ...readableTitleCaseVariants,
     ...bracketedNameVariants,
