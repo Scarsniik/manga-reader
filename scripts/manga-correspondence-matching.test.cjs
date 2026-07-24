@@ -6,6 +6,7 @@ const esbuild = require("esbuild");
 const source = `
   export { doesCorrespondenceTitleContainKnownTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractCorrespondenceBareHashChapter } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
+  export { partitionCorrespondenceAlternativeTitles } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -29,6 +30,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 const {
   doesCorrespondenceTitleContainKnownTitle,
   extractCorrespondenceBareHashChapter,
+  partitionCorrespondenceAlternativeTitles,
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
   inferMangaCorrespondenceFirstChapter,
@@ -63,6 +65,25 @@ test("correspondence treats dotted initialisms as the same title", () => {
       "NILF - Nerd I'd Like To Fuck",
     ),
     true,
+  );
+});
+
+test("an author suffix parsed as an alternative cannot become a searched manga title", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "N.I.L.F. Nerd I’d Like To Fuck – Tekuho",
+    null,
+  );
+  const partition = partitionCorrespondenceAlternativeTitles(
+    result.alternativeTitles,
+    ["Tekuho", "tekuho"],
+  );
+
+  assert.equal(result.title, "N.I.L.F. Nerd I’d Like To Fuck");
+  assert.deepEqual(partition.titleAlternatives, []);
+  assert.deepEqual(partition.authorAlternatives, ["Tekuho"]);
+  assert.equal(
+    doesCorrespondenceTitleContainKnownTitle("Jessica – Tekuho", "NILF - Nerd I'd Like To Fuck"),
+    false,
   );
 });
 

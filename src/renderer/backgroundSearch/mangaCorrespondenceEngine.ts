@@ -38,6 +38,7 @@ import type {
 } from "@/renderer/backgroundSearch/types";
 import {
   doesCorrespondenceTitleContainKnownTitle,
+  partitionCorrespondenceAlternativeTitles,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
@@ -110,15 +111,20 @@ const sourceMatchesReference = (
   input: MangaCorrespondenceBackgroundInput,
   source: MultiSearchSourceResult,
   knownTitles: string[],
+  knownAuthors: string[],
 ): { analyzedTitle: string; alternativeTitles: string[]; authors: string[]; chapter?: string; matchedTerm?: string } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
   const analysis = analyzeMangaCorrespondenceTitle(source.result.title, config);
+  const {
+    titleAlternatives,
+    authorAlternatives,
+  } = partitionCorrespondenceAlternativeTitles(analysis.alternativeTitles, knownAuthors);
   const parsedAuthorKeys = analysis.authors.map(normalizeKey);
   const supplementalAuthors = [...(source.result.authorNames ?? []), ...source.tentativeAuthorNames]
     .filter((author) => !parsedAuthorKeys.some((parsedAuthor) => normalizeKey(author).includes(parsedAuthor)));
-  const authors = uniqueText([...analysis.authors, ...supplementalAuthors]);
+  const authors = uniqueText([...analysis.authors, ...supplementalAuthors, ...authorAlternatives]);
   const candidate = {
-    title: [analysis.title, ...analysis.alternativeTitles].join(", "),
+    title: [analysis.title, ...titleAlternatives].join(", "),
     sourceUrl: source.result.detailUrl,
     authorNames: authors,
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
@@ -136,7 +142,7 @@ const sourceMatchesReference = (
     ?? inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
   return {
     analyzedTitle: analysis.title,
-    alternativeTitles: analysis.alternativeTitles,
+    alternativeTitles: titleAlternatives,
     authors,
     chapter,
     matchedTerm,
@@ -214,7 +220,7 @@ export const runMangaCorrespondenceSearch = async (
     let accepted = 0;
     const acceptedSources: MultiSearchSourceResult[] = [];
     sources.forEach((source) => {
-      const analyzed = sourceMatchesReference(input, source, knownTitles);
+      const analyzed = sourceMatchesReference(input, source, knownTitles, knownAuthors);
       if (!analyzed.matchedTerm) return;
       if (input.request === "sameManga" && referenceChapter && analyzed.chapter && referenceChapter !== analyzed.chapter) return;
       const key = buildMultiSearchSourceIdentityKey(source);

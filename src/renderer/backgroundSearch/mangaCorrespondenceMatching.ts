@@ -34,6 +34,28 @@ export const doesCorrespondenceTitleContainKnownTitle = (
   return ` ${candidate} `.includes(` ${known} `);
 };
 
+export const partitionCorrespondenceAlternativeTitles = (
+  alternativeTitles: string[],
+  knownAuthors: string[],
+): { titleAlternatives: string[]; authorAlternatives: string[] } => {
+  const knownAuthorKeys = new Set(
+    knownAuthors
+      .map(normalizeCorrespondenceTitle)
+      .filter(Boolean),
+  );
+  const titleAlternatives: string[] = [];
+  const authorAlternatives: string[] = [];
+
+  alternativeTitles.forEach((alternative) => {
+    const target = knownAuthorKeys.has(normalizeCorrespondenceTitle(alternative))
+      ? authorAlternatives
+      : titleAlternatives;
+    target.push(alternative);
+  });
+
+  return { titleAlternatives, authorAlternatives };
+};
+
 export const extractCorrespondenceBareHashChapter = (value: string): string | undefined => {
   const chapters = Array.from(value.matchAll(/#\s*([0-9０-９]+(?:[.,][0-9０-９]+)?)/gu))
     .map((match) => match[1].normalize("NFKC").replace(",", "."));
