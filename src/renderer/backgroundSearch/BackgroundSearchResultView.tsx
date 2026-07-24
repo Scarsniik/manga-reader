@@ -8,6 +8,7 @@ import type { ScraperRecord } from "@/shared/scraper";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import MultiSearchBrowser from "@/renderer/components/MultiSearch/MultiSearchBrowser";
 import MangaCorrespondenceView from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceView";
+import AuthorCorrespondenceView from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceView";
 import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import ScraperLatestView from "@/renderer/components/ScraperLatest/ScraperLatestView";
@@ -21,6 +22,7 @@ type Props = {
 const KIND_LABELS: Record<BackgroundSearchKind, string> = {
   multiSearch: "Recherche multi-sources",
   mangaCorrespondence: "Recherche de correspondances",
+  authorCorrespondence: "Correspondances auteur",
   scraperAuthor: "Recherche d’auteur",
   latestSources: "Nouveautés des sources",
   latestAuthors: "Nouveautés des auteurs favoris",
@@ -37,11 +39,20 @@ const STATUS_LABELS: Record<BackgroundSearchJobMetadata["status"], string> = {
   expired: "Expirée",
 };
 
-const getProgressLabel = (metadata: BackgroundSearchJobMetadata): string => {
+const getProgressValue = (metadata: BackgroundSearchJobMetadata): string => {
   const completed = Math.max(0, metadata.progress.completedUnits);
   const total = metadata.progress.totalUnits;
-  if (typeof total === "number" && total > 0) return `${completed}/${total} étapes`;
-  return `${completed} étape(s)`;
+  if (typeof total === "number" && total > 0) return `${completed}/${total}`;
+  return String(completed);
+};
+
+const getProgressDescription = (metadata: BackgroundSearchJobMetadata): string => {
+  const unitLabel = metadata.kind === "mangaCorrespondence"
+    ? "recherches exécutées"
+    : "étapes exécutées";
+  return metadata.progress.currentLabel
+    ? `${unitLabel} · ${metadata.progress.currentLabel}`
+    : unitLabel;
 };
 
 export default function BackgroundSearchResultView({ backgroundSearchJobId, scrapers }: Props) {
@@ -63,6 +74,9 @@ export default function BackgroundSearchResultView({ backgroundSearchJobId, scra
     }
     if (metadata.kind === "mangaCorrespondence") {
       return <MangaCorrespondenceView backgroundSearchJobId={metadata.id} resultOnly />;
+    }
+    if (metadata.kind === "authorCorrespondence") {
+      return <AuthorCorrespondenceView backgroundSearchJobId={metadata.id} resultOnly />;
     }
     if (metadata.kind === "latestSources" || metadata.kind === "latestAuthors") {
       return <ScraperLatestView scrapers={scrapers} backgroundSearchJobId={metadata.id} resultOnly />;
@@ -100,8 +114,11 @@ export default function BackgroundSearchResultView({ backgroundSearchJobId, scra
       </header>
 
       <div className="background-search-result-view__facts" aria-label="Résumé de la recherche">
-        <div><strong>{metadata.progress.resultCount}</strong><span>résultat(s)</span></div>
-        <div><strong>{getProgressLabel(metadata)}</strong><span>{metadata.progress.currentLabel || "Progression"}</span></div>
+        <div><strong>{metadata.progress.resultCount}</strong><span>résultat(s) conservé(s)</span></div>
+        {(metadata.progress.excludedResultCount ?? 0) > 0 ? (
+          <div><strong>{metadata.progress.excludedResultCount}</strong><span>ignoré(s) par blacklist</span></div>
+        ) : null}
+        <div><strong>{getProgressValue(metadata)}</strong><span>{getProgressDescription(metadata)}</span></div>
         <div><strong>{storageLabel}</strong><span>Stockage du résultat</span></div>
       </div>
 

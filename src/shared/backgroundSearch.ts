@@ -5,6 +5,7 @@ export const BACKGROUND_SEARCH_SCHEMA_VERSION = 1;
 export type BackgroundSearchKind =
   | "multiSearch"
   | "mangaCorrespondence"
+  | "authorCorrespondence"
   | "scraperAuthor"
   | "latestSources"
   | "latestAuthors"
@@ -24,6 +25,7 @@ export type BackgroundSearchStorageMode = "memory" | "temporaryFile";
 export type BackgroundSearchProgress = {
   completedUnits: number;
   currentLabel?: string;
+  excludedResultCount?: number;
   resultCount: number;
   totalUnits?: number;
 };
@@ -148,6 +150,25 @@ export type MangaCorrespondenceTraceStep = {
   createdAt: string;
 };
 
+export type AuthorCorrespondenceReferenceSource = {
+  scraperId: string;
+  authorUrl: string;
+  name: string;
+  templateContext?: Record<string, string | undefined> | null;
+};
+
+export type AuthorCorrespondenceBackgroundInput = {
+  referenceName: string;
+  names: string[];
+  referenceSources: AuthorCorrespondenceReferenceSource[];
+  scraperFilterValues: string[];
+  scrapers: ScraperRecord[];
+  maxPages: number | null;
+  paceMode: "fast" | "careful";
+  scrapingConcurrency: number;
+  scrapeDetailsWithCards: boolean;
+};
+
 export type ListingBackgroundSource = {
   id: string;
   name: string;
@@ -170,12 +191,19 @@ export type ListingBackgroundInput = {
   resultLimit?: number;
   paceMode: "fast" | "careful";
   concurrency?: number;
+  excludeBlacklistedTagCards?: boolean;
+  tagBlacklistByScraper?: Record<string, Array<{
+    value: string;
+    label?: string;
+    addedAt?: string;
+  }>>;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
   selectedFavoriteIds?: string[];
   selectedScraperIds?: string[];
   selectedTagFavoriteIds?: string[];
   searchMode?: "quick" | "deep";
+  quickConsecutiveSeenStopThreshold?: number;
 };
 
 export type BackgroundSearchChangeEvent = {

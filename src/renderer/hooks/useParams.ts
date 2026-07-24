@@ -66,6 +66,7 @@ export type AppParams = {
     savedScraperSearches?: SavedScraperSearch[];
     multiSearchShowUnseenFirst?: boolean;
     multiSearchEnableRomajiPhoneticMerge?: boolean;
+    multiSearchMergedTitleLanguagePriority?: string[];
     multiSearchSelectedScraperIds?: string[];
     multiSearchSelectedLanguageCodes?: string[];
     multiSearchIncludedLanguageCodes?: string[];

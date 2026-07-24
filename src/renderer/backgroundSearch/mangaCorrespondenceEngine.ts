@@ -22,8 +22,8 @@ import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
-import { analyzeScraperTitle } from "@/renderer/utils/scraperTitleAnalysis";
-import { stripTitleLanguageMarkers } from "@/renderer/utils/languageDetection";
+import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
+import { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
 import {
   getScraperFeature,
   getScraperTitleAnalysisFeatureConfig,
@@ -37,8 +37,8 @@ import type {
 } from "@/renderer/backgroundSearch/types";
 import {
   doesCorrespondenceTitleContainKnownTitle,
-  extractCorrespondenceBareHashChapter,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
+import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -55,6 +55,7 @@ type DiscoveryTask = {
 const MAX_DISCOVERY_TASKS = 80;
 const MAX_DISCOVERED_TITLES = 18;
 const MAX_DISCOVERED_AUTHORS = 18;
+const AUTHOR_MULTI_SEARCH_MAX_PAGES = 1;
 
 const normalizeKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
@@ -66,32 +67,6 @@ const uniqueText = (values: Array<string | undefined>): string[] => {
     seen.add(key);
     return true;
   });
-};
-
-const getChapter = (title: string, scraper: ScraperRecord): string | undefined => {
-  const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(scraper, "titleAnalysis"));
-  const marker = analyzeCorrespondenceTitle(title, config).sequenceMarkers.find((entry) => entry.kind === "chapter");
-  return marker?.value ?? extractCorrespondenceBareHashChapter(title);
-};
-
-const analyzeCorrespondenceTitle = (
-  rawTitle: string,
-  config: ReturnType<typeof getScraperTitleAnalysisFeatureConfig>,
-): ReturnType<typeof analyzeScraperTitle> => {
-  const originalAnalysis = analyzeScraperTitle(rawTitle, config);
-  const languageStrippedTitle = stripTitleLanguageMarkers(rawTitle);
-  if (!languageStrippedTitle || languageStrippedTitle === rawTitle) return originalAnalysis;
-  const strippedAnalysis = analyzeScraperTitle(languageStrippedTitle, config);
-  if (strippedAnalysis.sequenceMarkers.length <= originalAnalysis.sequenceMarkers.length) return originalAnalysis;
-  return {
-    ...strippedAnalysis,
-    rawTitle,
-    alternativeTitles: uniqueText([
-      ...originalAnalysis.alternativeTitles,
-      ...strippedAnalysis.alternativeTitles,
-    ]),
-    authors: uniqueText([...originalAnalysis.authors, ...strippedAnalysis.authors]),
-  };
 };
 
 const selectScrapers = (input: MangaCorrespondenceBackgroundInput): ScraperRecord[] => {
@@ -160,8 +135,11 @@ const sourceMatchesReference = (
   knownTitles: string[],
 ): { analyzedTitle: string; alternativeTitles: string[]; authors: string[]; chapter?: string; matchedTerm?: string } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
-  const analysis = analyzeCorrespondenceTitle(source.result.title, config);
-  const authors = uniqueText([...analysis.authors, ...(source.result.authorNames ?? []), ...source.tentativeAuthorNames]);
+  const analysis = analyzeMangaCorrespondenceTitle(source.result.title, config);
+  const parsedAuthorKeys = analysis.authors.map(normalizeKey);
+  const supplementalAuthors = [...(source.result.authorNames ?? []), ...source.tentativeAuthorNames]
+    .filter((author) => !parsedAuthorKeys.some((parsedAuthor) => normalizeKey(author).includes(parsedAuthor)));
+  const authors = uniqueText([...analysis.authors, ...supplementalAuthors]);
   const candidate = {
     title: [analysis.title, ...analysis.alternativeTitles].join(", "),
     sourceUrl: source.result.detailUrl,
@@ -177,11 +155,13 @@ const sourceMatchesReference = (
       { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
     ) !== null
   ));
+  const chapter = analysis.chapter
+    ?? inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
   return {
     analyzedTitle: analysis.title,
     alternativeTitles: analysis.alternativeTitles,
     authors,
-    chapter: getChapter(source.result.title, source.scraper),
+    chapter,
     matchedTerm,
   };
 };
@@ -197,12 +177,17 @@ export const runMangaCorrespondenceSearch = async (
   const concurrency = Math.max(1, Math.floor(input.scrapingConcurrency));
   const pace = { ...getPaceConfig(input.paceMode), concurrency };
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
-  const referenceChapter = input.reference.chapter || getChapter(input.reference.rawTitle, scrapers.find(
-    (scraper) => scraper.id === input.reference.scraperId,
-  ) ?? scrapers[0]);
+  const referenceScraper = scrapers.find((scraper) => scraper.id === input.reference.scraperId) ?? scrapers[0];
+  const referenceAnalysis = analyzeMangaCorrespondenceTitle(
+    input.reference.rawTitle,
+    getScraperTitleAnalysisFeatureConfig(getScraperFeature(referenceScraper, "titleAnalysis")),
+  );
+  const knownTitles = uniqueText([input.reference.title, ...input.reference.alternativeTitles]);
+  const referenceChapter = input.reference.chapter
+    || referenceAnalysis.chapter
+    || inferMangaCorrespondenceFirstChapter(referenceAnalysis, knownTitles);
   const trace: MangaCorrespondenceTraceStep[] = [];
   const matches = new Map<string, MangaCorrespondenceMatch>();
-  const knownTitles = uniqueText([input.reference.title, ...input.reference.alternativeTitles]);
   const knownAuthors = uniqueText(input.reference.authors);
   const searchedTitles: string[] = [];
   const searchedAuthors: string[] = [];
@@ -283,10 +268,10 @@ export const runMangaCorrespondenceSearch = async (
           directTargets: directAuthorUrls.map((url) => ({ scraper: source.scraper, url })),
         });
       }
-      uniqueText(analyzed.alternativeTitles).forEach((title) => {
+      uniqueText([analyzed.analyzedTitle, ...analyzed.alternativeTitles]).forEach((title) => {
         if (knownTitles.length >= MAX_DISCOVERED_TITLES || knownTitles.some((value) => normalizeKey(value) === normalizeKey(title))) return;
         knownTitles.push(title);
-        const titleStep = addTrace("titleDiscovered", "Titre alternatif trouvé", title, step.id);
+        const titleStep = addTrace("titleDiscovered", "Titre correspondant trouvé", title, step.id);
         addTask({ kind: "title", term: title, parentId: titleStep.id });
       });
     });
@@ -323,19 +308,38 @@ export const runMangaCorrespondenceSearch = async (
     step.detail = `${sources.length} résultat(s) analysé(s), ${accepted} nouvelle(s) correspondance(s).`;
   };
 
-  const loadSearch = async (scraper: ScraperRecord, term: string): Promise<MultiSearchSourceResult[]> => {
+  const loadSearch = async (
+    scraper: ScraperRecord,
+    term: string,
+    pageLimit = maxPages,
+  ): Promise<MultiSearchSourceResult[]> => {
     if (!isSearchableScraper(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
+    const resultKeys = new Set<string>();
     let nextPageUrl: string | undefined;
-    for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
+        const requestedPageUrl = nextPageUrl;
         const page = await fetchSearchPageWithRetry(scraper, getSearchConfig(scraper), term, pageIndex, nextPageUrl, pace, {
           scrapeDetailsWithCards: input.scrapeDetailsWithCards,
         });
-        results.push(...await enrichSourceResultsWithJapaneseRomanization(buildSourceResults(scraper, page, pageIndex, term)));
+        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
+          buildSourceResults(scraper, page, pageIndex, term),
+        );
+        const newSources = pageSources.filter((source) => {
+          const key = buildMultiSearchSourceIdentityKey(source);
+          if (resultKeys.has(key)) return false;
+          resultKeys.add(key);
+          return true;
+        });
+        results.push(...newSources);
         nextPageUrl = page.nextPageUrl;
-        if (!resolveHasNextPage(getSearchConfig(scraper), page)) break;
+        if (
+          (pageSources.length > 0 && newSources.length === 0)
+          || isBackgroundListingPaginationStalled(requestedPageUrl, nextPageUrl)
+          || !resolveHasNextPage(getSearchConfig(scraper), page)
+        ) break;
       } catch (error) {
         if (!isScraperListingPaginationEndError(error) && results.length === 0) throw error;
         break;
@@ -346,16 +350,31 @@ export const runMangaCorrespondenceSearch = async (
   const loadAuthor = async (scraper: ScraperRecord, term: string): Promise<MultiSearchSourceResult[]> => {
     if (!canSearchAuthors(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
+    const resultKeys = new Set<string>();
     let nextPageUrl: string | undefined;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
+        const requestedPageUrl = nextPageUrl;
         const page = await fetchAuthorPageWithRetry(scraper, getAuthorConfig(scraper), term, pageIndex, nextPageUrl, pace, null, {
           scrapeDetailsWithCards: input.scrapeDetailsWithCards,
         });
-        results.push(...await enrichSourceResultsWithJapaneseRomanization(buildSourceResults(scraper, page, pageIndex, term)));
+        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
+          buildSourceResults(scraper, page, pageIndex, term),
+        );
+        const newSources = pageSources.filter((source) => {
+          const key = buildMultiSearchSourceIdentityKey(source);
+          if (resultKeys.has(key)) return false;
+          resultKeys.add(key);
+          return true;
+        });
+        results.push(...newSources);
         nextPageUrl = page.nextPageUrl;
-        if (!resolveHasNextAuthorPage(getAuthorConfig(scraper), page)) break;
+        if (
+          (pageSources.length > 0 && newSources.length === 0)
+          || isBackgroundListingPaginationStalled(requestedPageUrl, nextPageUrl)
+          || !resolveHasNextAuthorPage(getAuthorConfig(scraper), page)
+        ) break;
       } catch (error) {
         if (!isScraperListingPaginationEndError(error) && results.length === 0) throw error;
         break;
@@ -378,7 +397,10 @@ export const runMangaCorrespondenceSearch = async (
     if (input.strategy === "titleFirst") index = Math.max(0, queue.findIndex((task) => task.kind === "title"));
     if (input.strategy === "authorFirst") index = Math.max(0, queue.findIndex((task) => task.kind === "author"));
     if (input.strategy === "balanced") {
-      const preferred = queue.findIndex((task) => task.kind === balancedKind);
+      const discoveredTitle = queue.findIndex((task) => task.kind === "title" && Boolean(task.parentId));
+      const preferred = discoveredTitle >= 0
+        ? discoveredTitle
+        : queue.findIndex((task) => task.kind === balancedKind);
       index = preferred >= 0 ? preferred : 0;
       balancedKind = balancedKind === "title" ? "author" : "title";
     }
@@ -408,7 +430,11 @@ export const runMangaCorrespondenceSearch = async (
           sources = await loadAuthor(scraper, url);
         } else {
           const authorSources = await loadAuthorVariants(scraper, task.term);
-          const multiSourceAuthorMatches = await loadSearch(scraper, task.term);
+          const multiSourceAuthorMatches = await loadSearch(
+            scraper,
+            task.term,
+            Math.min(maxPages, AUTHOR_MULTI_SEARCH_MAX_PAGES),
+          );
           sources = [...authorSources, ...multiSourceAuthorMatches];
         }
         collected.push(...sources);

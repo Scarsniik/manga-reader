@@ -65,9 +65,17 @@ const getCompletedProgress = (result: BackgroundSearchExecutionResult): Backgrou
       completedUnits: result.runs.length,
       totalUnits: result.runs.length,
       resultCount,
+      excludedResultCount: result.runs.reduce(
+        (count, run) => count + ("excludedByBlacklistedTagCount" in run
+          ? run.excludedByBlacklistedTagCount ?? 0
+          : 0),
+        0,
+      ),
     };
   }
-  const completedUnits = result.searchedTitles.length + result.searchedAuthors.length;
+  const completedUnits = "searchedNames" in result
+    ? result.searchedNames.length
+    : result.searchedTitles.length + result.searchedAuthors.length;
   return {
     completedUnits,
     totalUnits: completedUnits,

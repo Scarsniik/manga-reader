@@ -56,10 +56,17 @@ Le parametre global `Stocker les resultats des auteurs favoris` remplace cette l
 La vue auteur favori expose aussi :
 
 - chaque source auteur, cliquable pour revenir a la page auteur du scrapper correspondant
+- une action `Trouver les correspondances`, egalement disponible sur les pages auteur classiques,
+  qui recherche les pages du meme auteur sur plusieurs sources
 - une action `Recherche multi-source` qui ouvre la recherche multi-sources avec les noms auteur
   uniques de toutes les sources du favori, separes par `, `, sans lancer la recherche
 - `Charger plus`, qui charge une page supplementaire sur les sources encore paginables
 - `Charger tout`, qui charge toutes les pages restantes sur les sources encore paginables
+
+La recherche de correspondances auteur analyse les resultats de recherche manga pour en extraire les
+liens auteur, puis teste aussi directement les modules Auteur configures avec un gabarit d'URL. La page
+de resultat affiche une ligne par page auteur, avec un apercu de ses premiers mangas. Chaque ligne permet
+d'ouvrir la page auteur et d'ajouter ou retirer cette source des auteurs favoris.
 
 La vue combinee reutilise aussi :
 

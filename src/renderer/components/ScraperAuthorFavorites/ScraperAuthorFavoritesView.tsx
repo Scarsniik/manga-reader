@@ -43,6 +43,8 @@ import useScraperSourceFavoriteSelection from "@/renderer/components/ScraperSour
 import ScraperAuthorFavoriteResults from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoriteResults";
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import { formatAuthorMultiSearchQuery } from "@/renderer/utils/authorSearchNames";
+import AuthorCorrespondenceDialog from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceDialog";
+import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "./style.scss";
@@ -64,7 +66,7 @@ export default function ScraperAuthorFavoritesView({
   backgroundSearchJobId,
   resultOnly = false,
 }: Props) {
-  const { openModal } = useModal();
+  const { openModal, closeModal } = useModal();
   const { params, setParams } = useParams();
   const { favorites, loading, error } = useScraperAuthorFavorites();
   const { favorites: tagFavorites } = useScraperTagFavorites();
@@ -163,7 +165,17 @@ export default function ScraperAuthorFavoritesView({
     trackedSources: loadedSources,
     logLabel: "author favorites",
   });
-  const mergedResults = useMemo(() => mergeMultiSearchResults(loadedSources), [loadedSources]);
+  const mergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+    preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
+  }), [
+    params?.multiSearchEnableRomajiPhoneticMerge,
+    params?.multiSearchMergedTitleLanguagePriority,
+  ]);
+  const mergedResults = useMemo(
+    () => mergeMultiSearchResults(loadedSources, mergeOptions),
+    [loadedSources, mergeOptions],
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
     [loadedSources],
@@ -280,6 +292,28 @@ export default function ScraperAuthorFavoritesView({
       },
     );
   }, [location.pathname, location.search, navigate, selectedFavoriteMultiSearchQuery]);
+
+  const handleOpenAuthorCorrespondence = useCallback(() => {
+    if (!selectedFavorite) return;
+    openModal({
+      title: "Trouver les correspondances auteur",
+      content: (
+        <AuthorCorrespondenceDialog
+          initialName={selectedFavorite.name}
+          initialNames={selectedFavorite.sources.map((source) => source.name)}
+          referenceSources={selectedFavorite.sources.map((source) => ({
+            scraperId: source.scraperId,
+            authorUrl: source.authorUrl,
+            name: source.name,
+            templateContext: source.templateContext,
+          }))}
+          onCancel={closeModal}
+          onQueued={() => closeModal()}
+        />
+      ),
+      className: "manga-correspondence-modal-shell",
+    });
+  }, [closeModal, openModal, selectedFavorite]);
 
   const enqueueSelectedFavoriteRefresh = useCallback(async () => {
     if (!selectedFavorite) return;
@@ -413,6 +447,17 @@ export default function ScraperAuthorFavoritesView({
         tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         resultOnly={resultOnly}
+        correspondenceAction={!resultOnly ? (
+          <button
+            type="button"
+            className="scraper-author-favorites-view__multi-search"
+            onClick={handleOpenAuthorCorrespondence}
+            title="Trouver les pages correspondantes de cet auteur"
+          >
+            <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+            <span>Trouver les correspondances</span>
+          </button>
+        ) : null}
         onBack={() => handleSelectFavorite(null)}
         onReload={handleReloadSelectedFavorite}
         onOpenMultiSearch={handleOpenSelectedFavoriteMultiSearch}

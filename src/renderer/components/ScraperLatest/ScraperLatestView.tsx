@@ -253,6 +253,8 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const { params, setParams } = useParams();
   const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
+  const hasStoredBlacklistDecision = attachedSearch.job?.metadata.kind === "latestSources"
+    && typeof attachedInput?.excludeBlacklistedTagCards === "boolean";
   const { openModal } = useModal();
   const hideBlacklistedLatestCards = params?.scraperHideBlacklistedTagCards === true;
   const {
@@ -498,7 +500,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   }, [sourceResults.viewHistoryRecordsById]);
 
   React.useEffect(() => {
-    if (params?.scraperScrapeDetailsWithCards !== true) {
+    if (hasStoredBlacklistDecision || params?.scraperScrapeDetailsWithCards !== true) {
       return undefined;
     }
 
@@ -586,6 +588,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   }, [
     baseActiveSources,
     blacklistEnrichedSourcesByKey,
+    hasStoredBlacklistDecision,
     params?.scraperBlacklistedTagsByScraper,
     params?.scraperScrapeDetailsWithCards,
   ]);
@@ -713,7 +716,13 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         name: `${run.name} - ${run.scraper.name}`,
         status: run.status,
         state: getStatusState(run.status === "cancelled" ? "done" : run.status),
-        detail: `${run.results.length} résultat(s), ${run.loadedPages} page(s) chargée(s)`,
+        detail: [
+          `${run.results.length} résultat(s)`,
+          (run.excludedByBlacklistedTagCount ?? 0) > 0
+            ? `${run.excludedByBlacklistedTagCount} ignorée(s) par blacklist`
+            : "",
+          `${run.loadedPages} page(s) chargée(s)`,
+        ].filter(Boolean).join(" - "),
         error: run.error,
       }))
       : activeTab === "authors"
@@ -1039,13 +1048,16 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           : 1,
       resultLimit: scraperResultLimit,
       paceMode: "careful",
-      concurrency: scraperLatestConcurrency,
+      concurrency: defaultScraperLatestConcurrency,
       includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+      excludeBlacklistedTagCards: isAuthors ? false : shouldHideBlacklistedLatestCards,
+      tagBlacklistByScraper: isAuthors ? undefined : params?.scraperBlacklistedTagsByScraper,
       selectedFavoriteIds: isAuthors ? authorIncludedFavorites.map((favorite) => favorite.id) : undefined,
       selectedScraperIds: isAuthors ? undefined : scraperIncludedScraperIds,
       selectedTagFavoriteIds: isAuthors ? undefined : scraperIncludedTagFavoriteIds,
       searchMode,
+      quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
     };
     await enqueueBackgroundSearch({
       kind: isAuthors ? "latestAuthors" : "latestSources",
@@ -1065,9 +1077,11 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
     scraperIncludedTagFavorites,
-    scraperLatestConcurrency,
+    defaultScraperLatestConcurrency,
+    scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scrapersById,
+    shouldHideBlacklistedLatestCards,
     tagResultLimit,
   ]);
 
@@ -1329,12 +1343,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         preserveStoredResults={attachedSearch.attached}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
-        hideBlacklistedCards={activeTab === "scrapers" ? hideBlacklistedLatestCards : false}
+        hideBlacklistedCards={activeTab === "scrapers" && !hasStoredBlacklistDecision
+          ? hideBlacklistedLatestCards
+          : false}
         showBlacklistedCardsLocally={showBlacklistedLatestCardsLocally}
         hiddenBlacklistedCardCount={hiddenBlacklistedLatestCardCount}
         languageFilterModes={sourceResults.languageFilterModes}
         enableRomajiPhoneticMerge={params?.multiSearchEnableRomajiPhoneticMerge === true}
-        onShowBlacklistedCardsLocallyChange={activeTab === "scrapers"
+        preferredTitleLanguageCodes={params?.multiSearchMergedTitleLanguagePriority ?? []}
+        onShowBlacklistedCardsLocallyChange={activeTab === "scrapers" && !hasStoredBlacklistDecision
           ? setShowBlacklistedLatestCardsLocally
           : undefined}
         onReload={resultOnly ? undefined : attachedSearch.attached ? () => { void attachedSearch.reload(); } : handleReload}

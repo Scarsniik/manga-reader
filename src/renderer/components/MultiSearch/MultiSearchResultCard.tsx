@@ -143,16 +143,15 @@ export default function MultiSearchResultCard({
 }: Props) {
   const sourceMenuRef = React.useRef<HTMLDetailsElement>(null);
   const openMenuRef = React.useRef<HTMLDetailsElement>(null);
+  const coverSource = React.useMemo(() => result.sources.find((source) => (
+    source.result.thumbnailUrl?.trim() === result.coverUrl?.trim()
+  )), [result.coverUrl, result.sources]);
   const coverUrls = React.useMemo(() => uniqueCoverUrls([
     {
       url: result.coverUrl,
-      refererUrl: result.sources[0]?.result.detailUrl || result.sources[0]?.scraper.baseUrl,
+      refererUrl: coverSource?.result.detailUrl || coverSource?.scraper.baseUrl,
     },
-    ...result.sources.map((source) => ({
-      url: source.result.thumbnailUrl,
-      refererUrl: source.result.detailUrl || source.scraper.baseUrl,
-    })),
-  ]), [result.coverUrl, result.sources]);
+  ]), [coverSource, result.coverUrl]);
   const coverUrlsKey = coverUrls.join("\n");
   const [coverIndex, setCoverIndex] = React.useState(0);
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : undefined;

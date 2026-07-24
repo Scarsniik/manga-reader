@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
-import type { MangaCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
+import type {
+  MangaCorrespondenceBackgroundResult,
+  MangaCorrespondenceMatch,
+} from "@/renderer/backgroundSearch/types";
+import type { MangaCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import {
@@ -10,16 +14,34 @@ import {
   getMultiSearchLanguageFilterMode,
   toggleMultiSearchLanguageFilterMode,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import {
+  buildMultiSearchSourceIdentityKey,
+  mergeMultiSearchResults,
+} from "@/renderer/components/MultiSearch/multiSearchMerge";
+import { selectPreferredMultiSearchTitleSource } from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
+  MultiSearchMergeOptions,
   MultiSearchMergedResult,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
+import useParams from "@/renderer/hooks/useParams";
+import useModal from "@/renderer/hooks/useModal";
+import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
+import { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+import { getLanguageLabel } from "@/renderer/utils/languageDetection";
+import {
+  getScraperFeature,
+  getScraperTitleAnalysisFeatureConfig,
+} from "@/renderer/utils/scraperRuntime";
+import MangaCorrespondenceReadingListDialog, {
+  type MangaCorrespondenceReadingListChapter,
+} from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceReadingListDialog";
+import type { ReadingListItem } from "@/renderer/types/readingList";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -41,53 +63,94 @@ const chapterSortValue = (value: string): number => {
 
 const buildChapterCard = (
   chapter: string,
-  sources: MultiSearchSourceResult[],
+  matches: MangaCorrespondenceMatch[],
   fallbackTitle: string,
-  mergeOptions: { enableRomajiPhoneticMerge: boolean },
-): MultiSearchMergedResult => {
-  const mergedParts = mergeMultiSearchResults(sources, mergeOptions);
-  const primary = mergedParts[0];
-  const displayTitle = chapter === "Non renseigné"
-    ? primary?.title || fallbackTitle
-    : `${fallbackTitle} · Chapitre ${chapter}`;
+  mergeOptions: MultiSearchMergeOptions,
+): MultiSearchMergedResult | undefined => {
+  const seenSourceKeys = new Set<string>();
+  const sources = matches.map((match) => match.source).filter((source) => {
+    const key = buildMultiSearchSourceIdentityKey(source);
+    if (seenSourceKeys.has(key)) return false;
+    seenSourceKeys.add(key);
+    return true;
+  });
+  if (!sources.length) return undefined;
+
+  const preferredSource = selectPreferredMultiSearchTitleSource(
+    sources,
+    mergeOptions.preferredTitleLanguageCodes,
+  );
   return {
     id: `manga-correspondence::chapter::${chapter}`,
-    title: displayTitle,
-    coverUrl: primary?.coverUrl || sources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
-    summary: primary?.summary,
-    pageCount: primary?.pageCount,
+    title: preferredSource?.result.title || fallbackTitle,
+    coverUrl: preferredSource?.result.thumbnailUrl,
+    summary: sources.find((source) => source.result.summary)?.result.summary,
+    pageCount: sources.find((source) => source.result.pageCount)?.result.pageCount,
     sources,
     sourceLanguageCodes: buildMultiSearchResultLanguageFilterCodes(sources),
     tentativeAuthorNames: Array.from(new Set(sources.flatMap((source) => source.tentativeAuthorNames))),
     contentTypes: Array.from(new Set(sources.flatMap((source) => source.contentTypes))),
+    preferredTitleLanguageCodes: [...mergeOptions.preferredTitleLanguageCodes],
   };
 };
 
 export default function MangaCorrespondenceView({ backgroundSearchJobId, resultOnly = false }: Props) {
   const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
+  const { params } = useParams();
+  const { openModal, closeModal } = useModal();
   const [displayMode, setDisplayMode] = useState<DisplayMode>("chapters");
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
-  const mergeOptions = useMemo(() => ({ enableRomajiPhoneticMerge: true }), []);
+  const input = job?.input as MangaCorrespondenceBackgroundInput | undefined;
+  const mergeOptions = useMemo<MultiSearchMergeOptions>(() => ({
+    enableRomajiPhoneticMerge: true,
+    preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
+  }), [params?.multiSearchMergedTitleLanguagePriority]);
   const allSources = useMemo(() => result?.matches.map((match) => match.source) ?? [], [result?.matches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
-  const chapterCards = useMemo(() => {
-    const byChapter = new Map<string, MultiSearchSourceResult[]>();
+  const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => {
+    const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
     (result?.matches ?? []).forEach((match) => {
-      const chapter = match.chapter || "Non renseigné";
-      byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match.source]);
+      const titleAnalysis = analyzeMangaCorrespondenceTitle(
+        match.source.result.title,
+        getScraperTitleAnalysisFeatureConfig(getScraperFeature(match.source.scraper, "titleAnalysis")),
+      );
+      const inferredFirstChapter = inferMangaCorrespondenceFirstChapter(titleAnalysis, [
+        match.matchedTerm,
+        input?.reference.title ?? "",
+        ...(input?.reference.alternativeTitles ?? []),
+      ]);
+      const chapter = titleAnalysis.chapter || match.chapter || inferredFirstChapter || "Non renseigné";
+      byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())
       .sort(([left], [right]) => chapterSortValue(left) - chapterSortValue(right) || left.localeCompare(right))
-      .map(([chapter, sources]) => buildChapterCard(
-        chapter,
-        sources,
-        job?.metadata.primaryTerm || "Manga",
-        mergeOptions,
-      ));
-  }, [job?.metadata.primaryTerm, mergeOptions, result?.matches]);
+      .flatMap(([chapter, matches]) => {
+        const resultCard = buildChapterCard(
+          chapter,
+          matches,
+          job?.metadata.primaryTerm || "Manga",
+          mergeOptions,
+        );
+        return resultCard ? [{ chapter, result: resultCard }] : [];
+      });
+  }, [
+    input?.reference.alternativeTitles,
+    input?.reference.title,
+    job?.metadata.primaryTerm,
+    mergeOptions,
+    result?.matches,
+  ]);
+  const chapterCards = useMemo(
+    () => chapterEntries.map((entry) => entry.result),
+    [chapterEntries],
+  );
+  const readingListChapters = useMemo(
+    () => chapterEntries.filter((entry) => entry.chapter !== "Non renseigné"),
+    [chapterEntries],
+  );
   const resultLanguageCodes = useMemo(() => buildMultiSearchResultLanguageFilterCodes(allSources), [allSources]);
   const visibleClassicGroups = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(classicGroups, languageFilterModes),
@@ -131,6 +194,35 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       bookmarksFilterScraperId: null,
     }) });
   };
+  const createReadingList = async (
+    items: ReadingListItem[],
+    languageCode: string,
+  ): Promise<void> => {
+    const title = `${job?.metadata.primaryTerm || "Manga"} · ${getLanguageLabel(languageCode)}`;
+    const opened = await openWorkspaceTarget({
+      kind: "reading-list",
+      items,
+      title,
+    });
+    if (!opened) {
+      throw new Error("L’espace de travail n’a pas pu ouvrir la liste de lecture.");
+    }
+    closeModal();
+  };
+  const openReadingListDialog = () => {
+    openModal({
+      title: "Créer une liste de lecture",
+      className: "manga-correspondence-reading-list-modal",
+      content: (
+        <MangaCorrespondenceReadingListDialog
+          chapters={readingListChapters}
+          preferredLanguageCodes={mergeOptions.preferredTitleLanguageCodes}
+          onCancel={closeModal}
+          onCreate={createReadingList}
+        />
+      ),
+    });
+  };
   const renderCards = (items: MultiSearchMergedResult[]) => (
     <div className="manga-correspondence-view__results">
       {items.map((item) => (
@@ -156,6 +248,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
   const active = job.metadata.status === "queued" || job.metadata.status === "running";
   const displayedCards = displayMode === "chapters" ? visibleChapterCards : visibleClassicGroups;
+  const traceSearchCount = result?.trace.filter((step) => (
+    step.kind === "titleSearch" || step.kind === "authorSearch"
+  )).length ?? 0;
+  const traceDiscoveryCount = (result?.trace.length ?? 0) - traceSearchCount;
   return (
     <section className="manga-correspondence-view">
       {!resultOnly ? <header className="manga-correspondence-view__summary">
@@ -167,13 +263,23 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}
       <details className="manga-correspondence-view__trace">
-        <summary>Déroulé de la recherche ({result?.trace.length ?? 0} étapes)</summary>
+        <summary>
+          Déroulé de la recherche ({result?.trace.length ?? 0} événements · {traceSearchCount} recherches · {traceDiscoveryCount} découvertes)
+        </summary>
         <ol>{result?.trace.map((step) => <li key={step.id}><strong>{step.label}</strong><span>{step.term}</span>{typeof step.resultCount === "number" ? <small>{step.resultCount} nouveau(x) résultat(s)</small> : null}</li>)}</ol>
       </details>
       <div className="manga-correspondence-view__controls">
         <div className="manga-correspondence-view__toolbar" aria-label="Mode d’affichage">
           <button type="button" className={displayMode === "chapters" ? "is-active" : ""} onClick={() => setDisplayMode("chapters")}>Par chapitre</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
+          <button
+            type="button"
+            className="manga-correspondence-view__reading-list"
+            onClick={openReadingListDialog}
+            disabled={!readingListChapters.length}
+          >
+            Créer une liste de lecture
+          </button>
         </div>
         <MultiSearchLanguageFilterBar
           languageCodes={resultLanguageCodes}

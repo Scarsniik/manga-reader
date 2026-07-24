@@ -11,6 +11,10 @@ import {
   type MultiSearchTitleMatchKind,
 } from "@/renderer/components/MultiSearch/multiSearchTitleMerge";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
+import {
+  normalizeMultiSearchTitleLanguagePriority,
+  selectPreferredMultiSearchTitleSource,
+} from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
 
 export type MultiSearchMergeState = {
   groups: MultiSearchMergedResult[];
@@ -29,20 +33,34 @@ type MultiSearchGroupMatch = {
 
 export const DEFAULT_MULTI_SEARCH_MERGE_OPTIONS: MultiSearchMergeOptions = {
   enableRomajiPhoneticMerge: false,
+  preferredTitleLanguageCodes: [],
 };
 
 export const normalizeMultiSearchMergeOptions = (
   options: Partial<MultiSearchMergeOptions> | null | undefined,
-): MultiSearchMergeOptions => ({
-  ...DEFAULT_MULTI_SEARCH_MERGE_OPTIONS,
-  ...(options ?? {}),
-});
+): MultiSearchMergeOptions => {
+  const normalized = {
+    ...DEFAULT_MULTI_SEARCH_MERGE_OPTIONS,
+    ...(options ?? {}),
+  };
+  return {
+    ...normalized,
+    preferredTitleLanguageCodes: normalizeMultiSearchTitleLanguagePriority(
+      normalized.preferredTitleLanguageCodes,
+    ),
+  };
+};
 
 export const areMultiSearchMergeOptionsEqual = (
   left: MultiSearchMergeOptions,
   right: MultiSearchMergeOptions,
 ): boolean => (
   left.enableRomajiPhoneticMerge === right.enableRomajiPhoneticMerge
+  && left.preferredTitleLanguageCodes.length === right.preferredTitleLanguageCodes.length
+  && left.preferredTitleLanguageCodes.every((
+    languageCode,
+    index,
+  ) => languageCode === right.preferredTitleLanguageCodes[index])
 );
 
 export const createMultiSearchMergeState = (
@@ -59,6 +77,13 @@ export const createMultiSearchMergeState = (
   };
 
   groups.forEach((group, index) => {
+    const preferredSource = selectPreferredMultiSearchTitleSource(
+      group.sources,
+      state.options.preferredTitleLanguageCodes,
+    );
+    group.title = preferredSource?.result.title || group.title;
+    group.coverUrl = preferredSource?.result.thumbnailUrl;
+    group.preferredTitleLanguageCodes = [...state.options.preferredTitleLanguageCodes];
     state.groupIndexes.set(group, index);
     group.sources.forEach((source) => indexGroupSource(state, group, source));
   });
@@ -130,7 +155,10 @@ const buildMergedResultId = (source: MultiSearchSourceResult): string => (
   `multi-search::${buildMultiSearchSourceIdentityKey(source)}`
 );
 
-const buildMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedResult => ({
+const buildMergedResult = (
+  source: MultiSearchSourceResult,
+  options: MultiSearchMergeOptions,
+): MultiSearchMergedResult => ({
   id: buildMergedResultId(source),
   title: source.result.title,
   coverUrl: source.result.thumbnailUrl,
@@ -140,6 +168,7 @@ const buildMergedResult = (source: MultiSearchSourceResult): MultiSearchMergedRe
   sourceLanguageCodes: uniqueValues(getSourceLanguageValuesForMerge(source)),
   tentativeAuthorNames: uniqueValues(source.tentativeAuthorNames),
   contentTypes: uniqueValues(source.contentTypes),
+  preferredTitleLanguageCodes: [...options.preferredTitleLanguageCodes],
 });
 
 const addGroupToIndex = <Key,>(
@@ -228,6 +257,7 @@ const collectCandidateGroups = (
 const appendSourceToGroup = (
   group: MultiSearchMergedResult,
   source: MultiSearchSourceResult,
+  options: MultiSearchMergeOptions,
 ): boolean => {
   const sourceIdentityKey = buildMultiSearchSourceIdentityKey(source);
   if (group.sources.some((groupSource) => buildMultiSearchSourceIdentityKey(groupSource) === sourceIdentityKey)) {
@@ -247,9 +277,13 @@ const appendSourceToGroup = (
     ...group.contentTypes,
     ...source.contentTypes,
   ]);
-  if (!group.coverUrl && source.result.thumbnailUrl) {
-    group.coverUrl = source.result.thumbnailUrl;
-  }
+  const preferredSource = selectPreferredMultiSearchTitleSource(
+    group.sources,
+    options.preferredTitleLanguageCodes,
+  );
+  group.title = preferredSource?.result.title || group.title;
+  group.coverUrl = preferredSource?.result.thumbnailUrl;
+  group.preferredTitleLanguageCodes = [...options.preferredTitleLanguageCodes];
   if (!group.summary && source.result.summary) {
     group.summary = source.result.summary;
   }
@@ -283,13 +317,13 @@ export const mergeMultiSearchSourceIntoState = (
   const match = findSourceGroupMatch(state, source);
 
   if (match) {
-    if (appendSourceToGroup(match.group, source)) {
+    if (appendSourceToGroup(match.group, source, state.options)) {
       indexGroupSource(state, match.group, source);
     }
     return;
   }
 
-  const newGroup = buildMergedResult(source);
+  const newGroup = buildMergedResult(source, state.options);
   state.groupIndexes.set(newGroup, state.groups.length);
   state.groups.push(newGroup);
   indexGroupSource(state, newGroup, source);
@@ -304,11 +338,11 @@ export const mergeMultiSearchSourceIntoGroups = (
   const match = findSourceGroupMatch(state, source);
 
   if (match) {
-    appendSourceToGroup(match.group, source);
+    appendSourceToGroup(match.group, source, state.options);
     return;
   }
 
-  groups.push(buildMergedResult(source));
+  groups.push(buildMergedResult(source, state.options));
 };
 
 export const sortMultiSearchMergedResults = (

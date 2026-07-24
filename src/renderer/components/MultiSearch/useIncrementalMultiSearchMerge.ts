@@ -107,6 +107,7 @@ export default function useIncrementalMultiSearchMerge(
   optionsInput?: Partial<MultiSearchMergeOptions> | null,
 ): IncrementalMultiSearchMergeResult {
   const options = normalizeMultiSearchMergeOptions(optionsInput);
+  const preferredTitleLanguageCodesKey = options.preferredTitleLanguageCodes.join("|");
   const cacheRef = useRef<MergeCache>(buildEmptyMergeCache(refreshKey, options));
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
@@ -249,7 +250,12 @@ export default function useIncrementalMultiSearchMerge(
       };
 
     worker.postMessage(request);
-  }, [options.enableRomajiPhoneticMerge, refreshKey, sources]);
+  }, [
+    options.enableRomajiPhoneticMerge,
+    preferredTitleLanguageCodesKey,
+    refreshKey,
+    sources,
+  ]);
 
   return {
     mergedResults: sources.length ? mergedResults : [],

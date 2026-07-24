@@ -16,6 +16,7 @@ export type BackgroundListingRun = {
   hasNextPage: boolean;
   currentPageUrl?: string;
   nextPageUrl?: string;
+  excludedByBlacklistedTagCount?: number;
   error?: string;
 };
 
@@ -46,7 +47,26 @@ export type MangaCorrespondenceBackgroundResult = {
   searchedAuthors: string[];
 };
 
+export type AuthorCorrespondenceMatch = {
+  key: string;
+  scraperId: string;
+  scraperName: string;
+  authorName: string;
+  authorUrl: string;
+  templateContext?: Record<string, string | undefined> | null;
+  matchedName: string;
+  discoveryMethods: Array<"reference" | "search" | "authorModule">;
+  previewSources: MultiSearchSourceResult[];
+};
+
+export type AuthorCorrespondenceBackgroundResult = {
+  referenceName: string;
+  matches: AuthorCorrespondenceMatch[];
+  searchedNames: string[];
+};
+
 export type BackgroundSearchExecutionResult =
   | MultiSearchBackgroundResult
   | ListingBackgroundResult
+  | AuthorCorrespondenceBackgroundResult
   | MangaCorrespondenceBackgroundResult;

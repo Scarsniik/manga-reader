@@ -23,6 +23,7 @@ import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/comp
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import ScraperTagListView from '@/renderer/components/ScraperBrowser/components/ScraperTagListView';
 import MangaCorrespondenceDialog from '@/renderer/components/MangaCorrespondence/MangaCorrespondenceDialog';
+import AuthorCorrespondenceDialog from '@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceDialog';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
 import useScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
@@ -117,7 +118,8 @@ import {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from '@/renderer/utils/scraperRuntime';
-import { analyzeScraperTitle, getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
+import { getScraperTitleAnalysisSearchTitle } from '@/renderer/utils/scraperTitleAnalysis';
+import { analyzeMangaCorrespondenceTitle } from '@/renderer/utils/mangaCorrespondenceTitleAnalysis';
 import { buildScraperTemplateContextFromDetails, type ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import {
   buildScraperTagBlacklistEntry,
@@ -453,7 +455,7 @@ export default function ScraperBrowser({
 
     return getScraperTitleAnalysisSearchTitle(rawTitle, titleAnalysisConfig).trim();
   }, [detailsResult?.title, titleAnalysisConfig]);
-  const correspondenceTitleAnalysis = useMemo(() => analyzeScraperTitle(
+  const correspondenceTitleAnalysis = useMemo(() => analyzeMangaCorrespondenceTitle(
     detailsResult?.title?.trim() ?? '',
     titleAnalysisConfig,
   ), [detailsResult?.title, titleAnalysisConfig]);
@@ -1269,6 +1271,43 @@ export default function ScraperBrowser({
       },
     );
   }, [authorMultiSearchQuery, location.search, navigate, setRuntimeError]);
+  const handleOpenAuthorCorrespondence = useCallback(() => {
+    const initialName = authorNameCandidates[0];
+    if (!initialName) {
+      setRuntimeError('Aucun nom auteur exploitable n\'est disponible.');
+      return;
+    }
+    openModal({
+      title: 'Trouver les correspondances auteur',
+      content: (
+        <AuthorCorrespondenceDialog
+          initialName={initialName}
+          initialNames={authorNameCandidates}
+          referenceSources={[{
+            scraperId: scraper.id,
+            authorUrl: query.trim(),
+            name: authorSourceName,
+            templateContext: authorTemplateContext,
+          }]}
+          onCancel={closeModal}
+          onQueued={(message) => {
+            closeModal();
+            setRuntimeMessage(message);
+          }}
+        />
+      ),
+      className: 'manga-correspondence-modal-shell',
+    });
+  }, [
+    authorNameCandidates,
+    authorSourceName,
+    authorTemplateContext,
+    closeModal,
+    openModal,
+    query,
+    scraper.id,
+    setRuntimeError,
+  ]);
   const buildTitleMultiSearchTarget = useCallback((): WorkspaceTarget | null => {
     if (!titleMultiSearchQuery) {
       return null;
@@ -1357,7 +1396,6 @@ export default function ScraperBrowser({
       return;
     }
     const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl || '';
-    const chapter = correspondenceTitleAnalysis.sequenceMarkers.find((marker) => marker.kind === 'chapter')?.value;
     openModal({
       title: 'Rechercher des correspondances',
       content: (
@@ -1372,7 +1410,7 @@ export default function ScraperBrowser({
             ...detailsResult.authors,
           ]))}
           initialAuthorUrls={detailsResult.authorUrls}
-          initialChapter={chapter}
+          initialChapter={correspondenceTitleAnalysis.chapter}
           onCancel={closeModal}
           onQueued={(message) => {
             closeModal();
@@ -1508,6 +1546,18 @@ export default function ScraperBrowser({
       <span>Recherche multi-source</span>
     </button>
   ) : null;
+  const authorCorrespondenceAction = mode === 'author' ? (
+    <button
+      type="button"
+      className="scraper-browser__author-multi-search"
+      onClick={handleOpenAuthorCorrespondence}
+      disabled={loading || !authorNameCandidates.length}
+      title="Trouver les pages correspondantes de cet auteur"
+    >
+      <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+      <span>Trouver les correspondances</span>
+    </button>
+  ) : null;
   const authorFavoriteAction = mode === 'author' && query.trim() ? (
     <ScraperAuthorFavoriteButton
       scraperId={scraper.id}
@@ -1550,6 +1600,7 @@ export default function ScraperBrowser({
   const authorHeaderAction = mode === 'author' ? (
     <>
       {authorCombinedViewAction}
+      {authorCorrespondenceAction}
       {authorMultiSearchAction}
       {authorFavoriteAction}
     </>
@@ -2381,7 +2432,7 @@ export default function ScraperBrowser({
           tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
           tagFavorites={tagFavorites}
           hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
-          favoriteAction={authorFavoriteAction}
+          favoriteAction={<>{authorCorrespondenceAction}{authorFavoriteAction}</>}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
           onOpenSourceDetails={effectiveRouteSyncEnabled ? undefined : handleOpenAuthorCombinedSource}

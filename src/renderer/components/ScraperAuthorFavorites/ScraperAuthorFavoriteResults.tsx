@@ -43,6 +43,7 @@ type Props = {
   tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   resultOnly?: boolean;
+  correspondenceAction?: React.ReactNode;
   onBack: () => void;
   onReload: () => void;
   onOpenMultiSearch: () => void;
@@ -94,6 +95,7 @@ export default function ScraperAuthorFavoriteResults({
   tagFavorites = [],
   hideBlacklistedCards = false,
   resultOnly = false,
+  correspondenceAction = null,
   onBack,
   onReload,
   onOpenMultiSearch,
@@ -137,6 +139,7 @@ export default function ScraperAuthorFavoriteResults({
       tagFavorites={tagFavorites}
       hideBlacklistedCards={hideBlacklistedCards}
       readOnly={resultOnly}
+      favoriteAction={correspondenceAction}
       backLabel={resultOnly ? null : "Retour aux auteurs favoris"}
       onBack={onBack}
       onReload={onReload}

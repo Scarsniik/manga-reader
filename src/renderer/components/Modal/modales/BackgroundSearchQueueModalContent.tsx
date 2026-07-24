@@ -39,6 +39,7 @@ const formatStatus = (status: string): string => ({
 const formatKind = (kind: string): string => ({
   multiSearch: "Multi-sources",
   mangaCorrespondence: "Correspondances manga",
+  authorCorrespondence: "Correspondances auteur",
   scraperAuthor: "Auteur",
   latestSources: "Nouveautés · sources",
   latestAuthors: "Nouveautés · auteurs",
@@ -52,8 +53,11 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat("fr-FR", {
 
 const formatResultCount = (job: BackgroundSearchJobMetadata): string => {
   const count = job.progress.resultCount;
-  if (job.kind === "mangaCorrespondence") {
+  if (job.kind === "mangaCorrespondence" || job.kind === "authorCorrespondence") {
     return `${count} correspondance(s)`;
+  }
+  if (job.kind === "latestSources" && (job.progress.excludedResultCount ?? 0) > 0) {
+    return `${count} résultat(s) hors blacklist`;
   }
   return `${count} résultat(s) avant fusion`;
 };

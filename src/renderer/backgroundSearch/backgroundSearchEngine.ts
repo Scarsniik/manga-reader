@@ -1,4 +1,5 @@
 import type {
+  AuthorCorrespondenceBackgroundInput,
   BackgroundSearchJob,
   BackgroundSearchKind,
   BackgroundSearchProgress,
@@ -13,6 +14,7 @@ import {
 } from "@/shared/scraper";
 import {
   buildSourceResults,
+  enrichSourceResultsWithCardDetails,
   fetchAuthorPageWithRetry,
   fetchHomepagePageWithRetry,
   fetchSearchPageWithRetry,
@@ -46,7 +48,18 @@ import type {
   MultiSearchBackgroundResult,
 } from "@/renderer/backgroundSearch/types";
 import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
-import { resolveBackgroundListingConcurrency } from "@/renderer/backgroundSearch/backgroundListingExecution";
+import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
+import {
+  resolveBackgroundListingConcurrency,
+  resolveBackgroundQuickSeenProgress,
+} from "@/renderer/backgroundSearch/backgroundListingExecution";
+import {
+  BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
+  filterBackgroundListingSourcesByBlacklist,
+  isBackgroundListingPaginationStalled,
+  resolveBackgroundListingAcceptedTarget,
+  shouldContinueBackgroundBlacklistBackfill,
+} from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -218,7 +231,7 @@ const runListings = async (
   const knownHistoryIds = filterHistory ? await getKnownHistoryIds() : new Set<string>();
   const pace = getPaceConfig(input.paceMode);
   const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
-  const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
+  const configuredMaxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
   const runs: BackgroundListingRun[] = input.sources.map((source) => ({
     key: source.id,
     name: source.name,
@@ -233,6 +246,10 @@ const runListings = async (
     completedUnits: runs.filter((run) => run.status === "done" || run.status === "error").length,
     totalUnits: runs.length,
     resultCount: countListingResults(runs),
+    excludedResultCount: runs.reduce(
+      (count, run) => count + (run.excludedByBlacklistedTagCount ?? 0),
+      0,
+    ),
     currentLabel: label,
   });
   await emit();
@@ -244,9 +261,18 @@ const runListings = async (
     try {
       const source = input.sources[runIndex];
       const resultLimit = Math.max(0, Math.floor(source.resultLimit ?? input.resultLimit ?? 0));
-      for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+      const backfillBlacklistedResults = kind === "latestSources"
+        && input.excludeBlacklistedTagCards === true;
+      const executionPageLimit = backfillBlacklistedResults ? 250 : configuredMaxPages;
+      const rawQuotaResultKeys = new Set<string>();
+      const seenCandidateResultKeys = new Set<string>();
+      let acceptedResultTarget = 0;
+      let consecutiveStagnantBackfillPages = 0;
+      let consecutiveSeenResultCount = 0;
+      for (let pageIndex = 0; pageIndex < executionPageLimit; pageIndex += 1) {
         throwIfAborted(signal);
         const sourceMode = source.mode ?? (kind === "latestSources" ? "homepage" : "author");
+        const requestedPageUrl = run.nextPageUrl;
         const page = sourceMode === "homepage"
           ? await fetchHomepagePageWithRetry(
             run.scraper,
@@ -254,7 +280,7 @@ const runListings = async (
             pageIndex,
             run.nextPageUrl,
             pace,
-            { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+            { scrapeDetailsWithCards: false },
           ) : sourceMode === "search"
           ? await fetchSearchPageWithRetry(
             run.scraper,
@@ -263,7 +289,7 @@ const runListings = async (
             pageIndex,
             run.nextPageUrl,
             pace,
-            { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+            { scrapeDetailsWithCards: false },
           ) : sourceMode === "tag"
           ? await fetchTagPageWithRetry(
             run.scraper,
@@ -272,7 +298,7 @@ const runListings = async (
             pageIndex,
             run.nextPageUrl,
             pace,
-            { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+            { scrapeDetailsWithCards: false },
           ) : await fetchAuthorPageWithRetry(
             run.scraper,
             getAuthorConfig(run.scraper),
@@ -281,7 +307,7 @@ const runListings = async (
             run.nextPageUrl,
             pace,
             source.templateContext ?? null,
-            { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+            { scrapeDetailsWithCards: false },
           );
         const pageWithResultTag = source.resultTag
           ? {
@@ -293,33 +319,95 @@ const runListings = async (
             ),
           }
           : page;
-        const sources = await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(run.scraper, pageWithResultTag, pageIndex, run.name)
+        const pageSources = buildSourceResults(run.scraper, pageWithResultTag, pageIndex, run.name)
+          .filter((item) => doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes));
+        const newPageSources = pageSources.filter((item) => {
+          const key = normalizeResultUrl(item);
+          if (seenCandidateResultKeys.has(key)) return false;
+          seenCandidateResultKeys.add(key);
+          return true;
+        });
+        const quickSeenProgress = resolveBackgroundQuickSeenProgress(
+          newPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
+          consecutiveSeenResultCount,
+          input.quickConsecutiveSeenStopThreshold,
+        );
+        consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
+        const rawUnseenSources = newPageSources
+          .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
+        const detailedSources = await enrichSourceResultsWithCardDetails(run.scraper, rawUnseenSources, {
+          scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+        });
+        const newEligibleSources = await enrichSourceResultsWithJapaneseRomanization(
+          detailedSources
             .filter((item) => doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes))
             .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
         );
-        let nextResults = appendUniqueResults(run.results, sources);
-        if (resultLimit > 0) nextResults = nextResults.slice(0, resultLimit);
-        const hasNextPage = sourceMode === "homepage"
+        if (backfillBlacklistedResults && pageIndex < configuredMaxPages) {
+          newEligibleSources.forEach((item) => rawQuotaResultKeys.add(normalizeResultUrl(item)));
+          acceptedResultTarget = resolveBackgroundListingAcceptedTarget(
+            rawQuotaResultKeys.size,
+            resultLimit,
+          );
+        }
+        const blacklistFilter = kind === "latestSources"
+          ? filterBackgroundListingSourcesByBlacklist(newEligibleSources, input)
+          : { accepted: newEligibleSources, excludedCount: 0 };
+        let nextResults = appendUniqueResults(run.results, blacklistFilter.accepted);
+        const storedResultLimit = backfillBlacklistedResults ? acceptedResultTarget : resultLimit;
+        if (storedResultLimit > 0) nextResults = nextResults.slice(0, storedResultLimit);
+        const sourceHasNextPage = sourceMode === "homepage"
           ? resolveHasNextHomepagePage(getHomepageConfig(run.scraper), page)
           : sourceMode === "search"
             ? resolveHasNextPage(getSearchConfig(run.scraper), page)
             : sourceMode === "tag"
               ? resolveHasNextTagPage(getTagConfig(run.scraper), page)
               : resolveHasNextAuthorPage(getAuthorConfig(run.scraper), page);
+        const isBackfillPage = pageIndex >= configuredMaxPages;
+        consecutiveStagnantBackfillPages = backfillBlacklistedResults
+          && isBackfillPage
+          && newEligibleSources.length === 0
+          ? consecutiveStagnantBackfillPages + 1
+          : 0;
+        const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
+        const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
+        const quickAuthorBoundaryReached = kind === "latestAuthors"
+          && input.searchMode === "quick"
+          && quickSeenProgress.boundaryReached
+          && !(pageIndex === 0 && rawUnseenSources.length > 0);
+        const backfillStalled = backfillBlacklistedResults
+          && isBackfillPage
+          && consecutiveStagnantBackfillPages >= BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES;
+        const canLoadAnotherPage = sourceHasNextPage
+          && !paginationStalled
+          && !duplicatePage
+          && !quickAuthorBoundaryReached
+          && !backfillStalled;
+        const hasNextPage = backfillBlacklistedResults
+          ? shouldContinueBackgroundBlacklistBackfill({
+            sourceHasNextPage: canLoadAnotherPage,
+            nextPageIndex: pageIndex + 1,
+            configuredMaxPages,
+            resultLimit,
+            acceptedResultTarget,
+            storedResultCount: nextResults.length,
+          })
+          : canLoadAnotherPage && (resultLimit === 0 || nextResults.length < resultLimit);
         run = {
           ...run,
           results: nextResults,
           loadedPages: pageIndex + 1,
-          hasNextPage: hasNextPage && (resultLimit === 0 || nextResults.length < resultLimit),
+          hasNextPage,
           currentPageUrl: page.currentPageUrl,
           nextPageUrl: page.nextPageUrl,
+          excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
+            + blacklistFilter.excludedCount,
         };
         runs[runIndex] = run;
         await emit(run.name);
         if (!run.hasNextPage) break;
       }
-      if (input.maxPages === null && run.hasNextPage) {
+      if ((input.maxPages === null || backfillBlacklistedResults) && run.hasNextPage) {
         throw new Error("Limite de sécurité atteinte pendant le chargement complet.");
       }
       run = { ...run, status: "done" };
@@ -354,6 +442,11 @@ export const executeBackgroundSearch = async (
     multiSearch: () => runMultiSearch(job.input as MultiSearchBackgroundInput, signal, onSnapshot),
     mangaCorrespondence: () => runMangaCorrespondenceSearch(
       job.input as MangaCorrespondenceBackgroundInput,
+      signal,
+      onSnapshot,
+    ),
+    authorCorrespondence: () => runAuthorCorrespondenceSearch(
+      job.input as AuthorCorrespondenceBackgroundInput,
       signal,
       onSnapshot,
     ),

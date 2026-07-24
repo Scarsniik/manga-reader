@@ -35,6 +35,7 @@ import {
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "@/renderer/components/ScraperAuthorFavorites/style.scss";
+import useParams from "@/renderer/hooks/useParams";
 
 type Props = {
   scraper: ScraperRecord;
@@ -101,6 +102,7 @@ export default function ScraperAuthorCombinedView({
   onSwitchToPagedView,
   onOpenSourceDetails,
 }: Props) {
+  const { params } = useParams();
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
@@ -153,7 +155,17 @@ export default function ScraperAuthorCombinedView({
     logLabel: "direct author combined view",
     onOpenSourceDetails,
   });
-  const mergedResults = useMemo(() => mergeMultiSearchResults(loadedSources), [loadedSources]);
+  const mergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+    preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
+  }), [
+    params?.multiSearchEnableRomajiPhoneticMerge,
+    params?.multiSearchMergedTitleLanguagePriority,
+  ]);
+  const mergedResults = useMemo(
+    () => mergeMultiSearchResults(loadedSources, mergeOptions),
+    [loadedSources, mergeOptions],
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
     [loadedSources],

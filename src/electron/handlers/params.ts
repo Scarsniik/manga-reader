@@ -641,6 +641,7 @@ const defaultSettings = {
     savedScraperSearches: [],
     multiSearchShowUnseenFirst: false,
     multiSearchEnableRomajiPhoneticMerge: false,
+    multiSearchMergedTitleLanguagePriority: [] as string[],
     multiSearchSelectedScraperIds: [] as string[],
     multiSearchSelectedLanguageCodes: [] as string[],
     multiSearchIncludedLanguageCodes: [] as string[],
@@ -832,6 +833,9 @@ const normalizeSettings = (value: unknown) => {
     merged.multiSearchEnableRomajiPhoneticMerge = typeof merged.multiSearchEnableRomajiPhoneticMerge === "boolean"
         ? merged.multiSearchEnableRomajiPhoneticMerge
         : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
+    merged.multiSearchMergedTitleLanguagePriority = normalizeLowercaseStringListSetting(
+        merged.multiSearchMergedTitleLanguagePriority,
+    );
     merged.multiSearchSelectedScraperIds = normalizeStringListSetting(
         merged.multiSearchSelectedScraperIds,
     );
@@ -1178,6 +1182,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
             ? nextSettings.multiSearchEnableRomajiPhoneticMerge
             : defaultSettings.multiSearchEnableRomajiPhoneticMerge;
+        nextSettings.multiSearchMergedTitleLanguagePriority = normalizeLowercaseStringListSetting(
+            nextSettings.multiSearchMergedTitleLanguagePriority,
+        );
         nextSettings.multiSearchSelectedScraperIds = normalizeStringListSetting(
             nextSettings.multiSearchSelectedScraperIds,
         );

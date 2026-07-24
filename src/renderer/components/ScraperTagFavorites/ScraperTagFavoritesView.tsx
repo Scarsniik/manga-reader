@@ -101,7 +101,17 @@ export default function ScraperTagFavoritesView({
     trackedSources: visibleSources,
     logLabel: "tag favorites",
   });
-  const mergedResults = useMemo(() => mergeMultiSearchResults(visibleSources), [visibleSources]);
+  const mergeOptions = useMemo(() => ({
+    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+    preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
+  }), [
+    params?.multiSearchEnableRomajiPhoneticMerge,
+    params?.multiSearchMergedTitleLanguagePriority,
+  ]);
+  const mergedResults = useMemo(
+    () => mergeMultiSearchResults(visibleSources, mergeOptions),
+    [mergeOptions, visibleSources],
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],

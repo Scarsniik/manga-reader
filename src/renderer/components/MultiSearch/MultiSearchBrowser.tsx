@@ -284,7 +284,11 @@ export default function MultiSearchBrowser({
   const showUnseenFirst = canShowUnseenFirst && params?.multiSearchShowUnseenFirst === true;
   const mergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
-  }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+    preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
+  }), [
+    params?.multiSearchEnableRomajiPhoneticMerge,
+    params?.multiSearchMergedTitleLanguagePriority,
+  ]);
 
   const applyPersistentSettings = React.useCallback((settings: MultiSearchPersistentSettings) => {
     setSelectedScraperIds(settings.selectedScraperIds);

@@ -72,6 +72,7 @@ type Props = {
   hiddenBlacklistedCardCount?: number;
   languageFilterModes: MultiSearchLanguageFilterModes;
   enableRomajiPhoneticMerge?: boolean;
+  preferredTitleLanguageCodes?: string[];
   onShowBlacklistedCardsLocallyChange?: (showBlacklistedCards: boolean) => void;
   onReload?: () => void;
   onSecondaryAction?: () => void;
@@ -202,6 +203,7 @@ export default function ScraperLatestResults({
   hiddenBlacklistedCardCount = 0,
   languageFilterModes,
   enableRomajiPhoneticMerge = false,
+  preferredTitleLanguageCodes = [],
   onShowBlacklistedCardsLocallyChange,
   onReload,
   onSecondaryAction,
@@ -221,7 +223,7 @@ export default function ScraperLatestResults({
   const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
     sources,
     mergeRefreshKey,
-    { enableRomajiPhoneticMerge },
+    { enableRomajiPhoneticMerge, preferredTitleLanguageCodes },
   );
   const resultLanguageCodes = React.useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(sources),

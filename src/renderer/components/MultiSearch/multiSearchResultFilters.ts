@@ -4,6 +4,7 @@ import type {
   MultiSearchScraperRun,
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
+import { selectPreferredMultiSearchTitleSource } from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
 
 export const uniqueMultiSearchFilterValues = (values: string[]): string[] => {
   const seen = new Set<string>();
@@ -30,17 +31,25 @@ export const buildFilteredMultiSearchMergedResult = (
   result: MultiSearchMergedResult,
   sources: MultiSearchSourceResult[],
   getSourceLanguageValues: (source: MultiSearchSourceResult) => string[],
-): MultiSearchMergedResult => ({
-  id: result.id,
-  title: sources[0]?.result.title || result.title,
-  coverUrl: getFirstSourceValue(sources, (source) => source.result.thumbnailUrl),
-  summary: getFirstSourceValue(sources, (source) => source.result.summary),
-  pageCount: getFirstSourceValue(sources, (source) => source.result.pageCount),
-  sources,
-  sourceLanguageCodes: uniqueMultiSearchFilterValues(sources.flatMap(getSourceLanguageValues)),
-  tentativeAuthorNames: uniqueMultiSearchFilterValues(sources.flatMap((source) => source.tentativeAuthorNames)),
-  contentTypes: uniqueMultiSearchFilterValues(sources.flatMap((source) => source.contentTypes)),
-});
+): MultiSearchMergedResult => {
+  const preferredSource = selectPreferredMultiSearchTitleSource(
+    sources,
+    result.preferredTitleLanguageCodes,
+  );
+
+  return {
+    id: result.id,
+    title: preferredSource?.result.title || result.title,
+    coverUrl: preferredSource?.result.thumbnailUrl,
+    summary: getFirstSourceValue(sources, (source) => source.result.summary),
+    pageCount: getFirstSourceValue(sources, (source) => source.result.pageCount),
+    sources,
+    sourceLanguageCodes: uniqueMultiSearchFilterValues(sources.flatMap(getSourceLanguageValues)),
+    tentativeAuthorNames: uniqueMultiSearchFilterValues(sources.flatMap((source) => source.tentativeAuthorNames)),
+    contentTypes: uniqueMultiSearchFilterValues(sources.flatMap((source) => source.contentTypes)),
+    preferredTitleLanguageCodes: result.preferredTitleLanguageCodes,
+  };
+};
 
 const normalizeTextFilterValue = (value: string): string => (
   value

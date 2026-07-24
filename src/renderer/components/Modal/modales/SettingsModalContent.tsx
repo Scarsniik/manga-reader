@@ -8,6 +8,8 @@ import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 import ReaderSettingsPanel from '@/renderer/components/ReaderSettings/ReaderSettingsPanel'
 import ShortcutSettingsPanel from '@/renderer/components/ShortcutSettings/ShortcutSettingsPanel'
+import MergedTitleLanguagePrioritySettings from '@/renderer/components/Modal/modales/MergedTitleLanguagePrioritySettings'
+import { normalizeMultiSearchTitleLanguagePriority } from '@/renderer/components/MultiSearch/multiSearchTitleSelection'
 import {
   DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
   DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
@@ -33,11 +35,18 @@ export default function SettingsModalContent() {
   const [activeTab, setActiveTab] = React.useState<'options' | 'reader' | 'shortcuts' | 'version-installation'>('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
+  const [mergedTitleLanguagePriority, setMergedTitleLanguagePriority] = React.useState<string[]>([])
   const activeSubmitButtonId = activeTab === 'options'
     ? OPTIONS_SUBMIT_BUTTON_ID
     : activeTab === 'reader'
       ? READER_SUBMIT_BUTTON_ID
       : null
+
+  React.useEffect(() => {
+    setMergedTitleLanguagePriority(normalizeMultiSearchTitleLanguagePriority(
+      params?.multiSearchMergedTitleLanguagePriority,
+    ))
+  }, [params?.multiSearchMergedTitleLanguagePriority])
 
   React.useEffect(() => {
     setModalActions(activeSubmitButtonId ? [
@@ -399,6 +408,7 @@ export default function SettingsModalContent() {
         Math.floor(Number(values.backgroundSearchMaxConcurrent) || 3),
       )),
       multiSearchEnableRomajiPhoneticMerge: !!values.multiSearchEnableRomajiPhoneticMerge,
+      multiSearchMergedTitleLanguagePriority: mergedTitleLanguagePriority,
       multiSearchScrapeDetailsWithCards: !!values.multiSearchScrapeDetailsWithCards,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
@@ -498,6 +508,10 @@ export default function SettingsModalContent() {
               submitLabel="Enregistrer"
               formId="settings-form"
               submitButtonId={OPTIONS_SUBMIT_BUTTON_ID}
+            />
+            <MergedTitleLanguagePrioritySettings
+              value={mergedTitleLanguagePriority}
+              onChange={setMergedTitleLanguagePriority}
             />
             <section className="settings-modal-shortcut">
               <div className="settings-modal-shortcut__content">
