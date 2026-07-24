@@ -56,6 +56,16 @@ test("correspondence containment does not accept unrelated or incidental short t
   assert.equal(doesCorrespondenceTitleContainKnownTitle("The Gal Story", "Gal"), false);
 });
 
+test("correspondence treats dotted initialisms as the same title", () => {
+  assert.equal(
+    doesCorrespondenceTitleContainKnownTitle(
+      "N.I.L.F. Nerd I’d Like To Fuck – Tekuho",
+      "NILF - Nerd I'd Like To Fuck",
+    ),
+    true,
+  );
+});
+
 test("bare hash suffixes are parsed as chapter markers", () => {
   assert.deepEqual(extractTitleSequenceMarkers("Having Tons of Bareback Sex with Gyarus #6"), {
     title: "Having Tons of Bareback Sex with Gyarus",

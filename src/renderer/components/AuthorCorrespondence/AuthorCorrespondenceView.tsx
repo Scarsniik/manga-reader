@@ -4,20 +4,54 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
 import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton";
 import { OpenBookIcon } from "@/renderer/components/icons";
+import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
+import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import "./style.scss";
 
-type Props = { backgroundSearchJobId?: string; resultOnly?: boolean };
+type Props = {
+  backgroundSearchJobId?: string;
+  onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
+  resultOnly?: boolean;
+};
 
-export default function AuthorCorrespondenceView({ backgroundSearchJobId, resultOnly = false }: Props) {
+export default function AuthorCorrespondenceView({
+  backgroundSearchJobId,
+  onOpenAuthorTarget,
+  resultOnly = false,
+}: Props) {
   const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
 
-  const openAuthor = (scraperId: string, authorUrl: string, templateContext?: Record<string, string | undefined> | null) => {
+  const buildAuthorTarget = (
+    scraperId: string,
+    authorUrl: string,
+    authorName: string,
+    templateContext?: Record<string, string | undefined> | null,
+  ): ScraperAuthorWorkspaceTarget => ({
+    kind: "scraper.author",
+    scraperId,
+    query: authorUrl,
+    title: authorName,
+    templateContext: templateContext ?? undefined,
+  });
+
+  const openAuthor = (
+    scraperId: string,
+    authorUrl: string,
+    authorName: string,
+    templateContext?: Record<string, string | undefined> | null,
+  ) => {
+    const target = buildAuthorTarget(scraperId, authorUrl, authorName, templateContext);
+    if (onOpenAuthorTarget) {
+      onOpenAuthorTarget(target);
+      return;
+    }
+
     navigate({
       pathname: location.pathname,
       search: writeScraperRouteState(location.search, {
@@ -37,10 +71,18 @@ export default function AuthorCorrespondenceView({ backgroundSearchJobId, result
       }),
     }, {
       state: {
-        ...(location.state && typeof location.state === "object" ? location.state : {}),
         scraperBrowserAuthorTemplateContext: templateContext ?? null,
       },
     });
+  };
+
+  const openAuthorInWorkspace = (
+    scraperId: string,
+    authorUrl: string,
+    authorName: string,
+    templateContext?: Record<string, string | undefined> | null,
+  ) => {
+    void openWorkspaceTarget(buildAuthorTarget(scraperId, authorUrl, authorName, templateContext));
   };
 
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
@@ -94,8 +136,28 @@ export default function AuthorCorrespondenceView({ backgroundSearchJobId, result
                 <button
                   type="button"
                   className="author-correspondence-view__open"
-                  onClick={() => openAuthor(match.scraperId, match.authorUrl, match.templateContext)}
+                  onClick={() => openAuthor(
+                    match.scraperId,
+                    match.authorUrl,
+                    match.authorName,
+                    match.templateContext,
+                  )}
+                  onMouseDown={(event) => {
+                    if (event.button === 1) event.preventDefault();
+                  }}
+                  onAuxClick={(event) => {
+                    if (event.button !== 1) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openAuthorInWorkspace(
+                      match.scraperId,
+                      match.authorUrl,
+                      match.authorName,
+                      match.templateContext,
+                    );
+                  }}
                   title={`Ouvrir la page auteur dans ${match.scraperName}`}
+                  data-prevent-middle-click-autoscroll="true"
                 >
                   <OpenBookIcon aria-hidden="true" focusable="false" />
                   <span>Ouvrir l’auteur</span>

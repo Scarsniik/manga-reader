@@ -408,6 +408,7 @@ export default function WorkspaceTargetPanel({
       <MangaManager
         forcedViewId={target.viewId}
         forcedLocationState={target.locationState ?? null}
+        onOpenAuthorTarget={handleOpenWorkspaceTarget}
         showHeader={false}
       />
     );

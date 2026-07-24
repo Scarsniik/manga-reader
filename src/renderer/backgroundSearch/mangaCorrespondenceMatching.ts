@@ -5,6 +5,13 @@ export const normalizeCorrespondenceTitle = (value: string): string => (
     .normalize("NFKC")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(
+      /\b(?:[\p{L}\p{N}]\s*\.\s*){2,}/gu,
+      (initialism) => {
+        const trailingWhitespace = initialism.match(/\s+$/u)?.[0] ?? "";
+        return `${initialism.replace(/[.\s]/g, "")}${trailingWhitespace}`;
+      },
+    )
     .replace(/[’'`]/g, "")
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")

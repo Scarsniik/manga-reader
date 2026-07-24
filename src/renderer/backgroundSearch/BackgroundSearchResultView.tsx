@@ -5,6 +5,7 @@ import type {
   ListingBackgroundInput,
 } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
+import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import MultiSearchBrowser from "@/renderer/components/MultiSearch/MultiSearchBrowser";
 import MangaCorrespondenceView from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceView";
@@ -16,6 +17,7 @@ import "./resultView.scss";
 
 type Props = {
   backgroundSearchJobId?: string;
+  onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
   scrapers: ScraperRecord[];
 };
 
@@ -55,7 +57,11 @@ const getProgressDescription = (metadata: BackgroundSearchJobMetadata): string =
     : unitLabel;
 };
 
-export default function BackgroundSearchResultView({ backgroundSearchJobId, scrapers }: Props) {
+export default function BackgroundSearchResultView({
+  backgroundSearchJobId,
+  onOpenAuthorTarget,
+  scrapers,
+}: Props) {
   const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
 
   if (loading) return <div className="app-route-loading" aria-label="Chargement de la recherche" aria-busy="true" />;
@@ -76,7 +82,13 @@ export default function BackgroundSearchResultView({ backgroundSearchJobId, scra
       return <MangaCorrespondenceView backgroundSearchJobId={metadata.id} resultOnly />;
     }
     if (metadata.kind === "authorCorrespondence") {
-      return <AuthorCorrespondenceView backgroundSearchJobId={metadata.id} resultOnly />;
+      return (
+        <AuthorCorrespondenceView
+          backgroundSearchJobId={metadata.id}
+          onOpenAuthorTarget={onOpenAuthorTarget}
+          resultOnly
+        />
+      );
     }
     if (metadata.kind === "latestSources" || metadata.kind === "latestAuthors") {
       return <ScraperLatestView scrapers={scrapers} backgroundSearchJobId={metadata.id} resultOnly />;

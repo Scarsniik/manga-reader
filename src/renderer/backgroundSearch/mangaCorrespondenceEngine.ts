@@ -1,4 +1,5 @@
 import type {
+  AuthorCorrespondenceBackgroundInput,
   BackgroundSearchProgress,
   MangaCorrespondenceBackgroundInput,
   MangaCorrespondenceTraceStep,
@@ -39,6 +40,7 @@ import {
   doesCorrespondenceTitleContainKnownTitle,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -49,13 +51,16 @@ type DiscoveryTask = {
   kind: "title" | "author";
   term: string;
   parentId?: string;
-  directTargets?: Array<{ scraper: ScraperRecord; url: string }>;
+  directTargets?: Array<{
+    scraper: ScraperRecord;
+    url: string;
+    templateContext?: Record<string, string | undefined> | null;
+  }>;
 };
 
 const MAX_DISCOVERY_TASKS = 80;
 const MAX_DISCOVERED_TITLES = 18;
 const MAX_DISCOVERED_AUTHORS = 18;
-const AUTHOR_MULTI_SEARCH_MAX_PAGES = 1;
 
 const normalizeKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
@@ -85,34 +90,6 @@ const canSearchAuthors = (scraper: ScraperRecord): boolean => {
   } catch {
     return false;
   }
-};
-
-const buildAuthorSlug = (value: string, separator: "-" | "_" | ""): string => value
-  .normalize("NFKD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLocaleLowerCase()
-  .replace(/[^\p{L}\p{N}]+/gu, separator)
-  .replace(new RegExp(`^${separator || "\\s"}+|${separator || "\\s"}+$`, "g"), "");
-
-const buildAuthorSearchValues = (scraper: ScraperRecord, authorName: string): string[] => {
-  const config = getAuthorConfig(scraper);
-  const hyphenSlug = buildAuthorSlug(authorName, "-");
-  const underscoreSlug = buildAuthorSlug(authorName, "_");
-  const compactSlug = buildAuthorSlug(authorName, "");
-  const testPrefix = config.testValue?.match(/^([\p{L}\p{N}_-]+):/u)?.[1];
-  const values = testPrefix
-    ? [
-      `${testPrefix}:${underscoreSlug}`,
-      `${testPrefix}:${hyphenSlug}`,
-      authorName,
-      underscoreSlug,
-      hyphenSlug,
-      compactSlug,
-    ]
-    : /\/artists?\//i.test(config.urlTemplate ?? "")
-      ? [hyphenSlug, underscoreSlug, authorName, compactSlug]
-      : [authorName, hyphenSlug, underscoreSlug, compactSlug];
-  return uniqueText(values);
 };
 
 const buildResult = (
@@ -193,6 +170,7 @@ export const runMangaCorrespondenceSearch = async (
   const searchedAuthors: string[] = [];
   const queuedKeys = new Set<string>();
   const extractedAuthorSourceKeys = new Set<string>();
+  const resolvedAuthorPageKeys = new Set<string>();
   const queue: DiscoveryTask[] = [];
   let processedTasks = 0;
   let balancedKind: DiscoveryTask["kind"] = "title";
@@ -347,7 +325,11 @@ export const runMangaCorrespondenceSearch = async (
     }
     return results;
   };
-  const loadAuthor = async (scraper: ScraperRecord, term: string): Promise<MultiSearchSourceResult[]> => {
+  const loadAuthor = async (
+    scraper: ScraperRecord,
+    term: string,
+    templateContext?: Record<string, string | undefined> | null,
+  ): Promise<MultiSearchSourceResult[]> => {
     if (!canSearchAuthors(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
     const resultKeys = new Set<string>();
@@ -356,9 +338,16 @@ export const runMangaCorrespondenceSearch = async (
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
         const requestedPageUrl = nextPageUrl;
-        const page = await fetchAuthorPageWithRetry(scraper, getAuthorConfig(scraper), term, pageIndex, nextPageUrl, pace, null, {
-          scrapeDetailsWithCards: input.scrapeDetailsWithCards,
-        });
+        const page = await fetchAuthorPageWithRetry(
+          scraper,
+          getAuthorConfig(scraper),
+          term,
+          pageIndex,
+          nextPageUrl,
+          pace,
+          templateContext ?? null,
+          { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+        );
         const pageSources = await enrichSourceResultsWithJapaneseRomanization(
           buildSourceResults(scraper, page, pageIndex, term),
         );
@@ -381,13 +370,6 @@ export const runMangaCorrespondenceSearch = async (
       }
     }
     return results;
-  };
-  const loadAuthorVariants = async (scraper: ScraperRecord, authorName: string): Promise<MultiSearchSourceResult[]> => {
-    for (const value of buildAuthorSearchValues(scraper, authorName)) {
-      const sources = await loadAuthor(scraper, value);
-      if (sources.length) return sources;
-    }
-    return [];
   };
 
   await emit();
@@ -416,32 +398,88 @@ export const runMangaCorrespondenceSearch = async (
     );
     await emit(task.term);
     const collected: MultiSearchSourceResult[] = [];
-    const targets = task.directTargets?.length
-      ? task.directTargets
-      : scrapers
-        .filter((scraper) => isTitle || (canSearchAuthors(scraper) && getAuthorConfig(scraper).urlStrategy === "template"))
-        .map((scraper) => ({ scraper, url: task.term }));
-    await runWithConcurrency(targets.map(({ scraper, url }) => async () => {
-      try {
-        let sources: MultiSearchSourceResult[];
-        if (isTitle) {
-          sources = await loadSearch(scraper, task.term);
-        } else if (task.directTargets?.length) {
-          sources = await loadAuthor(scraper, url);
-        } else {
-          const authorSources = await loadAuthorVariants(scraper, task.term);
-          const multiSourceAuthorMatches = await loadSearch(
-            scraper,
-            task.term,
-            Math.min(maxPages, AUTHOR_MULTI_SEARCH_MAX_PAGES),
-          );
-          sources = [...authorSources, ...multiSourceAuthorMatches];
+    if (isTitle) {
+      await runWithConcurrency(scrapers.map((scraper) => async () => {
+        try {
+          collected.push(...await loadSearch(scraper, task.term));
+        } catch (error) {
+          console.warn(`Correspondence search failed for ${scraper.name}`, error);
         }
-        collected.push(...sources);
+      }), concurrency);
+    } else {
+      const authorInput: AuthorCorrespondenceBackgroundInput = {
+        referenceName: task.term,
+        names: [task.term],
+        referenceSources: (task.directTargets ?? []).map((target) => ({
+          scraperId: target.scraper.id,
+          authorUrl: target.url,
+          name: task.term,
+          templateContext: target.templateContext,
+        })),
+        scraperFilterValues: input.scraperFilterValues,
+        scrapers: input.scrapers,
+        maxPages: input.maxPages,
+        paceMode: input.paceMode,
+        scrapingConcurrency: concurrency,
+        scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+      };
+      try {
+        const authorResult = await runAuthorCorrespondenceSearch(
+          authorInput,
+          signal,
+          async () => {},
+        );
+        await runWithConcurrency(authorResult.matches.map((authorMatch) => async () => {
+          if (resolvedAuthorPageKeys.has(authorMatch.key)) return;
+          resolvedAuthorPageKeys.add(authorMatch.key);
+          const scraper = scrapers.find((entry) => entry.id === authorMatch.scraperId);
+          if (!scraper) return;
+
+          if (
+            knownAuthors.length < MAX_DISCOVERED_AUTHORS
+            && !knownAuthors.some((value) => normalizeKey(value) === normalizeKey(authorMatch.authorName))
+          ) {
+            knownAuthors.push(authorMatch.authorName);
+          }
+          const authorPageStep = addTrace(
+            "authorDiscovered",
+            "Page auteur équivalente trouvée",
+            `${authorMatch.authorName} · ${authorMatch.scraperName}`,
+            step.id,
+          );
+          try {
+            const sources = await loadAuthor(
+              scraper,
+              authorMatch.authorUrl,
+              authorMatch.templateContext,
+            );
+            collected.push(...(sources.length ? sources : authorMatch.previewSources));
+            authorPageStep.resultCount = sources.length || authorMatch.previewSources.length;
+            authorPageStep.detail = `${sources.length || authorMatch.previewSources.length} résultat(s) récupéré(s) sur la page auteur.`;
+          } catch (error) {
+            collected.push(...authorMatch.previewSources);
+            authorPageStep.resultCount = authorMatch.previewSources.length;
+            authorPageStep.detail = authorMatch.previewSources.length
+              ? `${authorMatch.previewSources.length} aperçu(s) récupéré(s), la page complète n'a pas pu être chargée.`
+              : "La page auteur n'a pas pu être chargée.";
+            console.warn(`Correspondence author page failed for ${scraper.name}`, error);
+          }
+        }), concurrency);
       } catch (error) {
-        console.warn(`Correspondence search failed for ${scraper.name}`, error);
+        console.warn(`Author correspondence discovery failed for ${task.term}`, error);
+        await runWithConcurrency((task.directTargets ?? []).map((target) => async () => {
+          try {
+            collected.push(...await loadAuthor(
+              target.scraper,
+              target.url,
+              target.templateContext,
+            ));
+          } catch (targetError) {
+            console.warn(`Correspondence author page failed for ${target.scraper.name}`, targetError);
+          }
+        }), concurrency);
       }
-    }), concurrency);
+    }
     await discoverFromSources(collected, step);
     processedTasks += 1;
     await emit(task.term);

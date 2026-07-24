@@ -30,7 +30,10 @@ import {
     writeMangaManagerViewState,
 } from '@/renderer/utils/readerNavigation';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
-import type { MangaManagerViewWorkspaceTarget } from '@/renderer/types/workspace';
+import type {
+    MangaManagerViewWorkspaceTarget,
+    ScraperAuthorWorkspaceTarget,
+} from '@/renderer/types/workspace';
 import type {
     BackgroundSearchChangeEvent,
     BackgroundSearchJob,
@@ -90,12 +93,14 @@ const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 
 type MangaManagerProps = {
     forcedViewId?: string;
     forcedLocationState?: MangaManagerViewWorkspaceTarget['locationState'] | null;
+    onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
     showHeader?: boolean;
 };
 
 const MangaManager: React.FC<MangaManagerProps> = ({
     forcedViewId,
     forcedLocationState = null,
+    onOpenAuthorTarget,
     showHeader = true,
 }) => {
     const location = useLocation();
@@ -897,6 +902,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                         ) : isBackgroundSearchResultView ? (
                             <BackgroundSearchResultView
                                 backgroundSearchJobId={backgroundSearchJobId}
+                                onOpenAuthorTarget={onOpenAuthorTarget}
                                 scrapers={sortedScrapers}
                             />
                         ) : isMultiSearchView ? (
