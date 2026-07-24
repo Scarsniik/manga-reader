@@ -11,6 +11,8 @@ const source = `
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { filterIncludedMangaCorrespondenceChapters } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
+  export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
 `;
 const built = esbuild.buildSync({
@@ -36,6 +38,8 @@ const {
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
   inferMangaCorrespondenceFirstChapter,
+  filterIncludedMangaCorrespondenceChapters,
+  toggleMangaCorrespondenceChapterExclusion,
   mergeMultiSearchResults,
 } = bundledModule.exports;
 
@@ -256,6 +260,30 @@ test("a plain known title is treated as chapter 1 but an extra release is not", 
     ),
     undefined,
   );
+});
+
+test("invalidated correspondence chapters are omitted without mutating the search results", () => {
+  const chapters = [
+    { chapter: "1", title: "Chapter 1" },
+    { chapter: "2", title: "Chapter 2" },
+    { chapter: "3", title: "Chapter 3" },
+  ];
+  const initialExclusions = new Set(["2"]);
+  const included = filterIncludedMangaCorrespondenceChapters(chapters, initialExclusions);
+  const withChapterThreeExcluded = toggleMangaCorrespondenceChapterExclusion(
+    initialExclusions,
+    "3",
+  );
+  const withChapterTwoRestored = toggleMangaCorrespondenceChapterExclusion(
+    withChapterThreeExcluded,
+    "2",
+  );
+
+  assert.deepEqual(included.map((chapter) => chapter.chapter), ["1", "3"]);
+  assert.deepEqual(chapters.map((chapter) => chapter.chapter), ["1", "2", "3"]);
+  assert.deepEqual(Array.from(initialExclusions), ["2"]);
+  assert.deepEqual(Array.from(withChapterThreeExcluded), ["2", "3"]);
+  assert.deepEqual(Array.from(withChapterTwoRestored), ["3"]);
 });
 
 const buildMergeSource = (title, languageCode, detailUrl, thumbnailUrl) => ({

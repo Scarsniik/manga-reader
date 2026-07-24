@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import type {
@@ -41,6 +41,10 @@ import {
 import MangaCorrespondenceReadingListDialog, {
   type MangaCorrespondenceReadingListChapter,
 } from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceReadingListDialog";
+import {
+  filterIncludedMangaCorrespondenceChapters,
+  toggleMangaCorrespondenceChapterExclusion,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
 import type { ReadingListItem } from "@/renderer/types/readingList";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
@@ -100,6 +104,9 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const { openModal, closeModal } = useModal();
   const [displayMode, setDisplayMode] = useState<DisplayMode>("chapters");
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
+  const [excludedReadingListChapters, setExcludedReadingListChapters] = useState<Set<string>>(
+    () => new Set(),
+  );
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
@@ -151,6 +158,17 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     () => chapterEntries.filter((entry) => entry.chapter !== "Non renseigné"),
     [chapterEntries],
   );
+  const includedReadingListChapters = useMemo(
+    () => filterIncludedMangaCorrespondenceChapters(
+      readingListChapters,
+      excludedReadingListChapters,
+    ),
+    [excludedReadingListChapters, readingListChapters],
+  );
+  const chapterByResultId = useMemo(
+    () => new Map(readingListChapters.map((entry) => [entry.result.id, entry.chapter])),
+    [readingListChapters],
+  );
   const resultLanguageCodes = useMemo(() => buildMultiSearchResultLanguageFilterCodes(allSources), [allSources]);
   const visibleClassicGroups = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(classicGroups, languageFilterModes),
@@ -160,6 +178,16 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     () => filterMultiSearchMergedResultsByLanguage(chapterCards, languageFilterModes),
     [chapterCards, languageFilterModes],
   );
+
+  useEffect(() => {
+    setExcludedReadingListChapters(new Set());
+  }, [backgroundSearchJobId]);
+
+  const toggleReadingListChapter = (chapter: string) => {
+    setExcludedReadingListChapters((current) => (
+      toggleMangaCorrespondenceChapterExclusion(current, chapter)
+    ));
+  };
 
   const toggleLanguageFilter = (
     languageCode: string,
@@ -216,31 +244,66 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       content: (
         <MangaCorrespondenceReadingListDialog
           chapters={readingListChapters}
+          initialExcludedChapterLabels={Array.from(excludedReadingListChapters)}
           preferredLanguageCodes={mergeOptions.preferredTitleLanguageCodes}
           onCancel={closeModal}
           onCreate={createReadingList}
+          onExcludedChapterLabelsChange={(chapterLabels) => {
+            setExcludedReadingListChapters(new Set(chapterLabels));
+          }}
         />
       ),
     });
   };
-  const renderCards = (items: MultiSearchMergedResult[]) => (
+  const renderCards = (
+    items: MultiSearchMergedResult[],
+    withReadingListPreparation = false,
+  ) => (
     <div className="manga-correspondence-view__results">
-      {items.map((item) => (
-        <MultiSearchResultCard
-          key={item.id}
-          result={item}
-          libraryMangas={[]}
-          bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
-          sourceProgressIndex={EMPTY_PROGRESS_INDEX}
-          viewHistoryRecordsById={EMPTY_HISTORY}
-          newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
-          viewHistoryRecordingDisabled
-          onOpenSource={(source) => openSource(source)}
-          onOpenSourceInWorkspace={(source) => openSource(source, true)}
-          onOpenProgressReader={() => undefined}
-          onSetSourcesRead={() => undefined}
-        />
-      ))}
+      {items.map((item) => {
+        const chapter = withReadingListPreparation
+          ? chapterByResultId.get(item.id)
+          : undefined;
+        const isExcluded = chapter
+          ? excludedReadingListChapters.has(chapter)
+          : false;
+        return (
+          <div
+            key={item.id}
+            className={[
+              "manga-correspondence-view__result",
+              isExcluded ? "is-reading-list-excluded" : "",
+            ].join(" ").trim()}
+          >
+            {chapter ? (
+              <div className="manga-correspondence-view__list-preparation">
+                <span>Chapitre {chapter}</span>
+                <button
+                  type="button"
+                  className={isExcluded ? "is-excluded" : ""}
+                  aria-pressed={isExcluded}
+                  onClick={() => toggleReadingListChapter(chapter)}
+                >
+                  {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
+                </button>
+              </div>
+            ) : null}
+            <MultiSearchResultCard
+              result={item}
+              libraryMangas={[]}
+              bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
+              sourceProgressIndex={EMPTY_PROGRESS_INDEX}
+              viewHistoryRecordsById={EMPTY_HISTORY}
+              newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
+              viewHistoryRecordingDisabled
+              onOpenSource={(source) => openSource(source)}
+              onOpenSourceInWorkspace={(source) => openSource(source, true)}
+              onOpenProgressReader={() => undefined}
+              onSetSourcesRead={() => undefined}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -276,10 +339,19 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
             type="button"
             className="manga-correspondence-view__reading-list"
             onClick={openReadingListDialog}
-            disabled={!readingListChapters.length}
+            disabled={!includedReadingListChapters.length}
           >
-            Créer une liste de lecture
+            Créer une liste de lecture ({includedReadingListChapters.length})
           </button>
+          {excludedReadingListChapters.size ? (
+            <button
+              type="button"
+              className="manga-correspondence-view__restore-list"
+              onClick={() => setExcludedReadingListChapters(new Set())}
+            >
+              Réintégrer les {excludedReadingListChapters.size} invalidé(s)
+            </button>
+          ) : null}
         </div>
         <MultiSearchLanguageFilterBar
           languageCodes={resultLanguageCodes}
@@ -289,7 +361,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       </div>
       {active && !result?.matches.length ? (
         <div className="empty">La recherche est en cours. Les correspondances apparaîtront ici dès qu’elles seront trouvées.</div>
-      ) : displayedCards.length ? renderCards(displayedCards) : (
+      ) : displayedCards.length ? renderCards(displayedCards, displayMode === "chapters") : (
         <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
       )}
     </section>

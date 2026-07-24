@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { UNKNOWN_MULTI_SEARCH_VALUE } from "@/renderer/components/MultiSearch/multiSearchConstants";
 import { getMultiSearchSourceLanguageValues } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
@@ -9,6 +9,10 @@ import type {
 import type { ReadingListItem } from "@/renderer/types/readingList";
 import { getLanguageLabel } from "@/renderer/utils/languageDetection";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import {
+  filterIncludedMangaCorrespondenceChapters,
+  toggleMangaCorrespondenceChapterExclusion,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
 import generateId from "@/utils/id";
 
 export type MangaCorrespondenceReadingListChapter = {
@@ -18,8 +22,10 @@ export type MangaCorrespondenceReadingListChapter = {
 
 type Props = {
   chapters: MangaCorrespondenceReadingListChapter[];
+  initialExcludedChapterLabels: string[];
   onCancel: () => void;
   onCreate: (items: ReadingListItem[], languageCode: string) => Promise<void>;
+  onExcludedChapterLabelsChange: (chapterLabels: string[]) => void;
   preferredLanguageCodes: string[];
 };
 
@@ -102,26 +108,35 @@ const getSourceOptionLabel = (source: MultiSearchSourceResult): string => (
 
 export default function MangaCorrespondenceReadingListDialog({
   chapters,
+  initialExcludedChapterLabels,
   onCancel,
   onCreate,
+  onExcludedChapterLabelsChange,
   preferredLanguageCodes,
 }: Props) {
+  const [excludedChapterLabels, setExcludedChapterLabels] = useState<Set<string>>(
+    () => new Set(initialExcludedChapterLabels),
+  );
+  const includedChapters = useMemo(
+    () => filterIncludedMangaCorrespondenceChapters(chapters, excludedChapterLabels),
+    [chapters, excludedChapterLabels],
+  );
   const coverage = useMemo<LanguageCoverage[]>(() => {
-    const languageCodes = Array.from(new Set(chapters.flatMap((chapter) => (
+    const languageCodes = Array.from(new Set(includedChapters.flatMap((chapter) => (
       getReadableSources(chapter).flatMap(getMultiSearchSourceLanguageValues)
     )))).filter((code) => code !== UNKNOWN_MULTI_SEARCH_VALUE);
     const priorityIndexes = new Map(preferredLanguageCodes.map((code, index) => [code, index]));
 
     return languageCodes
       .map((code) => {
-        const coveredChapters = chapters.filter((chapter) => (
+        const coveredChapters = includedChapters.filter((chapter) => (
           getReadableSources(chapter).some((source) => sourceMatchesLanguage(source, code))
         ));
         const coveredLabels = new Set(coveredChapters.map((chapter) => chapter.chapter));
         return {
           code,
           coveredChapters,
-          missingChapters: chapters
+          missingChapters: includedChapters
             .filter((chapter) => !coveredLabels.has(chapter.chapter)),
         };
       })
@@ -132,7 +147,7 @@ export default function MangaCorrespondenceReadingListDialog({
           || right.coveredChapters.length - left.coveredChapters.length
           || getLanguageLabel(left.code).localeCompare(getLanguageLabel(right.code));
       });
-  }, [chapters, preferredLanguageCodes]);
+  }, [includedChapters, preferredLanguageCodes]);
   const [selectedLanguageCode, setSelectedLanguageCode] = useState(
     () => coverage[0]?.code ?? "",
   );
@@ -141,7 +156,7 @@ export default function MangaCorrespondenceReadingListDialog({
   const [openingSourceKey, setOpeningSourceKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedCoverage = coverage.find((entry) => entry.code === selectedLanguageCode);
-  const totalChapterCount = chapters.length;
+  const totalChapterCount = includedChapters.length;
   const selectedChapterCount = selectedCoverage?.coveredChapters.length ?? 0;
   const replacementSourcesByChapter = useMemo(() => new Map(
     (selectedCoverage?.missingChapters ?? []).map((chapter) => [
@@ -159,6 +174,28 @@ export default function MangaCorrespondenceReadingListDialog({
     }),
   ), [replacementSourceKeys, replacementSourcesByChapter]);
   const finalChapterCount = selectedChapterCount + selectedReplacementSources.size;
+
+  useEffect(() => {
+    if (!coverage.length) {
+      if (selectedLanguageCode) setSelectedLanguageCode("");
+      return;
+    }
+    if (!coverage.some((entry) => entry.code === selectedLanguageCode)) {
+      setSelectedLanguageCode(coverage[0].code);
+      setReplacementSourceKeys({});
+    }
+  }, [coverage, selectedLanguageCode]);
+
+  const updateExcludedChapterLabels = (next: Set<string>) => {
+    setExcludedChapterLabels(next);
+    onExcludedChapterLabelsChange(Array.from(next));
+    setError(null);
+  };
+  const toggleChapter = (chapter: string) => {
+    updateExcludedChapterLabels(
+      toggleMangaCorrespondenceChapterExclusion(excludedChapterLabels, chapter),
+    );
+  };
 
   const openReplacementSource = async (source: MultiSearchSourceResult) => {
     const sourceKey = buildMultiSearchSourceIdentityKey(source);
@@ -188,7 +225,7 @@ export default function MangaCorrespondenceReadingListDialog({
   const createList = async () => {
     if (!selectedCoverage || creating) return;
 
-    const items = chapters.flatMap((chapter) => {
+    const items = includedChapters.flatMap((chapter) => {
       const source = getReadableSources(chapter)
         .find((candidate) => sourceMatchesLanguage(candidate, selectedCoverage.code))
         ?? selectedReplacementSources.get(chapter.chapter);
@@ -213,6 +250,55 @@ export default function MangaCorrespondenceReadingListDialog({
 
   return (
     <div className="manga-correspondence-reading-list-dialog">
+      <section className="manga-correspondence-reading-list-dialog__chapter-selection">
+        <div className="manga-correspondence-reading-list-dialog__chapter-selection-header">
+          <div>
+            <strong>Chapitres retenus</strong>
+            <small>
+              Une entrée invalidée reste dans les résultats, mais ne sera pas ajoutée à la liste.
+            </small>
+          </div>
+          <span>{includedChapters.length}/{chapters.length}</span>
+        </div>
+        <div className="manga-correspondence-reading-list-dialog__chapter-selection-list">
+          {chapters.map((chapter) => {
+            const isExcluded = excludedChapterLabels.has(chapter.chapter);
+            return (
+              <button
+                key={chapter.chapter}
+                type="button"
+                className={isExcluded ? "is-excluded" : ""}
+                aria-pressed={isExcluded}
+                onClick={() => toggleChapter(chapter.chapter)}
+                disabled={creating}
+                title={isExcluded
+                  ? `Réintégrer le chapitre ${chapter.chapter}`
+                  : `Invalider le chapitre ${chapter.chapter} pour cette liste`}
+              >
+                <span className="manga-correspondence-reading-list-dialog__chapter-state" aria-hidden="true">
+                  {isExcluded ? "×" : "✓"}
+                </span>
+                <span>
+                  <strong>Chapitre {chapter.chapter}</strong>
+                  <small>{chapter.result.title}</small>
+                </span>
+                <em>{isExcluded ? "Invalidé" : "Inclus"}</em>
+              </button>
+            );
+          })}
+        </div>
+        {excludedChapterLabels.size ? (
+          <button
+            type="button"
+            className="manga-correspondence-reading-list-dialog__restore"
+            onClick={() => updateExcludedChapterLabels(new Set())}
+            disabled={creating}
+          >
+            Tout réintégrer
+          </button>
+        ) : null}
+      </section>
+
       {coverage.length ? (
         <>
           <label>
@@ -325,7 +411,9 @@ export default function MangaCorrespondenceReadingListDialog({
         </>
       ) : (
         <div className="manga-correspondence-reading-list-dialog__warning" role="alert">
-          Aucun chapitre ouvrable ne possède de langue identifiable.
+          {includedChapters.length
+            ? "Aucun chapitre retenu ne possède de langue identifiable."
+            : "Tous les chapitres ont été invalidés pour cette liste."}
         </div>
       )}
 
