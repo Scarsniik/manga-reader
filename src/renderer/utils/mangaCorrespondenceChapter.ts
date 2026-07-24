@@ -15,6 +15,8 @@ const containsNonChapterReleaseMarker = (
   analysis: MangaCorrespondenceTitleAnalysis,
 ): boolean => (
   [
+    analysis.title,
+    ...analysis.alternativeTitles,
     analysis.parody,
     ...analysis.suffixTags,
     ...analysis.unmatchedParts,

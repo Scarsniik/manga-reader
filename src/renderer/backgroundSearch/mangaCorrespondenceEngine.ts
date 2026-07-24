@@ -37,7 +37,7 @@ import type {
   MangaCorrespondenceMatch,
 } from "@/renderer/backgroundSearch/types";
 import {
-  doesCorrespondenceTitleContainKnownTitle,
+  doesCorrespondenceAnalyzedTitleMatchKnownTitle,
   partitionCorrespondenceAlternativeTitles,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
@@ -131,7 +131,11 @@ const sourceMatchesReference = (
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
   const matchedTerm = knownTitles.find((title) => (
-    doesCorrespondenceTitleContainKnownTitle(source.result.title, title)
+    doesCorrespondenceAnalyzedTitleMatchKnownTitle(
+      analysis.title,
+      titleAlternatives,
+      title,
+    )
     || getMangaTitleMergeMatchKind(
       { title, authorNames: input.reference.authors },
       candidate,

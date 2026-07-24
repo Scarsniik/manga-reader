@@ -22,11 +22,12 @@ export type MangaCorrespondenceTitleAnalysis = ScraperTitleAnalysisResult & {
   chapter?: string;
 };
 
-const TRAILING_BARE_CHAPTER_PATTERN = /^(?<title>.*\S)\s+(?<chapter>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?)\s*[!！]?$/u;
-const TRAILING_SUFFIX_PATTERN = /\s*\[([^\]]*)\]\s*$/u;
+const TRAILING_BARE_CHAPTER_PATTERN = /^(?<title>.*\S)\s+(?:\(\s*(?<parenthesizedChapter>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?)\s*\)|(?<bareChapter>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?))\s*[!！]?$/u;
+const TRAILING_SUFFIX_PATTERN = /\s*(?:\[([^\]]*)\]|\{([^}]*)\}|=([^=]*)=)\s*$/u;
 const LEADING_EVENT_PATTERN = /^\s*\((?:(?:c\d+|20\d{2}[^)]*)|(?:[^)]*(?:akihabara|comiket|comic|doujin)[^)]*))\)\s*/iu;
 const LEADING_AUTHOR_PATTERN = /^\s*\[([^\]]*)\]\s*/u;
 const TRAILING_PARENTHESES_PATTERN = /\s*\(([^()]*)\)\s*$/u;
+const BARE_CHAPTER_VALUE_PATTERN = /^[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*-\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?$/u;
 
 const normalizeChapter = (value: string): string => {
   const normalized = value
@@ -41,13 +42,14 @@ const stripTrailingBareChapter = (
   value: string,
 ): { title: string; chapter?: string } => {
   const match = value.match(TRAILING_BARE_CHAPTER_PATTERN);
-  if (!match?.groups?.title || !match.groups.chapter) {
+  const chapter = match?.groups?.parenthesizedChapter ?? match?.groups?.bareChapter;
+  if (!match?.groups?.title || !chapter) {
     return { title: value };
   }
 
   return {
     title: match.groups.title.trim(),
-    chapter: normalizeChapter(match.groups.chapter),
+    chapter: normalizeChapter(chapter),
   };
 };
 
@@ -100,8 +102,9 @@ const extractTrailingSuffixValues = (
 
   for (let guard = 0; guard < 30; guard += 1) {
     const match = remaining.match(TRAILING_SUFFIX_PATTERN);
-    if (!match?.[1] || typeof match.index !== "number") break;
-    suffixValues.unshift(normalizeTitleAnalysisText(match[1]));
+    const suffixValue = match?.[1] ?? match?.[2] ?? match?.[3];
+    if (!match || !suffixValue || typeof match.index !== "number") break;
+    suffixValues.unshift(normalizeTitleAnalysisText(suffixValue));
     remaining = remaining.slice(0, match.index);
   }
 
@@ -117,6 +120,7 @@ const stripTrailingParentheses = (
   for (let guard = 0; guard < 8; guard += 1) {
     const match = title.match(TRAILING_PARENTHESES_PATTERN);
     if (!match?.[1] || typeof match.index !== "number") break;
+    if (BARE_CHAPTER_VALUE_PATTERN.test(normalizeTitleAnalysisText(match[1]))) break;
     values.unshift(normalizeTitleAnalysisText(match[1]));
     title = normalizeTitleAnalysisText(title.slice(0, match.index));
   }

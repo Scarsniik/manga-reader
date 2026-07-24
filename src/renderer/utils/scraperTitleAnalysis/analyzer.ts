@@ -156,7 +156,7 @@ const consumeParentheses = (value: string): BlockConsumption | null => {
 };
 
 const getTrailingSuffixStartIndex = (value: string): number => {
-  const match = value.match(/(?:\s*\[[^\]]+])+\s*$/);
+  const match = value.match(/(?:\s*(?:\[[^\]]+]|\{[^}]+}|=[^=]+=))+\s*$/);
   return typeof match?.index === "number" ? match.index : -1;
 };
 

@@ -34,6 +34,16 @@ export const doesCorrespondenceTitleContainKnownTitle = (
   return ` ${candidate} `.includes(` ${known} `);
 };
 
+export const doesCorrespondenceAnalyzedTitleMatchKnownTitle = (
+  analyzedTitle: string,
+  alternativeTitles: string[],
+  knownTitle: string,
+): boolean => (
+  [analyzedTitle, ...alternativeTitles].some((candidateTitle) => (
+    doesCorrespondenceTitleContainKnownTitle(candidateTitle, knownTitle)
+  ))
+);
+
 export const partitionCorrespondenceAlternativeTitles = (
   alternativeTitles: string[],
   knownAuthors: string[],

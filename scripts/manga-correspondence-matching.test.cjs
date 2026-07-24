@@ -5,6 +5,7 @@ const esbuild = require("esbuild");
 
 const source = `
   export { doesCorrespondenceTitleContainKnownTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
+  export { doesCorrespondenceAnalyzedTitleMatchKnownTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractCorrespondenceBareHashChapter } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { partitionCorrespondenceAlternativeTitles } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
@@ -29,6 +30,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 
 const {
   doesCorrespondenceTitleContainKnownTitle,
+  doesCorrespondenceAnalyzedTitleMatchKnownTitle,
   extractCorrespondenceBareHashChapter,
   partitionCorrespondenceAlternativeTitles,
   extractTitleSequenceMarkers,
@@ -56,6 +58,25 @@ test("correspondence containment does not accept unrelated or incidental short t
     false,
   );
   assert.equal(doesCorrespondenceTitleContainKnownTitle("The Gal Story", "Gal"), false);
+});
+
+test("correspondence only validates titles found in parsed title fields", () => {
+  assert.equal(
+    doesCorrespondenceAnalyzedTitleMatchKnownTitle(
+      "Isekai de Shota ni Okasareru Yatsu",
+      ["Ravaged by a Shota in Another World"],
+      "Isekai no Onnatachi",
+    ),
+    false,
+  );
+  assert.equal(
+    doesCorrespondenceAnalyzedTitleMatchKnownTitle(
+      "Isekai no Onnatachi",
+      ["The Women From Another World"],
+      "The Women From Another World",
+    ),
+    true,
+  );
 });
 
 test("correspondence treats dotted initialisms as the same title", () => {
@@ -123,6 +144,44 @@ test("correspondence parsing separates translated titles and their bare chapter"
   assert.deepEqual(result.suffixTags, ["Digital"]);
 });
 
+test("correspondence parsing removes parenthesized chapters and curly source suffixes", () => {
+  const bilingual = analyzeMangaCorrespondenceTitle(
+    "[R-man] Nandemo Iukoto o Kiite Kureru Jimi-ko-chan (1) | The Plain Girl Who Does Whatever I Tell Her (1) [English] {Doujins.com}",
+    null,
+  );
+  const english = analyzeMangaCorrespondenceTitle(
+    "The Plain Girl Who Does Whatever I Tell Her (1) [English] {Doujins.com}",
+    null,
+  );
+
+  assert.equal(bilingual.title, "Nandemo Iukoto o Kiite Kureru Jimi-ko-chan");
+  assert.deepEqual(bilingual.alternativeTitles, ["The Plain Girl Who Does Whatever I Tell Her"]);
+  assert.deepEqual(bilingual.authors, ["R-man"]);
+  assert.equal(bilingual.chapter, "1");
+  assert.equal(bilingual.languageCode, "en");
+  assert.deepEqual(bilingual.unmatchedParts, ["Doujins.com"]);
+
+  assert.equal(english.title, "The Plain Girl Who Does Whatever I Tell Her");
+  assert.deepEqual(english.alternativeTitles, []);
+  assert.equal(english.chapter, "1");
+  assert.equal(english.languageCode, "en");
+  assert.deepEqual(english.unmatchedParts, ["Doujins.com"]);
+});
+
+test("correspondence parsing removes equals-delimited release suffixes", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "(C99) [Kireinabuta (Butachang)] Isekai no Onnatachi 2.0 [English] =LWB=",
+    null,
+  );
+
+  assert.equal(result.title, "Isekai no Onnatachi");
+  assert.deepEqual(result.authors, ["Butachang"]);
+  assert.equal(result.circle, "Kireinabuta");
+  assert.equal(result.chapter, "2");
+  assert.equal(result.languageCode, "en");
+  assert.deepEqual(result.unmatchedParts, ["LWB"]);
+});
+
 test("correspondence parsing separates author, chapter and release suffixes", () => {
   const result = analyzeMangaCorrespondenceTitle(
     "[Sakura no Tomoru Hi e] Gal Mama Anna-san 2 [English] [SS22]",
@@ -182,10 +241,21 @@ test("a plain known title is treated as chapter 1 but an extra release is not", 
     "[Popochichi (Yahiro Pochi)] Rental Kanojo Osawari Shimasu (Ongoing) [English]",
     null,
   );
+  const compilation = analyzeMangaCorrespondenceTitle(
+    "[Kireinabuta (Butachang)] Isekai no Onnatachi Soushuuhen II [English] [Digital]",
+    null,
+  );
 
   assert.equal(inferMangaCorrespondenceFirstChapter(plain, knownTitles), "1");
   assert.equal(inferMangaCorrespondenceFirstChapter(extra, knownTitles), undefined);
   assert.equal(inferMangaCorrespondenceFirstChapter(ongoing, knownTitles), undefined);
+  assert.equal(
+    inferMangaCorrespondenceFirstChapter(
+      compilation,
+      ["Isekai no Onnatachi Soushuuhen II"],
+    ),
+    undefined,
+  );
 });
 
 const buildMergeSource = (title, languageCode, detailUrl, thumbnailUrl) => ({

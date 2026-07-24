@@ -23,13 +23,13 @@ const consumeSuffixBracket = (
   value: string;
   remaining: string;
 } | null => {
-  const match = value.match(/^\s*\[([^\]]*)]\s*/);
+  const match = value.match(/^\s*(?:\[([^\]]*)]|\{([^}]*)}|=([^=]*)=)\s*/);
   if (!match) {
     return null;
   }
 
   return {
-    value: normalizeTitleAnalysisText(match[1]),
+    value: normalizeTitleAnalysisText(match[1] ?? match[2] ?? match[3]),
     remaining: value.slice(match[0].length),
   };
 };
@@ -115,4 +115,3 @@ export const consumeTitleAnalysisSuffixes = (
       .reverse(),
   };
 };
-
