@@ -127,6 +127,7 @@ const renderThumbnail = (
 
 type Props = {
   scraperId: string;
+  expensiveChecksEnabled?: boolean;
   bookmarkExcludedFields: ScraperBookmarkMetadataField[];
   detailsResult: ScraperRuntimeDetailsResult | null;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
@@ -169,6 +170,7 @@ type Props = {
 
 export default function ScraperDetailsPanel({
   scraperId,
+  expensiveChecksEnabled = true,
   bookmarkExcludedFields,
   detailsResult,
   tagBlacklistEntries = [],
@@ -340,6 +342,7 @@ export default function ScraperDetailsPanel({
                 </span>
               ) : null}
               <ScraperBookmarkButton
+                subscriptionsEnabled={expensiveChecksEnabled}
                 scraperId={scraperId}
                 sourceUrl={detailsResult.finalUrl || detailsResult.requestedUrl}
                 title={detailsResult.title || detailsResult.finalUrl || detailsResult.requestedUrl}

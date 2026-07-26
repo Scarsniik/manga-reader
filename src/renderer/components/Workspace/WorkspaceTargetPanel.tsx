@@ -33,6 +33,7 @@ import {
 } from "@/renderer/utils/workspaceTargets";
 
 type Props = {
+  isActive: boolean;
   returnTarget?: WorkspaceTarget;
   tabId: string;
   target: WorkspaceTarget;
@@ -50,6 +51,7 @@ type ScraperConfigPanelProps = {
 };
 
 type ScraperDetailsPanelProps = {
+  isActive: boolean;
   tabId: string;
   scraperId: string;
   sourceUrl: string;
@@ -138,6 +140,7 @@ function ScraperConfigPanel({ scraperId, onTitleChange }: ScraperConfigPanelProp
 }
 
 function ScraperDetailsPanel({
+  isActive,
   tabId,
   scraperId,
   sourceUrl,
@@ -357,6 +360,7 @@ function ScraperDetailsPanel({
       <ScraperBrowser
         scraper={scraper}
         initialState={initialState}
+        expensiveDetailsChecksEnabled={isActive}
         routeSyncEnabled={false}
         onOpenReaderTarget={onOpenReaderTarget}
         onOpenWorkspaceTarget={onOpenWorkspaceTarget}
@@ -366,6 +370,7 @@ function ScraperDetailsPanel({
 }
 
 export default function WorkspaceTargetPanel({
+  isActive,
   returnTarget,
   tabId,
   target,
@@ -449,6 +454,7 @@ export default function WorkspaceTargetPanel({
   if (target.kind === "scraper.details") {
     return (
       <ScraperDetailsPanel
+        isActive={isActive}
         tabId={tabId}
         scraperId={target.scraperId}
         sourceUrl={target.sourceUrl}

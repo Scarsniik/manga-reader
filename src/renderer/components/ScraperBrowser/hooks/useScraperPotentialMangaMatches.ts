@@ -28,6 +28,7 @@ type UseScraperPotentialMangaMatchesOptions = {
   detailsResult: ScraperRuntimeDetailsResult | null;
   libraryMangas: Manga[];
   mergeOptions: MangaMergeOptions;
+  enabled?: boolean;
 };
 
 const EMPTY_MATCH_STATE: ScraperPotentialMangaMatchState = {
@@ -52,11 +53,20 @@ let sharedRecordsSnapshot: SharedPotentialMatchRecordsSnapshot = {
   progressRecords: [],
   scrapers: [],
 };
+const disabledSharedRecordsSnapshot: SharedPotentialMatchRecordsSnapshot = {
+  historyRecords: EMPTY_HISTORY_RECORDS,
+  progressRecords: [],
+  scrapers: [],
+};
 let sharedRecordsLoadPromise: Promise<void> | null = null;
 let sharedRecordsReloadQueued = false;
+const subscribeDisabled = () => () => {};
 
 const getSharedPotentialMatchRecordsSnapshot = (): SharedPotentialMatchRecordsSnapshot => (
   sharedRecordsSnapshot
+);
+const getDisabledSharedPotentialMatchRecordsSnapshot = (): SharedPotentialMatchRecordsSnapshot => (
+  disabledSharedRecordsSnapshot
 );
 
 const subscribeSharedPotentialMatchRecords = (listener: () => void): (() => void) => {
@@ -225,21 +235,26 @@ export default function useScraperPotentialMangaMatches({
   detailsResult,
   libraryMangas,
   mergeOptions,
+  enabled = true,
 }: UseScraperPotentialMangaMatchesOptions): ScraperPotentialMangaMatchState {
   const [matches, setMatches] = useState<ScraperPotentialMangaMatchState>(EMPTY_MATCH_STATE);
-  const { bookmarks } = useScraperBookmarks();
-  const { records: viewHistoryRecords } = useScraperViewHistory();
+  const { bookmarks } = useScraperBookmarks({ enabled });
+  const { records: viewHistoryRecords } = useScraperViewHistory({ enabled });
   const {
     historyRecords,
     progressRecords,
     scrapers,
   } = useSyncExternalStore(
-    subscribeSharedPotentialMatchRecords,
-    getSharedPotentialMatchRecordsSnapshot,
-    getSharedPotentialMatchRecordsSnapshot,
+    enabled ? subscribeSharedPotentialMatchRecords : subscribeDisabled,
+    enabled ? getSharedPotentialMatchRecordsSnapshot : getDisabledSharedPotentialMatchRecordsSnapshot,
+    enabled ? getSharedPotentialMatchRecordsSnapshot : getDisabledSharedPotentialMatchRecordsSnapshot,
   );
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     void loadSharedPotentialMatchRecords(scraper);
 
     const reload = () => {
@@ -258,7 +273,7 @@ export default function useScraperPotentialMangaMatches({
       window.removeEventListener("mangas-updated", reload as EventListener);
       window.removeEventListener("scrapers-updated", reload as EventListener);
     };
-  }, [scraper]);
+  }, [enabled, scraper]);
 
   const scrapersById = useMemo(() => (
     new Map((scrapers.length ? scrapers : [scraper]).map((candidate) => [candidate.id, candidate]))
@@ -313,7 +328,7 @@ export default function useScraperPotentialMangaMatches({
   useEffect(() => {
     let cancelled = false;
 
-    if (!currentMatchable) {
+    if (!enabled || !currentMatchable) {
       setMatches(EMPTY_MATCH_STATE);
       return () => {
         cancelled = true;
@@ -374,6 +389,7 @@ export default function useScraperPotentialMangaMatches({
     comparableBookmarkCandidates,
     comparableReadingCandidates,
     currentMatchable,
+    enabled,
     mergeOptions,
   ]);
 

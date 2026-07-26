@@ -16,6 +16,7 @@ type ScraperViewHistoryState = {
 
 type UseScraperViewHistoryOptions = {
   scraperId?: string | null;
+  enabled?: boolean;
 };
 
 const listeners = new Set<() => void>();
@@ -31,6 +32,14 @@ let inFlightLoad: Promise<ScraperViewHistoryRecord[]> | null = null;
 let hasBoundWindowEvents = false;
 
 const getSnapshot = (): ScraperViewHistoryState => state;
+const getDisabledSnapshot = (): ScraperViewHistoryState => DISABLED_STATE;
+
+const DISABLED_STATE: ScraperViewHistoryState = {
+  loaded: false,
+  loading: false,
+  records: [],
+  error: null,
+};
 
 const emitChange = () => {
   listeners.forEach((listener) => listener());
@@ -54,6 +63,8 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
+
+const subscribeDisabled = () => () => {};
 
 const getApi = (): any => (
   typeof window !== 'undefined' ? (window as any).api : null
@@ -219,11 +230,20 @@ export const setScraperCardRead = async (
 export const useScraperViewHistory = (options?: UseScraperViewHistoryOptions) => {
   bindWindowEvents();
 
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const enabled = options?.enabled !== false;
+  const snapshot = useSyncExternalStore(
+    enabled ? subscribe : subscribeDisabled,
+    enabled ? getSnapshot : getDisabledSnapshot,
+    enabled ? getSnapshot : getDisabledSnapshot,
+  );
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     void loadScraperViewHistory();
-  }, []);
+  }, [enabled]);
 
   const normalizedScraperId = String(options?.scraperId ?? '').trim();
 

@@ -14,6 +14,7 @@ type ScraperBookmarksState = {
 
 type UseScraperBookmarksOptions = {
   scraperId?: string | null;
+  enabled?: boolean;
 };
 
 const listeners = new Set<() => void>();
@@ -30,6 +31,14 @@ let hasBoundWindowEvents = false;
 let localBookmarkWriteEventSkips = 0;
 
 const getSnapshot = (): ScraperBookmarksState => state;
+const getDisabledSnapshot = (): ScraperBookmarksState => DISABLED_STATE;
+
+const DISABLED_STATE: ScraperBookmarksState = {
+  loaded: false,
+  loading: false,
+  bookmarks: [],
+  error: null,
+};
 
 const emitChange = () => {
   listeners.forEach((listener) => listener());
@@ -51,6 +60,8 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
+
+const subscribeDisabled = () => () => {};
 
 const getApi = (): any => (
   typeof window !== 'undefined' ? (window as any).api : null
@@ -250,11 +261,20 @@ export const removeScraperBookmark = async (
 export const useScraperBookmarks = (options?: UseScraperBookmarksOptions) => {
   bindWindowEvents();
 
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const enabled = options?.enabled !== false;
+  const snapshot = useSyncExternalStore(
+    enabled ? subscribe : subscribeDisabled,
+    enabled ? getSnapshot : getDisabledSnapshot,
+    enabled ? getSnapshot : getDisabledSnapshot,
+  );
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     void loadScraperBookmarks();
-  }, []);
+  }, [enabled]);
 
   const normalizedScraperId = String(options?.scraperId ?? '').trim();
 
@@ -290,17 +310,38 @@ export const useScraperBookmarks = (options?: UseScraperBookmarksOptions) => {
 export const useScraperBookmark = (
   scraperId?: string | null,
   sourceUrl?: string | null,
+  enabled = true,
 ) => {
-  const { loaded, loading, error, bookmarkMap, reload } = useScraperBookmarks({ scraperId });
-  const bookmarkKey = getScraperBookmarkKey(scraperId, sourceUrl);
-  const bookmark = bookmarkKey ? bookmarkMap.get(bookmarkKey) ?? null : null;
+  const normalizedScraperId = String(scraperId ?? '').trim();
+  const normalizedSourceUrl = String(sourceUrl ?? '').trim();
+  const getBookmarkSnapshot = () => (
+    enabled && normalizedScraperId && normalizedSourceUrl
+      ? state.bookmarks.find((candidate) => (
+        candidate.scraperId === normalizedScraperId
+        && candidate.sourceUrl === normalizedSourceUrl
+      )) ?? null
+      : null
+  );
+  const bookmark = useSyncExternalStore(
+    enabled ? subscribe : subscribeDisabled,
+    getBookmarkSnapshot,
+    getBookmarkSnapshot,
+  );
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    void loadScraperBookmarks();
+  }, [enabled]);
 
   return {
-    loaded,
-    loading,
-    error,
+    loaded: enabled && state.loaded,
+    loading: enabled && state.loading,
+    error: enabled ? state.error : null,
     bookmark,
     isBookmarked: Boolean(bookmark),
-    reload,
+    reload: () => loadScraperBookmarks(true),
   };
 };

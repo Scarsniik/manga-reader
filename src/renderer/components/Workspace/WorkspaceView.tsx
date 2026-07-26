@@ -329,6 +329,7 @@ export default function WorkspaceView() {
                 hidden={!isActive}
               >
                 <WorkspaceTargetPanel
+                  isActive={isActive}
                   returnTarget={tab.returnTarget}
                   tabId={tab.id}
                   target={tab.target}

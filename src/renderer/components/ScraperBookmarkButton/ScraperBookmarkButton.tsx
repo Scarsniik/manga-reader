@@ -35,6 +35,7 @@ type Props = {
   className?: string;
   size?: 'sm' | 'md';
   disabled?: boolean;
+  subscriptionsEnabled?: boolean;
   autoSyncWhenBookmarked?: boolean;
   stopPropagation?: boolean;
   onBeforeToggle?: (nextIsBookmarked: boolean, proceed: () => void) => void;
@@ -56,6 +57,7 @@ export default function ScraperBookmarkButton({
   className = '',
   size = 'md',
   disabled = false,
+  subscriptionsEnabled = true,
   autoSyncWhenBookmarked = true,
   stopPropagation = true,
   onBeforeToggle,
@@ -100,7 +102,11 @@ export default function ScraperBookmarkButton({
     pageCount,
     summary,
   ]);
-  const { bookmark, isBookmarked } = useScraperBookmark(normalizedScraperId, normalizedSourceUrl);
+  const { bookmark, isBookmarked } = useScraperBookmark(
+    normalizedScraperId,
+    normalizedSourceUrl,
+    subscriptionsEnabled,
+  );
   const [pending, setPending] = useState(false);
   const syncInFlightRef = useRef(false);
   const skipNextAutoSyncRef = useRef(false);
@@ -110,7 +116,13 @@ export default function ScraperBookmarkButton({
     : `Ajouter ${normalizedTitle} aux bookmarks`;
 
   useEffect(() => {
-    if (!autoSyncWhenBookmarked || !bookmarkRequest || !isBookmarked || syncInFlightRef.current) {
+    if (
+      !subscriptionsEnabled
+      || !autoSyncWhenBookmarked
+      || !bookmarkRequest
+      || !isBookmarked
+      || syncInFlightRef.current
+    ) {
       return;
     }
 
@@ -141,7 +153,7 @@ export default function ScraperBookmarkButton({
     return () => {
       cancelled = true;
     };
-  }, [autoSyncWhenBookmarked, bookmark, bookmarkRequest, isBookmarked]);
+  }, [autoSyncWhenBookmarked, bookmark, bookmarkRequest, isBookmarked, subscriptionsEnabled]);
 
   const runToggle = useCallback(async () => {
     if (!bookmarkRequest || disabled || pending) {

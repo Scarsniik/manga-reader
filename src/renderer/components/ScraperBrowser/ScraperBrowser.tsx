@@ -146,6 +146,7 @@ import type { ListingBackgroundResult } from '@/renderer/backgroundSearch/types'
 type Props = {
   scraper: ScraperRecord;
   backgroundSearchJobId?: string;
+  expensiveDetailsChecksEnabled?: boolean;
   initialState?: ScraperBrowserInitialState | null;
   onOpenReaderTarget?: (target: ReaderWorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
   onOpenWorkspaceTarget?: (target: WorkspaceTarget, options?: { returnTarget?: WorkspaceTarget }) => void;
@@ -244,6 +245,7 @@ const normalizeSavedScraperSearches = (value: unknown): SavedScraperSearch[] => 
 export default function ScraperBrowser({
   scraper,
   backgroundSearchJobId,
+  expensiveDetailsChecksEnabled = true,
   initialState = null,
   onOpenReaderTarget,
   onOpenWorkspaceTarget,
@@ -471,6 +473,7 @@ export default function ScraperBrowser({
     detailsResult,
     libraryMangas,
     mergeOptions: potentialMatchMergeOptions,
+    enabled: expensiveDetailsChecksEnabled,
   });
 
   const clearFeedback = useCallback(() => {
@@ -586,6 +589,10 @@ export default function ScraperBrowser({
   }, [currentScraperSavedSearches.length, showSavedScraperSearches]);
 
   useEffect(() => {
+    if (!expensiveDetailsChecksEnabled) {
+      return;
+    }
+
     void loadLibraryMangas();
 
     const onMangasUpdated = () => {
@@ -594,7 +601,7 @@ export default function ScraperBrowser({
 
     window.addEventListener('mangas-updated', onMangasUpdated as EventListener);
     return () => window.removeEventListener('mangas-updated', onMangasUpdated as EventListener);
-  }, [loadLibraryMangas]);
+  }, [expensiveDetailsChecksEnabled, loadLibraryMangas]);
 
   const {
     currentDetailsUrl,
@@ -2479,6 +2486,7 @@ export default function ScraperBrowser({
       ) : null}
 
       <ScraperDetailsPanel
+        expensiveChecksEnabled={expensiveDetailsChecksEnabled}
         scraperId={scraper.id}
         bookmarkExcludedFields={scraper.globalConfig.bookmark.excludedFields}
         detailsResult={detailsResult}
