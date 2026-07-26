@@ -5,6 +5,7 @@ const esbuild = require("esbuild");
 
 const source = `
   export {
+    resolveBackgroundLanguageProgress,
     resolveBackgroundListingConcurrency,
     resolveBackgroundQuickSeenProgress,
   } from "@/renderer/backgroundSearch/backgroundListingExecution";
@@ -25,6 +26,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
   resolveBackgroundQuickSeenProgress,
 } = bundledModule.exports;
@@ -52,5 +54,29 @@ test("quick author scans stop after the configured consecutive seen boundary", (
   assert.deepEqual(resolveBackgroundQuickSeenProgress([true, false, true], 2, 2), {
     consecutiveSeenCount: 1,
     boundaryReached: true,
+  });
+});
+
+test("background source scans stop after the configured language rejection boundary", () => {
+  assert.deepEqual(resolveBackgroundLanguageProgress(40, 0, 25, 0, 0, 60), {
+    excludedCount: 65,
+    includedCount: 0,
+    boundaryReached: true,
+  });
+});
+
+test("background source scans keep running after finding an included language", () => {
+  assert.deepEqual(resolveBackgroundLanguageProgress(60, 1, 20, 0, 0, 60), {
+    excludedCount: 80,
+    includedCount: 1,
+    boundaryReached: false,
+  });
+});
+
+test("background language rejection boundary can be disabled", () => {
+  assert.deepEqual(resolveBackgroundLanguageProgress(0, 0, 100, 0, 0, 0), {
+    excludedCount: 100,
+    includedCount: 0,
+    boundaryReached: false,
   });
 });

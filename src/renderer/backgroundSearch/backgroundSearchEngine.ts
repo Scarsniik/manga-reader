@@ -50,6 +50,7 @@ import type {
 import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
 import {
+  resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
   resolveBackgroundQuickSeenProgress,
 } from "@/renderer/backgroundSearch/backgroundListingExecution";
@@ -321,29 +322,43 @@ const runListings = async (
             ),
           }
           : page;
-        const pageSources = buildSourceResults(run.scraper, pageWithResultTag, pageIndex, run.name)
-          .filter((item) => doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes));
+        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
+          buildSourceResults(run.scraper, pageWithResultTag, pageIndex, run.name),
+        );
         const newPageSources = pageSources.filter((item) => {
           const key = normalizeResultUrl(item);
           if (seenCandidateResultKeys.has(key)) return false;
           seenCandidateResultKeys.add(key);
           return true;
         });
+        const includedPageSources = newPageSources.filter((item) => (
+          doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
+        ));
         const quickSeenProgress = resolveBackgroundQuickSeenProgress(
-          newPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
+          includedPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
           consecutiveSeenResultCount,
           input.quickConsecutiveSeenStopThreshold,
         );
         consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
-        const rawUnseenSources = newPageSources
+        const rawUnseenSources = includedPageSources
           .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
         const detailedSources = await enrichSourceResultsWithCardDetails(run.scraper, rawUnseenSources, {
           scrapeDetailsWithCards: input.scrapeDetailsWithCards,
         });
-        const newEligibleSources = await enrichSourceResultsWithJapaneseRomanization(
-          detailedSources
-            .filter((item) => doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes))
-            .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
+        const enrichedSources = await enrichSourceResultsWithJapaneseRomanization(detailedSources);
+        const languageEligibleSources = enrichedSources.filter((item) => (
+          doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
+        ));
+        const enrichedLanguageExcludedCount = enrichedSources.length - languageEligibleSources.length;
+        const newEligibleSources = languageEligibleSources
+          .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
+        const languageProgress = resolveBackgroundLanguageProgress(
+          run.excludedByLanguageCount ?? 0,
+          run.includedByLanguageCount ?? 0,
+          newPageSources.length,
+          includedPageSources.length,
+          enrichedLanguageExcludedCount,
+          input.languageRejectLimit,
         );
         if (backfillBlacklistedResults && pageIndex < configuredMaxPages) {
           newEligibleSources.forEach((item) => rawQuotaResultKeys.add(normalizeResultUrl(item)));
@@ -384,6 +399,7 @@ const runListings = async (
           && !paginationStalled
           && !duplicatePage
           && !quickHistoryBoundaryReached
+          && !languageProgress.boundaryReached
           && !backfillStalled;
         const hasNextPage = backfillBlacklistedResults
           ? shouldContinueBackgroundBlacklistBackfill({
@@ -402,6 +418,9 @@ const runListings = async (
           hasNextPage,
           currentPageUrl: page.currentPageUrl,
           nextPageUrl: page.nextPageUrl,
+          excludedByLanguageCount: languageProgress.excludedCount,
+          includedByLanguageCount: languageProgress.includedCount,
+          languageRejectLimitReached: languageProgress.boundaryReached,
           excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
             + blacklistFilter.excludedCount,
         };

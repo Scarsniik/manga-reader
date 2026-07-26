@@ -204,6 +204,7 @@ export type ListingBackgroundInput = {
   selectedTagFavoriteIds?: string[];
   searchMode?: "quick" | "continuous" | "deep";
   quickConsecutiveSeenStopThreshold?: number;
+  languageRejectLimit?: number;
 };
 
 export type BackgroundSearchChangeEvent = {

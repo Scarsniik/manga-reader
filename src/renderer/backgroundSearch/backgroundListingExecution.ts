@@ -32,3 +32,44 @@ export const resolveBackgroundQuickSeenProgress = (
 
   return { consecutiveSeenCount, boundaryReached };
 };
+
+type BackgroundLanguageProgress = {
+  excludedCount: number;
+  includedCount: number;
+  boundaryReached: boolean;
+};
+
+export const resolveBackgroundLanguageProgress = (
+  previousExcludedCount: number,
+  previousIncludedCount: number,
+  newResultCount: number,
+  includedResultCount: number,
+  enrichedExcludedCount: number,
+  rejectLimit: number | undefined,
+): BackgroundLanguageProgress => {
+  const normalizedNewResultCount = Math.max(0, Math.floor(newResultCount));
+  const normalizedIncludedResultCount = Math.min(
+    normalizedNewResultCount,
+    Math.max(0, Math.floor(includedResultCount)),
+  );
+  const normalizedEnrichedExcludedCount = Math.min(
+    normalizedIncludedResultCount,
+    Math.max(0, Math.floor(enrichedExcludedCount)),
+  );
+  const excludedCount = Math.max(0, previousExcludedCount)
+    + normalizedNewResultCount
+    - normalizedIncludedResultCount
+    + normalizedEnrichedExcludedCount;
+  const includedCount = Math.max(0, previousIncludedCount)
+    + normalizedIncludedResultCount
+    - normalizedEnrichedExcludedCount;
+  const normalizedRejectLimit = Math.max(0, Math.floor(Number(rejectLimit) || 0));
+
+  return {
+    excludedCount,
+    includedCount,
+    boundaryReached: normalizedRejectLimit > 0
+      && includedCount === 0
+      && excludedCount >= normalizedRejectLimit,
+  };
+};

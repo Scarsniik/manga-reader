@@ -16,6 +16,9 @@ export type BackgroundListingRun = {
   hasNextPage: boolean;
   currentPageUrl?: string;
   nextPageUrl?: string;
+  excludedByLanguageCount?: number;
+  includedByLanguageCount?: number;
+  languageRejectLimitReached?: boolean;
   excludedByBlacklistedTagCount?: number;
   error?: string;
 };

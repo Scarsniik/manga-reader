@@ -47,7 +47,9 @@ scraper, sans historique permettant de reconnaitre la zone deja vue, ne parcoure
 la totalite d'un catalogue. Sa valeur globale est configuree par
 `scraperLatestContinuousPageSafetyLimit` (100 pages par defaut, minimum 1) et peut etre remplacee
 temporairement dans les parametres de session. Ce mode est egalement disponible quand la collecte
-en arriere-plan est activee.
+en arriere-plan est activee. Le retrait du quota de resultats ne desactive pas la limite de refus
+par langue : un scraper qui ne retourne aucun resultat dans une langue incluse est toujours arrete
+au seuil `scraperLatestLanguageRejectLimit`, y compris pendant une collecte en arriere-plan.
 
 Le scan profond utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
 d'anciennes cards jamais vues. Si aucun checkpoint exact n'existe pour la requete et les langues

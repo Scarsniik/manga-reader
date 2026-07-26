@@ -1085,6 +1085,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       selectedTagFavoriteIds: isAuthors ? undefined : scraperIncludedTagFavoriteIds,
       searchMode,
       quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
+      languageRejectLimit: isAuthors ? undefined : scraperLanguageRejectLimit,
     };
     await enqueueBackgroundSearch({
       kind: isAuthors ? "latestAuthors" : "latestSources",
@@ -1105,6 +1106,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
     scraperIncludedTagFavorites,
+    scraperLanguageRejectLimit,
     defaultScraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
