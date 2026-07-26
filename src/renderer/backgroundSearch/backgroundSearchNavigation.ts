@@ -9,6 +9,14 @@ export const getBackgroundSearchViewId = (_job: BackgroundSearchJob): string => 
   BACKGROUND_SEARCH_RESULTS_VIEW_ID
 );
 
+export const isRestorableBackgroundSearchJob = (
+  job: BackgroundSearchJob | null | undefined,
+): job is BackgroundSearchJob => (
+  job?.input !== null
+  && job?.input !== undefined
+  && job.metadata.status !== "expired"
+);
+
 export const buildBackgroundSearchWorkspaceTarget = (
   job: BackgroundSearchJob,
 ): MangaManagerViewWorkspaceTarget => ({

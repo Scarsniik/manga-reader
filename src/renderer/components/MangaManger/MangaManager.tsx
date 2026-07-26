@@ -43,6 +43,7 @@ import {
     BACKGROUND_SEARCH_OPEN_EVENT,
     consumePendingBackgroundSearchOpen,
     getBackgroundSearchViewId,
+    isRestorableBackgroundSearchJob,
 } from '@/renderer/backgroundSearch/backgroundSearchNavigation';
 
 type DefaultComponentModule = {
@@ -461,9 +462,11 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         : null;
     const backgroundSearchJobId = typeof forcedLocationState?.backgroundSearchJobId === 'string'
         ? forcedLocationState.backgroundSearchJobId
-        : typeof locationState?.backgroundSearchJobId === 'string'
-            ? locationState.backgroundSearchJobId
-            : undefined;
+        : typeof routeScraperState.backgroundSearchJobId === 'string'
+            ? routeScraperState.backgroundSearchJobId
+            : typeof locationState?.backgroundSearchJobId === 'string'
+                ? locationState.backgroundSearchJobId
+                : undefined;
     const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
         { id: 'library', label: 'Bibliotheque', group: 'navigation', icon: 'library' },
         ...(isBackgroundSearchResultView ? [{ id: BACKGROUND_SEARCH_RESULTS_VIEW_ID, label: 'Résultat enregistré', group: 'navigation' as const, icon: 'search' as const }] : []),
@@ -649,6 +652,48 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         }
     }, [activeViewId, forcedViewId, hasLoadedScrapers, location.pathname, location.search, navigate, scrapers]);
 
+    useEffect(() => {
+        if (forcedViewId || !isBackgroundSearchResultView) {
+            return;
+        }
+
+        let cancelled = false;
+        const returnToHome = () => {
+            if (cancelled) return;
+            navigate(
+                {
+                    pathname: location.pathname,
+                    search: clearScraperRouteState(location.search),
+                },
+                { replace: true, state: null },
+            );
+        };
+
+        if (!backgroundSearchJobId || typeof window.api?.getBackgroundSearchJob !== 'function') {
+            returnToHome();
+            return;
+        }
+
+        void window.api.getBackgroundSearchJob(backgroundSearchJobId)
+            .then((job: BackgroundSearchJob | null) => {
+                if (!isRestorableBackgroundSearchJob(job)) {
+                    returnToHome();
+                }
+            })
+            .catch(returnToHome);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        backgroundSearchJobId,
+        forcedViewId,
+        isBackgroundSearchResultView,
+        location.pathname,
+        location.search,
+        navigate,
+    ]);
+
     const handleSearchResults = useCallback((result: Manga[]) => {
         setFiltered(result);
         setHasResolvedInitialFilters(true);
@@ -747,6 +792,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         const nextSearch = writeScraperRouteState(location.search, {
             scraperId: nextViewId,
             mode: 'search',
+            backgroundSearchJobId: job.metadata.id,
             homepageActive: false,
             homepagePage: 1,
             searchActive: false,

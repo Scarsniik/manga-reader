@@ -7,7 +7,13 @@ const source = `
   export {
     buildBackgroundSearchWorkspaceTarget,
     getBackgroundSearchViewId,
+    isRestorableBackgroundSearchJob,
   } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
+  export {
+    clearScraperRouteState,
+    parseScraperRouteState,
+    writeScraperRouteState,
+  } from "@/renderer/utils/scraperBrowserNavigation";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "background-search-navigation-test.ts" },
@@ -26,7 +32,11 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 
 const {
   buildBackgroundSearchWorkspaceTarget,
+  clearScraperRouteState,
   getBackgroundSearchViewId,
+  isRestorableBackgroundSearchJob,
+  parseScraperRouteState,
+  writeScraperRouteState,
 } = bundledModule.exports;
 
 const makeJob = (kind) => ({
@@ -54,4 +64,37 @@ test("every background search opens in the dedicated result view", () => {
       locationState: { backgroundSearchJobId: `job-${kind}` },
     });
   }
+});
+
+test("background search routes persist the job id across a restart", () => {
+  const search = writeScraperRouteState("?sort=date-desc", {
+    scraperId: "background-search-results",
+    mode: "search",
+    backgroundSearchJobId: "job-persisted",
+    searchActive: false,
+    searchQuery: "",
+    searchPage: 1,
+    authorActive: false,
+    authorQuery: "",
+    authorPage: 1,
+    mangaQuery: "",
+  });
+
+  assert.equal(parseScraperRouteState(search).backgroundSearchJobId, "job-persisted");
+  assert.equal(new URLSearchParams(search).get("sort"), "date-desc");
+  assert.equal(new URLSearchParams(search).get("backgroundSearchJob"), "job-persisted");
+  assert.equal(new URLSearchParams(clearScraperRouteState(search)).has("backgroundSearchJob"), false);
+});
+
+test("only available, non-expired jobs can be restored", () => {
+  const job = makeJob("multiSearch");
+  job.metadata.status = "completed";
+
+  assert.equal(isRestorableBackgroundSearchJob(job), true);
+  assert.equal(isRestorableBackgroundSearchJob({ ...job, input: null }), false);
+  assert.equal(isRestorableBackgroundSearchJob({
+    ...job,
+    metadata: { ...job.metadata, status: "expired" },
+  }), false);
+  assert.equal(isRestorableBackgroundSearchJob(null), false);
 });

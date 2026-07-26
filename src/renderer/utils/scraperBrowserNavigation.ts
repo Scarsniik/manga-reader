@@ -15,6 +15,7 @@ export type MultiSearchPrefillLocationState = {
 export type ScraperRouteState = {
   scraperId: string | null;
   mode: ScraperRouteMode;
+  backgroundSearchJobId?: string | null;
   homepageActive?: boolean;
   homepagePage?: number;
   searchActive: boolean;
@@ -51,6 +52,7 @@ const SCRAPER_MANGA_URL_PARAM = 'scraperMangaUrl';
 const SCRAPER_BOOKMARK_FILTER_PARAM = 'scraperBookmarkFilter';
 const SCRAPER_AUTHOR_FAVORITE_PARAM = 'scraperAuthorFavorite';
 const SCRAPER_TAG_FAVORITE_PARAM = 'scraperTagFavorite';
+const BACKGROUND_SEARCH_JOB_PARAM = 'backgroundSearchJob';
 
 const normalizeSearch = (search: string): URLSearchParams => (
   new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
@@ -88,6 +90,7 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
   return {
     scraperId,
     mode,
+    backgroundSearchJobId: params.get(BACKGROUND_SEARCH_JOB_PARAM) || null,
     homepageActive: params.get(SCRAPER_HOMEPAGE_ACTIVE_PARAM) === '1',
     homepagePage: normalizePage(params.get(SCRAPER_HOMEPAGE_PAGE_PARAM)),
     searchActive: params.get(SCRAPER_SEARCH_ACTIVE_PARAM) === '1',
@@ -131,6 +134,7 @@ export const writeScraperRouteState = (
   params.delete(SCRAPER_BOOKMARK_FILTER_PARAM);
   params.delete(SCRAPER_AUTHOR_FAVORITE_PARAM);
   params.delete(SCRAPER_TAG_FAVORITE_PARAM);
+  params.delete(BACKGROUND_SEARCH_JOB_PARAM);
 
   if (!state.scraperId) {
     const nextSearch = params.toString();
@@ -139,6 +143,10 @@ export const writeScraperRouteState = (
 
   params.set(SCRAPER_PARAM, state.scraperId);
   params.set(SCRAPER_MODE_PARAM, state.mode);
+
+  if (state.scraperId === BACKGROUND_SEARCH_RESULTS_VIEW_ID && state.backgroundSearchJobId) {
+    params.set(BACKGROUND_SEARCH_JOB_PARAM, state.backgroundSearchJobId);
+  }
 
   if (state.homepageActive) {
     params.set(SCRAPER_HOMEPAGE_ACTIVE_PARAM, '1');
@@ -198,6 +206,7 @@ export const clearScraperRouteState = (search: string): string => (
   writeScraperRouteState(search, {
     scraperId: null,
     mode: 'search',
+    backgroundSearchJobId: null,
     homepageActive: false,
     homepagePage: 1,
     searchActive: false,
