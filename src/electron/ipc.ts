@@ -481,6 +481,11 @@ ipcMain.handle("save-scraper-reader-progress", async (event: IpcMainInvokeEvent,
     notifyMangasUpdated();
     return saved;
 });
+ipcMain.handle("remove-scraper-reader-progress", async (event: IpcMainInvokeEvent, request: any) => {
+    const removedCount = await scrapers.removeScraperReaderProgress(event, request);
+    notifyMangasUpdated();
+    return removedCount;
+});
 ipcMain.handle("download-scraper-manga", async (event: IpcMainInvokeEvent, request: any) => (
     scrapers.queueScraperDownload(event, request)
 ));

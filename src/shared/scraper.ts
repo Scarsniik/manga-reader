@@ -733,12 +733,20 @@ export interface ScraperBookmarkViewRequest {
   blacklistedTagsByScraper?: Record<string, ScraperBookmarkViewTagBlacklistEntry[]> | null;
 }
 
+export interface ScraperBookmarkReaderProgress {
+  currentPage: number;
+  totalPages: number | null;
+  percent: number | null;
+  label: string;
+}
+
 export interface ScraperBookmarkViewRecord {
   bookmark: ScraperBookmarkRecord;
   languageCodes: string[];
   viewHistoryId: string;
   viewState: ScraperBookmarkViewState;
   readingStatus: ScraperBookmarkReadingStatus;
+  readerProgress: ScraperBookmarkReaderProgress | null;
 }
 
 export interface ScraperBookmarkViewResponse {
@@ -1024,6 +1032,11 @@ export interface SaveScraperReaderProgressRequest {
   sourceUrl: string;
   currentPage?: number | null;
   totalPages?: number | null;
+}
+
+export interface RemoveScraperReaderProgressRequest {
+  scraperId: string;
+  sourceUrl: string;
 }
 
 const normalizeScraperViewHistoryText = (value: unknown): string => (

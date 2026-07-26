@@ -16,6 +16,7 @@ import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/Scra
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
 import buildScraperBookmarkTagStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
 import buildScraperBookmarkReadingListModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkReadingListModal';
+import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import SavedReadingListsView from '@/renderer/components/ScraperBookmarks/SavedReadingListsView';
 import {
   findScraperBookmarkDuplicateGroups,
@@ -152,6 +153,7 @@ export default function ScraperBookmarksView({
   const [downloadingSourceUrl, setDownloadingSourceUrl] = useState<string | null>(null);
   const [addingSourceUrl, setAddingSourceUrl] = useState<string | null>(null);
   const [removingBookmarkKey, setRemovingBookmarkKey] = useState<string | null>(null);
+  const [clearingProgressKey, setClearingProgressKey] = useState<string | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [duplicateCheckProgress, setDuplicateCheckProgress] = useState<ScraperBookmarkDuplicateDetectionProgress>({
     compared: 0,
@@ -774,6 +776,79 @@ export default function ScraperBookmarksView({
     };
   }, [bookmarkViewRecordsByKey, handleSetBookmarkRead]);
 
+  const handleClearBookmarkProgress = useCallback(async (bookmark: ScraperBookmarkRecord) => {
+    const bookmarkKey = getBookmarkKey(bookmark);
+    if (clearingProgressKey) {
+      return;
+    }
+
+    setClearingProgressKey(bookmarkKey);
+    setHistoryError(null);
+
+    try {
+      if (!window.api || typeof window.api.removeScraperReaderProgress !== "function") {
+        throw new Error("La suppression de progression n'est pas disponible dans cette version.");
+      }
+
+      await window.api.removeScraperReaderProgress({
+        scraperId: bookmark.scraperId,
+        sourceUrl: bookmark.sourceUrl,
+      });
+      await reloadBookmarkView();
+    } catch (error) {
+      setHistoryError(
+        error instanceof Error
+          ? error.message
+          : "Impossible d'effacer la progression de lecture.",
+      );
+    } finally {
+      setClearingProgressKey(null);
+    }
+  }, [clearingProgressKey, reloadBookmarkView]);
+
+  const renderBookmarkClearProgressAction = useCallback((
+    bookmark: ScraperBookmarkRecord,
+  ): ScraperCardAction | null => {
+    const bookmarkKey = getBookmarkKey(bookmark);
+    const readerProgress = bookmarkViewRecordsByKey.get(bookmarkKey)?.readerProgress;
+    if (!readerProgress) {
+      return null;
+    }
+
+    const isClearing = clearingProgressKey === bookmarkKey;
+
+    return {
+      id: `clear-progress-${bookmark.scraperId}-${bookmark.sourceUrl}`,
+      type: "secondary",
+      label: isClearing ? "Effacement..." : "Effacer progression",
+      ariaLabel: `Effacer la progression de lecture de ${bookmark.title}`,
+      icon: <TrashCanIcon aria-hidden="true" focusable="false" />,
+      className: "is-clear-progress",
+      disabled: Boolean(clearingProgressKey),
+      onClick: () => {
+        openModal(buildConfirmActionModal({
+          title: "Effacer la progression",
+          message: (
+            <>
+              Effacer la progression de lecture de <strong>{bookmark.title}</strong> ?
+            </>
+          ),
+          details: "La prochaine lecture recommencera depuis le debut.",
+          confirmLabel: "Effacer",
+          confirmVariant: "danger",
+          onConfirm: () => {
+            void handleClearBookmarkProgress(bookmark);
+          },
+        }));
+      },
+    };
+  }, [
+    bookmarkViewRecordsByKey,
+    clearingProgressKey,
+    handleClearBookmarkProgress,
+    openModal,
+  ]);
+
   const handleRemoveBookmark = useCallback(async (bookmark: ScraperBookmarkRecord) => {
     const bookmarkKey = getBookmarkKey(bookmark);
     if (removingBookmarkKey) {
@@ -890,6 +965,7 @@ export default function ScraperBookmarksView({
 
   const renderDisplayedBookmark = useCallback((bookmark: ScraperBookmarkRecord) => {
     const scraper = scrapersById.get(bookmark.scraperId) ?? null;
+    const viewRecord = bookmarkViewRecordsByKey.get(getBookmarkKey(bookmark));
 
     return (
       <ScraperBookmarkCard
@@ -897,8 +973,10 @@ export default function ScraperBookmarksView({
         scraper={scraper}
         languageCodes={getLanguageCodesForBookmark(bookmark, scraper)}
         viewState={getBookmarkViewState(bookmark)}
+        readerProgress={viewRecord?.readerProgress}
         bookmarkAction={renderBookmarkRemoveAction(bookmark)}
         readAction={renderBookmarkReadAction(bookmark)}
+        clearProgressAction={renderBookmarkClearProgressAction(bookmark)}
         addToLibraryAction={renderBookmarkAddToLibraryAction(bookmark, scraper)}
         downloadAction={renderBookmarkDownloadAction(bookmark, scraper)}
         tagBlacklistEntries={getScraperTagBlacklistEntries(
@@ -914,11 +992,13 @@ export default function ScraperBookmarksView({
   }, [
     getBookmarkViewState,
     getLanguageCodesForBookmark,
+    bookmarkViewRecordsByKey,
     handleBookmarkViewed,
     handleOpenBookmark,
     handleOpenBookmarkInWorkspace,
     params?.scraperBlacklistedTagsByScraper,
     renderBookmarkAddToLibraryAction,
+    renderBookmarkClearProgressAction,
     renderBookmarkDownloadAction,
     renderBookmarkRemoveAction,
     renderBookmarkReadAction,

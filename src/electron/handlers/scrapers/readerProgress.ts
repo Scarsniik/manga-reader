@@ -1,5 +1,7 @@
 import { type IpcMainInvokeEvent } from "electron";
 import {
+  normalizeScraperViewHistorySourceUrl,
+  type RemoveScraperReaderProgressRequest,
   type SaveScraperReaderProgressRequest,
   type ScraperReaderProgressRecord,
 } from "../../scraper";
@@ -55,4 +57,29 @@ export async function saveScraperReaderProgress(
 
   await writeScraperReaderProgressFile(records);
   return normalized;
+}
+
+export async function removeScraperReaderProgress(
+  _event: IpcMainInvokeEvent,
+  request: RemoveScraperReaderProgressRequest,
+): Promise<number> {
+  const scraperId = String(request?.scraperId ?? "").trim();
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(request?.sourceUrl);
+
+  if (!scraperId || !sourceUrl) {
+    throw new Error("La source de la progression est incomplete.");
+  }
+
+  const records = await readScraperReaderProgressFile();
+  const retainedRecords = records.filter((record) => (
+    record.scraperId !== scraperId
+    || normalizeScraperViewHistorySourceUrl(record.sourceUrl) !== sourceUrl
+  ));
+  const removedCount = records.length - retainedRecords.length;
+
+  if (removedCount > 0) {
+    await writeScraperReaderProgressFile(retainedRecords);
+  }
+
+  return removedCount;
 }

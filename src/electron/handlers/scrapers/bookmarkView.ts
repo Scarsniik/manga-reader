@@ -6,6 +6,7 @@ import {
   type ScraperBookmarkFilterState,
   type ScraperBookmarkLanguageFilterMode,
   type ScraperBookmarkLanguageFilterModes,
+  type ScraperBookmarkReaderProgress,
   type ScraperBookmarkReadingStatus,
   type ScraperBookmarkRecord,
   type ScraperBookmarkSortKey,
@@ -275,6 +276,34 @@ const getReaderProgressStatus = (
   return "unread";
 };
 
+const buildBookmarkReaderProgress = (
+  record: ScraperReaderProgressRecord | null | undefined,
+): ScraperBookmarkReaderProgress | null => {
+  const currentPage = toPositiveNumber(record?.currentPage);
+  const totalPages = toPositiveNumber(record?.totalPages);
+  const status = getReaderProgressStatus(currentPage, totalPages);
+
+  if (!record || currentPage === null || status === "unread") {
+    return null;
+  }
+
+  const displayedCurrentPage = totalPages === null
+    ? currentPage
+    : Math.min(currentPage, totalPages);
+  const pageLabel = totalPages === null
+    ? `page ${displayedCurrentPage}`
+    : `${displayedCurrentPage}/${totalPages}`;
+
+  return {
+    currentPage: displayedCurrentPage,
+    totalPages,
+    percent: totalPages === null
+      ? null
+      : Math.max(0, Math.min(100, Math.round((displayedCurrentPage / totalPages) * 100))),
+    label: status === "read" ? `Termine ${pageLabel}` : `En cours ${pageLabel}`,
+  };
+};
+
 const createStableHash = (input: string): string => {
   let hash = 0x811c9dc5;
 
@@ -379,6 +408,29 @@ const getBookmarkReadingStatusFromIndex = (
   ));
 
   return hasStartedSourceProgress ? "inProgress" : "unread";
+};
+
+const getBookmarkReaderProgressFromIndex = (
+  bookmark: ScraperBookmarkRecord,
+  progressIndex: ReturnType<typeof buildProgressIndex>,
+): ScraperBookmarkReaderProgress | null => {
+  const standaloneProgress = progressIndex.recordsById.get(createScraperMangaId(
+    bookmark.scraperId,
+    bookmark.sourceUrl,
+  ));
+  const standaloneDisplay = buildBookmarkReaderProgress(standaloneProgress);
+  if (standaloneDisplay) {
+    return standaloneDisplay;
+  }
+
+  const sourceProgressRecords = progressIndex.recordsBySourceKey.get(
+    buildProgressSourceKey(bookmark.scraperId, bookmark.sourceUrl),
+  ) ?? [];
+  const startedRecords = sourceProgressRecords
+    .filter((record) => buildBookmarkReaderProgress(record) !== null)
+    .sort((left, right) => Date.parse(left.updatedAt) - Date.parse(right.updatedAt));
+
+  return buildBookmarkReaderProgress(startedRecords[startedRecords.length - 1]);
 };
 
 const getScraperSingleSourceLanguageCodes = (
@@ -543,6 +595,7 @@ const buildBookmarkViewCandidate = (
     viewHistoryId,
     viewState,
     readingStatus: getBookmarkReadingStatusFromIndex(bookmark, viewHistoryRecordsById, progressIndex),
+    readerProgress: getBookmarkReaderProgressFromIndex(bookmark, progressIndex),
   };
 };
 
@@ -643,6 +696,7 @@ const toResponseRecord = (candidate: BookmarkViewCandidate): ScraperBookmarkView
   viewHistoryId: candidate.viewHistoryId,
   viewState: candidate.viewState,
   readingStatus: candidate.readingStatus,
+  readerProgress: candidate.readerProgress,
 });
 
 export async function getScraperBookmarkView(

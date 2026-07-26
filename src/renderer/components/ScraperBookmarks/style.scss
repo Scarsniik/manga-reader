@@ -285,6 +285,46 @@
   font-weight: 700;
 }
 
+.scraper-bookmarks-view__progress {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(93, 156, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(93, 156, 255, 0.08);
+}
+
+.scraper-bookmarks-view__progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.scraper-bookmarks-view__progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #5d9cff;
+}
+
+.scraper-bookmarks-view__progress strong {
+  color: #dceaff;
+  font-size: 12px;
+}
+
+.scraper-bookmarks-view__card .scraper-card__action-button.is-clear-progress {
+  border-color: rgba(239, 83, 80, 0.38);
+  background: rgba(239, 83, 80, 0.12);
+  color: #ffb4b0;
+}
+
+.scraper-bookmarks-view__card .scraper-card__action-button.is-clear-progress:hover {
+  border-color: rgba(239, 83, 80, 0.58);
+  background: rgba(239, 83, 80, 0.2);
+  color: #ffe2e0;
+}
+
 .scraper-bookmarks-view .scraper-browser__results-grid {
   align-items: stretch;
 }

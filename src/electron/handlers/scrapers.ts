@@ -45,6 +45,7 @@ export {
 export {
   getScraperReaderProgress,
   getScraperReaderProgressRecords,
+  removeScraperReaderProgress,
   saveScraperReaderProgress,
 } from "./scrapers/readerProgress";
 export {

@@ -3,7 +3,11 @@ import ScraperCard, { type ScraperCardAction } from '@/renderer/components/Scrap
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import { DetailsCardIcon } from '@/renderer/components/icons';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
-import type { ScraperBookmarkRecord, ScraperRecord } from '@/shared/scraper';
+import type {
+  ScraperBookmarkReaderProgress,
+  ScraperBookmarkRecord,
+  ScraperRecord,
+} from "@/shared/scraper";
 import type { ScraperCardViewState } from '@/renderer/utils/scraperViewHistory';
 import { buildRemoteThumbnailUrl } from '@/renderer/utils/remoteThumbnails';
 import { formatScraperPageCountForDisplay } from '@/renderer/utils/scraperRuntime';
@@ -23,8 +27,10 @@ type Props = {
   scraper?: ScraperRecord | null;
   languageCodes?: string[];
   viewState: ScraperCardViewState;
+  readerProgress?: ScraperBookmarkReaderProgress | null;
   bookmarkAction?: ScraperCardAction | null;
   readAction?: ScraperCardAction | null;
+  clearProgressAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
@@ -95,8 +101,10 @@ export default function ScraperBookmarkCard({
   scraper = null,
   languageCodes = [],
   viewState,
+  readerProgress = null,
   bookmarkAction = null,
   readAction = null,
+  clearProgressAction = null,
   addToLibraryAction = null,
   downloadAction = null,
   tagBlacklistEntries = [],
@@ -155,6 +163,7 @@ export default function ScraperBookmarkCard({
   };
   const actions: ScraperCardAction[] = [
     ...(readAction ? [readAction] : []),
+    ...(clearProgressAction ? [clearProgressAction] : []),
     bookmarkAction ?? defaultBookmarkAction,
     ...(addToLibraryAction ? [addToLibraryAction] : []),
     ...(downloadAction ? [downloadAction] : []),
@@ -190,6 +199,21 @@ export default function ScraperBookmarkCard({
       summary={bookmark.description || bookmark.summary}
       metadata={(
         <>
+          {readerProgress ? (
+            <div
+              className="scraper-bookmarks-view__progress"
+              role="progressbar"
+              aria-valuemin={1}
+              aria-valuemax={readerProgress.totalPages ?? undefined}
+              aria-valuenow={readerProgress.currentPage}
+              aria-valuetext={readerProgress.label}
+            >
+              <div className="scraper-bookmarks-view__progress-track">
+                <span style={{ width: `${readerProgress.percent ?? 100}%` }} />
+              </div>
+              <strong>{readerProgress.label}</strong>
+            </div>
+          ) : null}
           {pageCountLabel ? (
             <div className="scraper-card__metadata">
               <span>{pageCountLabel}</span>

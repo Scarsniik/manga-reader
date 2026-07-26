@@ -575,6 +575,8 @@ Pour garder la progression :
 - un identifiant stable est derive du scraper et de l'URL stable de la fiche
 - la progression est stockee a part des mangas locaux
 - rouvrir la meme fiche reprend a la derniere page connue
+- les cards de bookmarks affichent la page atteinte quand la lecture a commence
+- la progression d'un bookmark peut etre effacee apres confirmation
 - le bouton `Retour` renvoie a la fiche scraper precedemment ouverte
 
 ## Assistant visuel de selecteurs
