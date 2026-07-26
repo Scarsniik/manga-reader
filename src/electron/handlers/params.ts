@@ -76,6 +76,8 @@ const DEFAULT_SCRAPER_LATEST_CONCURRENCY = 2;
 const MIN_SCRAPER_LATEST_CONCURRENCY = 1;
 const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
+const DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT = 100;
+const MIN_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT = 1;
 const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
 const MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 0;
 const DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT = 60;
@@ -510,6 +512,14 @@ const normalizeScraperLatestDeepPageLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestContinuousPageSafetyLimit = (value: unknown): number => (
+    normalizeIntegerSettingWithoutMax(
+        value,
+        DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
+        MIN_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
+    )
+);
+
 const normalizeScraperLatestQuickConsecutiveSeenStopThreshold = (value: unknown): number => (
     normalizeIntegerSettingWithoutMax(
         value,
@@ -664,6 +674,7 @@ const defaultSettings = {
     scraperLatestTagResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestConcurrency: DEFAULT_SCRAPER_LATEST_CONCURRENCY,
     scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
+    scraperLatestContinuousPageSafetyLimit: DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
     scraperLatestIncludedLanguageCodes: [] as string[],
@@ -790,6 +801,9 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.scraperLatestConcurrency = normalizeScraperLatestConcurrency(merged.scraperLatestConcurrency);
     merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
+    merged.scraperLatestContinuousPageSafetyLimit = normalizeScraperLatestContinuousPageSafetyLimit(
+        merged.scraperLatestContinuousPageSafetyLimit,
+    );
     merged.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
         merged.scraperLatestQuickConsecutiveSeenStopThreshold,
     );
@@ -1156,6 +1170,9 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(
             nextSettings.scraperLatestDeepPageLimit,
+        );
+        nextSettings.scraperLatestContinuousPageSafetyLimit = normalizeScraperLatestContinuousPageSafetyLimit(
+            nextSettings.scraperLatestContinuousPageSafetyLimit,
         );
         nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold = normalizeScraperLatestQuickConsecutiveSeenStopThreshold(
             nextSettings.scraperLatestQuickConsecutiveSeenStopThreshold,

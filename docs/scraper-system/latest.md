@@ -37,16 +37,27 @@ cette card d'ancrage avant de continuer autour du checkpoint.
 Les checkpoints sont separes par selection de langues. `Toutes les langues`, `ja`, `en` et `ja+en`
 ont donc chacun un point de reprise different.
 
-L'onglet propose `Scan rapide` et `Scan profond` dans l'en-tete des resultats. Le scan profond
-utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
+L'onglet propose trois modes dans un panneau de collecte dedie : `Scan rapide`, `Scanner sans quota`
+et `Scan profond`.
+
+`Scanner sans quota` reprend les regles du scan rapide mais retire le quota de resultats par source.
+Il continue donc la pagination tant que des nouveautes sont trouvees et s'arrete en retrouvant la
+zone de cards deja vues. Un garde-fou limite ce mode par source afin qu'un nouveau
+scraper, sans historique permettant de reconnaitre la zone deja vue, ne parcoure pas accidentellement
+la totalite d'un catalogue. Sa valeur globale est configuree par
+`scraperLatestContinuousPageSafetyLimit` (100 pages par defaut, minimum 1) et peut etre remplacee
+temporairement dans les parametres de session. Ce mode est egalement disponible quand la collecte
+en arriere-plan est activee.
+
+Le scan profond utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
 d'anciennes cards jamais vues. Si aucun checkpoint exact n'existe pour la requete et les langues
 incluses, il continue la pagination normale au lieu de s'arreter a la premiere page deja connue ou
 ignoree par langue. Le parametre `scraperLatestDeepPageLimit` limite le nombre de pages consultees
 en scan profond quand il est superieur a 0 ; la valeur 0 signifie aucune limite de pages.
 
-Quand des cards apparaissent, un bouton `Continuer` devient disponible dans l'en-tete des resultats.
-Il est place avant la grille pour pouvoir relancer la collecte avant de parcourir les cards. Un petit
-champ numerique indique combien de passes de continuation lancer a la suite. Le bouton est actif
+Sous les trois modes de scan, une barre `Reglages et reprise` regroupe `Parametres session`, le
+nombre de passes et le bouton `Continuer`. Elle est placee avant le resume et la grille pour pouvoir
+ajuster ou relancer la collecte avant de parcourir les cards. Le bouton est actif
 uniquement si au moins une source a atteint son quota de resultats et garde une suite possible. Une
 source arretee avant son quota, par exemple faute de nouveautes, devient non viable pour `Continuer`.
 Apres un scan rapide, chaque passe ajoute une nouvelle reprise rapide depuis le curseur dynamique du
@@ -98,7 +109,8 @@ par source incluse. Si une valeur tres grande est configuree, le runtime suit ce
 charger beaucoup de pages.
 L'en-tete des resultats propose aussi des parametres de session pour remplacer temporairement le
 nombre de resultats par scrapper et par tag favori, le nombre de scrapings simultanes, la limite du
-scan profond, le seuil de cards vues d'affilee en scan rapide et la limite de refus par langue. Ces
+scan profond, le garde-fou du scan sans quota, le seuil de cards vues d'affilee en scan rapide et la
+limite de refus par langue. Ces
 valeurs ne sont pas sauvegardees dans les settings globaux et le resume commence par un message
 `Override de session actif` tant qu'elles sont utilisees.
 Le parametre global `scraperLatestConcurrency` a un minimum de 1 et pas de limite haute. Il indique
@@ -117,6 +129,12 @@ vide.
 La vue affiche un avertissement si l'historique de vue des cards n'est pas configure en illimite
 sur la limite globale, la conservation des cards vues et la conservation des cards lues. Dans ce
 cas, des cards deja vues peuvent redevenir des nouveautes apres nettoyage automatique.
+
+## Indicateur des recherches en arriere-plan
+
+Le bouton `Recherches` de l'en-tete conserve le compteur des recherches actives. Il affiche aussi
+un badge vert distinct pour les recherches terminees qui n'ont pas encore ete consultees. Ce badge
+disparait pour une recherche apres l'ouverture de ses resultats.
 
 ## Onglet Auteurs
 

@@ -263,7 +263,9 @@ const runListings = async (
       const resultLimit = Math.max(0, Math.floor(source.resultLimit ?? input.resultLimit ?? 0));
       const backfillBlacklistedResults = kind === "latestSources"
         && input.excludeBlacklistedTagCards === true;
-      const executionPageLimit = backfillBlacklistedResults ? 250 : configuredMaxPages;
+      const executionPageLimit = backfillBlacklistedResults && input.searchMode !== "continuous"
+        ? 250
+        : configuredMaxPages;
       const rawQuotaResultKeys = new Set<string>();
       const seenCandidateResultKeys = new Set<string>();
       let acceptedResultTarget = 0;
@@ -371,8 +373,8 @@ const runListings = async (
           : 0;
         const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
         const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
-        const quickAuthorBoundaryReached = kind === "latestAuthors"
-          && input.searchMode === "quick"
+        const quickHistoryBoundaryReached = (kind === "latestAuthors" || kind === "latestSources")
+          && (input.searchMode === "quick" || input.searchMode === "continuous")
           && quickSeenProgress.boundaryReached
           && !(pageIndex === 0 && rawUnseenSources.length > 0);
         const backfillStalled = backfillBlacklistedResults
@@ -381,7 +383,7 @@ const runListings = async (
         const canLoadAnotherPage = sourceHasNextPage
           && !paginationStalled
           && !duplicatePage
-          && !quickAuthorBoundaryReached
+          && !quickHistoryBoundaryReached
           && !backfillStalled;
         const hasNextPage = backfillBlacklistedResults
           ? shouldContinueBackgroundBlacklistBackfill({
@@ -407,7 +409,10 @@ const runListings = async (
         await emit(run.name);
         if (!run.hasNextPage) break;
       }
-      if ((input.maxPages === null || backfillBlacklistedResults) && run.hasNextPage) {
+      if (
+        (input.maxPages === null || backfillBlacklistedResults || input.searchMode === "continuous")
+        && run.hasNextPage
+      ) {
         throw new Error("Limite de sécurité atteinte pendant le chargement complet.");
       }
       run = { ...run, status: "done" };

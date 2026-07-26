@@ -19,6 +19,7 @@ import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSource
 import { loadScraperViewHistory } from "@/renderer/stores/scraperViewHistory";
 import { getScraperTagBlacklistEntries } from "@/renderer/utils/scraperTagBlacklist";
 import useScraperLatestRuns, {
+  DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
   type ScraperLatestSearchMode,
 } from "@/renderer/components/ScraperLatest/useScraperLatestRuns";
 import {
@@ -182,6 +183,13 @@ const getScraperDeepPageLimit = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 };
 
+const getScraperContinuousPageSafetyLimit = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(1, Math.floor(parsed))
+    : DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT;
+};
+
 const getScraperQuickConsecutiveSeenStopThreshold = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 2;
@@ -343,6 +351,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   );
   const defaultScraperLanguageRejectLimit = getScraperLanguageRejectLimit(params?.scraperLatestLanguageRejectLimit);
   const defaultScraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
+  const defaultScraperContinuousPageSafetyLimit = getScraperContinuousPageSafetyLimit(
+    params?.scraperLatestContinuousPageSafetyLimit,
+  );
   const defaultScraperQuickConsecutiveSeenStopThreshold = getScraperQuickConsecutiveSeenStopThreshold(
     params?.scraperLatestQuickConsecutiveSeenStopThreshold,
   );
@@ -351,6 +362,8 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const tagResultLimit = scraperSessionSettings?.tagResultLimit ?? defaultTagResultLimit;
   const scraperLanguageRejectLimit = scraperSessionSettings?.languageRejectLimit ?? defaultScraperLanguageRejectLimit;
   const scraperDeepPageLimit = scraperSessionSettings?.deepPageLimit ?? defaultScraperDeepPageLimit;
+  const scraperContinuousPageSafetyLimit = scraperSessionSettings?.continuousPageSafetyLimit
+    ?? defaultScraperContinuousPageSafetyLimit;
   const scraperQuickConsecutiveSeenStopThreshold = scraperSessionSettings?.quickConsecutiveSeenStopThreshold
     ?? defaultScraperQuickConsecutiveSeenStopThreshold;
   const scraperLatestConcurrency = scraperSessionSettings?.concurrency ?? defaultScraperLatestConcurrency;
@@ -628,6 +641,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         preserveCurrentResults: options.preserveCurrentResults === true,
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         deepPageLimit: scraperDeepPageLimit,
+        continuousPageSafetyLimit: scraperContinuousPageSafetyLimit,
         concurrency: scraperLatestConcurrency,
         tagResultLimit,
         languageRejectLimit: scraperLanguageRejectLimit,
@@ -642,6 +656,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     params?.scraperBlacklistedTagsByScraper,
     params?.scraperScrapeDetailsWithCards,
     scraperDeepPageLimit,
+    scraperContinuousPageSafetyLimit,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
     scraperIncludedTagFavorites,
@@ -746,13 +761,16 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           state: getStatusState(run.status, canContinue),
           detail: [
             run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
-            `${run.results.length}/${runResultLimit} non vue(s)`,
+            run.continuousScan
+              ? `${run.results.length} non vue(s)`
+              : `${run.results.length}/${runResultLimit} non vue(s)`,
             run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
             run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
             run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
             run.languageRejectLimitReached ? "arret langue" : "",
+            run.safetyLimitReached ? "garde-fou atteint" : "",
             run.checkpointUsed ? "checkpoint utilise" : "",
-            run.deepSearch ? "recherche profonde" : "mode rapide",
+            run.deepSearch ? "recherche profonde" : run.continuousScan ? "sans quota" : "mode rapide",
             `${run.checkedPages} page(s) consultee(s)`,
             run.loadedPages > run.checkedPages ? `jusqu'a la page ${run.loadedPages}` : "",
             run.status === "done" && canContinue ? "suite disponible" : "",
@@ -896,6 +914,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         `${tagResultLimit} par tag favori`,
         `${scraperLatestConcurrency} source(s) en parallele`,
         `scan profond ${scraperDeepPageLimit} page(s)`,
+        `garde-fou sans quota ${scraperContinuousPageSafetyLimit} page(s)`,
         `rapide ${scraperQuickConsecutiveSeenStopThreshold} vue(s)`,
         `refus langue ${scraperLanguageRejectLimit}. `,
       ].join(", ")
@@ -921,19 +940,21 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     const deepPageLimitSummary = scraperDeepPageLimit > 0
       ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
       : " Scan profond sans limite de pages.";
+    const continuousPageSafetyLimitSummary = ` Scan sans quota limite a ${scraperContinuousPageSafetyLimit} page(s) par source.`;
     const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
     const languageRejectSummary = scraperLanguageRejectLimit > 0
       ? ` Arret d'une source apres ${scraperLanguageRejectLimit} resultat(s) refuses par langue.`
       : " Arret par refus de langue desactive.";
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
+      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
     }
 
-    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
+    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
   }, [
     enabledLatestScrapers,
     scraperIncludesNoScrapers,
     scraperDeepPageLimit,
+    scraperContinuousPageSafetyLimit,
     hasScraperSessionSettingsOverride,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
@@ -963,6 +984,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         tagResultLimit: defaultTagResultLimit,
         concurrency: defaultScraperLatestConcurrency,
         deepPageLimit: defaultScraperDeepPageLimit,
+        continuousPageSafetyLimit: defaultScraperContinuousPageSafetyLimit,
         quickConsecutiveSeenStopThreshold: defaultScraperQuickConsecutiveSeenStopThreshold,
         languageRejectLimit: defaultScraperLanguageRejectLimit,
       },
@@ -971,6 +993,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         tagResultLimit,
         concurrency: scraperLatestConcurrency,
         deepPageLimit: scraperDeepPageLimit,
+        continuousPageSafetyLimit: scraperContinuousPageSafetyLimit,
         quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
         languageRejectLimit: scraperLanguageRejectLimit,
       },
@@ -980,6 +1003,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     }));
   }, [
     defaultScraperDeepPageLimit,
+    defaultScraperContinuousPageSafetyLimit,
     defaultScraperLanguageRejectLimit,
     defaultScraperLatestConcurrency,
     defaultScraperQuickConsecutiveSeenStopThreshold,
@@ -987,6 +1011,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     defaultTagResultLimit,
     hasScraperSessionSettingsOverride,
     scraperDeepPageLimit,
+    scraperContinuousPageSafetyLimit,
     scraperLanguageRejectLimit,
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
@@ -1021,7 +1046,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             ? scraper.globalConfig.homeSearch.query ?? ""
             : "",
           mode: scraper.globalConfig.latest.module,
-          resultLimit: scraperResultLimit,
+          resultLimit: searchMode === "continuous" ? 0 : scraperResultLimit,
         })),
         ...scraperIncludedTagFavorites.flatMap((favorite) => favorite.sources.flatMap((source) => {
           const scraper = scrapersById.get(source.scraperId);
@@ -1031,7 +1056,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             scraper,
             query: source.tagUrl,
             mode: "tag" as const,
-            resultLimit: tagResultLimit,
+            resultLimit: searchMode === "continuous" ? 0 : tagResultLimit,
             resultTag: {
               name: source.name || favorite.name,
               url: source.tagUrl,
@@ -1045,8 +1070,10 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         ? authorPageCount
         : searchMode === "deep"
           ? scraperDeepPageLimit > 0 ? scraperDeepPageLimit : null
+          : searchMode === "continuous"
+            ? scraperContinuousPageSafetyLimit
           : 1,
-      resultLimit: scraperResultLimit,
+      resultLimit: searchMode === "continuous" ? 0 : scraperResultLimit,
       paceMode: "careful",
       concurrency: defaultScraperLatestConcurrency,
       includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
@@ -1073,6 +1100,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     includedLatestScrapers,
     params,
     scraperDeepPageLimit,
+    scraperContinuousPageSafetyLimit,
     scraperIncludedLanguageCodes,
     scraperIncludedScraperIds,
     scraperIncludedTagFavoriteIds,
@@ -1144,6 +1172,31 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     setScraperSearchMode("deep");
     setScraperRefreshKey((currentKey) => currentKey + 1);
   }, [activeTab, enqueueLatestBackgroundSearch, params?.scraperLatestSourcesBackgroundEnabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
+
+  const handleContinuousScan = React.useCallback(async () => {
+    if (activeTab !== "scrapers" || scraperActionsDisabled) {
+      return;
+    }
+
+    sourceResults.setLanguageFilterModes({});
+    sourceResults.setOpenError(null);
+
+    if (params?.scraperLatestSourcesBackgroundEnabled === true) {
+      await enqueueLatestBackgroundSearch("scrapers", "continuous");
+      return;
+    }
+
+    await refreshViewHistorySnapshot();
+    setScraperSearchMode("continuous");
+    setScraperRefreshKey((currentKey) => currentKey + 1);
+  }, [
+    activeTab,
+    enqueueLatestBackgroundSearch,
+    params?.scraperLatestSourcesBackgroundEnabled,
+    refreshViewHistorySnapshot,
+    scraperActionsDisabled,
+    sourceResults,
+  ]);
 
   const handleContinueScan = React.useCallback(async (repeatCount: number) => {
     if (activeTab !== "scrapers" || scraperActionsDisabled) {
@@ -1317,6 +1370,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         statusItems={statusItems}
         actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
         secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
+        continuousActionLabel={activeTab === "scrapers" ? "Scanner sans quota" : undefined}
         continueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
         continueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
         continueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
@@ -1356,6 +1410,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           : undefined}
         onReload={resultOnly ? undefined : attachedSearch.attached ? () => { void attachedSearch.reload(); } : handleReload}
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
+        onContinuousAction={activeTab === "scrapers" ? handleContinuousScan : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
         onContinueCountChange={setScraperContinueCount}
         onReplaceContinue={activeTab === "scrapers" ? handleReplaceContinueScan : undefined}

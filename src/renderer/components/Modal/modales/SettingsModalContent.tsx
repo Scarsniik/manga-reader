@@ -217,6 +217,13 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperLatestContinuousPageSafetyLimit',
+          label: 'Pages max du scan sans quota nouveautés (garde-fou)',
+          type: 'number',
+          min: 1,
+          step: 1,
+        },
+        {
           name: 'scraperLatestQuickConsecutiveSeenStopThreshold',
           label: 'Cards vues d\'affilée tolérées avant arrêt du scan rapide nouveautés',
           type: 'number',
@@ -374,6 +381,7 @@ export default function SettingsModalContent() {
     )
     const scraperLatestConcurrency = Number(values.scraperLatestConcurrency)
     const scraperLatestDeepPageLimit = Number(values.scraperLatestDeepPageLimit)
+    const scraperLatestContinuousPageSafetyLimit = Number(values.scraperLatestContinuousPageSafetyLimit)
     const scraperLatestQuickConsecutiveSeenStopThreshold = Number(
       values.scraperLatestQuickConsecutiveSeenStopThreshold,
     )
@@ -429,6 +437,9 @@ export default function SettingsModalContent() {
         ? Math.max(1, Math.floor(scraperLatestConcurrency))
         : 2,
       scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit) ? scraperLatestDeepPageLimit : 0,
+      scraperLatestContinuousPageSafetyLimit: Number.isFinite(scraperLatestContinuousPageSafetyLimit)
+        ? Math.max(1, Math.floor(scraperLatestContinuousPageSafetyLimit))
+        : 100,
       scraperLatestQuickConsecutiveSeenStopThreshold: Number.isFinite(scraperLatestQuickConsecutiveSeenStopThreshold)
         ? scraperLatestQuickConsecutiveSeenStopThreshold
         : 2,

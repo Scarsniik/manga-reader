@@ -116,6 +116,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const [selectionMode, setSelectionMode] = useState<boolean>(false);
     const [activeDownloadJobCount, setActiveDownloadJobCount] = useState(0);
     const [activeBackgroundSearchCount, setActiveBackgroundSearchCount] = useState(0);
+    const [unopenedCompletedBackgroundSearchCount, setUnopenedCompletedBackgroundSearchCount] = useState(0);
     const [scraperBrowserSeed, setScraperBrowserSeed] = useState<ScraperBrowserReturnState | null>(null);
     const { tags } = useTags();
     const { params, loading: paramsLoading, setParams } = useParams();
@@ -182,11 +183,15 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const loadBackgroundSearchSummary = useCallback(async () => {
         if (typeof window.api?.getBackgroundSearchQueue !== 'function') {
             setActiveBackgroundSearchCount(0);
+            setUnopenedCompletedBackgroundSearchCount(0);
             return;
         }
         try {
             const queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
             setActiveBackgroundSearchCount(queue?.counts?.active ?? 0);
+            setUnopenedCompletedBackgroundSearchCount(queue?.jobs?.filter((job) => (
+                job.status === 'completed' && job.openedAt === null
+            )).length ?? 0);
         } catch (summaryError) {
             console.warn('Failed to load background search summary', summaryError);
         }
@@ -891,6 +896,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             {showHeader ? (
                 <MangaManagerHeader
                     activeBackgroundSearchCount={activeBackgroundSearchCount}
+                    unopenedCompletedBackgroundSearchCount={unopenedCompletedBackgroundSearchCount}
                     activeDownloadJobCount={activeDownloadJobCount}
                     activeViewId={activeViewId}
                     isLibraryView={isLibraryView}

@@ -202,7 +202,7 @@ export type ListingBackgroundInput = {
   selectedFavoriteIds?: string[];
   selectedScraperIds?: string[];
   selectedTagFavoriteIds?: string[];
-  searchMode?: "quick" | "deep";
+  searchMode?: "quick" | "continuous" | "deep";
   quickConsecutiveSeenStopThreshold?: number;
 };
 

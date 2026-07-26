@@ -347,6 +347,34 @@
   line-height: 1;
 }
 
+.mangaManager-header__button--has-completed-search {
+  border-color: rgba(94, 207, 134, 0.32);
+  background: rgba(94, 207, 134, 0.08);
+  color: #dff8e7;
+}
+
+.mangaManager-header__button--has-completed-search .mangaManager-header__button-icon {
+  color: #72db96;
+}
+
+.mangaManager-header__completed-count {
+  display: inline-flex;
+  min-width: 22px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid rgba(94, 207, 134, 0.38);
+  border-radius: 999px;
+  background: rgba(94, 207, 134, 0.16);
+  color: #8ee7ac;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .mangaManager-content {
   padding-top: 8px;
 }

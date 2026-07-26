@@ -7,6 +7,7 @@ export type ScraperLatestSessionSettings = {
   tagResultLimit: number;
   concurrency: number;
   deepPageLimit: number;
+  continuousPageSafetyLimit: number;
   quickConsecutiveSeenStopThreshold: number;
   languageRejectLimit: number;
 };
@@ -47,6 +48,9 @@ function ScraperLatestSessionSettingsModalContent({
   const [tagResultLimit, setTagResultLimit] = React.useState(initialValues.tagResultLimit);
   const [concurrency, setConcurrency] = React.useState(initialValues.concurrency);
   const [deepPageLimit, setDeepPageLimit] = React.useState(initialValues.deepPageLimit);
+  const [continuousPageSafetyLimit, setContinuousPageSafetyLimit] = React.useState(
+    initialValues.continuousPageSafetyLimit,
+  );
   const [quickConsecutiveSeenStopThreshold, setQuickConsecutiveSeenStopThreshold] = React.useState(
     initialValues.quickConsecutiveSeenStopThreshold,
   );
@@ -59,6 +63,7 @@ function ScraperLatestSessionSettingsModalContent({
       tagResultLimit: normalizeResultLimit(tagResultLimit),
       concurrency: normalizeResultLimit(concurrency),
       deepPageLimit: normalizeNonNegativeLimit(deepPageLimit),
+      continuousPageSafetyLimit: normalizeResultLimit(continuousPageSafetyLimit),
       quickConsecutiveSeenStopThreshold: normalizeNonNegativeLimit(quickConsecutiveSeenStopThreshold),
       languageRejectLimit: normalizeNonNegativeLimit(languageRejectLimit),
     });
@@ -123,6 +128,20 @@ function ScraperLatestSessionSettingsModalContent({
           onChange={(event) => setDeepPageLimit(Number.parseInt(event.currentTarget.value, 10) || 0)}
         />
         <small>{`Parametre global : ${defaults.deepPageLimit} (0 = infini)`}</small>
+      </label>
+
+      <label className="scraper-latest-session-settings-modal__field">
+        <span>Garde-fou du scan sans quota</span>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={continuousPageSafetyLimit}
+          onChange={(event) => (
+            setContinuousPageSafetyLimit(Number.parseInt(event.currentTarget.value, 10) || 1)
+          )}
+        />
+        <small>{`Parametre global : ${defaults.continuousPageSafetyLimit} pages par source`}</small>
       </label>
 
       <label className="scraper-latest-session-settings-modal__field">

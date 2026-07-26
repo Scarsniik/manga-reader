@@ -58,8 +58,9 @@ import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSea
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
-export type ScraperLatestSearchMode = "quick" | "deep";
+export type ScraperLatestSearchMode = "quick" | "continuous" | "deep";
 export type ScraperLatestRunSourceKind = "scraper" | "tagFavorite";
+export const DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT = 100;
 
 export type ScraperLatestRun = {
   key: string;
@@ -81,6 +82,8 @@ export type ScraperLatestRun = {
   checkpoint?: ScraperLatestCheckpointRecord | null;
   checkpointUsed: boolean;
   deepSearch: boolean;
+  continuousScan: boolean;
+  safetyLimitReached?: boolean;
   languageRejectLimitReached?: boolean;
   currentPageUrl?: string;
   nextPageUrl?: string;
@@ -93,6 +96,7 @@ type StartOptions = {
   preserveCurrentResults?: boolean;
   quickConsecutiveSeenStopThreshold?: number;
   deepPageLimit?: number;
+  continuousPageSafetyLimit?: number;
   concurrency?: number;
   tagResultLimit?: number;
   languageRejectLimit?: number;
@@ -202,6 +206,7 @@ const buildRun = (
   checkpoint,
   checkpointUsed: false,
   deepSearch: searchMode === "deep",
+  continuousScan: searchMode === "continuous",
 });
 
 const buildScraperRun = (
@@ -289,6 +294,14 @@ const normalizeDeepPageLimit = (value: number | undefined): number => {
   return Math.max(0, Math.floor(value ?? 0));
 };
 
+const normalizeContinuousPageSafetyLimit = (value: number | undefined): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT;
+  }
+
+  return Math.max(1, Math.floor(value ?? DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT));
+};
+
 const DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
 const DEFAULT_LANGUAGE_REJECT_LIMIT = 60;
 
@@ -323,6 +336,14 @@ const isDeepPageLimitReached = (
   run.deepSearch
   && deepPageLimit > 0
   && run.checkedPages >= deepPageLimit
+);
+
+const isContinuousPageSafetyLimitReached = (
+  run: ScraperLatestRun,
+  continuousPageSafetyLimit: number,
+): boolean => (
+  run.continuousScan
+  && run.checkedPages >= continuousPageSafetyLimit
 );
 
 const isLanguageRejectLimitReached = (
@@ -1051,6 +1072,7 @@ export default function useScraperLatestRuns() {
     continueFromQuickScan = false,
     quickConsecutiveSeenStopThreshold = DEFAULT_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     deepPageLimit = 0,
+    continuousPageSafetyLimit = DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     languageRejectLimit = DEFAULT_LANGUAGE_REJECT_LIMIT,
     scrapeDetailsWithCards = false,
     excludeBlacklistedTagCards = false,
@@ -1073,6 +1095,7 @@ export default function useScraperLatestRuns() {
       && run.results.length < resultLimit
       && token === tokenRef.current
       && !isDeepPageLimitReached(run, deepPageLimit)
+      && !isContinuousPageSafetyLimitReached(run, continuousPageSafetyLimit)
       && !run.languageRejectLimitReached
     ) {
       const pageIndex = run.loadedPages;
@@ -1246,7 +1269,9 @@ export default function useScraperLatestRuns() {
       }
     }
 
-    const canContinueRun = runHasContinuationPotential(run, resultLimit);
+    const safetyLimitReached = isContinuousPageSafetyLimitReached(run, continuousPageSafetyLimit)
+      && run.hasNextPage;
+    const canContinueRun = !safetyLimitReached && runHasContinuationPotential(run, resultLimit);
 
     if (!run.deepSearch && !run.languageRejectLimitReached && token === tokenRef.current) {
       if (canContinueRun) {
@@ -1264,6 +1289,8 @@ export default function useScraperLatestRuns() {
     run = {
       ...run,
       canContinue: canContinueRun,
+      hasNextPage: safetyLimitReached ? false : run.hasNextPage,
+      safetyLimitReached,
     };
 
     if (token === tokenRef.current) {
@@ -1295,7 +1322,11 @@ export default function useScraperLatestRuns() {
       })
     ));
     const includedSourceCount = includedScrapers.length + includedTagFavoriteSources.length;
-    const searchMode: ScraperLatestSearchMode = options.searchMode === "deep" ? "deep" : "quick";
+    const searchMode: ScraperLatestSearchMode = options.searchMode === "deep"
+      ? "deep"
+      : options.searchMode === "continuous"
+        ? "continuous"
+        : "quick";
     const continueFromQuickScan = searchMode === "quick" && options.continueFromQuickScan === true;
     const preserveCurrentResults = options.preserveCurrentResults === true;
     const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
@@ -1305,6 +1336,7 @@ export default function useScraperLatestRuns() {
       options.quickConsecutiveSeenStopThreshold,
     );
     const deepPageLimit = normalizeDeepPageLimit(options.deepPageLimit);
+    const continuousPageSafetyLimit = normalizeContinuousPageSafetyLimit(options.continuousPageSafetyLimit);
     const languageRejectLimit = normalizeLanguageRejectLimit(options.languageRejectLimit);
     const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
     const token = tokenRef.current + 1;
@@ -1345,6 +1377,7 @@ export default function useScraperLatestRuns() {
           buildTagFavoriteRun(favorite, source, scraper, null, searchMode)
         )),
       ];
+      const continuousResultLimit = Number.MAX_SAFE_INTEGER;
       const currentRunsByKey = new Map(runsRef.current.map((run) => [run.key, run]));
       const continuationIdsToRefresh = new Set(baseRuns.map((run) => (
         buildQuickContinuationId(buildContinuationKeyForRun(run, includedLanguageCodes))
@@ -1446,7 +1479,9 @@ export default function useScraperLatestRuns() {
       await runWithConcurrency(
         initialRuns.map((run) => async () => {
           const baseRunResultLimit = run.sourceKind === "tagFavorite" ? tagResultLimit : resultLimit;
-          const runResultLimit = preserveCurrentResults
+          const runResultLimit = searchMode === "continuous"
+            ? continuousResultLimit
+            : preserveCurrentResults
             ? run.results.length + baseRunResultLimit
             : baseRunResultLimit;
           await loadRun(
@@ -1458,6 +1493,7 @@ export default function useScraperLatestRuns() {
             continueFromQuickScan,
             quickConsecutiveSeenStopThreshold,
             deepPageLimit,
+            continuousPageSafetyLimit,
             languageRejectLimit,
             scrapeDetailsWithCards,
             excludeBlacklistedTagCards,
@@ -1469,7 +1505,9 @@ export default function useScraperLatestRuns() {
 
       if (token === tokenRef.current) {
         setMessage(
-          includedLanguageCodes.length
+          searchMode === "continuous"
+            ? `Toutes les nouveautes ont ete recherchees jusqu'a la premiere zone deja vue, avec un garde-fou de ${continuousPageSafetyLimit} pages par source.`
+            : includedLanguageCodes.length
             ? `${resultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori recherches dans les langues incluses${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`
             : `${resultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori recherches${searchMode === "deep" ? " en recherche profonde" : " en mode rapide"}.`,
         );

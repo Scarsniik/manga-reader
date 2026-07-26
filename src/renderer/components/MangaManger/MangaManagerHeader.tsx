@@ -17,6 +17,7 @@ import TagsIcon from "@/renderer/components/MangaManger/icons/tags.svg?react";
 type Props = {
     activeDownloadJobCount: number;
     activeBackgroundSearchCount: number;
+    unopenedCompletedBackgroundSearchCount: number;
     activeViewId: string;
     isLibraryView: boolean;
     onAdd: () => void;
@@ -69,6 +70,7 @@ function HeaderButton({
 export default function MangaManagerHeader({
     activeDownloadJobCount,
     activeBackgroundSearchCount,
+    unopenedCompletedBackgroundSearchCount,
     activeViewId,
     isLibraryView,
     onAdd,
@@ -118,10 +120,33 @@ export default function MangaManagerHeader({
                             <span className="mangaManager-header__count">{activeDownloadJobCount}</span>
                         ) : null}
                     </HeaderButton>
-                    <HeaderButton icon={<MagnifyingGlassIcon />} onClick={onOpenBackgroundSearches}>
+                    <HeaderButton
+                        className={unopenedCompletedBackgroundSearchCount > 0
+                            ? "mangaManager-header__button--has-completed-search"
+                            : ""}
+                        icon={<MagnifyingGlassIcon />}
+                        onClick={onOpenBackgroundSearches}
+                        title={unopenedCompletedBackgroundSearchCount > 0
+                            ? `${unopenedCompletedBackgroundSearchCount} recherche(s) terminée(s) non consultée(s)`
+                            : "Voir les recherches en arrière-plan"}
+                    >
                         Recherches
                         {activeBackgroundSearchCount > 0 ? (
-                            <span className="mangaManager-header__count">{activeBackgroundSearchCount}</span>
+                            <span
+                                className="mangaManager-header__count"
+                                title={`${activeBackgroundSearchCount} recherche(s) active(s)`}
+                            >
+                                {activeBackgroundSearchCount}
+                            </span>
+                        ) : null}
+                        {unopenedCompletedBackgroundSearchCount > 0 ? (
+                            <span
+                                className="mangaManager-header__completed-count"
+                                title={`${unopenedCompletedBackgroundSearchCount} terminée(s) non consultée(s)`}
+                            >
+                                <span aria-hidden="true">✓</span>
+                                {unopenedCompletedBackgroundSearchCount}
+                            </span>
                         ) : null}
                     </HeaderButton>
                     <HeaderButton icon={<SettingsIcon />} onClick={onOpenSettings}>Parametres</HeaderButton>

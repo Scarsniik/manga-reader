@@ -27,6 +27,8 @@ import {
   filterBlacklistedMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import BlacklistedCardsDisplayToggle from "@/renderer/components/BlacklistedCardsDisplayToggle";
+import ScraperLatestScanActions from "@/renderer/components/ScraperLatest/ScraperLatestScanActions";
+import ScraperLatestScanTools from "@/renderer/components/ScraperLatest/ScraperLatestScanTools";
 
 type StatusItem = {
   key: string;
@@ -49,6 +51,7 @@ type Props = {
   statusItems?: StatusItem[];
   actionLabel?: string;
   secondaryActionLabel?: string;
+  continuousActionLabel?: string;
   continueActionLabel?: string;
   continueActionDisabled?: boolean;
   continueActionTitle?: string;
@@ -76,6 +79,7 @@ type Props = {
   onShowBlacklistedCardsLocallyChange?: (showBlacklistedCards: boolean) => void;
   onReload?: () => void;
   onSecondaryAction?: () => void;
+  onContinuousAction?: () => void;
   onContinue?: (count: number) => void;
   onContinueCountChange?: (count: number) => void;
   onReplaceContinue?: () => void;
@@ -180,6 +184,7 @@ export default function ScraperLatestResults({
   statusItems = [],
   actionLabel = "Recharger",
   secondaryActionLabel,
+  continuousActionLabel,
   continueActionLabel,
   continueActionDisabled = false,
   continueActionTitle,
@@ -207,6 +212,7 @@ export default function ScraperLatestResults({
   onShowBlacklistedCardsLocallyChange,
   onReload,
   onSecondaryAction,
+  onContinuousAction,
   onContinue,
   onContinueCountChange,
   onReplaceContinue,
@@ -293,6 +299,13 @@ export default function ScraperLatestResults({
     : loading
       ? "Chargement en cours."
       : "Continuer le scan en remplacant les resultats actuels.";
+  const hasScanModeActions = Boolean(
+    onReload
+    && onSecondaryAction
+    && onContinuousAction
+    && secondaryActionLabel
+    && continuousActionLabel,
+  );
 
   React.useEffect(() => {
     setIsStatusPanelOpen(false);
@@ -312,49 +325,7 @@ export default function ScraperLatestResults({
                 onShowBlacklistedCardsLocallyChange={onShowBlacklistedCardsLocallyChange}
               />
             ) : null}
-            {settingsActionLabel && onOpenSettings ? (
-              <button
-                type="button"
-                className={settingsActionActive ? "secondary is-active" : "secondary"}
-                onClick={onOpenSettings}
-                disabled={loading}
-              >
-                {settingsActionLabel}
-              </button>
-            ) : null}
-            {continueActionLabel && onContinue ? (
-              <div className="scraper-latest-results__continue-action">
-                <label className="scraper-latest-results__continue-count">
-                  <span>Passes</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={normalizedContinueCount}
-                    onChange={(event) => {
-                      onContinueCountChange?.(Number.parseInt(event.currentTarget.value, 10) || 1);
-                    }}
-                    disabled={loading || actionsDisabled}
-                    aria-label="Nombre de continuations"
-                  />
-                </label>
-                <span className="scraper-latest-results__action-tooltip" title={resolvedContinueActionTitle}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setMergeRefreshKey((currentKey) => currentKey + 1);
-                      onContinue(normalizedContinueCount);
-                    }}
-                    disabled={isContinueDisabled}
-                    title={resolvedContinueActionTitle}
-                  >
-                    {loading ? "Chargement..." : continueActionLabel}
-                  </button>
-                </span>
-              </div>
-            ) : null}
-            {onReload ? (
+            {onReload && !hasScanModeActions ? (
               <button
                 type="button"
                 className="secondary"
@@ -367,7 +338,7 @@ export default function ScraperLatestResults({
                 {loading ? "Chargement..." : actionLabel}
               </button>
             ) : null}
-            {secondaryActionLabel && onSecondaryAction ? (
+            {secondaryActionLabel && onSecondaryAction && !hasScanModeActions ? (
               <button
                 type="button"
                 className="secondary"
@@ -382,6 +353,45 @@ export default function ScraperLatestResults({
             ) : null}
           </div>
         </div>
+        {hasScanModeActions && onReload && onSecondaryAction && onContinuousAction ? (
+          <ScraperLatestScanActions
+            loading={loading}
+            disabled={actionsDisabled}
+            quickLabel={actionLabel}
+            continuousLabel={continuousActionLabel ?? ""}
+            deepLabel={secondaryActionLabel ?? ""}
+            onQuick={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
+              onReload();
+            }}
+            onContinuous={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
+              onContinuousAction();
+            }}
+            onDeep={() => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
+              onSecondaryAction();
+            }}
+          />
+        ) : null}
+        {hasScanModeActions ? (
+          <ScraperLatestScanTools
+            loading={loading}
+            disabled={actionsDisabled}
+            settingsLabel={settingsActionLabel}
+            settingsActive={settingsActionActive}
+            continueLabel={continueActionLabel}
+            continueDisabled={isContinueDisabled}
+            continueTitle={resolvedContinueActionTitle}
+            continueCount={normalizedContinueCount}
+            onOpenSettings={onOpenSettings}
+            onContinue={(count) => {
+              setMergeRefreshKey((currentKey) => currentKey + 1);
+              onContinue?.(count);
+            }}
+            onContinueCountChange={onContinueCountChange}
+          />
+        ) : null}
         <div className="scraper-latest-results__summary">
           <p>{summary}</p>
           {preserveStoredResults ? (
