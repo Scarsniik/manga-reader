@@ -26,7 +26,7 @@ type Props = {
     onOpenOcr: () => void;
     onOpenScrapers: () => void;
     onOpenSettings: () => void;
-    onOpenTags: () => void;
+    onOpenLibraryMetadata: () => void;
     onOpenViewInWorkspace: (viewId: string) => void;
     onSelectView: (viewId: string) => void;
     onToggleSelection: () => void;
@@ -78,7 +78,7 @@ export default function MangaManagerHeader({
     onOpenOcr,
     onOpenScrapers,
     onOpenSettings,
-    onOpenTags,
+    onOpenLibraryMetadata,
     onOpenViewInWorkspace,
     onSelectView,
     onToggleSelection,
@@ -100,7 +100,13 @@ export default function MangaManagerHeader({
             <div className="mangaManager-header__actions" aria-label="Actions principales">
                 {isLibraryView ? (
                     <div className="mangaManager-header__group">
-                        <HeaderButton icon={<TagsIcon />} onClick={onOpenTags}>Tags</HeaderButton>
+                        <HeaderButton
+                            icon={<TagsIcon />}
+                            onClick={onOpenLibraryMetadata}
+                            title="Gérer les tags, auteurs et séries"
+                        >
+                            Métadonnées
+                        </HeaderButton>
                         <HeaderButton icon={<OcrScanIcon />} onClick={onOpenOcr}>OCR</HeaderButton>
                     </div>
                 ) : null}

@@ -483,9 +483,11 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         })),
     ], [isBackgroundSearchResultView, isCorrespondenceView, sortedScrapers]);
 
-    const openTagsModal = useCallback(async () => {
-        const buildTagsModal = await loadModalBuilder(() => import('@/renderer/components/Modal/modales/TagsModal.js'));
-        openModal(buildTagsModal());
+    const openLibraryMetadataModal = useCallback(async () => {
+        const buildLibraryMetadataModal = await loadModalBuilder(
+            () => import("@/renderer/components/Modal/modales/LibraryMetadataModal.js"),
+        );
+        openModal(buildLibraryMetadataModal());
     }, [openModal]);
 
     const openOcrQueueModal = useCallback(async () => {
@@ -853,7 +855,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                     onOpenOcr={() => { void openOcrQueueModal(); }}
                     onOpenScrapers={() => { void openScraperConfigModal(); }}
                     onOpenSettings={() => { void openSettingsModal(); }}
-                    onOpenTags={() => { void openTagsModal(); }}
+                    onOpenLibraryMetadata={() => { void openLibraryMetadataModal(); }}
                     onOpenViewInWorkspace={handleOpenViewInWorkspace}
                     onSelectView={handleActiveViewChange}
                     onToggleSelection={() => setSelectionMode((value) => !value)}

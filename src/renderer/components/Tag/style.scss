@@ -55,7 +55,7 @@
   color: #111827;
 }
 
-/* Styles moved from TagsModalContent.scss to make tag styles available to TagItem everywhere */
+/* Shared tag styles used by TagItem throughout the application. */
 .tag-item {
   display: inline-flex;
   align-items: center;
