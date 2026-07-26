@@ -25,6 +25,7 @@ import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import * as japaneseInflection from "./handlers/japaneseInflection";
 import * as voicevox from "./handlers/voicevox";
 import * as backgroundSearch from "./handlers/backgroundSearch";
+import * as statistics from "./handlers/statistics";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -315,6 +316,7 @@ ipcMain.handle("update-series", async (event: IpcMainInvokeEvent, updatedSeries:
 
 // Settings
 ipcMain.handle("get-settings", async () => params.getSettings());
+ipcMain.handle("get-application-statistics", async () => statistics.getApplicationStatistics());
 ipcMain.handle("save-settings", async (event: IpcMainInvokeEvent, settings: any) => {
     const savedSettings = await params.saveSettings(event, settings);
     scrapers.setGlobalScraperRequestConcurrency(savedSettings.scraperLatestConcurrency);

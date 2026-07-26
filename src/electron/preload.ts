@@ -472,6 +472,7 @@ contextBridge.exposeInMainWorld('api', {
     ocrTerminate: () => ipcRenderer.invoke('ocr-terminate'),
     // Settings API
     getSettings: () => ipcRenderer.invoke('get-settings'),
+    getApplicationStatistics: () => ipcRenderer.invoke("get-application-statistics"),
     saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
     appUpdateStatus: () => ipcRenderer.invoke("app-update-status"),
     appUpdateCheck: () => ipcRenderer.invoke("app-update-check"),

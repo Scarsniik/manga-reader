@@ -8,6 +8,7 @@ import type { FormItem } from '@/renderer/components/utils/Form/types'
 import OcrRuntimeSettingsPanel from '@/renderer/components/OcrRuntime/OcrRuntimeSettingsPanel'
 import ReaderSettingsPanel from '@/renderer/components/ReaderSettings/ReaderSettingsPanel'
 import ShortcutSettingsPanel from '@/renderer/components/ShortcutSettings/ShortcutSettingsPanel'
+import StatisticsPanel from '@/renderer/components/Statistics/StatisticsPanel'
 import MergedTitleLanguagePrioritySettings from '@/renderer/components/Modal/modales/MergedTitleLanguagePrioritySettings'
 import { normalizeMultiSearchTitleLanguagePriority } from '@/renderer/components/MultiSearch/multiSearchTitleSelection'
 import {
@@ -32,7 +33,9 @@ declare global {
 export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
   const { setModalActions } = useModal()
-  const [activeTab, setActiveTab] = React.useState<'options' | 'reader' | 'shortcuts' | 'version-installation'>('options')
+  const [activeTab, setActiveTab] = React.useState<
+    'options' | 'reader' | 'shortcuts' | 'statistics' | 'version-installation'
+  >('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
   const [mergedTitleLanguagePriority, setMergedTitleLanguagePriority] = React.useState<string[]>([])
@@ -502,6 +505,13 @@ export default function SettingsModalContent() {
         </button>
         <button
           type="button"
+          className={`settings-modal-tab ${activeTab === 'statistics' ? 'active' : ''}`}
+          onClick={() => setActiveTab('statistics')}
+        >
+          Statistiques
+        </button>
+        <button
+          type="button"
           className={`settings-modal-tab ${activeTab === 'version-installation' ? 'active' : ''}`}
           onClick={() => setActiveTab('version-installation')}
         >
@@ -556,6 +566,12 @@ export default function SettingsModalContent() {
         {activeTab === 'shortcuts' ? (
           <div className="settings-modal-panel">
             <ShortcutSettingsPanel />
+          </div>
+        ) : null}
+
+        {activeTab === 'statistics' ? (
+          <div className="settings-modal-panel">
+            <StatisticsPanel />
           </div>
         ) : null}
 
