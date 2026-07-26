@@ -9,6 +9,10 @@ import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
 import type { MultiSearchAdvancedPages, MultiSearchDepthMode, MultiSearchPaceMode } from "@/renderer/components/MultiSearch/types";
 import useParams from "@/renderer/hooks/useParams";
+import {
+  buildMangaCorrespondenceTitleInput,
+  parseMangaCorrespondenceTitleInput,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
 import "./style.scss";
 
 type Props = {
@@ -41,7 +45,13 @@ export default function MangaCorrespondenceDialog({
   onQueued,
 }: Props) {
   const { params } = useParams();
-  const [title, setTitle] = useState(initialTitle);
+  const initialTitles = useMemo(
+    () => Array.from(new Set([initialTitle, ...initialAlternativeTitles])).filter(Boolean),
+    [initialAlternativeTitles, initialTitle],
+  );
+  const [titleInput, setTitleInput] = useState(
+    () => buildMangaCorrespondenceTitleInput(initialTitle, initialAlternativeTitles),
+  );
   const [authors, setAuthors] = useState(initialAuthors.join(", "));
   const [chapter, setChapter] = useState(initialChapter ?? "");
   const [request, setRequest] = useState<MangaCorrespondenceRequest>("otherChapters");
@@ -60,7 +70,14 @@ export default function MangaCorrespondenceDialog({
     return () => { disposed = true; };
   }, []);
 
-  const canSubmit = useMemo(() => Boolean(title.trim() && scrapers.length && !submitting), [scrapers.length, submitting, title]);
+  const enteredTitles = useMemo(
+    () => parseMangaCorrespondenceTitleInput(titleInput, initialTitles),
+    [initialTitles, titleInput],
+  );
+  const canSubmit = useMemo(
+    () => Boolean(enteredTitles.length && scrapers.length && !submitting),
+    [enteredTitles.length, scrapers.length, submitting],
+  );
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
@@ -73,17 +90,14 @@ export default function MangaCorrespondenceDialog({
         : "quick") as MultiSearchDepthMode;
       const advancedPages = (params?.multiSearchAdvancedPages ?? 3) as MultiSearchAdvancedPages;
       const paceMode = (params?.multiSearchPaceMode === "careful" ? "careful" : "fast") as MultiSearchPaceMode;
-      const enteredTitle = title.trim();
-      const preservedAlternativeTitles = enteredTitle === initialTitle.trim()
-        ? initialAlternativeTitles
-        : [];
+      const [enteredTitle, ...enteredAlternativeTitles] = enteredTitles;
       const input: MangaCorrespondenceBackgroundInput = {
         reference: {
           scraperId,
           sourceUrl,
           rawTitle,
           title: enteredTitle,
-          alternativeTitles: Array.from(new Set([enteredTitle, ...preservedAlternativeTitles])).filter(Boolean),
+          alternativeTitles: enteredAlternativeTitles,
           authors: normalizeList(authors),
           authorUrls: initialAuthorUrls,
           chapter: chapter.trim() || undefined,
@@ -102,10 +116,10 @@ export default function MangaCorrespondenceDialog({
         input,
         kind: "mangaCorrespondence",
         params,
-        primaryTerm: title.trim(),
-        title: `Correspondances · ${title.trim()}`,
+        primaryTerm: enteredTitle,
+        title: `Correspondances · ${enteredTitle}`,
       });
-      onQueued(`Recherche de correspondances lancée pour « ${title.trim()} ».`);
+      onQueued(`Recherche de correspondances lancée pour « ${enteredTitles.join(", ")} ».`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Impossible de lancer la recherche.");
       setSubmitting(false);
@@ -115,13 +129,13 @@ export default function MangaCorrespondenceDialog({
   return (
     <form className="manga-correspondence-dialog" onSubmit={submit}>
       <div className="manga-correspondence-dialog__grid">
-        <label><span>Nom</span><input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus /></label>
+        <label className="manga-correspondence-dialog__wide"><span>Nom(s)</span><input value={titleInput} onChange={(event) => setTitleInput(event.target.value)} placeholder="Titres séparés par une virgule" autoFocus /></label>
         <label><span>Auteur(s)</span><input value={authors} onChange={(event) => setAuthors(event.target.value)} placeholder="Séparés par une virgule" /></label>
         <label><span>Chapitre</span><input value={chapter} onChange={(event) => setChapter(event.target.value)} /></label>
         <label><span>Demande</span><select value={request} onChange={(event) => setRequest(event.target.value as MangaCorrespondenceRequest)}><option value="otherChapters">Trouver les autres chapitres</option><option value="sameManga">Trouver ce même manga</option></select></label>
         <label className="manga-correspondence-dialog__wide"><span>Ordre d’exploration</span><select value={strategy} onChange={(event) => setStrategy(event.target.value as MangaCorrespondenceStrategy)}><option value="balanced">Équilibré</option><option value="titleFirst">Titres en priorité</option><option value="authorFirst">Auteurs en priorité</option></select></label>
       </div>
-      <p className="manga-correspondence-dialog__hint">La recherche s’exécute en arrière-plan et respecte la limite de scrapings simultanés des paramètres.</p>
+      <p className="manga-correspondence-dialog__hint">Chaque titre séparé par une virgule est recherché individuellement en arrière-plan, dans la limite globale de scrapings configurée.</p>
       {error ? <p className="manga-correspondence-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-dialog__actions">
         <button type="button" className="secondary" onClick={onCancel}>Annuler</button>

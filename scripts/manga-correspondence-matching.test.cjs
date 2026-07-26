@@ -25,6 +25,8 @@ const source = `
   export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
   export { isClearlyDerivativeMangaCorrespondenceTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
   export { stripMangaCorrespondenceTrailingKnownAuthor } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
+  export { buildMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
+  export { parseMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -63,6 +65,8 @@ const {
   applyCommonReadingAlternatives,
   isClearlyDerivativeMangaCorrespondenceTitle,
   stripMangaCorrespondenceTrailingKnownAuthor,
+  buildMangaCorrespondenceTitleInput,
+  parseMangaCorrespondenceTitleInput,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -113,6 +117,47 @@ test("correspondence only expands explicit or merge-backed alternative titles", 
       true,
     ),
     ["日本語の題名"],
+  );
+});
+
+test("correspondence title input exposes and separates every parsed title", () => {
+  const initialTitles = [
+    "Gal Yuina-chan to Ecchi",
+    "Sex with the Gyaru Yuina-chan",
+  ];
+  const input = buildMangaCorrespondenceTitleInput(
+    initialTitles[0],
+    initialTitles.slice(1),
+  );
+
+  assert.equal(
+    input,
+    "Gal Yuina-chan to Ecchi, Sex with the Gyaru Yuina-chan",
+  );
+  assert.deepEqual(
+    parseMangaCorrespondenceTitleInput(input, initialTitles),
+    initialTitles,
+  );
+  assert.deepEqual(
+    parseMangaCorrespondenceTitleInput("First title, Second title", initialTitles),
+    ["First title", "Second title"],
+  );
+});
+
+test("correspondence title input preserves a known title containing a comma", () => {
+  const initialTitles = ["Kanojo, Okarishimasu", "Rent-A-Girlfriend"];
+  const input = buildMangaCorrespondenceTitleInput(
+    initialTitles[0],
+    initialTitles.slice(1),
+  );
+
+  assert.deepEqual(
+    parseMangaCorrespondenceTitleInput(input, initialTitles),
+    initialTitles,
+  );
+  assert.deepEqual(
+    parseMangaCorrespondenceTitleInput("Kanojo, Okarishimasu", initialTitles),
+    ["Kanojo, Okarishimasu"],
   );
 });
 
