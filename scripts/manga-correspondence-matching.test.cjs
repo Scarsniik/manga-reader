@@ -340,6 +340,28 @@ test("correspondence removes generic chapter subtitles from bilingual titles", (
   assert.equal(result.languageCode, "en");
 });
 
+test("correspondence removes hyphen-wrapped subtitles without confusing chapter ranges", () => {
+  const numbered = analyzeMangaCorrespondenceTitle(
+    "[Example Circle (Example Author)] Example Series 3 -A Blushing Crush!?- | Translated Series 3 -My Crush Is Blushing!?- [English]",
+    null,
+  );
+  const firstChapter = analyzeMangaCorrespondenceTitle(
+    "[Example Author] Example Series -The First Encounter- [English]",
+    null,
+  );
+  const compactRange = analyzeMangaCorrespondenceTitle("Example Series 1-6", null);
+  const spacedRange = analyzeMangaCorrespondenceTitle("Example Series 1 - 6", null);
+
+  assert.equal(numbered.title, "Example Series");
+  assert.deepEqual(numbered.alternativeTitles, ["Translated Series"]);
+  assert.equal(numbered.chapter, "3");
+  assert.equal(firstChapter.title, "Example Series");
+  assert.equal(firstChapter.chapter, undefined);
+  assert.equal(inferMangaCorrespondenceFirstChapter(firstChapter, ["Example Series"]), "1");
+  assert.equal(compactRange.chapter, "1-6");
+  assert.equal(spacedRange.chapter, "1-6");
+});
+
 test("correspondence infers the first chapter after removing an unnumbered subtitle", () => {
   const result = analyzeMangaCorrespondenceTitle(
     "[Example Author] Example Series ~The Beginning~ [English]",

@@ -26,7 +26,7 @@ const CHAPTER_NUMBER_SOURCE = "[0-9０-９]{1,4}(?:[.,][0-9０-９]+)?";
 const CHAPTER_VALUE_SOURCE = `${CHAPTER_NUMBER_SOURCE}(?:\\s*[-–—~〜～]\\s*${CHAPTER_NUMBER_SOURCE})?`;
 const TRAILING_CHAPTER_MODIFIER_SOURCE = "(?:\\s*\\+\\s*(?:bonus|omake|extra|おまけ))?";
 const TRAILING_BARE_CHAPTER_PATTERN = new RegExp(
-  `^(?<title>.*\\S)\\s+(?:\\(\\s*(?<parenthesizedChapter>${CHAPTER_VALUE_SOURCE})\\s*\\)|(?<bareChapter>${CHAPTER_VALUE_SOURCE}))${TRAILING_CHAPTER_MODIFIER_SOURCE}\\s*[!！]?$`,
+  `^(?<title>.*?\\S)\\s+(?:\\(\\s*(?<parenthesizedChapter>${CHAPTER_VALUE_SOURCE})\\s*\\)|(?<bareChapter>${CHAPTER_VALUE_SOURCE}))${TRAILING_CHAPTER_MODIFIER_SOURCE}\\s*[!！]?$`,
   "iu",
 );
 const TRAILING_JAPANESE_CHAPTER_PATTERN = new RegExp(
@@ -45,10 +45,15 @@ const NUMBERED_DASH_SUBTITLE_PATTERN = new RegExp(
   `^(?<title>.*\\S)\\s+[-–—]\\s*(?<chapter>${CHAPTER_VALUE_SOURCE})\\s*[-–—:]\\s*.+$`,
   "iu",
 );
+const NUMBERED_WRAPPED_SUBTITLE_PATTERN = new RegExp(
+  `^(?<title>.*?\\S)\\s+(?<chapter>${CHAPTER_NUMBER_SOURCE})\\s*[-–—]\\s*(?!${CHAPTER_NUMBER_SOURCE}(?:\\s|$))(?<subtitle>.+?)\\s*[-–—]\\s*$`,
+  "iu",
+);
 const NUMBERED_SUFFIX_SUBTITLE_PATTERN = new RegExp(
   `^(?<title>.*\\S)\\s+(?<chapter>${CHAPTER_VALUE_SOURCE})\\s*:\\s*.+$`,
   "iu",
 );
+const WRAPPED_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s+[-–—]\s*.+?\s*[-–—]\s*$/iu;
 const TILDE_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s*[~〜～]\s*.*$/iu;
 const INLINE_RELEASE_STATUS_PATTERN = /\s*\[(?:ongoing|complete|completed)\]\s*/giu;
 const TRAILING_SUFFIX_PATTERN = /\s*(?:\[([^\]]*)\]|\{([^}]*)\}|=([^=]*)=)\s*$/u;
@@ -113,6 +118,7 @@ const stripDecoratedChapterSubtitle = (
   }
 
   const numberedMatch = value.match(NUMBERED_DASH_SUBTITLE_PATTERN)
+    ?? value.match(NUMBERED_WRAPPED_SUBTITLE_PATTERN)
     ?? value.match(NUMBERED_TILDE_SUBTITLE_PATTERN)
     ?? value.match(JAPANESE_NUMBERED_TILDE_SUBTITLE_PATTERN)
     ?? value.match(NUMBERED_SUFFIX_SUBTITLE_PATTERN);
@@ -121,6 +127,11 @@ const stripDecoratedChapterSubtitle = (
       title: normalizeTitleAnalysisText(numberedMatch.groups.title),
       chapter: normalizeChapter(numberedMatch.groups.chapter),
     };
+  }
+
+  const wrappedSubtitleMatch = value.match(WRAPPED_SUBTITLE_PATTERN);
+  if (wrappedSubtitleMatch?.groups?.title) {
+    return { title: normalizeTitleAnalysisText(wrappedSubtitleMatch.groups.title) };
   }
 
   const subtitleMatch = value.match(TILDE_SUBTITLE_PATTERN);
