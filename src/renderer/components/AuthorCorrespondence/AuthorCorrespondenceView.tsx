@@ -2,12 +2,22 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
+import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
 import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import type { AuthorCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
+import type {
+  ScraperAuthorFavoriteRecord,
+  ScraperAuthorFavoriteSource,
+} from "@/shared/scraper";
+import {
+  readAuthorCorrespondenceInvalidations,
+  writeAuthorCorrespondenceInvalidations,
+} from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceInvalidations";
 import "./style.scss";
 
 type Props = {
@@ -25,7 +35,75 @@ export default function AuthorCorrespondenceView({
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
+  const input = job?.input as AuthorCorrespondenceBackgroundInput | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
+  const [showCombinedView, setShowCombinedView] = React.useState(false);
+  const [invalidatedMatchKeys, setInvalidatedMatchKeys] = React.useState<Set<string>>(() => new Set());
+  const validMatches = React.useMemo(
+    () => result?.matches.filter((match) => !invalidatedMatchKeys.has(match.key)) ?? [],
+    [invalidatedMatchKeys, result?.matches],
+  );
+
+  React.useEffect(() => {
+    if (!job?.metadata.id) {
+      setInvalidatedMatchKeys(new Set());
+      return;
+    }
+
+    setInvalidatedMatchKeys(readAuthorCorrespondenceInvalidations(job.metadata.id));
+  }, [job?.metadata.id]);
+
+  const setMatchInvalidated = React.useCallback((matchKey: string, invalidated: boolean) => {
+    if (!job?.metadata.id) {
+      return;
+    }
+
+    setInvalidatedMatchKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys);
+      if (invalidated) {
+        nextKeys.add(matchKey);
+      } else {
+        nextKeys.delete(matchKey);
+      }
+      writeAuthorCorrespondenceInvalidations(job.metadata.id, nextKeys);
+      return nextKeys;
+    });
+  }, [job?.metadata.id]);
+
+  const invalidateCombinedSource = React.useCallback((source: ScraperAuthorFavoriteSource) => {
+    const match = result?.matches.find((candidate) => (
+      candidate.scraperId === source.scraperId
+      && candidate.authorUrl === source.authorUrl
+    ));
+    if (match) {
+      setMatchInvalidated(match.key, true);
+    }
+  }, [result?.matches, setMatchInvalidated]);
+
+  const combinedAuthor = React.useMemo<ScraperAuthorFavoriteRecord | null>(() => {
+    if (!job || !validMatches.length) {
+      return null;
+    }
+
+    return {
+      id: `author-correspondence:${job.metadata.id}`,
+      name: result?.referenceName || job.metadata.primaryTerm,
+      cover: validMatches
+        .flatMap((match) => match.previewSources)
+        .find((source) => source.result.thumbnailUrl)
+        ?.result.thumbnailUrl,
+      sources: validMatches.map((match) => ({
+        scraperId: match.scraperId,
+        authorUrl: match.authorUrl,
+        name: match.authorName,
+        templateContext: match.templateContext ?? undefined,
+        createdAt: job.metadata.createdAt,
+        updatedAt: job.metadata.updatedAt,
+      })),
+      createdAt: job.metadata.createdAt,
+      updatedAt: job.metadata.updatedAt,
+    };
+  }, [job, result?.referenceName, validMatches]);
 
   const buildAuthorTarget = (
     scraperId: string,
@@ -88,6 +166,19 @@ export default function AuthorCorrespondenceView({
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
 
+  if (showCombinedView && combinedAuthor) {
+    return (
+      <ScraperAuthorFavoritesView
+        scrapers={input?.scrapers ?? []}
+        favoriteOverride={combinedAuthor}
+        initialPageCountOverride={input?.authorPageCount}
+        onBackFromFavoriteOverride={() => setShowCombinedView(false)}
+        onInvalidateFavoriteOverrideSource={invalidateCombinedSource}
+        onOpenAuthorTarget={onOpenAuthorTarget}
+      />
+    );
+  }
+
   return (
     <section className="author-correspondence-view">
       {!resultOnly ? (
@@ -95,16 +186,46 @@ export default function AuthorCorrespondenceView({
           <div>
             <p>Correspondances auteur</p>
             <h2>{job.metadata.primaryTerm}</h2>
-            <span>{result?.matches.length ?? 0} page(s) auteur · {active ? "Recherche en cours" : "Recherche terminée"}</span>
+            <span>
+              {validMatches.length} page(s) auteur conservée(s)
+              {invalidatedMatchKeys.size ? ` · ${invalidatedMatchKeys.size} invalidée(s)` : ""}
+              {" · "}
+              {active ? "Recherche en cours" : "Recherche terminée"}
+            </span>
           </div>
           {active ? <button type="button" onClick={() => void cancel()}>Arrêter</button> : null}
         </header>
       ) : null}
 
+      {validMatches.length ? (
+        <div className="author-correspondence-view__view-actions">
+          <button
+            type="button"
+            className="author-correspondence-view__open-combined"
+            onClick={() => setShowCombinedView(true)}
+            disabled={active}
+            title={active
+              ? "Attends la fin de la recherche pour ouvrir la vue combinée"
+              : "Afficher ensemble les mangas de toutes les pages auteur trouvées"}
+          >
+            <OpenBookIcon aria-hidden="true" focusable="false" />
+            <span>Voir l’auteur combiné</span>
+          </button>
+        </div>
+      ) : null}
+
       {result?.matches.length ? (
         <div className="author-correspondence-view__list">
-          {result.matches.map((match) => (
-            <article key={match.key} className="author-correspondence-view__row">
+          {result.matches.map((match) => {
+            const invalidated = invalidatedMatchKeys.has(match.key);
+            return (
+              <article
+                key={match.key}
+                className={[
+                  "author-correspondence-view__row",
+                  invalidated ? "is-invalidated" : "",
+                ].filter(Boolean).join(" ")}
+              >
               <div className="author-correspondence-view__content">
                 <div className="author-correspondence-view__identity">
                   <span className="author-correspondence-view__source">{match.scraperName}</span>
@@ -171,9 +292,17 @@ export default function AuthorCorrespondenceView({
                   templateContext={match.templateContext}
                   disabled={active}
                 />
+                <button
+                  type="button"
+                  className="author-correspondence-view__invalidate"
+                  onClick={() => setMatchInvalidated(match.key, !invalidated)}
+                >
+                  {invalidated ? "Réintégrer" : "Invalider"}
+                </button>
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="empty">{active

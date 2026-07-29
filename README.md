@@ -12,6 +12,7 @@ Scaramanga is a lightweight desktop application designed to help users learn Jap
 - **User Data Access**: Open the managed user data folder directly from the Options modal for inspection or backup.
 - **Reading Lists**: Convert open manga workspace tabs into an ordered or shuffled session, save lists, and resume them from Bookmarks.
 - **Read-only Collection Statistics**: Review library, reading, scraper, bookmark, and user-data storage statistics from the Options modal.
+- **Combined Author Correspondences**: Open author pages found by a correspondence search in the favorite-author combined view, using the configured author page limit, and invalidate incorrect matches from either view.
 
 ## Project Structure
 

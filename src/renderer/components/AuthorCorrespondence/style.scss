@@ -21,6 +21,40 @@
   gap: 0.85rem;
 }
 
+.author-correspondence-view__view-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.author-correspondence-view__open-combined {
+  align-items: center;
+  background: rgba(73, 105, 214, 0.18);
+  border: 1px solid rgba(126, 156, 255, 0.5);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 14px;
+}
+
+.author-correspondence-view__open-combined:hover,
+.author-correspondence-view__open-combined:focus-visible {
+  background: rgba(73, 105, 214, 0.3);
+  border-color: rgba(149, 174, 255, 0.9);
+}
+
+.author-correspondence-view__open-combined:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.author-correspondence-view__open-combined svg {
+  height: 18px;
+  width: 18px;
+}
+
 .author-correspondence-view__row {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -37,6 +71,15 @@
 .author-correspondence-view__row:hover {
   border-color: rgba(93, 156, 255, 0.3);
   transform: translateY(-1px);
+}
+
+.author-correspondence-view__row.is-invalidated {
+  border-color: rgba(255, 139, 139, 0.28);
+  opacity: 0.58;
+}
+
+.author-correspondence-view__row.is-invalidated:hover {
+  border-color: rgba(255, 139, 139, 0.5);
 }
 
 .author-correspondence-view__content {
@@ -163,6 +206,27 @@
 .author-correspondence-view__open svg {
   height: 18px;
   width: 18px;
+}
+
+.author-correspondence-view__invalidate {
+  background: rgba(255, 111, 111, 0.1);
+  border: 1px solid rgba(255, 139, 139, 0.35);
+  border-radius: 9px;
+  color: #ffd6d6;
+  min-height: 34px;
+  padding: 0 0.8rem;
+}
+
+.author-correspondence-view__invalidate:hover,
+.author-correspondence-view__invalidate:focus-visible {
+  background: rgba(255, 111, 111, 0.2);
+  border-color: rgba(255, 139, 139, 0.7);
+}
+
+.author-correspondence-view__row.is-invalidated .author-correspondence-view__invalidate {
+  background: rgba(93, 156, 255, 0.14);
+  border-color: rgba(93, 156, 255, 0.42);
+  color: #e4efff;
 }
 
 .author-correspondence-view__actions .scraper-author-favorite-actions {

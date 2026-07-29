@@ -79,6 +79,7 @@ type Props = {
   onOpenAuthorSource: (source: ScraperAuthorFavoriteSource) => void;
   getSourceButtonTitle?: (run: AuthorFavoriteSourceRun) => string;
   getSourceButtonAriaLabel?: (run: AuthorFavoriteSourceRun) => string;
+  renderSourceAction?: (run: AuthorFavoriteSourceRun) => React.ReactNode;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -137,6 +138,7 @@ export default function ScraperAuthorCombinedResults({
   onOpenAuthorSource,
   getSourceButtonTitle,
   getSourceButtonAriaLabel,
+  renderSourceAction,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -253,6 +255,7 @@ export default function ScraperAuthorCombinedResults({
               </button>
               <div>
                 <span>{run.loadedPages} page(s)</span>
+                {renderSourceAction?.(run)}
                 {!readOnly ? <button
                   type="button"
                   className="scraper-author-favorites-view__source-more"

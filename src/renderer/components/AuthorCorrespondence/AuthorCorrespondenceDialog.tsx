@@ -69,6 +69,7 @@ export default function AuthorCorrespondenceDialog({
         scraperFilterValues: params?.multiSearchSelectedScraperIds ?? [],
         scrapers,
         maxPages: getDepthPages(depthMode, advancedPages),
+        authorPageCount: Math.max(1, Math.floor(params?.scraperAuthorFavoritePageCount ?? 1)),
         paceMode,
         scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,

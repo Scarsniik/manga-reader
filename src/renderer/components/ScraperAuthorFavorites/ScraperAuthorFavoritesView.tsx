@@ -52,10 +52,16 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
+import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 
 type Props = {
   scrapers: ScraperRecord[];
   backgroundSearchJobId?: string;
+  favoriteOverride?: ScraperAuthorFavoriteRecord;
+  initialPageCountOverride?: number;
+  onBackFromFavoriteOverride?: () => void;
+  onInvalidateFavoriteOverrideSource?: (source: ScraperAuthorFavoriteSource) => void;
+  onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
   resultOnly?: boolean;
 };
 
@@ -64,6 +70,11 @@ const RESULT_TEXT_FILTER_DELAY_MS = 350;
 export default function ScraperAuthorFavoritesView({
   scrapers,
   backgroundSearchJobId,
+  favoriteOverride,
+  initialPageCountOverride,
+  onBackFromFavoriteOverride,
+  onInvalidateFavoriteOverrideSource,
+  onOpenAuthorTarget,
   resultOnly = false,
 }: Props) {
   const { openModal, closeModal } = useModal();
@@ -86,13 +97,27 @@ export default function ScraperAuthorFavoritesView({
     writeFavoriteRouteState: writeScraperAuthorFavoriteRouteState,
   });
   const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
-  const selectedFavoriteId = attachedInput?.favoriteId ?? routeSelectedFavoriteId;
-  const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId)
+  const selectedFavoriteId = favoriteOverride?.id
+    ?? attachedInput?.favoriteId
+    ?? routeSelectedFavoriteId;
+  const selectedFavorite = favoriteOverride
+    ?? favorites.find((favorite) => favorite.id === selectedFavoriteId)
     ?? routeSelectedFavorite;
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const automaticallyStartedFavoriteIdRef = React.useRef<string | null>(null);
+  const initialPageCount = Math.max(
+    1,
+    Math.floor(initialPageCountOverride ?? params?.scraperAuthorFavoritePageCount ?? 1),
+  );
+  const selectedFavoriteStartKey = selectedFavorite
+    ? favoriteOverride
+      ? `${selectedFavorite.id}:${selectedFavorite.sources
+        .map((source) => `${source.scraperId}:${source.authorUrl}`)
+        .join("|")}:pages=${initialPageCount}`
+      : `${selectedFavorite.id}:pages=${initialPageCount}`
+    : null;
   const selectedFavoriteMultiSearchQuery = useMemo(() => (
     selectedFavorite
       ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
@@ -114,8 +139,8 @@ export default function ScraperAuthorFavoritesView({
     attachedSearch.attached ? null : selectedFavorite,
     scrapersById,
     {
-      initialPageCount: params?.scraperAuthorFavoritePageCount ?? 1,
-      cacheResults: params?.scraperAuthorFavoriteCacheResults === true,
+      initialPageCount,
+      cacheResults: !favoriteOverride && params?.scraperAuthorFavoriteCacheResults === true,
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     },
   );
@@ -143,7 +168,17 @@ export default function ScraperAuthorFavoritesView({
       error: run.error,
     }));
   }, [attachedResult?.runs, attachedSearch.job?.metadata.createdAt, attachedSearch.job?.metadata.updatedAt, selectedFavorite]);
-  const effectiveRuns = attachedSearch.attached ? attachedRuns : runs;
+  const effectiveRuns = useMemo(() => {
+    const currentRuns = attachedSearch.attached ? attachedRuns : runs;
+    if (!favoriteOverride) {
+      return currentRuns;
+    }
+
+    const sourceKeys = new Set(favoriteOverride.sources.map(
+      (source) => `${source.scraperId}::${source.authorUrl}`,
+    ));
+    return currentRuns.filter((run) => sourceKeys.has(run.key));
+  }, [attachedRuns, attachedSearch.attached, favoriteOverride, runs]);
   const loadedSources = useMemo(() => flattenMultiSearchSources(effectiveRuns), [effectiveRuns]);
   const {
     libraryMangas,
@@ -226,6 +261,17 @@ export default function ScraperAuthorFavoritesView({
   }, [resultTextFilter]);
 
   const handleOpenFavoriteSource = useCallback((source: ScraperAuthorFavoriteSource) => {
+    if (onOpenAuthorTarget) {
+      onOpenAuthorTarget({
+        kind: "scraper.author",
+        scraperId: source.scraperId,
+        query: source.authorUrl,
+        title: source.name,
+        templateContext: source.templateContext,
+      });
+      return;
+    }
+
     const locationState = location.state && typeof location.state === "object"
       ? location.state as Record<string, unknown>
       : {};
@@ -256,7 +302,7 @@ export default function ScraperAuthorFavoritesView({
         },
       },
     );
-  }, [location.pathname, location.search, location.state, navigate]);
+  }, [location.pathname, location.search, location.state, navigate, onOpenAuthorTarget]);
 
   const handleOpenSelectedFavoriteMultiSearch = useCallback(() => {
     if (!selectedFavoriteMultiSearchQuery) {
@@ -350,32 +396,46 @@ export default function ScraperAuthorFavoritesView({
       automaticallyStartedFavoriteIdRef.current = null;
       return;
     }
-    if (attachedSearch.attached || automaticallyStartedFavoriteIdRef.current === selectedFavorite.id) return;
-    automaticallyStartedFavoriteIdRef.current = selectedFavorite.id;
+    if (attachedSearch.attached || automaticallyStartedFavoriteIdRef.current === selectedFavoriteStartKey) return;
+    automaticallyStartedFavoriteIdRef.current = selectedFavoriteStartKey;
     setLanguageFilterModes({});
     setReadingStatusFilters([]);
     setResultTextFilter("");
     setDebouncedResultTextFilter("");
-    if (params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
+    if (!favoriteOverride && params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
       void enqueueSelectedFavoriteRefresh().catch((enqueueError) => {
         console.warn("Failed to enqueue author favorite refresh", enqueueError);
       });
     } else {
       void start();
     }
-  }, [attachedSearch.attached, enqueueSelectedFavoriteRefresh, params?.scraperAuthorFavoriteRefreshBackgroundEnabled, selectedFavorite, start]);
+  }, [
+    attachedSearch.attached,
+    enqueueSelectedFavoriteRefresh,
+    favoriteOverride,
+    params?.scraperAuthorFavoriteRefreshBackgroundEnabled,
+    selectedFavorite,
+    selectedFavoriteStartKey,
+    start,
+  ]);
 
   const handleReloadSelectedFavorite = useCallback(() => {
     if (attachedSearch.attached) {
       void attachedSearch.reload();
-    } else if (params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
+    } else if (!favoriteOverride && params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
       void enqueueSelectedFavoriteRefresh().catch((enqueueError) => {
         console.warn("Failed to enqueue author favorite refresh", enqueueError);
       });
     } else {
       void start();
     }
-  }, [attachedSearch, enqueueSelectedFavoriteRefresh, params?.scraperAuthorFavoriteRefreshBackgroundEnabled, start]);
+  }, [
+    attachedSearch,
+    enqueueSelectedFavoriteRefresh,
+    favoriteOverride,
+    params?.scraperAuthorFavoriteRefreshBackgroundEnabled,
+    start,
+  ]);
 
   const handleRemoveFavorite = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
     openModal(buildConfirmActionModal({
@@ -405,7 +465,7 @@ export default function ScraperAuthorFavoritesView({
   if (selectedFavorite) {
     return (
       <>
-        {!resultOnly ? <label className="background-search-toggle scraper-author-favorite__background-toggle">
+        {!resultOnly && !favoriteOverride ? <label className="background-search-toggle scraper-author-favorite__background-toggle">
           <input
             type="checkbox"
             checked={attachedSearch.attached || params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true}
@@ -447,7 +507,8 @@ export default function ScraperAuthorFavoritesView({
         tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         resultOnly={resultOnly}
-        correspondenceAction={!resultOnly ? (
+        backLabel={favoriteOverride ? "Retour aux correspondances auteur" : undefined}
+        correspondenceAction={!resultOnly && !favoriteOverride ? (
           <button
             type="button"
             className="scraper-author-favorites-view__multi-search"
@@ -458,7 +519,20 @@ export default function ScraperAuthorFavoritesView({
             <span>Trouver les correspondances</span>
           </button>
         ) : null}
-        onBack={() => handleSelectFavorite(null)}
+        renderSourceAction={favoriteOverride && onInvalidateFavoriteOverrideSource
+          ? (run) => (
+            <button
+              type="button"
+              className="scraper-author-favorites-view__source-more"
+              onClick={() => onInvalidateFavoriteOverrideSource(run.favoriteSource)}
+            >
+              Invalider
+            </button>
+          )
+          : undefined}
+        onBack={favoriteOverride
+          ? () => onBackFromFavoriteOverride?.()
+          : () => handleSelectFavorite(null)}
         onReload={handleReloadSelectedFavorite}
         onOpenMultiSearch={handleOpenSelectedFavoriteMultiSearch}
         onLoadMoreForAll={() => void loadMoreForAll()}

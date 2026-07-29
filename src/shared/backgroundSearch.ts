@@ -164,6 +164,7 @@ export type AuthorCorrespondenceBackgroundInput = {
   scraperFilterValues: string[];
   scrapers: ScraperRecord[];
   maxPages: number | null;
+  authorPageCount?: number;
   paceMode: "fast" | "careful";
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
