@@ -10,6 +10,8 @@ type Options<TFavorite extends FavoriteRecord> = {
   scrapers: ScraperRecord[];
   favorites: TFavorite[];
   loading: boolean;
+  initialFavoriteId?: string | null;
+  routeSyncEnabled?: boolean;
   readFavoriteRouteId: (search: string) => string | null;
   writeFavoriteRouteState: (search: string, favoriteId: string | null) => string;
 };
@@ -18,14 +20,16 @@ export default function useScraperSourceFavoriteSelection<TFavorite extends Favo
   scrapers,
   favorites,
   loading,
+  initialFavoriteId = null,
+  routeSyncEnabled = true,
   readFavoriteRouteId,
   writeFavoriteRouteState,
 }: Options<TFavorite>) {
   const location = useLocation();
   const navigate = useNavigate();
   const routeFavoriteId = useMemo(
-    () => readFavoriteRouteId(location.search),
-    [location.search, readFavoriteRouteId],
+    () => routeSyncEnabled ? readFavoriteRouteId(location.search) : initialFavoriteId,
+    [initialFavoriteId, location.search, readFavoriteRouteId, routeSyncEnabled],
   );
   const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | null>(routeFavoriteId);
   const scrapersById = useMemo(
@@ -38,7 +42,7 @@ export default function useScraperSourceFavoriteSelection<TFavorite extends Favo
   );
 
   useEffect(() => {
-    if (routeFavoriteId === selectedFavoriteId) {
+    if (!routeSyncEnabled || routeFavoriteId === selectedFavoriteId) {
       return;
     }
 
@@ -75,17 +79,21 @@ export default function useScraperSourceFavoriteSelection<TFavorite extends Favo
     location.search,
     navigate,
     routeFavoriteId,
+    routeSyncEnabled,
     selectedFavoriteId,
     writeFavoriteRouteState,
   ]);
 
   const handleSelectFavorite = useCallback((favoriteId: string | null) => {
     setSelectedFavoriteId(favoriteId);
+    if (!routeSyncEnabled) {
+      return;
+    }
     navigate({
       pathname: location.pathname,
       search: writeFavoriteRouteState(location.search, favoriteId),
     });
-  }, [location.pathname, location.search, navigate, writeFavoriteRouteState]);
+  }, [location.pathname, location.search, navigate, routeSyncEnabled, writeFavoriteRouteState]);
 
   return {
     location,

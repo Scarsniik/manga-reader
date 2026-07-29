@@ -9,6 +9,11 @@ import { executeBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import type { BackgroundSearchExecutionResult, ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ScraperAuthorFavoriteCacheRecord } from "@/shared/scraper";
+import {
+  buildCompleteAuthorFavoriteCache,
+  buildLatestAuthorCacheUpdates,
+  mergeAuthorFavoriteCacheUpdate,
+} from "@/renderer/utils/scraperAuthorFavoriteCache";
 const PROGRESS_UPDATE_THROTTLE_MS = 1000;
 const RESULT_CHECKPOINT_THROTTLE_MS = 5000;
 
@@ -21,37 +26,34 @@ const persistAuthorFavoriteCache = async (
   job: BackgroundSearchJob,
   result: BackgroundSearchExecutionResult,
 ): Promise<void> => {
-  if (job.metadata.kind !== "authorFavoriteRefresh") return;
+  if (
+    (job.metadata.kind !== "authorFavoriteRefresh" && job.metadata.kind !== "latestAuthors")
+    || !("runs" in result)
+  ) {
+    return;
+  }
   const input = job.input as ListingBackgroundInput;
-  if (!input.favoriteId || !("runs" in result)) return;
   const listingResult = result as ListingBackgroundResult;
-  if (listingResult.runs.some((run) => run.status === "error" || run.hasNextPage)) return;
   const api = window.api ?? {};
   if (typeof api.saveScraperAuthorFavoriteCache !== "function") return;
-  const timestamp = new Date().toISOString();
-  const cache: ScraperAuthorFavoriteCacheRecord = {
-    favoriteId: input.favoriteId,
-    favoriteUpdatedAt: input.favoriteUpdatedAt,
-    cachedAt: timestamp,
-    completedAt: timestamp,
-    sources: listingResult.runs.map((run) => ({
-      key: run.key,
-      scraperId: run.scraper.id,
-      authorUrl: run.query,
-      sourceName: run.name,
-      loadedPages: run.loadedPages,
-      hasNextPage: run.hasNextPage,
-      currentPageUrl: run.currentPageUrl,
-      nextPageUrl: run.nextPageUrl,
-      results: run.results.map((source) => ({
-        pageIndex: source.pageIndex,
-        searchTerm: source.searchTerm,
-        result: source.result,
-      })),
-      updatedAt: timestamp,
-    })),
-  };
-  await api.saveScraperAuthorFavoriteCache({ favoriteId: input.favoriteId, cache });
+
+  if (job.metadata.kind === "authorFavoriteRefresh") {
+    const cache = buildCompleteAuthorFavoriteCache(input, listingResult);
+    if (cache) {
+      await api.saveScraperAuthorFavoriteCache({ favoriteId: cache.favoriteId, cache });
+    }
+    return;
+  }
+
+  if (typeof api.getScraperAuthorFavoriteCache !== "function") return;
+  const updates = buildLatestAuthorCacheUpdates(input, listingResult);
+  await Promise.all(Array.from(updates.entries()).map(async ([favoriteId, update]) => {
+    const existingCache = await api.getScraperAuthorFavoriteCache(
+      favoriteId,
+    ) as ScraperAuthorFavoriteCacheRecord | null;
+    const cache = mergeAuthorFavoriteCacheUpdate(existingCache, update);
+    await api.saveScraperAuthorFavoriteCache({ favoriteId, cache });
+  }));
 };
 
 const isBackgroundSearchRunnerWindow = (): boolean => (

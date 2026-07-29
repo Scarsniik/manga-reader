@@ -163,6 +163,25 @@ ou jusqu'a la fin reelle de la pagination. Le quota de resultats et le seuil de 
 scan rapide ne s'appliquent pas aux auteurs. Le nombre de sources auteur chargees en parallele
 reprend `scraperLatestConcurrency`.
 
+Chaque collecte terminee fusionne les cards scrapees dans le fichier de cache de l'auteur favori
+concerne, y compris les cards deja connues qui ne sont pas affichees comme nouveautes. Comme cette
+collecte peut etre limitee en pages, elle complete le cache existant au lieu de le remplacer. Les
+sources et les cards ayant la meme cible canonique sont dedoublonnees avant la sauvegarde.
+
+Le reglage `Utiliser le cache pour les nouveautes auteurs` permet de reutiliser ces fichiers avant
+de lancer un scraping. L'anciennete maximale acceptee est configuree en heures avec
+`Anciennete maximale du cache des nouveautes auteurs` (24 heures par defaut).
+La validation est faite separement pour chaque auteur :
+
+- le cache doit provenir d'un chargement complet
+- sa date `cachedAt` doit respecter l'anciennete maximale
+- le favori ne doit pas avoir ete modifie apres cette date
+- la version du favori enregistree dans le cache doit encore correspondre a la version actuelle
+
+Les auteurs dont le cache est valide sont charges depuis leur fichier, tandis que les autres sont
+rescrapes normalement pendant la meme recherche. Une simple lecture du cache ne modifie pas sa date.
+Cette politique est identique pour les recherches lancees au premier plan et en arriere-plan.
+
 ## Reglages par scraper
 
 Dans les reglages globaux d'un scraper :

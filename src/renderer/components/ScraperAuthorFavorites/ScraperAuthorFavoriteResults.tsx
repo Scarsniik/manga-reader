@@ -71,6 +71,8 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  selectedCoverUrl?: string;
+  onSelectCover?: (coverUrl: string) => void;
 };
 
 export default function ScraperAuthorFavoriteResults({
@@ -116,6 +118,8 @@ export default function ScraperAuthorFavoriteResults({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  selectedCoverUrl,
+  onSelectCover,
 }: Props) {
   return (
     <ScraperAuthorCombinedResults
@@ -162,6 +166,8 @@ export default function ScraperAuthorFavoriteResults({
       onOpenSourceInWorkspace={onOpenSourceInWorkspace}
       onOpenProgressReader={onOpenProgressReader}
       onSetSourcesRead={onSetSourcesRead}
+      selectedCoverUrl={selectedCoverUrl}
+      onSelectCover={onSelectCover}
     />
   );
 }

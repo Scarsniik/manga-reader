@@ -175,6 +175,9 @@ export type ListingBackgroundSource = {
   name: string;
   scraper: ScraperRecord;
   query: string;
+  favoriteId?: string;
+  favoriteUpdatedAt?: string;
+  favoriteSourceName?: string;
   mode?: "homepage" | "search" | "author" | "tag";
   templateContext?: Record<string, string | undefined> | null;
   resultLimit?: number;
@@ -206,6 +209,8 @@ export type ListingBackgroundInput = {
   searchMode?: "quick" | "continuous" | "deep";
   quickConsecutiveSeenStopThreshold?: number;
   languageRejectLimit?: number;
+  useAuthorFavoriteCache?: boolean;
+  authorFavoriteCacheMaxAgeHours?: number;
 };
 
 export type BackgroundSearchChangeEvent = {

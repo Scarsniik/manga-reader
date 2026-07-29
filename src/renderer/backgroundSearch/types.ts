@@ -12,6 +12,8 @@ export type BackgroundListingRun = {
   query: string;
   status: "waiting" | "loading" | "done" | "error" | "cancelled";
   results: MultiSearchSourceResult[];
+  cacheResults?: MultiSearchSourceResult[];
+  fromCache?: boolean;
   loadedPages: number;
   hasNextPage: boolean;
   currentPageUrl?: string;

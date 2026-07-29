@@ -25,6 +25,10 @@ import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
 import {
+  buildAuthorCorrespondenceMatchKey,
+  normalizeAuthorCorrespondenceTarget,
+} from "@/renderer/utils/authorCorrespondenceIdentity";
+import {
   getScraperFeature,
   isScraperFeatureConfigured,
   isScraperListingPaginationEndError,
@@ -94,40 +98,27 @@ const findMatchedName = (candidateName: string, names: string[]): string | undef
   return candidate === reference || getFuzzyTextMatchScore(reference, candidateName) >= 450;
 });
 
-const normalizeAuthorTarget = (value: string): string => {
-  const trimmed = value.trim();
-  try {
-    const url = new URL(trimmed);
-    url.hash = "";
-    url.hostname = url.hostname.toLocaleLowerCase();
-    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
-    url.searchParams.sort();
-    return url.toString();
-  } catch {
-    return normalizeFuzzyText(trimmed);
-  }
-};
-
-const buildCandidateKey = (scraperId: string, authorUrl: string): string => (
-  `${scraperId}::${normalizeAuthorTarget(authorUrl)}`
-);
-
 const addCandidate = (
   candidates: Map<string, Candidate>,
   candidate: Omit<Candidate, "key" | "discoveryMethods"> & { discoveryMethod: Candidate["discoveryMethods"][number] },
 ): void => {
-  const directKey = buildCandidateKey(candidate.scraperId, candidate.authorUrl);
-  const existing = candidates.get(directKey) ?? Array.from(candidates.values()).find((entry) => (
-    entry.scraperId === candidate.scraperId
-    && normalizeFuzzyText(entry.authorName) === normalizeFuzzyText(candidate.authorName)
-  ));
+  const directKey = buildAuthorCorrespondenceMatchKey(candidate.scraperId, candidate.authorUrl);
+  const existing = candidates.get(directKey);
   const key = existing?.key ?? directKey;
   const { discoveryMethod, ...candidateFields } = candidate;
+  const preserveExistingReference = Boolean(
+    existing?.discoveryMethods.includes("reference")
+    && discoveryMethod !== "reference",
+  );
+  const mergedFields = preserveExistingReference
+    ? { ...candidateFields, ...existing }
+    : { ...existing, ...candidateFields };
   candidates.set(key, {
-    ...existing,
-    ...candidateFields,
+    ...mergedFields,
     key,
-    templateContext: candidate.templateContext ?? existing?.templateContext,
+    templateContext: preserveExistingReference
+      ? existing?.templateContext ?? candidate.templateContext
+      : candidate.templateContext ?? existing?.templateContext,
     discoveryMethods: Array.from(new Set([
       ...(existing?.discoveryMethods ?? []),
       discoveryMethod,
@@ -173,13 +164,12 @@ export const runAuthorCorrespondenceSearch = async (
     previewSources: MultiSearchSourceResult[],
     resolvedTarget?: string,
   ): void => {
-    const normalizedResolvedTarget = normalizeAuthorTarget(resolvedTarget || candidate.authorUrl);
+    const normalizedResolvedTarget = normalizeAuthorCorrespondenceTarget(resolvedTarget || candidate.authorUrl);
     const existing = Array.from(matches.values()).find((entry) => (
       entry.scraperId === candidate.scraperId
       && (
         resolvedTargetsByMatchKey.get(entry.key) === normalizedResolvedTarget
-        || normalizeAuthorTarget(entry.authorUrl) === normalizedResolvedTarget
-        || normalizeFuzzyText(entry.authorName) === normalizeFuzzyText(candidate.authorName)
+        || normalizeAuthorCorrespondenceTarget(entry.authorUrl) === normalizedResolvedTarget
       )
     ));
     const sourceKeys = new Set<string>();

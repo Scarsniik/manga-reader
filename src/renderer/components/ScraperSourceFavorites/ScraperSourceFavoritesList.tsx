@@ -28,7 +28,10 @@ type Props<
   emptyMessage: string;
   actionPrefix: string;
   favoriteKindLabel: string;
+  headerAction?: React.ReactNode;
+  statusMessage?: string | null;
   onSelectFavorite: (favoriteId: string) => void;
+  onOpenFavoriteInWorkspace?: (favorite: TRecord) => void;
   onRemoveFavorite: (favorite: TRecord) => void;
 };
 
@@ -61,7 +64,10 @@ export default function ScraperSourceFavoritesList<
   emptyMessage,
   actionPrefix,
   favoriteKindLabel,
+  headerAction,
+  statusMessage,
   onSelectFavorite,
+  onOpenFavoriteInWorkspace,
   onRemoveFavorite,
 }: Props<TRecord, TSource>) {
   return (
@@ -71,8 +77,14 @@ export default function ScraperSourceFavoritesList<
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
+        {headerAction ? (
+          <div className="scraper-author-favorites-view__header-actions">
+            {headerAction}
+          </div>
+        ) : null}
       </div>
 
+      {statusMessage ? <div className="multi-search__message is-info">{statusMessage}</div> : null}
       {error ? <div className="scraper-browser__message is-error">{error}</div> : null}
 
       {favorites.length ? (
@@ -84,6 +96,9 @@ export default function ScraperSourceFavoritesList<
                 type: "primary",
                 label: "Ouvrir",
                 onClick: () => onSelectFavorite(favorite.id),
+                onMiddleClick: onOpenFavoriteInWorkspace
+                  ? () => onOpenFavoriteInWorkspace(favorite)
+                  : undefined,
               },
               {
                 id: `remove-${actionPrefix}-favorite`,
@@ -108,6 +123,9 @@ export default function ScraperSourceFavoritesList<
                 actions={actions}
                 isActionable
                 onClick={() => onSelectFavorite(favorite.id)}
+                onMiddleClick={onOpenFavoriteInWorkspace
+                  ? () => onOpenFavoriteInWorkspace(favorite)
+                  : undefined}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();

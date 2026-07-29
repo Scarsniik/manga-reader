@@ -24,6 +24,7 @@ import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import {
   removeScraperAuthorFavorite,
+  saveScraperAuthorFavorite,
   useScraperAuthorFavorites,
 } from "@/renderer/stores/scraperAuthorFavorites";
 import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
@@ -53,10 +54,13 @@ import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
+import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 
 type Props = {
   scrapers: ScraperRecord[];
   backgroundSearchJobId?: string;
+  initialFavoriteId?: string;
+  routeSyncEnabled?: boolean;
   favoriteOverride?: ScraperAuthorFavoriteRecord;
   initialPageCountOverride?: number;
   onBackFromFavoriteOverride?: () => void;
@@ -70,6 +74,8 @@ const RESULT_TEXT_FILTER_DELAY_MS = 350;
 export default function ScraperAuthorFavoritesView({
   scrapers,
   backgroundSearchJobId,
+  initialFavoriteId,
+  routeSyncEnabled = true,
   favoriteOverride,
   initialPageCountOverride,
   onBackFromFavoriteOverride,
@@ -93,6 +99,8 @@ export default function ScraperAuthorFavoritesView({
     scrapers,
     favorites,
     loading,
+    initialFavoriteId,
+    routeSyncEnabled,
     readFavoriteRouteId: readScraperAuthorFavoriteRouteId,
     writeFavoriteRouteState: writeScraperAuthorFavoriteRouteState,
   });
@@ -106,6 +114,8 @@ export default function ScraperAuthorFavoritesView({
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
+  const [refreshingAllFavorites, setRefreshingAllFavorites] = useState(false);
+  const [refreshAllMessage, setRefreshAllMessage] = useState<string | null>(null);
   const automaticallyStartedFavoriteIdRef = React.useRef<string | null>(null);
   const initialPageCount = Math.max(
     1,
@@ -361,18 +371,21 @@ export default function ScraperAuthorFavoritesView({
     });
   }, [closeModal, openModal, selectedFavorite]);
 
-  const enqueueSelectedFavoriteRefresh = useCallback(async () => {
-    if (!selectedFavorite) return;
-    const input: ListingBackgroundInput = {
-      favoriteId: selectedFavorite.id,
-      favoriteUpdatedAt: selectedFavorite.updatedAt,
-      sources: selectedFavorite.sources.flatMap((source) => {
+  const buildFavoriteRefreshInput = useCallback((
+    favorite: ScraperAuthorFavoriteRecord,
+  ): ListingBackgroundInput => ({
+      favoriteId: favorite.id,
+      favoriteUpdatedAt: favorite.updatedAt,
+      sources: favorite.sources.flatMap((source) => {
         const scraper = scrapersById.get(source.scraperId);
         return scraper ? [{
-          id: `${source.scraperId}::${source.authorUrl}`,
+          id: `${favorite.id}::${source.scraperId}::${source.authorUrl}`,
           name: source.name,
           scraper,
           query: source.authorUrl,
+          favoriteId: favorite.id,
+          favoriteUpdatedAt: favorite.updatedAt,
+          favoriteSourceName: source.name,
           templateContext: source.templateContext ?? null,
         }] : [];
       }),
@@ -381,15 +394,53 @@ export default function ScraperAuthorFavoritesView({
       concurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
       includedLanguageCodes: [],
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-    };
+  }), [params?.scraperLatestConcurrency, params?.scraperScrapeDetailsWithCards, scrapersById]);
+
+  const enqueueSelectedFavoriteRefresh = useCallback(async () => {
+    if (!selectedFavorite) return;
     await enqueueBackgroundSearch({
       kind: "authorFavoriteRefresh",
       title: `Auteur favori · ${selectedFavorite.name}`,
       primaryTerm: selectedFavorite.name,
-      input,
+      input: buildFavoriteRefreshInput(selectedFavorite),
       params,
     });
-  }, [params, scrapersById, selectedFavorite]);
+  }, [buildFavoriteRefreshInput, params, selectedFavorite]);
+
+  const handleRefreshAllFavorites = useCallback(async () => {
+    const refreshableFavorites = favorites
+      .map((favorite) => ({
+        favorite,
+        input: buildFavoriteRefreshInput(favorite),
+      }))
+      .filter(({ input }) => input.sources.length > 0);
+
+    if (!refreshableFavorites.length) {
+      setRefreshAllMessage("Aucun auteur favori ne dispose d'une source actuellement utilisable.");
+      return;
+    }
+
+    setRefreshingAllFavorites(true);
+    setRefreshAllMessage(null);
+    try {
+      await Promise.all(refreshableFavorites.map(({ favorite, input }) => enqueueBackgroundSearch({
+        kind: "authorFavoriteRefresh",
+        title: `Auteur favori · ${favorite.name}`,
+        primaryTerm: favorite.name,
+        input,
+        params,
+      })));
+      setRefreshAllMessage(
+        `${refreshableFavorites.length} mise(s) à jour ajoutée(s) à la file d'arrière-plan.`,
+      );
+    } catch (refreshError) {
+      setRefreshAllMessage(refreshError instanceof Error
+        ? refreshError.message
+        : "Impossible d'ajouter les mises à jour à la file d'arrière-plan.");
+    } finally {
+      setRefreshingAllFavorites(false);
+    }
+  }, [buildFavoriteRefreshInput, favorites, params]);
 
   useEffect(() => {
     if (!selectedFavorite) {
@@ -455,6 +506,49 @@ export default function ScraperAuthorFavoritesView({
       },
     }));
   }, [handleSelectFavorite, openModal, selectedFavoriteId]);
+
+  const handleOpenFavoriteInWorkspace = useCallback((favorite: ScraperAuthorFavoriteRecord) => {
+    void openWorkspaceTarget({
+      kind: "manga-manager.view",
+      viewId: "author-favorites",
+      title: favorite.name,
+      locationState: {
+        authorFavoriteId: favorite.id,
+      },
+    });
+  }, []);
+
+  const handleSelectFavoriteCover = useCallback(async (cover: string) => {
+    if (!selectedFavorite || selectedFavorite.cover === cover) {
+      return;
+    }
+
+    const source = selectedFavorite.sources[0];
+    if (!source) {
+      setOpenError("Aucune source auteur n'est disponible pour enregistrer cette couverture.");
+      return;
+    }
+
+    setOpenError(null);
+    try {
+      await saveScraperAuthorFavorite({
+        favoriteId: selectedFavorite.id,
+        name: selectedFavorite.name,
+        cover,
+        source: {
+          scraperId: source.scraperId,
+          authorUrl: source.authorUrl,
+          name: source.name,
+          cover: source.cover,
+          templateContext: source.templateContext,
+        },
+      });
+    } catch (saveError) {
+      setOpenError(saveError instanceof Error
+        ? saveError.message
+        : "Impossible d'enregistrer la couverture de cet auteur favori.");
+    }
+  }, [selectedFavorite, setOpenError]);
 
   const handleToggleReadingStatusFilter = useCallback((status: MultiSearchReadingStatusFilter) => {
     setReadingStatusFilters((currentStatuses) => (
@@ -554,6 +648,10 @@ export default function ScraperAuthorFavoritesView({
           openInWorkspace,
         )}
         onSetSourcesRead={(identities, read) => void handleSetSourcesRead(identities, read)}
+        selectedCoverUrl={!favoriteOverride && !resultOnly ? selectedFavorite.cover : undefined}
+        onSelectCover={!favoriteOverride && !resultOnly
+          ? (cover) => void handleSelectFavoriteCover(cover)
+          : undefined}
       />
       </>
     );
@@ -571,7 +669,19 @@ export default function ScraperAuthorFavoritesView({
       emptyMessage="Aucun auteur favori. Ouvre une page auteur dans un scrapper puis utilise l'etoile."
       actionPrefix="author"
       favoriteKindLabel="l'auteur favori"
+      headerAction={(
+        <button
+          type="button"
+          className="scraper-author-favorites-view__multi-search"
+          onClick={() => void handleRefreshAllFavorites()}
+          disabled={refreshingAllFavorites || loading || !favorites.length}
+        >
+          {refreshingAllFavorites ? "Ajout en cours..." : "Mettre à jour tous les auteurs"}
+        </button>
+      )}
+      statusMessage={refreshAllMessage}
       onSelectFavorite={handleSelectFavorite}
+      onOpenFavoriteInWorkspace={handleOpenFavoriteInWorkspace}
       onRemoveFavorite={(favorite) => void handleRemoveFavorite(favorite)}
     />
   );

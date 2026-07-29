@@ -82,6 +82,9 @@ const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
 const MIN_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 0;
 const DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT = 60;
 const MIN_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT = 0;
+const DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS = 24;
+const MIN_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS = 1;
+const MAX_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS = 8760;
 const DEFAULT_MULTI_SEARCH_DEPTH_MODE = "quick";
 const DEFAULT_MULTI_SEARCH_ADVANCED_PAGES = 3;
 const DEFAULT_MULTI_SEARCH_PACE_MODE = "fast";
@@ -536,6 +539,15 @@ const normalizeScraperLatestLanguageRejectLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestAuthorCacheMaxAgeHours = (value: unknown): number => (
+    normalizeIntegerSetting(
+        value,
+        DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
+        MIN_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
+        MAX_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
+    )
+);
+
 const normalizeMultiSearchDepthMode = (value: unknown): string => (
     value === "extended" || value === "advanced" ? value : DEFAULT_MULTI_SEARCH_DEPTH_MODE
 );
@@ -677,6 +689,8 @@ const defaultSettings = {
     scraperLatestContinuousPageSafetyLimit: DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
+    scraperLatestAuthorsUseCache: true,
+    scraperLatestAuthorCacheMaxAgeHours: DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
     scraperLatestIncludedLanguageCodes: [] as string[],
     scraperLatestAuthorIncludedLanguageCodes: [] as string[],
     scraperLatestIncludedScraperIds: [] as string[],
@@ -809,6 +823,12 @@ const normalizeSettings = (value: unknown) => {
     );
     merged.scraperLatestLanguageRejectLimit = normalizeScraperLatestLanguageRejectLimit(
         merged.scraperLatestLanguageRejectLimit,
+    );
+    merged.scraperLatestAuthorsUseCache = typeof merged.scraperLatestAuthorsUseCache === "boolean"
+        ? merged.scraperLatestAuthorsUseCache
+        : defaultSettings.scraperLatestAuthorsUseCache;
+    merged.scraperLatestAuthorCacheMaxAgeHours = normalizeScraperLatestAuthorCacheMaxAgeHours(
+        merged.scraperLatestAuthorCacheMaxAgeHours,
     );
     merged.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
         merged.scraperLatestIncludedLanguageCodes,
@@ -1179,6 +1199,12 @@ export async function saveSettings(event: any, settings: any) {
         );
         nextSettings.scraperLatestLanguageRejectLimit = normalizeScraperLatestLanguageRejectLimit(
             nextSettings.scraperLatestLanguageRejectLimit,
+        );
+        nextSettings.scraperLatestAuthorsUseCache = typeof nextSettings.scraperLatestAuthorsUseCache === "boolean"
+            ? nextSettings.scraperLatestAuthorsUseCache
+            : defaultSettings.scraperLatestAuthorsUseCache;
+        nextSettings.scraperLatestAuthorCacheMaxAgeHours = normalizeScraperLatestAuthorCacheMaxAgeHours(
+            nextSettings.scraperLatestAuthorCacheMaxAgeHours,
         );
         nextSettings.scraperLatestIncludedLanguageCodes = normalizeLowercaseStringListSetting(
             nextSettings.scraperLatestIncludedLanguageCodes,

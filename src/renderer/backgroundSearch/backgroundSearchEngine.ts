@@ -9,11 +9,14 @@ import type {
 } from "@/shared/backgroundSearch";
 import {
   buildScraperViewHistoryCardId,
+  type ScraperAuthorFavoriteCacheSource,
+  type ScraperAuthorFavoriteRecord,
   type ScraperSearchResultItem,
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import {
   buildSourceResults,
+  buildSourceResultsFromItems,
   enrichSourceResultsWithCardDetails,
   fetchAuthorPageWithRetry,
   fetchHomepagePageWithRetry,
@@ -63,6 +66,10 @@ import {
   resolveBackgroundListingAcceptedTarget,
   shouldContinueBackgroundBlacklistBackfill,
 } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+import {
+  findAuthorFavoriteCachedSource,
+  loadUsableAuthorFavoriteCaches,
+} from "@/renderer/utils/scraperAuthorFavoriteCache";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -223,6 +230,86 @@ const isKnownResult = (
   buildSearchResultViewHistoryIdentity(scraperId, result),
 ));
 
+const loadLatestAuthorCacheAssignments = async (
+  input: ListingBackgroundInput,
+): Promise<Map<string, ScraperAuthorFavoriteCacheSource | null>> => {
+  if (
+    input.useAuthorFavoriteCache !== true
+    || typeof window.api?.getScraperAuthorFavoriteCache !== "function"
+  ) {
+    return new Map();
+  }
+
+  const sourcesByFavoriteId = new Map<string, ListingBackgroundInput["sources"]>();
+  input.sources.forEach((source) => {
+    if (!source.favoriteId || !source.favoriteUpdatedAt) {
+      return;
+    }
+    const favoriteSources = sourcesByFavoriteId.get(source.favoriteId) ?? [];
+    favoriteSources.push(source);
+    sourcesByFavoriteId.set(source.favoriteId, favoriteSources);
+  });
+  const favorites: ScraperAuthorFavoriteRecord[] = Array.from(sourcesByFavoriteId.entries())
+    .map(([favoriteId, sources]) => ({
+      id: favoriteId,
+      name: sources[0]?.name ?? favoriteId,
+      sources: sources.map((source) => ({
+        scraperId: source.scraper.id,
+        authorUrl: source.query,
+        name: source.favoriteSourceName || source.name,
+        templateContext: source.templateContext ?? undefined,
+        createdAt: source.favoriteUpdatedAt ?? "",
+        updatedAt: source.favoriteUpdatedAt ?? "",
+      })),
+      createdAt: sources[0]?.favoriteUpdatedAt ?? "",
+      updatedAt: sources[0]?.favoriteUpdatedAt ?? "",
+    }));
+  const caches = await loadUsableAuthorFavoriteCaches(
+    favorites,
+    input.authorFavoriteCacheMaxAgeHours,
+    async (favoriteId) => window.api.getScraperAuthorFavoriteCache(favoriteId),
+  );
+  const assignments = new Map<string, ScraperAuthorFavoriteCacheSource | null>();
+
+  favorites.forEach((favorite) => {
+    const cache = caches.get(favorite.id);
+    const inputSources = sourcesByFavoriteId.get(favorite.id) ?? [];
+    if (!cache) {
+      return;
+    }
+
+    const unassignedSourceIds = new Set(inputSources.map((source) => source.id));
+    cache.sources.forEach((cachedSource) => {
+      const exactSource = inputSources.find((source) => (
+        unassignedSourceIds.has(source.id)
+        && findAuthorFavoriteCachedSource({
+          scraperId: source.scraper.id,
+          authorUrl: source.query,
+          name: source.favoriteSourceName || source.name,
+          createdAt: source.favoriteUpdatedAt ?? "",
+          updatedAt: source.favoriteUpdatedAt ?? "",
+        }, {
+          ...cache,
+          sources: [cachedSource],
+        }) !== null
+      ));
+      const assignedSource = exactSource ?? inputSources.find((source) => (
+        unassignedSourceIds.has(source.id)
+        && source.scraper.id === cachedSource.scraperId
+      ));
+      if (!assignedSource) {
+        return;
+      }
+
+      assignments.set(assignedSource.id, cachedSource);
+      unassignedSourceIds.delete(assignedSource.id);
+    });
+    unassignedSourceIds.forEach((sourceId) => assignments.set(sourceId, null));
+  });
+
+  return assignments;
+};
+
 const runListings = async (
   kind: BackgroundSearchKind,
   input: ListingBackgroundInput,
@@ -232,6 +319,9 @@ const runListings = async (
   if (!input.sources.length) throw new Error("Aucune source n'est disponible.");
   const filterHistory = kind === "latestSources" || kind === "latestAuthors";
   const knownHistoryIds = filterHistory ? await getKnownHistoryIds() : new Set<string>();
+  const latestAuthorCacheAssignments = kind === "latestAuthors"
+    ? await loadLatestAuthorCacheAssignments(input)
+    : new Map<string, ScraperAuthorFavoriteCacheSource | null>();
   const pace = getPaceConfig(input.paceMode);
   const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
   const configuredMaxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
@@ -263,6 +353,37 @@ const runListings = async (
     await emit(run.name);
     try {
       const source = input.sources[runIndex];
+      if (latestAuthorCacheAssignments.has(source.id)) {
+        const cachedSource = latestAuthorCacheAssignments.get(source.id);
+        const cachedResults = cachedSource
+          ? await enrichSourceResultsWithJapaneseRomanization(buildSourceResultsFromItems(
+            run.scraper,
+            cachedSource.results.map((cachedResult) => cachedResult.result),
+            (_result, index) => cachedSource.results[index]?.pageIndex ?? 0,
+            (_result, index) => cachedSource.results[index]?.searchTerm || run.name,
+            () => [source.favoriteSourceName || run.name],
+          ).filter((item) => (
+            doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
+          )))
+          : [];
+        run = {
+          ...run,
+          status: "done",
+          results: cachedResults.filter((item) => (
+            !isKnownResult(knownHistoryIds, run.scraper.id, item.result)
+          )),
+          cacheResults: cachedResults,
+          fromCache: true,
+          loadedPages: cachedSource?.loadedPages ?? 0,
+          hasNextPage: false,
+          currentPageUrl: cachedSource?.currentPageUrl,
+          nextPageUrl: cachedSource?.nextPageUrl,
+        };
+        runs[runIndex] = run;
+        await emit(run.name);
+        return;
+      }
+
       const resultLimit = resolveBackgroundListingResultLimit(
         source.resultLimit,
         input.resultLimit,
@@ -383,6 +504,9 @@ const runListings = async (
           ? filterBackgroundListingSourcesByBlacklist(newEligibleSources, input)
           : { accepted: newEligibleSources, excludedCount: 0 };
         let nextResults = appendUniqueResults(run.results, blacklistFilter.accepted);
+        const nextCacheResults = kind === "latestAuthors"
+          ? appendUniqueResults(run.cacheResults ?? [], includedPageSources)
+          : undefined;
         const storedResultLimit = backfillBlacklistedResults ? acceptedResultTarget : resultLimit;
         if (storedResultLimit > 0) nextResults = nextResults.slice(0, storedResultLimit);
         const sourceHasNextPage = sourceMode === "homepage"
@@ -426,6 +550,7 @@ const runListings = async (
         run = {
           ...run,
           results: nextResults,
+          cacheResults: nextCacheResults,
           loadedPages: pageIndex + 1,
           hasNextPage,
           currentPageUrl: page.currentPageUrl,
@@ -450,7 +575,10 @@ const runListings = async (
     } catch (error) {
       if (signal.aborted) {
         run = { ...run, status: "cancelled" };
-      } else if (isScraperListingPaginationEndError(error) && run.results.length > 0) {
+      } else if (
+        isScraperListingPaginationEndError(error)
+        && (run.results.length > 0 || (run.cacheResults?.length ?? 0) > 0)
+      ) {
         run = { ...run, status: "done", hasNextPage: false };
       } else {
         run = {

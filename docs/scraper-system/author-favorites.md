@@ -38,6 +38,10 @@ L'etoile devient active quand la source auteur courante est deja rattachee a un 
 ## Vue combinee
 
 La vue `Auteurs favoris` liste les auteurs sauvegardes. Ouvrir un auteur combine les resultats de ses sources.
+Un clic molette sur un auteur de la liste l'ouvre dans un nouvel onglet du workspace.
+Le bouton `Mettre a jour tous les auteurs` de la liste planifie un rescrape complet de chaque favori
+en arriere-plan. Chaque auteur est mis a jour dans son propre fichier de cache et reste consultable
+pendant la collecte.
 
 Par defaut, le chargement est volontairement borne :
 
@@ -52,9 +56,11 @@ Le parametre global `Stocker les resultats des auteurs favoris` remplace cette l
 - le stockage implique que l'ouverture d'un auteur favori charge toutes les pages disponibles pour chaque source
 - si un cache existe deja, il est affiche immediatement pendant que l'application re-scrape l'auteur en arriere-plan
 - le cache JSON n'est remplace qu'apres un chargement complet sans erreur
+- les sources et les mangas sont dedoublonnes par leur cible canonique avant chaque sauvegarde
 
 La vue auteur favori expose aussi :
 
+- une action sur chaque manga pour utiliser sa couverture comme image de l'auteur dans la liste des favoris
 - chaque source auteur, cliquable pour revenir a la page auteur du scrapper correspondant
 - une action `Trouver les correspondances`, egalement disponible sur les pages auteur classiques,
   qui recherche les pages du meme auteur sur plusieurs sources
@@ -67,6 +73,12 @@ La recherche de correspondances auteur analyse les resultats de recherche manga 
 liens auteur, puis teste aussi directement les modules Auteur configures avec un gabarit d'URL. La page
 de resultat affiche une ligne par page auteur, avec un apercu de ses premiers mangas. Chaque ligne permet
 d'ouvrir la page auteur et d'ajouter ou retirer cette source des auteurs favoris.
+Quand une page provient deja de l'auteur favori utilise comme reference, son URL ou sa requete exacte
+reste prioritaire afin que le resultat soit correctement signale comme favori.
+Deux candidats d'un meme scraper ne sont regroupes que lorsqu'ils partagent la meme cible ou lorsque
+le scraper les resout vers la meme page canonique. Un nom identique ne suffit pas a les fusionner.
+Les differences d'encodage sans effet, comme la casse des octets `%E3` et `%e3` dans une URL,
+designent la meme cible et ne produisent plus deux lignes.
 
 La vue combinee reutilise aussi :
 
@@ -95,3 +107,11 @@ Les donnees sont stockees dans `scraper-author-favorites.json` dans le dossier d
 Les resultats complets caches par auteur favori sont stockes dans le dossier
 `scraper-author-favorite-cache` du dossier de donnees utilisateur. Chaque favori
 utilise un fichier JSON dedie, nomme a partir de son identifiant interne.
+
+Une recherche de nouveautes dans l'onglet `Auteurs` fusionne aussi les cards nouvellement scrapees
+dans ces fichiers. Cette mise a jour conserve le contenu deja enregistre et dedoublonne les sources
+ainsi que les mangas par leur URL canonique.
+
+Quand l'utilisation du cache est activee pour les nouveautes auteurs, un cache complet et assez
+recent peut etre relu sans rescraper l'auteur. Modifier le favori apres sa mise en cache invalide
+automatiquement ce fichier pour cette recherche.

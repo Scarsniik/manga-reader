@@ -9,6 +9,10 @@ import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import {
+  buildAuthorCorrespondenceMatchKey,
+  normalizeAuthorCorrespondenceTarget,
+} from "@/renderer/utils/authorCorrespondenceIdentity";
 import type { AuthorCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
 import type {
   ScraperAuthorFavoriteRecord,
@@ -39,9 +43,19 @@ export default function AuthorCorrespondenceView({
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
   const [showCombinedView, setShowCombinedView] = React.useState(false);
   const [invalidatedMatchKeys, setInvalidatedMatchKeys] = React.useState<Set<string>>(() => new Set());
+  const displayedMatches = React.useMemo(() => {
+    const matchesByTarget = new Map<string, AuthorCorrespondenceBackgroundResult["matches"][number]>();
+    result?.matches.forEach((match) => {
+      const targetKey = `${match.scraperId}::${normalizeAuthorCorrespondenceTarget(match.authorUrl)}`;
+      if (!matchesByTarget.has(targetKey)) {
+        matchesByTarget.set(targetKey, match);
+      }
+    });
+    return Array.from(matchesByTarget.values());
+  }, [result?.matches]);
   const validMatches = React.useMemo(
-    () => result?.matches.filter((match) => !invalidatedMatchKeys.has(match.key)) ?? [],
-    [invalidatedMatchKeys, result?.matches],
+    () => displayedMatches.filter((match) => !invalidatedMatchKeys.has(match.key)),
+    [displayedMatches, invalidatedMatchKeys],
   );
 
   React.useEffect(() => {
@@ -214,10 +228,13 @@ export default function AuthorCorrespondenceView({
         </div>
       ) : null}
 
-      {result?.matches.length ? (
+      {displayedMatches.length ? (
         <div className="author-correspondence-view__list">
-          {result.matches.map((match) => {
+          {displayedMatches.map((match) => {
             const invalidated = invalidatedMatchKeys.has(match.key);
+            const referenceSource = input?.referenceSources.find((source) => (
+              buildAuthorCorrespondenceMatchKey(source.scraperId, source.authorUrl) === match.key
+            ));
             return (
               <article
                 key={match.key}
@@ -286,10 +303,10 @@ export default function AuthorCorrespondenceView({
                 <ScraperAuthorFavoriteButton
                   scraperId={match.scraperId}
                   scraperName={match.scraperName}
-                  authorUrl={match.authorUrl}
-                  sourceName={match.authorName}
+                  authorUrl={referenceSource?.authorUrl ?? match.authorUrl}
+                  sourceName={referenceSource?.name ?? match.authorName}
                   cover={match.previewSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl}
-                  templateContext={match.templateContext}
+                  templateContext={referenceSource?.templateContext ?? match.templateContext}
                   disabled={active}
                 />
                 <button

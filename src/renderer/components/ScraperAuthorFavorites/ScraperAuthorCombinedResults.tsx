@@ -90,6 +90,8 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  selectedCoverUrl?: string;
+  onSelectCover?: (coverUrl: string) => void;
 };
 
 export default function ScraperAuthorCombinedResults({
@@ -143,6 +145,8 @@ export default function ScraperAuthorCombinedResults({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  selectedCoverUrl,
+  onSelectCover,
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
   const {
@@ -329,6 +333,8 @@ export default function ScraperAuthorCombinedResults({
                 onOpenSourceInWorkspace={onOpenSourceInWorkspace}
                 onOpenProgressReader={onOpenProgressReader}
                 onSetSourcesRead={onSetSourcesRead}
+                selectedCoverUrl={selectedCoverUrl}
+                onSelectCover={onSelectCover}
                 onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
                   const nextIds = new Set(currentIds);
                   nextIds.add(resultId);

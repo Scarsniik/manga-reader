@@ -13,6 +13,7 @@ type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
     locationState?: {
+        authorFavoriteId?: string;
         librarySearchQuery?: string;
         multiSearchPrefillQuery?: string;
         bookmarkFilters?: Record<string, unknown>;
@@ -163,6 +164,7 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
     }
 
     const candidate = value as {
+        authorFavoriteId?: unknown;
         bookmarkFilters?: unknown;
         bookmarksFilterScraperId?: unknown;
         librarySearchQuery?: unknown;
@@ -170,6 +172,10 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
         backgroundSearchJobId?: unknown;
     };
     return (
+        candidate.authorFavoriteId === undefined
+        || typeof candidate.authorFavoriteId === "string"
+    )
+    && (
         candidate.multiSearchPrefillQuery === undefined
         || typeof candidate.multiSearchPrefillQuery === "string"
     )

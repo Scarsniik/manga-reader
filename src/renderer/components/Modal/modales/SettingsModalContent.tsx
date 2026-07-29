@@ -206,6 +206,23 @@ export default function SettingsModalContent() {
           step: 1,
         },
         {
+          name: 'scraperLatestAuthorsUseCache',
+          label: 'Utiliser le cache pour les nouveautés auteurs',
+          type: 'checkbox',
+        },
+        {
+          name: 'scraperLatestAuthorCacheMaxAgeHours',
+          label: 'Ancienneté maximale du cache des nouveautés auteurs (heures)',
+          type: 'number',
+          min: 1,
+          max: 8760,
+          step: 1,
+          disabledWhen: {
+            field: 'scraperLatestAuthorsUseCache',
+            equals: false,
+          },
+        },
+        {
           name: 'scraperLatestConcurrency',
           label: 'Scrapings simultanés (limite globale)',
           type: 'number',
@@ -389,6 +406,7 @@ export default function SettingsModalContent() {
       values.scraperLatestQuickConsecutiveSeenStopThreshold,
     )
     const scraperLatestLanguageRejectLimit = Number(values.scraperLatestLanguageRejectLimit)
+    const scraperLatestAuthorCacheMaxAgeHours = Number(values.scraperLatestAuthorCacheMaxAgeHours)
     const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
 
     // convert types
@@ -449,6 +467,10 @@ export default function SettingsModalContent() {
       scraperLatestLanguageRejectLimit: Number.isFinite(scraperLatestLanguageRejectLimit)
         ? Math.max(0, Math.floor(scraperLatestLanguageRejectLimit))
         : 60,
+      scraperLatestAuthorsUseCache: values.scraperLatestAuthorsUseCache !== false,
+      scraperLatestAuthorCacheMaxAgeHours: Number.isFinite(scraperLatestAuthorCacheMaxAgeHours)
+        ? Math.min(8760, Math.max(1, Math.floor(scraperLatestAuthorCacheMaxAgeHours)))
+        : 24,
       ...scraperViewHistorySettings,
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),

@@ -93,6 +93,8 @@ export type AppParams = {
     scraperLatestContinuousPageSafetyLimit?: number;
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestLanguageRejectLimit?: number;
+    scraperLatestAuthorsUseCache?: boolean;
+    scraperLatestAuthorCacheMaxAgeHours?: number;
     scraperLatestIncludedLanguageCodes?: string[];
     scraperLatestAuthorIncludedLanguageCodes?: string[];
     scraperLatestIncludedScraperIds?: string[];

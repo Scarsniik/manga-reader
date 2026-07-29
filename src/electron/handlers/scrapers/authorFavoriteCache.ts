@@ -68,6 +68,20 @@ const normalizeUrl = (value: unknown): string => {
   }
 };
 
+const normalizeCacheIdentity = (value: unknown): string => {
+  const normalized = normalizeUrl(value);
+  try {
+    const url = new URL(normalized);
+    url.hash = "";
+    url.hostname = url.hostname.toLocaleLowerCase();
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    url.searchParams.sort();
+    return url.toString().replace(/%[0-9a-f]{2}/gi, (encodedByte) => encodedByte.toUpperCase());
+  } catch {
+    return normalized.normalize("NFKC").replace(/\s+/g, " ").toLocaleLowerCase();
+  }
+};
+
 const getFavoriteCacheFilePath = (favoriteId: string): string => {
   const normalizedFavoriteId = normalizeString(favoriteId);
   if (!normalizedFavoriteId) {
@@ -121,6 +135,22 @@ const sanitizeCachedResult = (value: unknown): ScraperAuthorFavoriteCachedResult
   };
 };
 
+const deduplicateCachedResults = (
+  results: ScraperAuthorFavoriteCachedResult[],
+): ScraperAuthorFavoriteCachedResult[] => {
+  const seenKeys = new Set<string>();
+  return results.filter((cachedResult) => {
+    const key = cachedResult.result.detailUrl
+      ? `url:${normalizeCacheIdentity(cachedResult.result.detailUrl)}`
+      : `title:${cachedResult.result.title.normalize("NFKC").trim().toLocaleLowerCase()}`;
+    if (seenKeys.has(key)) {
+      return false;
+    }
+    seenKeys.add(key);
+    return true;
+  });
+};
+
 const sanitizeCacheSource = (value: unknown): ScraperAuthorFavoriteCacheSource | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -130,11 +160,11 @@ const sanitizeCacheSource = (value: unknown): ScraperAuthorFavoriteCacheSource |
   const scraperId = normalizeString(raw.scraperId);
   const authorUrl = normalizeUrl(raw.authorUrl);
   const sourceName = normalizeString(raw.sourceName) || authorUrl;
-  const results = Array.isArray(raw.results)
+  const results = deduplicateCachedResults(Array.isArray(raw.results)
     ? raw.results
       .map((result) => sanitizeCachedResult(result))
       .filter((result): result is ScraperAuthorFavoriteCachedResult => Boolean(result))
-    : [];
+    : []);
 
   if (!scraperId || !authorUrl) {
     return null;
@@ -155,6 +185,46 @@ const sanitizeCacheSource = (value: unknown): ScraperAuthorFavoriteCacheSource |
   };
 };
 
+const deduplicateCacheSources = (
+  sources: ScraperAuthorFavoriteCacheSource[],
+): ScraperAuthorFavoriteCacheSource[] => {
+  const deduplicatedSources: ScraperAuthorFavoriteCacheSource[] = [];
+  const sourceIndexByIdentity = new Map<string, number>();
+  sources.forEach((source) => {
+    const identities = Array.from(new Set(
+      [source.authorUrl, source.currentPageUrl]
+        .filter((target): target is string => Boolean(target?.trim()))
+        .map((target) => `${source.scraperId}::${normalizeCacheIdentity(target)}`),
+    ));
+    const existingIndex = identities
+      .map((identity) => sourceIndexByIdentity.get(identity))
+      .find((index): index is number => index !== undefined);
+    if (existingIndex === undefined) {
+      const sourceIndex = deduplicatedSources.push(source) - 1;
+      identities.forEach((identity) => sourceIndexByIdentity.set(identity, sourceIndex));
+      return;
+    }
+
+    const existing = deduplicatedSources[existingIndex];
+    deduplicatedSources[existingIndex] = {
+      ...source,
+      ...existing,
+      loadedPages: Math.max(existing.loadedPages, source.loadedPages),
+      hasNextPage: existing.hasNextPage && source.hasNextPage,
+      currentPageUrl: existing.currentPageUrl ?? source.currentPageUrl,
+      nextPageUrl: existing.nextPageUrl ?? source.nextPageUrl,
+      results: deduplicateCachedResults([...existing.results, ...source.results]),
+      updatedAt: existing.updatedAt > source.updatedAt ? existing.updatedAt : source.updatedAt,
+    };
+    const existingIdentities = [existing.authorUrl, existing.currentPageUrl]
+      .filter((target): target is string => Boolean(target?.trim()))
+      .map((target) => `${existing.scraperId}::${normalizeCacheIdentity(target)}`);
+    [...existingIdentities, ...identities]
+      .forEach((identity) => sourceIndexByIdentity.set(identity, existingIndex));
+  });
+  return deduplicatedSources;
+};
+
 const sanitizeCacheRecord = (
   favoriteId: string,
   value: unknown,
@@ -162,11 +232,11 @@ const sanitizeCacheRecord = (
   const raw = value && typeof value === "object" && !Array.isArray(value)
     ? value as Partial<ScraperAuthorFavoriteCacheRecord>
     : {};
-  const sources = Array.isArray(raw.sources)
+  const sources = deduplicateCacheSources(Array.isArray(raw.sources)
     ? raw.sources
       .map((source) => sanitizeCacheSource(source))
       .filter((source): source is ScraperAuthorFavoriteCacheSource => Boolean(source))
-    : [];
+    : []);
   const now = new Date().toISOString();
 
   return {

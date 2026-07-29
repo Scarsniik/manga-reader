@@ -57,6 +57,8 @@ type Props = {
     openInWorkspace?: boolean,
   ) => void;
   onSetSourcesRead: (identities: ScraperViewHistoryCardIdentity[], read: boolean) => void;
+  selectedCoverUrl?: string;
+  onSelectCover?: (coverUrl: string) => void;
   onSplitResult?: (resultId: string) => void;
 };
 
@@ -139,6 +141,8 @@ export default function MultiSearchResultCard({
   onOpenSourceInWorkspace,
   onOpenProgressReader,
   onSetSourcesRead,
+  selectedCoverUrl,
+  onSelectCover,
   onSplitResult,
 }: Props) {
   const sourceMenuRef = React.useRef<HTMLDetailsElement>(null);
@@ -437,6 +441,18 @@ export default function MultiSearchResultCard({
     </div>
   );
   const actions: ScraperCardAction[] = [];
+  const selectableCoverUrl = result.coverUrl?.trim();
+
+  if (selectableCoverUrl && onSelectCover) {
+    const isSelectedCover = selectableCoverUrl === selectedCoverUrl?.trim();
+    actions.push({
+      id: "select-author-cover",
+      type: "secondary",
+      label: isSelectedCover ? "Couverture de l'auteur" : "Choisir comme couverture",
+      onClick: () => onSelectCover(selectableCoverUrl),
+      disabled: isSelectedCover,
+    });
+  }
 
   if (result.sources.length > 1 && onSplitResult) {
     actions.push({

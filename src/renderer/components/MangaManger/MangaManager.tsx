@@ -455,6 +455,9 @@ const MangaManager: React.FC<MangaManagerProps> = ({
     const forcedMultiSearchPrefillQuery = typeof forcedLocationState?.multiSearchPrefillQuery === 'string'
         ? forcedLocationState.multiSearchPrefillQuery.trim()
         : '';
+    const forcedAuthorFavoriteId = typeof forcedLocationState?.authorFavoriteId === 'string'
+        ? forcedLocationState.authorFavoriteId.trim()
+        : '';
     const forcedLibrarySearchQuery = typeof forcedLocationState?.librarySearchQuery === 'string'
         ? forcedLocationState.librarySearchQuery.trim()
         : '';
@@ -972,7 +975,12 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                         ) : isHistoryView ? (
                             <HistoryView scrapers={sortedScrapers} />
                         ) : isAuthorFavoritesView ? (
-                            <ScraperAuthorFavoritesView scrapers={sortedScrapers} backgroundSearchJobId={backgroundSearchJobId} />
+                            <ScraperAuthorFavoritesView
+                                scrapers={sortedScrapers}
+                                backgroundSearchJobId={backgroundSearchJobId}
+                                initialFavoriteId={forcedAuthorFavoriteId}
+                                routeSyncEnabled={!forcedViewId}
+                            />
                         ) : isTagFavoritesView ? (
                             <ScraperTagFavoritesView scrapers={sortedScrapers} />
                         ) : isBookmarksView ? (

@@ -70,6 +70,7 @@ type MangaManagerViewWorkspaceTarget = {
     kind: "manga-manager.view";
     viewId: string;
     locationState?: {
+        authorFavoriteId?: string;
         librarySearchQuery?: string;
         multiSearchPrefillQuery?: string;
         bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
