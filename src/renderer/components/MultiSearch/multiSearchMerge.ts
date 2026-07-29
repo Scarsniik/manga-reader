@@ -6,6 +6,7 @@ import type {
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import {
   getMultiSearchSourceTitleMergeMatchKind,
+  getMultiSearchTitleAlternatives,
   getMultiSearchTitleMergeExactKeys,
   getMultiSearchTitleMergeFuzzyLengths,
   type MultiSearchTitleMatchKind,
@@ -204,6 +205,18 @@ const indexGroupSource = (
   });
 };
 
+const rebuildMultiSearchMergeIndexes = (state: MultiSearchMergeState): void => {
+  state.detailUrlGroups.clear();
+  state.titleKeyGroups.clear();
+  state.fuzzyLengthGroups.clear();
+  state.groupIndexes = new WeakMap<MultiSearchMergedResult, number>();
+
+  state.groups.forEach((group, index) => {
+    state.groupIndexes.set(group, index);
+    group.sources.forEach((source) => indexGroupSource(state, group, source));
+  });
+};
+
 const addCandidateGroup = (
   candidates: MultiSearchMergedResult[],
   seenGroups: Set<MultiSearchMergedResult>,
@@ -294,31 +307,80 @@ const appendSourceToGroup = (
   return true;
 };
 
-const findSourceGroupMatch = (
+const findSourceGroupMatches = (
   state: MultiSearchMergeState,
   source: MultiSearchSourceResult,
-): MultiSearchGroupMatch | null => {
+): MultiSearchGroupMatch[] => {
+  const matches: MultiSearchGroupMatch[] = [];
+
   for (const candidate of collectCandidateGroups(state, source)) {
     const matchKind = shouldMergeSourceIntoGroup(state, source, candidate);
     if (matchKind) {
-      return {
+      matches.push({
         group: candidate,
-      };
+      });
     }
   }
 
-  return null;
+  return matches;
+};
+
+const doSourcesShareExactTitleKey = (
+  state: MultiSearchMergeState,
+  source: MultiSearchSourceResult,
+  groupSource: MultiSearchSourceResult,
+): boolean => {
+  const sourceKeys = new Set(getMultiSearchTitleMergeExactKeys(source, state.options));
+  return getMultiSearchTitleMergeExactKeys(groupSource, state.options)
+    .some((key) => sourceKeys.has(key));
+};
+
+const canConsolidateAliasBridgeGroups = (
+  state: MultiSearchMergeState,
+  source: MultiSearchSourceResult,
+  matches: MultiSearchGroupMatch[],
+): boolean => (
+  matches.length > 1
+  && getMultiSearchTitleAlternatives(source.result.title).length > 1
+  && matches.every(({ group }) => group.sources.some((groupSource) => (
+    doSourcesShareExactTitleKey(state, source, groupSource)
+  )))
+);
+
+const consolidateAliasBridgeGroups = (
+  state: MultiSearchMergeState,
+  source: MultiSearchSourceResult,
+  matches: MultiSearchGroupMatch[],
+): MultiSearchMergedResult => {
+  const targetGroup = matches[0].group;
+  const mergedGroups = new Set(matches.slice(1).map(({ group }) => group));
+
+  appendSourceToGroup(targetGroup, source, state.options);
+  mergedGroups.forEach((group) => {
+    group.sources.forEach((groupSource) => {
+      appendSourceToGroup(targetGroup, groupSource, state.options);
+    });
+  });
+  const remainingGroups = state.groups.filter((group) => !mergedGroups.has(group));
+  state.groups.splice(0, state.groups.length, ...remainingGroups);
+  rebuildMultiSearchMergeIndexes(state);
+  return targetGroup;
 };
 
 export const mergeMultiSearchSourceIntoState = (
   state: MultiSearchMergeState,
   source: MultiSearchSourceResult,
 ): void => {
-  const match = findSourceGroupMatch(state, source);
+  const matches = findSourceGroupMatches(state, source);
 
-  if (match) {
-    if (appendSourceToGroup(match.group, source, state.options)) {
-      indexGroupSource(state, match.group, source);
+  if (matches.length) {
+    if (canConsolidateAliasBridgeGroups(state, source, matches)) {
+      consolidateAliasBridgeGroups(state, source, matches);
+      return;
+    }
+
+    if (appendSourceToGroup(matches[0].group, source, state.options)) {
+      indexGroupSource(state, matches[0].group, source);
     }
     return;
   }
@@ -335,10 +397,15 @@ export const mergeMultiSearchSourceIntoGroups = (
   options: Partial<MultiSearchMergeOptions> | null | undefined = undefined,
 ): void => {
   const state = createMultiSearchMergeState(groups, options);
-  const match = findSourceGroupMatch(state, source);
+  const matches = findSourceGroupMatches(state, source);
 
-  if (match) {
-    appendSourceToGroup(match.group, source, state.options);
+  if (matches.length) {
+    if (canConsolidateAliasBridgeGroups(state, source, matches)) {
+      consolidateAliasBridgeGroups(state, source, matches);
+      return;
+    }
+
+    appendSourceToGroup(matches[0].group, source, state.options);
     return;
   }
 

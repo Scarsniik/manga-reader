@@ -322,7 +322,13 @@ export const runAuthorCorrespondenceSearch = async (
         { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
       );
       const previewSources = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(scraper, page, 0, candidate.authorName).slice(0, PREVIEW_RESULT_LIMIT),
+        buildSourceResults(
+          scraper,
+          page,
+          0,
+          candidate.authorName,
+          [candidate.authorName, ...names],
+        ).slice(0, PREVIEW_RESULT_LIMIT),
       );
       upsertMatch(candidate, previewSources, page.currentPageUrl);
       await emit(candidate.authorName);

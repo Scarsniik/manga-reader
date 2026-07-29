@@ -22,8 +22,11 @@ const getSourceMatchableManga = (source: MultiSearchSourceResult): MatchableMang
     title: source.result.title,
     sourceUrl: source.result.detailUrl,
     authorNames: source.tentativeAuthorNames,
+    contextualAuthorNames: source.contextualAuthorNames,
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
+    advancedRomanizedContextualAuthorNameVariants:
+      source.advancedRomanizedContextualAuthorNameVariants,
   };
 };
 

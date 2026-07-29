@@ -37,16 +37,20 @@ export const enrichSourceResultsWithJapaneseRomanization = async (
 
   const titleTargetsBySource = new Map<MultiSearchSourceResult, string[]>();
   const authorTargetsBySource = new Map<MultiSearchSourceResult, string[]>();
+  const contextualAuthorTargetsBySource = new Map<MultiSearchSourceResult, string[]>();
   const targets = sources.flatMap((source) => {
     const titleTargets = getTitleRomanizationTargets(source.result.title);
     const authorTargets = source.tentativeAuthorNames;
+    const contextualAuthorTargets = source.contextualAuthorNames ?? [];
 
     titleTargetsBySource.set(source, titleTargets);
     authorTargetsBySource.set(source, authorTargets);
+    contextualAuthorTargetsBySource.set(source, contextualAuthorTargets);
 
     return [
       ...titleTargets,
       ...authorTargets,
+      ...contextualAuthorTargets,
     ];
   });
   const variantsByText = await loadAdvancedJapaneseRomanizationVariants(targets);
@@ -62,6 +66,10 @@ export const enrichSourceResultsWithJapaneseRomanization = async (
     ),
     advancedRomanizedTentativeAuthorNameVariants: getAdvancedRomanizedVariantsForTargets(
       authorTargetsBySource.get(source) ?? [],
+      variantsByText,
+    ),
+    advancedRomanizedContextualAuthorNameVariants: getAdvancedRomanizedVariantsForTargets(
+      contextualAuthorTargetsBySource.get(source) ?? [],
       variantsByText,
     ),
   }));

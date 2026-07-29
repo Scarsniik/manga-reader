@@ -460,10 +460,14 @@ export const buildSourceResults = (
   page: ScraperRuntimeSearchPageResult,
   pageIndex: number,
   searchTerm: string,
+  contextualAuthorNames: string[] = [],
 ): MultiSearchSourceResult[] => {
   const scraperLanguageCodes = getScraperSourceLanguages(scraper);
   const contentTypes = getScraperContentTypes(scraper);
   const canOpenDetails = canOpenScraperDetails(scraper);
+  const normalizedContextualAuthorNames = Array.from(new Set(
+    contextualAuthorNames.map((value) => value.trim()).filter(Boolean),
+  ));
 
   return page.items.map((result) => {
     const configuredLanguageCodes = result.languageCodes ?? [];
@@ -483,8 +487,10 @@ export const buildSourceResults = (
         : fallbackLanguageCodes,
       detectedLanguageCodes,
       tentativeAuthorNames,
+      contextualAuthorNames: normalizedContextualAuthorNames,
       advancedRomanizedTitleVariants: [],
       advancedRomanizedTentativeAuthorNameVariants: [],
+      advancedRomanizedContextualAuthorNameVariants: [],
       contentTypes,
       canOpenDetails,
     };
@@ -496,11 +502,21 @@ export const buildSourceResultsFromItems = (
   items: ScraperSearchResultItem[],
   getPageIndex: (result: ScraperSearchResultItem, index: number) => number,
   getSearchTerm: (result: ScraperSearchResultItem, index: number) => string,
+  getContextualAuthorNames: (
+    result: ScraperSearchResultItem,
+    index: number,
+  ) => string[] = () => [],
 ): MultiSearchSourceResult[] => (
-  items.flatMap((result, index) => buildSourceResults(scraper, {
-    currentPageUrl: "",
-    items: [result],
-  }, getPageIndex(result, index), getSearchTerm(result, index)))
+  items.flatMap((result, index) => buildSourceResults(
+    scraper,
+    {
+      currentPageUrl: "",
+      items: [result],
+    },
+    getPageIndex(result, index),
+    getSearchTerm(result, index),
+    getContextualAuthorNames(result, index),
+  ))
 );
 
 export const enrichSourceResultsWithCardDetails = async (
@@ -527,6 +543,7 @@ export const enrichSourceResultsWithCardDetails = async (
     enrichedPage.items,
     (_result, index) => sources[index]?.pageIndex ?? 0,
     (_result, index) => sources[index]?.searchTerm ?? "",
+    (_result, index) => sources[index]?.contextualAuthorNames ?? [],
   );
 };
 

@@ -42,8 +42,10 @@ export type MultiSearchSourceResult = {
   sourceLanguageCodes: string[];
   detectedLanguageCodes: string[];
   tentativeAuthorNames: string[];
+  contextualAuthorNames?: string[];
   advancedRomanizedTitleVariants: string[];
   advancedRomanizedTentativeAuthorNameVariants: string[];
+  advancedRomanizedContextualAuthorNameVariants?: string[];
   contentTypes: string[];
   canOpenDetails: boolean;
 };

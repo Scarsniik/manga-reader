@@ -329,7 +329,13 @@ const runListings = async (
           }
           : page;
         const pageSources = await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(run.scraper, pageWithResultTag, pageIndex, run.name),
+          buildSourceResults(
+            run.scraper,
+            pageWithResultTag,
+            pageIndex,
+            run.name,
+            sourceMode === "author" ? [run.name] : [],
+          ),
         );
         const newPageSources = pageSources.filter((item) => {
           const key = normalizeResultUrl(item);

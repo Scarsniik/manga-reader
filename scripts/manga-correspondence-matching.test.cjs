@@ -20,6 +20,7 @@ const source = `
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
+  export { getMangaTitleAlternatives } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getTokenBasedRomanizationVariants } from "@/electron/handlers/japaneseRomanizationTokenVariants";
   export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
@@ -60,6 +61,7 @@ const {
   toggleMangaCorrespondenceChapterExclusion,
   mergeMultiSearchResults,
   selectMangaCorrespondenceRomanizedSearchTerms,
+  getMangaTitleAlternatives,
   getMangaTitleMergeMatchKind,
   getTokenBasedRomanizationVariants,
   applyCommonReadingAlternatives,
@@ -602,6 +604,98 @@ test("advanced reference romanization matches a Japanese title to its romaji tit
   );
 });
 
+test("multi-search recognizes normalized bilingual title separators", () => {
+  assert.deepEqual(
+    getMangaTitleAlternatives("Titre japonais｜English title │ Titre français ー Titolo italiano"),
+    ["Titre japonais", "English title", "Titre français", "Titolo italiano"],
+  );
+});
+
+test("multi-search normalizes common Japanese author romanization spellings", () => {
+  const canonical = {
+    title: "A sufficiently distinctive manga title",
+    authorNames: ["Oshima Aki"],
+  };
+
+  ["Ooshima Aki", "Ōshima Aki", "Ohshima Aki", "Aki Oshima"].forEach((authorName) => {
+    assert.equal(
+      getMangaTitleMergeMatchKind(
+        canonical,
+        {
+          title: canonical.title,
+          authorNames: [authorName],
+        },
+        { enableRomajiPhoneticMerge: false },
+      ),
+      "base",
+      authorName,
+    );
+  });
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      canonical,
+      {
+        title: canonical.title,
+        authorNames: ["Oshima Akira"],
+      },
+      { enableRomajiPhoneticMerge: false },
+    ),
+    null,
+  );
+});
+
+test("multi-search uses author-page context when card titles omit authors", () => {
+  const title = "A sufficiently distinctive manga title";
+
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title,
+        contextualAuthorNames: ["Oshima Aki"],
+      },
+      {
+        title,
+        contextualAuthorNames: ["Ōshima Aki"],
+      },
+      { enableRomajiPhoneticMerge: false },
+    ),
+    "base",
+  );
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title,
+        contextualAuthorNames: ["Oshima Aki"],
+      },
+      {
+        title,
+        contextualAuthorNames: ["Another Author"],
+      },
+      { enableRomajiPhoneticMerge: false },
+    ),
+    null,
+  );
+});
+
+test("multi-search compares structured sequence and edition markers", () => {
+  const options = { enableRomajiPhoneticMerge: false };
+  const matchKind = (leftTitle, rightTitle) => getMangaTitleMergeMatchKind(
+    { title: leftTitle },
+    { title: rightTitle },
+    options,
+  );
+
+  assert.equal(matchKind("Series Part 2", "Series #2"), "base");
+  assert.equal(matchKind("Series Part II", "Series #2"), "base");
+  assert.equal(matchKind("Series Vol. 1-2", "Series 1–2"), "base");
+  assert.equal(matchKind("Series (Zenpen)", "Series (前編)"), "base");
+  assert.equal(matchKind("Series Part 2", "Series Part 3"), null);
+  assert.equal(matchKind("Series (Zenpen)", "Series (Kouhen)"), null);
+  assert.equal(matchKind("Series (Zenpen+Kouhen)", "Series (Zenpen)"), null);
+  assert.equal(matchKind("Series Part 2", "Series"), null);
+  assert.equal(matchKind("Series (COMIC 2023-05)", "Series"), "base");
+});
+
 test("Japanese colloquial n-chi house suffix gets a searchable token variant", async () => {
   const kanaToRomaji = (value) => ({
     イマイズミ: "imaizumi",
@@ -724,4 +818,34 @@ test("merged cards use the first source from the highest-priority available lang
   assert.equal(merged.sources.length, 2);
   assert.equal(merged.title, english.result.title);
   assert.equal(merged.coverUrl, english.result.thumbnailUrl);
+});
+
+test("a bilingual source consolidates pre-existing monolingual groups", () => {
+  const englishTitle = "How I Ended Up With an Older Sister 2";
+  const japaneseTitle = "Totsuzen Dekita Ane to no Hanashi 2";
+  const english = buildMergeSource(
+    englishTitle,
+    "en",
+    "https://example.test/english",
+    "https://example.test/english.jpg",
+  );
+  const japanese = buildMergeSource(
+    japaneseTitle,
+    "ja",
+    "https://example.test/japanese",
+    "https://example.test/japanese.jpg",
+  );
+  const bilingual = buildMergeSource(
+    `${japaneseTitle}｜${englishTitle}`,
+    "en",
+    "https://example.test/bilingual",
+    "https://example.test/bilingual.jpg",
+  );
+  const merged = mergeMultiSearchResults([english, japanese, bilingual], {
+    enableRomajiPhoneticMerge: false,
+    preferredTitleLanguageCodes: ["en", "ja"],
+  });
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].sources.length, 3);
 });
