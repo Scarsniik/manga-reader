@@ -158,7 +158,10 @@ actions de chargement sont bloquees jusqu'a ce qu'au moins une source soit selec
 
 Le nombre de pages chargees par source reprend le parametre global
 `scraperAuthorFavoritePageCount`. Les resultats deja connus dans l'historique de vue ne sont pas
-affiches. Le nombre de sources auteur chargees en parallele reprend `scraperLatestConcurrency`.
+affiches, mais ils n'arretent pas le parcours : le chargement continue jusqu'a la limite de pages
+ou jusqu'a la fin reelle de la pagination. Le quota de resultats et le seuil de cards deja vues du
+scan rapide ne s'appliquent pas aux auteurs. Le nombre de sources auteur chargees en parallele
+reprend `scraperLatestConcurrency`.
 
 ## Reglages par scraper
 

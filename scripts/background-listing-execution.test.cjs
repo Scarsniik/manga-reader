@@ -7,7 +7,9 @@ const source = `
   export {
     resolveBackgroundLanguageProgress,
     resolveBackgroundListingConcurrency,
+    resolveBackgroundListingResultLimit,
     resolveBackgroundQuickSeenProgress,
+    usesBackgroundQuickSeenBoundary,
   } from "@/renderer/backgroundSearch/backgroundListingExecution";
 `;
 const built = esbuild.buildSync({
@@ -28,7 +30,9 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 const {
   resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
+  resolveBackgroundListingResultLimit,
   resolveBackgroundQuickSeenProgress,
+  usesBackgroundQuickSeenBoundary,
 } = bundledModule.exports;
 
 test("background listings keep the concurrency selected by the search", () => {
@@ -42,7 +46,7 @@ test("background listings fall back to the pace concurrency for old jobs", () =>
   assert.equal(resolveBackgroundListingConcurrency(Number.NaN, 3), 3);
 });
 
-test("quick author scans stop after the configured consecutive seen boundary", () => {
+test("quick listing progress detects the configured consecutive seen boundary", () => {
   assert.deepEqual(resolveBackgroundQuickSeenProgress([true, true], 0, 2), {
     consecutiveSeenCount: 2,
     boundaryReached: false,
@@ -55,6 +59,17 @@ test("quick author scans stop after the configured consecutive seen boundary", (
     consecutiveSeenCount: 1,
     boundaryReached: true,
   });
+});
+
+test("latest author scans are limited by pages instead of results", () => {
+  assert.equal(resolveBackgroundListingResultLimit(undefined, 50, true), 0);
+  assert.equal(resolveBackgroundListingResultLimit(20, 50, true), 0);
+  assert.equal(resolveBackgroundListingResultLimit(undefined, 50, false), 50);
+});
+
+test("latest author scans ignore the quick seen boundary", () => {
+  assert.equal(usesBackgroundQuickSeenBoundary("latestAuthors"), false);
+  assert.equal(usesBackgroundQuickSeenBoundary("latestSources"), true);
 });
 
 test("background source scans stop after the configured language rejection boundary", () => {

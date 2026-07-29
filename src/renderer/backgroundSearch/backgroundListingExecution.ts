@@ -9,6 +9,21 @@ export const resolveBackgroundListingConcurrency = (
 
 export const DEFAULT_BACKGROUND_QUICK_SEEN_STOP_THRESHOLD = 2;
 
+export const usesBackgroundQuickSeenBoundary = (kind: string): boolean => (
+  kind === "latestSources"
+);
+
+export const resolveBackgroundListingResultLimit = (
+  sourceResultLimit: unknown,
+  defaultResultLimit: unknown,
+  pageLimitedOnly: boolean,
+): number => {
+  if (pageLimitedOnly) return 0;
+
+  const parsed = Math.floor(Number(sourceResultLimit ?? defaultResultLimit ?? 0));
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
 export const resolveBackgroundQuickSeenProgress = (
   seenResults: boolean[],
   previousConsecutiveSeenCount: number,

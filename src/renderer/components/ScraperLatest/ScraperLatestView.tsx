@@ -1073,7 +1073,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           : searchMode === "continuous"
             ? scraperContinuousPageSafetyLimit
           : 1,
-      resultLimit: searchMode === "continuous" ? 0 : scraperResultLimit,
+      resultLimit: isAuthors || searchMode === "continuous" ? 0 : scraperResultLimit,
       paceMode: "careful",
       concurrency: defaultScraperLatestConcurrency,
       includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,

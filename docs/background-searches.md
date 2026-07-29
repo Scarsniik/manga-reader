@@ -32,7 +32,7 @@ Correspondence progress counts executed title and author searches. The trace als
 
 Author correspondence jobs reuse the multi-source scraper selection, depth, pacing and concurrency settings. For each searched name they combine regular manga search followed by author-link extraction with direct attempts against scrapers whose Author module uses a URL template. Their result stores each matching author page and a small preview of its first manga results.
 
-Latest favorite-author background scans use the persisted global scraping concurrency, not a temporary session override. In quick mode, each source stops after the configured consecutive already-seen boundary. Detail-page enrichment is deferred until after history filtering so known cards do not generate unnecessary requests.
+Latest favorite-author background scans use the persisted global scraping concurrency, not a temporary session override. They are limited by the configured author page count, not by a result quota or the quick scan's consecutive already-seen boundary. Detail-page enrichment is deferred until after history filtering so known cards do not generate unnecessary requests.
 
 Status transitions are:
 

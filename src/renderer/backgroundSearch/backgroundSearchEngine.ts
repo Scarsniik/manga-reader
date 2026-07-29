@@ -52,7 +52,9 @@ import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/autho
 import {
   resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
+  resolveBackgroundListingResultLimit,
   resolveBackgroundQuickSeenProgress,
+  usesBackgroundQuickSeenBoundary,
 } from "@/renderer/backgroundSearch/backgroundListingExecution";
 import {
   BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
@@ -261,7 +263,11 @@ const runListings = async (
     await emit(run.name);
     try {
       const source = input.sources[runIndex];
-      const resultLimit = Math.max(0, Math.floor(source.resultLimit ?? input.resultLimit ?? 0));
+      const resultLimit = resolveBackgroundListingResultLimit(
+        source.resultLimit,
+        input.resultLimit,
+        kind === "latestAuthors",
+      );
       const backfillBlacklistedResults = kind === "latestSources"
         && input.excludeBlacklistedTagCards === true;
       const executionPageLimit = backfillBlacklistedResults && input.searchMode !== "continuous"
@@ -388,7 +394,7 @@ const runListings = async (
           : 0;
         const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
         const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
-        const quickHistoryBoundaryReached = (kind === "latestAuthors" || kind === "latestSources")
+        const quickHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
           && (input.searchMode === "quick" || input.searchMode === "continuous")
           && quickSeenProgress.boundaryReached
           && !(pageIndex === 0 && rawUnseenSources.length > 0);
