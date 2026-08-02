@@ -4,6 +4,7 @@ import {
   BookmarkRibbonIcon,
   ChevronDownIcon,
   DetailsCardIcon,
+  FileSelectionIcon,
   OpenBookIcon,
 } from "@/renderer/components/icons";
 import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
@@ -12,11 +13,12 @@ import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 
 const MIDDLE_BUTTON = 1;
 
-type NoticeKind = "reading" | "bookmark";
+type NoticeKind = "reading" | "bookmark" | "readingList";
 
 type Props = {
   readingMatches: ScraperPotentialMangaMatch[];
   bookmarkMatches: ScraperPotentialMangaMatch[];
+  readingListMatches: ScraperPotentialMangaMatch[];
   fallbackCover?: string;
   fallbackCoverReferer?: string;
   loading?: boolean;
@@ -49,16 +51,28 @@ const getReadingSummary = (matches: ScraperPotentialMangaMatch[]): string => {
 };
 
 const getTargetLabel = (match: ScraperPotentialMangaMatch): string => (
-  match.target.kind === "library" ? "Bibliotheque" : "Fiche"
+  match.category === "readingList"
+    ? "Element d'une liste de lecture"
+    : match.target.kind === "library" ? "Bibliotheque" : "Fiche"
 );
 
-const getNoticeTitle = (kind: NoticeKind): string => (
-  kind === "reading" ? "Potentiellement deja lu" : "Potentiellement bookmarke"
-);
+const getNoticeTitle = (kind: NoticeKind): string => {
+  if (kind === "reading") {
+    return "Potentiellement deja lu";
+  }
 
-const getNoticeSummary = (kind: NoticeKind, matches: ScraperPotentialMangaMatch[]): string => (
-  kind === "reading" ? getReadingSummary(matches) : formatCount(matches.length, "correspondance")
-);
+  return kind === "bookmark"
+    ? "Potentiellement bookmarke"
+    : "Potentiellement dans une liste";
+};
+
+const getNoticeSummary = (kind: NoticeKind, matches: ScraperPotentialMangaMatch[]): string => {
+  if (kind === "reading") {
+    return getReadingSummary(matches);
+  }
+
+  return formatCount(matches.length, kind === "readingList" ? "manga" : "correspondance");
+};
 
 const buildPotentialMatchCoverUrls = (
   match: ScraperPotentialMangaMatch,
@@ -210,7 +224,10 @@ function PotentialMatchNotice({
   const noticeSummary = getNoticeSummary(kind, matches);
   const icon = kind === "reading"
     ? <OpenBookIcon aria-hidden="true" focusable="false" />
-    : <BookmarkRibbonIcon aria-hidden="true" focusable="false" />;
+    : kind === "bookmark"
+      ? <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
+      : <FileSelectionIcon aria-hidden="true" focusable="false" />;
+  const noticeClassName = kind === "readingList" ? "reading-list" : kind;
 
   const handleMatchAuxClick = (
     event: React.MouseEvent<HTMLButtonElement>,
@@ -229,7 +246,7 @@ function PotentialMatchNotice({
     <AdaptiveDropdown
       open={open}
       onOpenChange={setOpen}
-      className={`scraper-browser__potential-match is-${kind}`}
+      className={`scraper-browser__potential-match is-${noticeClassName}`}
       contentClassName="scraper-browser__potential-match-menu"
       contentRole="menu"
       gap={6}
@@ -284,13 +301,14 @@ function PotentialMatchNotice({
 export default function ScraperPotentialMangaMatches({
   readingMatches,
   bookmarkMatches,
+  readingListMatches,
   fallbackCover,
   fallbackCoverReferer,
   loading = false,
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: Props) {
-  if (!readingMatches.length && !bookmarkMatches.length) {
+  if (!readingMatches.length && !bookmarkMatches.length && !readingListMatches.length) {
     return null;
   }
 
@@ -308,6 +326,15 @@ export default function ScraperPotentialMangaMatches({
       <PotentialMatchNotice
         kind="bookmark"
         matches={bookmarkMatches}
+        fallbackCover={fallbackCover}
+        fallbackCoverReferer={fallbackCoverReferer}
+        loading={loading}
+        onOpenMatch={onOpenMatch}
+        onOpenMatchInWorkspace={onOpenMatchInWorkspace}
+      />
+      <PotentialMatchNotice
+        kind="readingList"
+        matches={readingListMatches}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
         loading={loading}

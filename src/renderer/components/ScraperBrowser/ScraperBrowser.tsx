@@ -469,6 +469,7 @@ export default function ScraperBrowser({
   const {
     readingMatches: potentialReadingMatches,
     bookmarkMatches: potentialBookmarkMatches,
+    readingListMatches: potentialReadingListMatches,
     loading: loadingPotentialMatches,
   } = useScraperPotentialMangaMatches({
     scraper,
@@ -2543,6 +2544,7 @@ export default function ScraperBrowser({
         loadingMoreThumbnails={loadingMoreThumbnails}
         potentialReadingMatches={potentialReadingMatches}
         potentialBookmarkMatches={potentialBookmarkMatches}
+        potentialReadingListMatches={potentialReadingListMatches}
         loadingPotentialMatches={loadingPotentialMatches}
         multiSearchTitle={titleMultiSearchQuery}
         getLinkedMangaForSource={getLinkedMangaForSource}

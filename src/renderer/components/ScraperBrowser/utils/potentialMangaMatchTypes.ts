@@ -16,7 +16,7 @@ export type ScraperPotentialReadingStatus = "inProgress" | "read";
 
 export type ScraperPotentialMangaMatch = MatchableManga & {
   id: string;
-  category: "reading" | "bookmark";
+  category: "reading" | "bookmark" | "readingList";
   title: string;
   cover?: string;
   sourceLabel: string;
@@ -30,5 +30,6 @@ export type ScraperPotentialMangaMatch = MatchableManga & {
 export type ScraperPotentialMangaMatchState = {
   readingMatches: ScraperPotentialMangaMatch[];
   bookmarkMatches: ScraperPotentialMangaMatch[];
+  readingListMatches: ScraperPotentialMangaMatch[];
   loading: boolean;
 };

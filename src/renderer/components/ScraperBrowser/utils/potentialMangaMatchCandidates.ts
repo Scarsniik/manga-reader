@@ -1,5 +1,9 @@
 import type { AppHistoryRecords, ReadingHistoryRecord } from "@/shared/history";
 import type {
+  SavedReadingList,
+  SavedReadingListItem,
+} from "@/shared/readingList";
+import type {
   ScraperBookmarkRecord,
   ScraperReaderProgressRecord,
   ScraperRecord,
@@ -7,6 +11,7 @@ import type {
 } from "@/shared/scraper";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import type { Manga } from "@/renderer/types";
+import type { ReaderLocationState } from "@/renderer/components/Reader/types";
 import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
 import type { MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
@@ -347,6 +352,100 @@ export const buildBookmarkCandidate = (
     updatedAt: bookmark.updatedAt || bookmark.createdAt,
     target: buildScraperDetailsTarget(bookmark.scraperId, sourceUrl, title),
   };
+};
+
+const buildReadingListScraperCandidate = (
+  list: SavedReadingList<ReaderLocationState>,
+  item: SavedReadingListItem<ReaderLocationState>,
+  scraperId: string,
+  sourceUrlValue: string,
+  scrapersById: Map<string, ScraperRecord>,
+): ScraperPotentialMangaMatch | null => {
+  const sourceUrl = normalizeScraperViewHistorySourceUrl(sourceUrlValue);
+  const title = normalizePotentialMatchText(item.metadata.title || item.sourceTarget.title || sourceUrl);
+  if (!scraperId || !sourceUrl || !title) {
+    return null;
+  }
+
+  return {
+    id: `reading-list:${list.id}:${item.id}`,
+    category: "readingList",
+    title,
+    cover: item.metadata.cover ?? undefined,
+    sourceUrl,
+    authorNames: getAuthorNames(title, item.metadata.authors ?? []),
+    sourceLabel: getScraperName(scraperId, scrapersById),
+    detailLabel: "Liste de lecture",
+    updatedAt: list.createdAt,
+    target: buildScraperDetailsTarget(scraperId, sourceUrl, title),
+  };
+};
+
+const buildReadingListCandidate = (
+  list: SavedReadingList<ReaderLocationState>,
+  item: SavedReadingListItem<ReaderLocationState>,
+  mangaById: Map<string, Manga>,
+  scrapersById: Map<string, ScraperRecord>,
+): ScraperPotentialMangaMatch | null => {
+  if (item.sourceTarget.kind === "scraper.details") {
+    return buildReadingListScraperCandidate(
+      list,
+      item,
+      item.sourceTarget.scraperId,
+      item.sourceTarget.sourceUrl,
+      scrapersById,
+    );
+  }
+
+  const scraperReader = item.sourceTarget.locationState?.scraperReader;
+  if (scraperReader?.scraperId && scraperReader.sourceUrl) {
+    return buildReadingListScraperCandidate(
+      list,
+      item,
+      scraperReader.scraperId,
+      scraperReader.sourceUrl,
+      scrapersById,
+    );
+  }
+
+  const manga = mangaById.get(item.sourceTarget.mangaId);
+  const title = normalizePotentialMatchText(
+    item.metadata.title || manga?.title || item.sourceTarget.title,
+  );
+  if (!title) {
+    return null;
+  }
+
+  return {
+    id: `reading-list:${list.id}:${item.id}`,
+    category: "readingList",
+    title,
+    cover: item.metadata.cover ?? manga?.thumbnailPath ?? undefined,
+    sourceUrl: manga?.sourceUrl ?? undefined,
+    authorNames: getAuthorNames(title, item.metadata.authors ?? []),
+    sourceLabel: "Bibliotheque",
+    detailLabel: "Liste de lecture",
+    updatedAt: list.createdAt,
+    target: buildLibraryTarget(title),
+  };
+};
+
+export const buildReadingListCandidates = ({
+  lists,
+  libraryMangas,
+  scrapersById,
+}: {
+  lists: SavedReadingList<ReaderLocationState>[];
+  libraryMangas: Manga[];
+  scrapersById: Map<string, ScraperRecord>;
+}): ScraperPotentialMangaMatch[] => {
+  const mangaById = new Map(libraryMangas.map((manga) => [manga.id, manga]));
+
+  return lists.flatMap((list) => (
+    list.items
+      .map((item) => buildReadingListCandidate(list, item, mangaById, scrapersById))
+      .filter((candidate): candidate is ScraperPotentialMangaMatch => Boolean(candidate))
+  ));
 };
 
 const buildTitleLookup = (

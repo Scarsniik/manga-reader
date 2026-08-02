@@ -36,10 +36,12 @@ const getPotentialWarningMatchLabel = (match: ScraperPotentialMangaMatch): strin
 const buildPotentialMatchWarningDetails = (
   readingMatches: ScraperPotentialMangaMatch[],
   bookmarkMatches: ScraperPotentialMangaMatch[],
+  readingListMatches: ScraperPotentialMangaMatch[],
 ): React.ReactNode => {
   const matches = [
     ...readingMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Lecture" })),
     ...bookmarkMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Bookmark" })),
+    ...readingListMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Liste" })),
   ];
   const visibleMatches = matches.slice(0, POTENTIAL_MATCH_WARNING_DETAIL_LIMIT);
   const hiddenCount = Math.max(0, matches.length - visibleMatches.length);
@@ -147,6 +149,7 @@ type Props = {
   loadingMoreThumbnails: boolean;
   potentialReadingMatches: ScraperPotentialMangaMatch[];
   potentialBookmarkMatches: ScraperPotentialMangaMatch[];
+  potentialReadingListMatches: ScraperPotentialMangaMatch[];
   loadingPotentialMatches?: boolean;
   multiSearchTitle?: string;
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
@@ -190,6 +193,7 @@ export default function ScraperDetailsPanel({
   loadingMoreThumbnails,
   potentialReadingMatches,
   potentialBookmarkMatches,
+  potentialReadingListMatches,
   loadingPotentialMatches = false,
   multiSearchTitle = '',
   getLinkedMangaForSource,
@@ -211,10 +215,16 @@ export default function ScraperDetailsPanel({
   onOpenCorrespondenceSearch,
 }: Props) {
   const { openModal } = useModal();
-  const potentialActionMatchCount = potentialReadingMatches.length + potentialBookmarkMatches.length;
+  const potentialActionMatchCount = potentialReadingMatches.length
+    + potentialBookmarkMatches.length
+    + potentialReadingListMatches.length;
   const potentialActionWarningDetails = useMemo(() => (
-    buildPotentialMatchWarningDetails(potentialReadingMatches, potentialBookmarkMatches)
-  ), [potentialBookmarkMatches, potentialReadingMatches]);
+    buildPotentialMatchWarningDetails(
+      potentialReadingMatches,
+      potentialBookmarkMatches,
+      potentialReadingListMatches,
+    )
+  ), [potentialBookmarkMatches, potentialReadingListMatches, potentialReadingMatches]);
   const confirmBookmarkWithPotentialMatches = useCallback((
     action: () => void,
   ) => {
@@ -227,7 +237,7 @@ export default function ScraperDetailsPanel({
       title: "Correspondance potentielle",
       message: (
         <>
-          Attention, cette fiche ressemble a un manga deja lu, en cours ou bookmarke.
+          Attention, cette fiche ressemble a un manga deja lu, en cours, bookmarke ou present dans une liste de lecture.
           {" "}
           Verifie la correspondance avant de continuer.
         </>
@@ -458,6 +468,7 @@ export default function ScraperDetailsPanel({
           <ScraperPotentialMangaMatches
             readingMatches={potentialReadingMatches}
             bookmarkMatches={potentialBookmarkMatches}
+            readingListMatches={potentialReadingListMatches}
             fallbackCover={detailsResult.cover}
             fallbackCoverReferer={sourceUrl}
             loading={loadingPotentialMatches}

@@ -122,7 +122,8 @@ Exemples :
 - si `Recherche` est configuree, on affiche une zone de recherche
 - si `Categories` est configuree, on affiche un acces categories
 - si `Pages` est configuree, la fiche manga peut afficher lecture et telechargement
-- si une fiche ressemble a un manga deja lu ou bookmarke, chaque alerte deroulante affiche les correspondances
+- si une fiche ressemble a un manga deja lu, bookmarke ou present dans une liste de lecture enregistree,
+  chaque alerte deroulante affiche les correspondances
   dans une liste horizontale de mini-cartes. La couverture et les auteurs sont affiches quand ils sont deja connus,
   et le clic molette conserve l'ouverture dans un nouvel onglet du workspace.
 
