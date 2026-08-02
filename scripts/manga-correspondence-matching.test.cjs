@@ -12,6 +12,7 @@ const source = `
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { resolveMangaCorrespondenceMatchChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { compareMangaCorrespondenceChapters } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { describeMangaCorrespondenceChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { doMangaCorrespondenceChaptersOverlap } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -57,6 +58,7 @@ const {
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
   inferMangaCorrespondenceFirstChapter,
+  resolveMangaCorrespondenceMatchChapter,
   compareMangaCorrespondenceChapters,
   describeMangaCorrespondenceChapter,
   doMangaCorrespondenceChaptersOverlap,
@@ -425,6 +427,35 @@ test("correspondence parses chapters followed by an unwrapped subtitle", () => {
   assert.equal(bilingual.chapter, "4");
   assert.equal(translated.title, "Neighborhood Seduction White Rose - The Aunt's Secret");
   assert.equal(translated.chapter, "2");
+});
+
+test("correspondence parses numbered named releases without a separator", () => {
+  const standalone = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi 11 Owari Hen [Chinese]",
+    null,
+  );
+  const wrapped = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi 8 ＜Numa Hen＞",
+    null,
+  );
+  const translated = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi 11 Owari Hen | 關於我和媽媽有了不可告人的關係這件事 11 完結篇 [Chinese]",
+    null,
+  );
+
+  for (const result of [standalone, translated]) {
+    assert.equal(result.title, "Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi");
+    assert.equal(result.chapter, "11");
+  }
+  assert.equal(wrapped.title, "Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi");
+  assert.equal(wrapped.chapter, "8");
+});
+
+test("stored inferred chapters yield to improved parsing unless manually reviewed", () => {
+  assert.equal(resolveMangaCorrespondenceMatchChapter("1", "11", undefined), "11");
+  assert.equal(resolveMangaCorrespondenceMatchChapter(undefined, "10", undefined), "10");
+  assert.equal(resolveMangaCorrespondenceMatchChapter("9", "8", undefined), "9");
+  assert.equal(resolveMangaCorrespondenceMatchChapter("3", "11", undefined, true), "3");
 });
 
 test("correspondence treats an explicit main story release as chapter one", () => {

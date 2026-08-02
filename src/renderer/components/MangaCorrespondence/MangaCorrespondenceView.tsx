@@ -38,6 +38,7 @@ import {
   compareMangaCorrespondenceChapters,
   formatMangaCorrespondenceChapterLabel,
   inferMangaCorrespondenceFirstChapter,
+  resolveMangaCorrespondenceMatchChapter,
 } from "@/renderer/utils/mangaCorrespondenceChapter";
 import { getLanguageLabel } from "@/renderer/utils/languageDetection";
 import {
@@ -179,7 +180,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         input?.reference.title ?? "",
         ...(input?.reference.alternativeTitles ?? []),
       ]);
-      const chapter = match.chapter || titleAnalysis.chapter || inferredFirstChapter || "Non renseigné";
+      const chapter = resolveMangaCorrespondenceMatchChapter(
+        match.chapter,
+        titleAnalysis.chapter,
+        inferredFirstChapter,
+        match.acceptedManually,
+      );
       byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())

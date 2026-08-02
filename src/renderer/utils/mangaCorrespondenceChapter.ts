@@ -160,3 +160,18 @@ export const inferMangaCorrespondenceFirstChapter = (
 
   return matchesKnownTitleExactly ? "1" : undefined;
 };
+
+export const resolveMangaCorrespondenceMatchChapter = (
+  storedChapter: string | undefined,
+  analyzedChapter: string | undefined,
+  inferredChapter: string | undefined,
+  acceptedManually = false,
+): string => {
+  if (acceptedManually && storedChapter) return storedChapter;
+  if (storedChapter) {
+    return storedChapter === "1" && analyzedChapter && analyzedChapter !== "1"
+      ? analyzedChapter
+      : storedChapter;
+  }
+  return analyzedChapter || inferredChapter || "Non renseigné";
+};

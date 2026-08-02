@@ -57,6 +57,10 @@ const NUMBERED_SUFFIX_SUBTITLE_PATTERN = new RegExp(
   `^(?<title>.*\\S)\\s+(?<chapter>${CHAPTER_VALUE_SOURCE})\\s*:\\s*.+$`,
   "iu",
 );
+const NUMBERED_NAMED_RELEASE_PATTERN = new RegExp(
+  `^(?<title>.*\\S)\\s+(?<chapter>${CHAPTER_VALUE_SOURCE})\\s+(?:[<＜〈《【]\\s*)?.+?(?:\\s+(?:hen|arc|volume|edition)|[編篇巻話])(?:\\s*[>＞〉》】])?\\s*$`,
+  "iu",
+);
 const WRAPPED_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s+[-–—]\s*.+?\s*[-–—]\s*$/iu;
 const TILDE_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s*[~〜～]\s*.*$/iu;
 const INLINE_RELEASE_STATUS_PATTERN = /\s*\[(?:ongoing|complete|completed)\]\s*/giu;
@@ -141,7 +145,8 @@ const stripDecoratedChapterSubtitle = (
     ?? value.match(NUMBERED_WRAPPED_SUBTITLE_PATTERN)
     ?? value.match(NUMBERED_TILDE_SUBTITLE_PATTERN)
     ?? value.match(JAPANESE_NUMBERED_TILDE_SUBTITLE_PATTERN)
-    ?? value.match(NUMBERED_SUFFIX_SUBTITLE_PATTERN);
+    ?? value.match(NUMBERED_SUFFIX_SUBTITLE_PATTERN)
+    ?? value.match(NUMBERED_NAMED_RELEASE_PATTERN);
   if (numberedMatch?.groups?.title && numberedMatch.groups.chapter) {
     return {
       title: normalizeTitleBeforeChapter(numberedMatch.groups.title),
