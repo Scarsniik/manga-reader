@@ -18,6 +18,7 @@ export type ScraperPotentialMangaMatch = MatchableManga & {
   id: string;
   category: "reading" | "bookmark";
   title: string;
+  cover?: string;
   sourceLabel: string;
   detailLabel: string;
   updatedAt?: string;

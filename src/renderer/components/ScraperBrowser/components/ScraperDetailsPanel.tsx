@@ -458,6 +458,8 @@ export default function ScraperDetailsPanel({
           <ScraperPotentialMangaMatches
             readingMatches={potentialReadingMatches}
             bookmarkMatches={potentialBookmarkMatches}
+            fallbackCover={detailsResult.cover}
+            fallbackCoverReferer={sourceUrl}
             loading={loadingPotentialMatches}
             onOpenMatch={onOpenPotentialMatch}
             onOpenMatchInWorkspace={onOpenPotentialMatchInWorkspace}

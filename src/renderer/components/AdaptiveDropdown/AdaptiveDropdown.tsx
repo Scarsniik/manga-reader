@@ -27,6 +27,7 @@ type Props = {
   contentClassName?: string;
   contentRole?: AriaRole;
   gap?: number;
+  horizontalBoundarySelector?: string;
   maxHeight?: number;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -38,6 +39,7 @@ type Props = {
 
 type DropdownLayout = {
   availableHeight: number | null;
+  availableWidth: number | null;
   horizontalShift: number;
   placement: AdaptiveDropdownPlacement;
 };
@@ -54,6 +56,7 @@ export default function AdaptiveDropdown({
   contentClassName,
   contentRole,
   gap = 0,
+  horizontalBoundarySelector,
   maxHeight,
   onOpenChange,
   open,
@@ -69,6 +72,7 @@ export default function AdaptiveDropdown({
   const animationFrameRef = useRef<number | null>(null);
   const [layout, setLayout] = useState<DropdownLayout>({
     availableHeight: null,
+    availableWidth: null,
     horizontalShift: 0,
     placement: preferredPlacement,
   });
@@ -88,6 +92,19 @@ export default function AdaptiveDropdown({
 
     const rootRect = root.getBoundingClientRect();
     const contentRect = content.getBoundingClientRect();
+    const horizontalBoundary = horizontalBoundarySelector
+      ? root.closest(horizontalBoundarySelector)
+      : null;
+    const horizontalBoundaryRect = horizontalBoundary?.getBoundingClientRect();
+    const horizontalLeft = Math.max(
+      viewportPadding,
+      horizontalBoundaryRect?.left ?? viewportPadding,
+    );
+    const horizontalRight = Math.min(
+      window.innerWidth - viewportPadding,
+      horizontalBoundaryRect?.right ?? window.innerWidth - viewportPadding,
+    );
+    const availableWidth = Math.max(0, Math.floor(horizontalRight - horizontalLeft));
     const availableDown = Math.max(
       0,
       window.innerHeight - rootRect.bottom - gap - viewportPadding,
@@ -104,23 +121,36 @@ export default function AdaptiveDropdown({
     const availableHeight = Math.floor(placement === "down" ? availableDown : availableUp);
 
     const unshiftedLeft = contentRect.left - layout.horizontalShift;
-    const unshiftedRight = contentRect.right - layout.horizontalShift;
-    const viewportRight = window.innerWidth - viewportPadding;
+    const unshiftedRight = unshiftedLeft + Math.min(contentRect.width, availableWidth);
     let horizontalShift = 0;
-    if (unshiftedLeft < viewportPadding) {
-      horizontalShift = viewportPadding - unshiftedLeft;
-    } else if (unshiftedRight > viewportRight) {
-      horizontalShift = viewportRight - unshiftedRight;
+    if (unshiftedLeft < horizontalLeft) {
+      horizontalShift = horizontalLeft - unshiftedLeft;
+    } else if (unshiftedRight > horizontalRight) {
+      horizontalShift = horizontalRight - unshiftedRight;
     }
 
     setLayout((current) => (
       current.placement === placement
       && current.availableHeight === availableHeight
+      && current.availableWidth === availableWidth
       && current.horizontalShift === horizontalShift
         ? current
-        : { availableHeight, horizontalShift, placement }
+        : {
+          availableHeight,
+          availableWidth,
+          horizontalShift,
+          placement,
+        }
     ));
-  }, [gap, layout.horizontalShift, maxHeight, open, preferredPlacement, viewportPadding]);
+  }, [
+    gap,
+    horizontalBoundarySelector,
+    layout.horizontalShift,
+    maxHeight,
+    open,
+    preferredPlacement,
+    viewportPadding,
+  ]);
 
   const scheduleLayoutUpdate = useCallback(() => {
     if (animationFrameRef.current !== null) {
@@ -137,6 +167,7 @@ export default function AdaptiveDropdown({
     if (!open) {
       setLayout({
         availableHeight: null,
+        availableWidth: null,
         horizontalShift: 0,
         placement: preferredPlacement,
       });
@@ -153,6 +184,12 @@ export default function AdaptiveDropdown({
     if (contentRef.current) {
       resizeObserver?.observe(contentRef.current);
     }
+    const horizontalBoundary = horizontalBoundarySelector
+      ? rootRef.current?.closest(horizontalBoundarySelector)
+      : null;
+    if (horizontalBoundary) {
+      resizeObserver?.observe(horizontalBoundary);
+    }
 
     window.addEventListener("resize", scheduleLayoutUpdate);
     window.addEventListener("scroll", scheduleLayoutUpdate, true);
@@ -165,7 +202,13 @@ export default function AdaptiveDropdown({
         animationFrameRef.current = null;
       }
     };
-  }, [open, preferredPlacement, scheduleLayoutUpdate, updateLayout]);
+  }, [
+    horizontalBoundarySelector,
+    open,
+    preferredPlacement,
+    scheduleLayoutUpdate,
+    updateLayout,
+  ]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -207,7 +250,9 @@ export default function AdaptiveDropdown({
     : Math.min(maxHeight ?? Number.POSITIVE_INFINITY, layout.availableHeight);
   const contentStyle: CSSProperties = {
     bottom: layout.placement === "up" ? `calc(100% + ${gap}px)` : "auto",
-    maxWidth: `calc(100vw - ${viewportPadding * 2}px)`,
+    maxWidth: layout.availableWidth === null
+      ? `calc(100vw - ${viewportPadding * 2}px)`
+      : `${layout.availableWidth}px`,
     maxHeight: availableMaxHeight === undefined ? undefined : `${availableMaxHeight}px`,
     overflowY: "auto",
     top: layout.placement === "down" ? `calc(100% + ${gap}px)` : "auto",
