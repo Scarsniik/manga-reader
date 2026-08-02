@@ -45,6 +45,10 @@ const NUMBERED_DASH_SUBTITLE_PATTERN = new RegExp(
   `^(?<title>.*\\S)\\s+[-–—]\\s*(?<chapter>${CHAPTER_VALUE_SOURCE})\\s*[-–—:]\\s*.+$`,
   "iu",
 );
+const NUMBERED_TRAILING_SUBTITLE_PATTERN = new RegExp(
+  `^(?<title>.*?\\S)\\s+(?<chapter>${CHAPTER_VALUE_SOURCE})\\s*[-–—:]\\s*(?<subtitle>.+)$`,
+  "iu",
+);
 const NUMBERED_WRAPPED_SUBTITLE_PATTERN = new RegExp(
   `^(?<title>.*?\\S)\\s+(?<chapter>${CHAPTER_NUMBER_SOURCE})\\s*[-–—]\\s*(?!${CHAPTER_NUMBER_SOURCE}(?:\\s|$))(?<subtitle>.+?)\\s*[-–—]\\s*$`,
   "iu",
@@ -73,6 +77,7 @@ const TRAILING_COMPILATION_DESCRIPTOR_PATTERN = new RegExp(
   `^(?<title>.+?\\S)\\s*${COMPILATION_MARKER_SOURCE}(?:\\s*(?:【|\\[|~|〜|～)\\s*(?<coverage>${CHAPTER_VALUE_SOURCE})\\s*[+＋]?\\s*(?:】|\\])?)?\\s*$`,
   "iu",
 );
+const TRAILING_FIRST_CHAPTER_DESCRIPTOR_PATTERN = /^(?<title>.+?\S)\s+[-–—:]\s*(?:main\s+(?:story|chapter|episode|part)|first\s+chapter|本[編篇])\s*$/iu;
 const SPECIAL_RELEASE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "Bonus", pattern: /(?:bonus|omake|おまけ)[\s~～〜:;,_\-–—]*$/iu },
   { label: "Extra", pattern: /(?:extra|extras|side[\s-]*story|番外編)[\s~～〜:;,_\-–—]*$/iu },
@@ -90,6 +95,12 @@ const normalizeChapter = (value: string): string => {
   return Number.isFinite(numeric) ? String(numeric) : normalized;
 };
 
+const normalizeTitleBeforeChapter = (value: string): string => (
+  normalizeTitleAnalysisText(value)
+    .replace(/(?:\s*[,，、;；:：])+\s*$/u, "")
+    .trim()
+);
+
 const stripTrailingBareChapter = (
   value: string,
 ): { title: string; chapter?: string } => {
@@ -101,7 +112,7 @@ const stripTrailingBareChapter = (
   }
 
   return {
-    title: match.groups.title.trim(),
+    title: normalizeTitleBeforeChapter(match.groups.title),
     chapter: normalizeChapter(chapter),
   };
 };
@@ -117,14 +128,23 @@ const stripDecoratedChapterSubtitle = (
     }
   }
 
+  const trailingSubtitleMatch = labeledSequence.sequenceMarkers.some((marker) => marker.kind === "chapter")
+    ? null
+    : value.match(NUMBERED_TRAILING_SUBTITLE_PATTERN);
+  const usableTrailingSubtitleMatch = trailingSubtitleMatch?.groups?.subtitle
+    && !BARE_CHAPTER_VALUE_PATTERN.test(normalizeTitleAnalysisText(trailingSubtitleMatch.groups.subtitle))
+    ? trailingSubtitleMatch
+    : null;
+
   const numberedMatch = value.match(NUMBERED_DASH_SUBTITLE_PATTERN)
+    ?? usableTrailingSubtitleMatch
     ?? value.match(NUMBERED_WRAPPED_SUBTITLE_PATTERN)
     ?? value.match(NUMBERED_TILDE_SUBTITLE_PATTERN)
     ?? value.match(JAPANESE_NUMBERED_TILDE_SUBTITLE_PATTERN)
     ?? value.match(NUMBERED_SUFFIX_SUBTITLE_PATTERN);
   if (numberedMatch?.groups?.title && numberedMatch.groups.chapter) {
     return {
-      title: normalizeTitleAnalysisText(numberedMatch.groups.title),
+      title: normalizeTitleBeforeChapter(numberedMatch.groups.title),
       chapter: normalizeChapter(numberedMatch.groups.chapter),
     };
   }
@@ -145,6 +165,14 @@ const stripDecoratedChapterSubtitle = (
 const stripTrailingReleaseDescriptor = (
   value: string,
 ): { title: string; releaseChapter?: string } => {
+  const firstChapterMatch = value.match(TRAILING_FIRST_CHAPTER_DESCRIPTOR_PATTERN);
+  if (firstChapterMatch?.groups?.title) {
+    return {
+      title: normalizeTitleAnalysisText(firstChapterMatch.groups.title),
+      releaseChapter: "1",
+    };
+  }
+
   const compilationMatch = value.match(TRAILING_COMPILATION_DESCRIPTOR_PATTERN);
   if (compilationMatch?.groups?.title) {
     const coverage = compilationMatch.groups.coverage

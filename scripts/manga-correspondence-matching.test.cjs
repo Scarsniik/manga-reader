@@ -387,6 +387,48 @@ test("correspondence removes generic chapter subtitles from bilingual titles", (
   assert.equal(result.languageCode, "en");
 });
 
+test("correspondence parses chapters followed by an unwrapped subtitle", () => {
+  const numbered = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta,,, 3 - Saikyouiku Hen",
+    null,
+  );
+  const bare = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta,,, 5 [English]",
+    null,
+  );
+  const bilingual = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta,,, 4 - Honshou Hen | Neighborhood Seduction White Rose - The Aunt's Secret 4 - True Nature Arc [English]",
+    null,
+  );
+  const translated = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Neighborhood Seduction White Rose - The Aunt's Secret 2 - Weakness Arc [English]",
+    null,
+  );
+
+  assert.equal(numbered.title, "Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta");
+  assert.equal(numbered.chapter, "3");
+  assert.equal(bare.title, "Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta");
+  assert.equal(bare.chapter, "5");
+  assert.equal(bilingual.title, "Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta");
+  assert.deepEqual(
+    bilingual.alternativeTitles,
+    ["Neighborhood Seduction White Rose - The Aunt's Secret"],
+  );
+  assert.equal(bilingual.chapter, "4");
+  assert.equal(translated.title, "Neighborhood Seduction White Rose - The Aunt's Secret");
+  assert.equal(translated.chapter, "2");
+});
+
+test("correspondence treats an explicit main story release as chapter one", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Hy-dou (Hyji)] Neighborhood Seduction White Rose - The Aunt's Secret - Main Story [English][MTL]",
+    null,
+  );
+
+  assert.equal(result.title, "Neighborhood Seduction White Rose - The Aunt's Secret");
+  assert.equal(result.chapter, "1");
+});
+
 test("correspondence removes hyphen-wrapped subtitles without confusing chapter ranges", () => {
   const numbered = analyzeMangaCorrespondenceTitle(
     "[Example Circle (Example Author)] Example Series 3 -A Blushing Crush!?- | Translated Series 3 -My Crush Is Blushing!?- [English]",
