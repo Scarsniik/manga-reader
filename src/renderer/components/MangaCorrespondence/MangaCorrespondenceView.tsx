@@ -18,6 +18,7 @@ import {
   buildMultiSearchSourceIdentityKey,
   mergeMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import { selectPreferredMultiSearchTitleSource } from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
 import type {
   MultiSearchLanguageFilterMode,
@@ -58,7 +59,15 @@ import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
 type Props = { backgroundSearchJobId?: string; resultOnly?: boolean };
-type DisplayMode = "chapters" | "classic";
+type DisplayMode = "mergedChapters" | "groupedChapters" | "classic";
+type ChapterMatchGroup = {
+  chapter: string;
+  matches: MangaCorrespondenceMatch[];
+};
+type ChapterCardGroup = {
+  chapter: string;
+  cards: MultiSearchMergedResult[];
+};
 
 const EMPTY_PROGRESS_INDEX: MultiSearchProgressIndex = {
   recordsById: new Map(),
@@ -105,7 +114,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
   const { params } = useParams();
   const { openModal, closeModal } = useModal();
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("chapters");
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("mergedChapters");
   const [languageFilterModes, setLanguageFilterModes] = useState<MultiSearchLanguageFilterModes>({});
   const [excludedReadingListChapters, setExcludedReadingListChapters] = useState<Set<string>>(
     () => new Set(),
@@ -126,7 +135,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   );
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
-  const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => {
+  const chapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
     const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
     eligibleMatches.forEach((match) => {
       const titleAnalysis = analyzeMangaCorrespondenceTitle(
@@ -146,23 +155,41 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     });
     return Array.from(byChapter.entries())
       .sort(([left], [right]) => compareMangaCorrespondenceChapters(left, right))
-      .flatMap(([chapter, matches]) => {
-        const resultCard = buildChapterCard(
-          chapter,
-          matches,
-          job?.metadata.primaryTerm || "Manga",
-          mergeOptions,
-        );
-        return resultCard ? [{ chapter, result: resultCard }] : [];
-      });
+      .map(([chapter, matches]) => ({ chapter, matches }));
   }, [
+    eligibleMatches,
     input?.reference.alternativeTitles,
     input?.reference.authors,
     input?.reference.title,
-    job?.metadata.primaryTerm,
-    mergeOptions,
-    eligibleMatches,
   ]);
+  const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => (
+    chapterMatchGroups.flatMap(({ chapter, matches }) => {
+      const resultCard = buildChapterCard(
+        chapter,
+        matches,
+        job?.metadata.primaryTerm || "Manga",
+        mergeOptions,
+      );
+      return resultCard ? [{ chapter, result: resultCard }] : [];
+    })
+  ), [chapterMatchGroups, job?.metadata.primaryTerm, mergeOptions]);
+  const groupedChapterCards = useMemo<ChapterCardGroup[]>(() => (
+    chapterEntries.map(({ chapter, result: chapterCard }) => ({
+      chapter,
+      cards: applyManualMultiSearchSplits(
+        [chapterCard],
+        new Set([chapterCard.id]),
+      ),
+    }))
+  ), [chapterEntries]);
+  const visibleGroupedChapterCards = useMemo<ChapterCardGroup[]>(() => (
+    groupedChapterCards
+      .map((group) => ({
+        ...group,
+        cards: filterMultiSearchMergedResultsByLanguage(group.cards, languageFilterModes),
+      }))
+      .filter((group) => group.cards.length > 0)
+  ), [groupedChapterCards, languageFilterModes]);
   const chapterCards = useMemo(
     () => chapterEntries.map((entry) => entry.result),
     [chapterEntries],
@@ -331,11 +358,51 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       })}
     </div>
   );
+  const renderGroupedChapterCards = (groups: ChapterCardGroup[]) => (
+    <div className="manga-correspondence-view__chapter-groups">
+      {groups.map(({ chapter, cards }) => {
+        const isReadingListChapter = chapter !== "Non renseigné";
+        const isExcluded = isReadingListChapter && excludedReadingListChapters.has(chapter);
+        return (
+          <section
+            key={chapter}
+            className={[
+              "manga-correspondence-view__chapter-group",
+              isExcluded ? "is-reading-list-excluded" : "",
+            ].filter(Boolean).join(" ")}
+          >
+            <header className="manga-correspondence-view__chapter-group-header">
+              <div>
+                <h3>{isReadingListChapter
+                  ? formatMangaCorrespondenceChapterLabel(chapter, true)
+                  : "Chapitre non renseigné"}</h3>
+                <span>{cards.length} carte(s)</span>
+              </div>
+              {isReadingListChapter ? (
+                <button
+                  type="button"
+                  className={isExcluded ? "is-excluded" : ""}
+                  aria-pressed={isExcluded}
+                  onClick={() => toggleReadingListChapter(chapter)}
+                >
+                  {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
+                </button>
+              ) : null}
+            </header>
+            {renderCards(cards)}
+          </section>
+        );
+      })}
+    </div>
+  );
 
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
   const active = job.metadata.status === "queued" || job.metadata.status === "running";
-  const displayedCards = displayMode === "chapters" ? visibleChapterCards : visibleClassicGroups;
+  const displayedCards = displayMode === "mergedChapters" ? visibleChapterCards : visibleClassicGroups;
+  const displayedCardCount = displayMode === "groupedChapters"
+    ? visibleGroupedChapterCards.reduce((count, group) => count + group.cards.length, 0)
+    : displayedCards.length;
   const traceSearchCount = result?.trace.filter((step) => (
     step.kind === "titleSearch" || step.kind === "authorSearch"
   )).length ?? 0;
@@ -346,7 +413,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         <div>
           <p className="manga-correspondence-view__eyebrow">Recherche intelligente</p>
           <h2>{job.metadata.primaryTerm}</h2>
-          <p>{displayedCards.length} card(s) · {eligibleMatches.length} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
+          <p>{displayedCardCount} card(s) · {eligibleMatches.length} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}
@@ -358,7 +425,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       </details>
       <div className="manga-correspondence-view__controls">
         <div className="manga-correspondence-view__toolbar" aria-label="Mode d’affichage">
-          <button type="button" className={displayMode === "chapters" ? "is-active" : ""} onClick={() => setDisplayMode("chapters")}>Par chapitre</button>
+          <button type="button" className={displayMode === "mergedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("mergedChapters")}>Chapitres fusionnés</button>
+          <button type="button" className={displayMode === "groupedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("groupedChapters")}>Chapitres détaillés</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
           <button
             type="button"
@@ -386,7 +454,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       </div>
       {active && !result?.matches.length ? (
         <div className="empty">La recherche est en cours. Les correspondances apparaîtront ici dès qu’elles seront trouvées.</div>
-      ) : displayedCards.length ? renderCards(displayedCards, displayMode === "chapters") : (
+      ) : displayMode === "groupedChapters" ? (
+        visibleGroupedChapterCards.length
+          ? renderGroupedChapterCards(visibleGroupedChapterCards)
+          : <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
+      ) : displayedCards.length ? renderCards(displayedCards, displayMode === "mergedChapters") : (
         <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
       )}
     </section>
