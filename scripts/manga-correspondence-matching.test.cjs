@@ -19,6 +19,7 @@ const source = `
   export { formatMangaCorrespondenceChapterLabel } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { filterIncludedMangaCorrespondenceChapters } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
+  export { toggleMangaCorrespondenceSourceExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
   export { getMangaTitleAlternatives } from "@/renderer/utils/mangaMatching/titleProfiles";
@@ -65,6 +66,7 @@ const {
   formatMangaCorrespondenceChapterLabel,
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
+  toggleMangaCorrespondenceSourceExclusion,
   mergeMultiSearchResults,
   selectMangaCorrespondenceRomanizedSearchTerms,
   getMangaTitleAlternatives,
@@ -862,6 +864,16 @@ test("invalidated correspondence chapters are omitted without mutating the searc
   assert.deepEqual(Array.from(initialExclusions), ["2"]);
   assert.deepEqual(Array.from(withChapterThreeExcluded), ["2", "3"]);
   assert.deepEqual(Array.from(withChapterTwoRestored), ["3"]);
+});
+
+test("detailed correspondence sources can be excluded and restored independently", () => {
+  const first = toggleMangaCorrespondenceSourceExclusion(new Set(), "source-a");
+  const second = toggleMangaCorrespondenceSourceExclusion(first, "source-b");
+  const restored = toggleMangaCorrespondenceSourceExclusion(second, "source-a");
+
+  assert.deepEqual(Array.from(first), ["source-a"]);
+  assert.deepEqual(Array.from(second), ["source-a", "source-b"]);
+  assert.deepEqual(Array.from(restored), ["source-b"]);
 });
 
 test("rejected correspondence scoring surfaces a partially translated title from the same author", () => {

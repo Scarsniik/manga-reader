@@ -23,3 +23,16 @@ export const toggleMangaCorrespondenceChapterExclusion = (
   }
   return next;
 };
+
+export const toggleMangaCorrespondenceSourceExclusion = (
+  excludedSourceKeys: ReadonlySet<string>,
+  sourceKey: string,
+): Set<string> => {
+  const next = new Set(excludedSourceKeys);
+  if (next.has(sourceKey)) {
+    next.delete(sourceKey);
+  } else {
+    next.add(sourceKey);
+  }
+  return next;
+};

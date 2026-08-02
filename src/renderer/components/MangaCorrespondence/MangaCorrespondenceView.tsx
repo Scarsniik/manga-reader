@@ -51,6 +51,7 @@ import MangaCorrespondenceReadingListDialog, {
 import {
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
+  toggleMangaCorrespondenceSourceExclusion,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
 import type { ReadingListItem } from "@/renderer/types/readingList";
 import {
@@ -138,6 +139,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const [excludedReadingListChapters, setExcludedReadingListChapters] = useState<Set<string>>(
     () => new Set(),
   );
+  const [excludedSourceKeys, setExcludedSourceKeys] = useState<Set<string>>(() => new Set());
+  const [showExcludedSources, setShowExcludedSources] = useState(false);
   const [rejectedFilter, setRejectedFilter] = useState<RejectedFilter>("all");
   const [rejectedVisibleLimit, setRejectedVisibleLimit] = useState(REJECTED_RESULTS_PAGE_SIZE);
   const [continuing, setContinuing] = useState(false);
@@ -157,17 +160,23 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     ),
     [input?.reference.title, job?.metadata.primaryTerm, result],
   );
-  const eligibleMatches = useMemo(
+  const correspondenceMatches = useMemo(
     () => effectiveMatches.filter((match) => (
       !isClearlyDerivativeMangaCorrespondenceTitle(match.source.result.title)
     )),
     [effectiveMatches],
   );
+  const eligibleMatches = useMemo(
+    () => correspondenceMatches.filter((match) => (
+      !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(match.source))
+    )),
+    [correspondenceMatches, excludedSourceKeys],
+  );
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
-  const chapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
+  const allChapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
     const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
-    eligibleMatches.forEach((match) => {
+    correspondenceMatches.forEach((match) => {
       const titleAnalysis = analyzeMangaCorrespondenceTitle(
         stripMangaCorrespondenceTrailingKnownAuthor(
           match.source.result.title,
@@ -192,11 +201,19 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       .sort(([left], [right]) => compareMangaCorrespondenceChapters(left, right))
       .map(([chapter, matches]) => ({ chapter, matches }));
   }, [
-    eligibleMatches,
+    correspondenceMatches,
     input?.reference.alternativeTitles,
     input?.reference.authors,
     input?.reference.title,
   ]);
+  const chapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => (
+    allChapterMatchGroups.flatMap((group) => {
+      const matches = group.matches.filter((match) => (
+        !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(match.source))
+      ));
+      return matches.length ? [{ ...group, matches }] : [];
+    })
+  ), [allChapterMatchGroups, excludedSourceKeys]);
   const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => (
     chapterMatchGroups.flatMap(({ chapter, matches }) => {
       const resultCard = buildChapterCard(
@@ -209,14 +226,22 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     })
   ), [chapterMatchGroups, job?.metadata.primaryTerm, mergeOptions]);
   const groupedChapterCards = useMemo<ChapterCardGroup[]>(() => (
-    chapterEntries.map(({ chapter, result: chapterCard }) => ({
-      chapter,
-      cards: applyManualMultiSearchSplits(
-        [chapterCard],
-        new Set([chapterCard.id]),
-      ),
-    }))
-  ), [chapterEntries]);
+    allChapterMatchGroups.flatMap(({ chapter, matches }) => {
+      const chapterCard = buildChapterCard(
+        chapter,
+        matches,
+        job?.metadata.primaryTerm || "Manga",
+        mergeOptions,
+      );
+      return chapterCard ? [{
+        chapter,
+        cards: applyManualMultiSearchSplits(
+          [chapterCard],
+          new Set([chapterCard.id]),
+        ),
+      }] : [];
+    })
+  ), [allChapterMatchGroups, job?.metadata.primaryTerm, mergeOptions]);
   const visibleGroupedChapterCards = useMemo<ChapterCardGroup[]>(() => (
     groupedChapterCards
       .map((group) => ({
@@ -244,7 +269,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     () => new Map(chapterEntries.map((entry) => [entry.result.id, entry.chapter])),
     [chapterEntries],
   );
-  const resultLanguageCodes = useMemo(() => buildMultiSearchResultLanguageFilterCodes(allSources), [allSources]);
+  const resultLanguageCodes = useMemo(
+    () => buildMultiSearchResultLanguageFilterCodes(
+      correspondenceMatches.map((match) => match.source),
+    ),
+    [correspondenceMatches],
+  );
   const visibleClassicGroups = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(classicGroups, languageFilterModes),
     [classicGroups, languageFilterModes],
@@ -305,6 +335,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
 
   useEffect(() => {
     setExcludedReadingListChapters(new Set());
+    setExcludedSourceKeys(new Set());
+    setShowExcludedSources(false);
     setRejectedFilter("all");
     setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
     setRejectedActionError(null);
@@ -318,6 +350,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const toggleReadingListChapter = (chapter: string) => {
     setExcludedReadingListChapters((current) => (
       toggleMangaCorrespondenceChapterExclusion(current, chapter)
+    ));
+  };
+
+  const toggleSourceExclusion = (sourceKey: string) => {
+    setExcludedSourceKeys((current) => (
+      toggleMangaCorrespondenceSourceExclusion(current, sourceKey)
     ));
   };
 
@@ -459,6 +497,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const renderCards = (
     items: MultiSearchMergedResult[],
     withReadingListPreparation = false,
+    withSourceInvalidation = false,
   ) => (
     <div className="manga-correspondence-view__results">
       {items.map((item) => {
@@ -469,15 +508,37 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         const isExcluded = isReadingListChapter && chapter
           ? excludedReadingListChapters.has(chapter)
           : false;
+        const source = withSourceInvalidation && item.sources.length === 1
+          ? item.sources[0]
+          : undefined;
+        const sourceKey = source ? buildMultiSearchSourceIdentityKey(source) : undefined;
+        const isSourceExcluded = sourceKey ? excludedSourceKeys.has(sourceKey) : false;
         return (
           <div
             key={item.id}
             className={[
               "manga-correspondence-view__result",
               isExcluded ? "is-reading-list-excluded" : "",
+              isSourceExcluded ? "is-source-excluded" : "",
             ].join(" ").trim()}
           >
-            {chapter ? (
+            {source && sourceKey ? (
+              <div className="manga-correspondence-view__list-preparation is-source">
+                <span>
+                  {isSourceExcluded
+                    ? `${source.scraper.name} · source retirée des résultats`
+                    : `${source.scraper.name} · source conservée`}
+                </span>
+                <button
+                  type="button"
+                  className={isSourceExcluded ? "is-excluded" : ""}
+                  aria-pressed={isSourceExcluded}
+                  onClick={() => toggleSourceExclusion(sourceKey)}
+                >
+                  {isSourceExcluded ? "Réintégrer" : "Retirer"}
+                </button>
+              </div>
+            ) : chapter ? (
               <div
                 className={[
                   "manga-correspondence-view__list-preparation",
@@ -524,6 +585,17 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       {groups.map(({ chapter, cards }) => {
         const isReadingListChapter = chapter !== "Non renseigné";
         const isExcluded = isReadingListChapter && excludedReadingListChapters.has(chapter);
+        const excludedCardCount = cards.filter((card) => (
+          card.sources.length === 1
+          && excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
+        )).length;
+        const activeCardCount = cards.length - excludedCardCount;
+        const displayedGroupCards = showExcludedSources
+          ? cards
+          : cards.filter((card) => (
+            card.sources.length !== 1
+            || !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
+          ));
         return (
           <section
             key={chapter}
@@ -537,7 +609,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                 <h3>{isReadingListChapter
                   ? formatMangaCorrespondenceChapterLabel(chapter, true)
                   : "Chapitre non renseigné"}</h3>
-                <span>{cards.length} carte(s)</span>
+                <span>
+                  {activeCardCount} source(s)
+                  {excludedCardCount ? ` · ${excludedCardCount} retirée(s)` : ""}
+                </span>
               </div>
               {isReadingListChapter ? (
                 <button
@@ -550,7 +625,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                 </button>
               ) : null}
             </header>
-            {renderCards(cards)}
+            {displayedGroupCards.length ? renderCards(displayedGroupCards, false, true) : (
+              <p className="manga-correspondence-view__chapter-group-empty">
+                Toutes les sources de ce chapitre ont été retirées.
+              </p>
+            )}
           </section>
         );
       })}
@@ -599,8 +678,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const active = job.metadata.status === "queued" || job.metadata.status === "running";
   const displayedCards = displayMode === "mergedChapters" ? visibleChapterCards : visibleClassicGroups;
   const displayedCardCount = displayMode === "groupedChapters"
-    ? visibleGroupedChapterCards.reduce((count, group) => count + group.cards.length, 0)
+    ? visibleGroupedChapterCards.reduce((count, group) => count + group.cards.filter((card) => (
+      card.sources.length !== 1
+      || !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
+    )).length, 0)
     : displayedCards.length;
+  const excludedSourceCount = correspondenceMatches.length - eligibleMatches.length;
   const traceSearchCount = result?.trace.filter((step) => (
     step.kind === "titleSearch" || step.kind === "authorSearch"
   )).length ?? 0;
@@ -611,7 +694,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         <div>
           <p className="manga-correspondence-view__eyebrow">Recherche intelligente</p>
           <h2>{job.metadata.primaryTerm}</h2>
-          <p>{displayedCardCount} card(s) · {eligibleMatches.length} source(s) · Passe {result?.passNumber ?? 1} · {active ? "Recherche en cours" : "Recherche terminée"}</p>
+          <p>
+            {displayedCardCount} card(s) · {eligibleMatches.length} source(s)
+            {excludedSourceCount ? ` · ${excludedSourceCount} retirée(s)` : ""}
+            {` · Passe ${result?.passNumber ?? 1} · ${active ? "Recherche en cours" : "Recherche terminée"}`}
+          </p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}
@@ -640,7 +727,31 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
               className="manga-correspondence-view__restore-list"
               onClick={() => setExcludedReadingListChapters(new Set())}
             >
-              Réintégrer les {excludedReadingListChapters.size} invalidé(s)
+              Réintégrer {excludedReadingListChapters.size} chapitre(s)
+            </button>
+          ) : null}
+          {excludedSourceCount ? (
+            <button
+              type="button"
+              className="manga-correspondence-view__restore-list"
+              onClick={() => {
+                setExcludedSourceKeys(new Set());
+                setShowExcludedSources(false);
+              }}
+            >
+              Réintégrer {excludedSourceCount} source(s)
+            </button>
+          ) : null}
+          {displayMode === "groupedChapters" && excludedSourceCount ? (
+            <button
+              type="button"
+              className={showExcludedSources ? "is-active" : ""}
+              aria-pressed={showExcludedSources}
+              onClick={() => setShowExcludedSources((current) => !current)}
+            >
+              {showExcludedSources
+                ? "Masquer les sources retirées"
+                : `Afficher ${excludedSourceCount} source(s) retirée(s)`}
             </button>
           ) : null}
         </div>
