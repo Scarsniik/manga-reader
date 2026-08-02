@@ -8,19 +8,95 @@
   background: #121212;
 }
 
-.workspace-tabs {
+.workspace-tabs-shell {
   position: sticky;
   top: 0;
   z-index: 20;
   display: flex;
-  align-items: stretch;
-  flex: 0 0 auto;
-  min-height: 38px;
-  padding: 0 8px;
+  flex: 0 0 44px;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
   border-bottom: 3px solid #303030;
   background: #181818;
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.24);
+}
+
+.workspace-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 8px 0;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.workspace-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tabs__scroll-button {
+  position: absolute;
+  top: 0;
+  bottom: 3px;
+  z-index: 2;
+  display: flex;
+  width: 40px;
+  align-items: center;
+  border: 0;
+  border-radius: 0;
+  color: #aeb8c4;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.workspace-tabs__scroll-button.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workspace-tabs__scroll-button.is-backward {
+  left: 0;
+  justify-content: flex-start;
+  padding: 0 0 0 5px;
+  background: linear-gradient(90deg, #181818 60%, rgba(24, 24, 24, 0));
+}
+
+.workspace-tabs__scroll-button.is-forward {
+  right: 0;
+  justify-content: flex-end;
+  padding: 0 5px 0 0;
+  background: linear-gradient(270deg, #181818 60%, rgba(24, 24, 24, 0));
+}
+
+.workspace-tabs__scroll-button:hover,
+.workspace-tabs__scroll-button:focus-visible {
+  color: #ffffff;
+}
+
+.workspace-tabs__scroll-button:focus-visible {
+  outline: 2px solid #4f9ddf;
+  outline-offset: -4px;
+}
+
+.workspace-tabs__scroll-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.workspace-tabs__scroll-button.is-forward svg {
+  transform: rotate(180deg);
 }
 
 .workspace-tabs__empty {
@@ -32,10 +108,12 @@
 
 .workspace-tab {
   display: flex;
+  flex: 0 0 auto;
   align-items: stretch;
+  height: 36px;
+  box-sizing: border-box;
   max-width: 260px;
   min-width: 150px;
-  margin: 5px 4px 0 0;
   border: 1px solid #303030;
   border-bottom: 0;
   border-radius: 6px 6px 0 0;

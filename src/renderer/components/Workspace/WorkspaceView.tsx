@@ -7,6 +7,7 @@ import {
   buildReadingListItemFromTab,
   isReadingListSourceTab,
 } from "@/renderer/components/ReadingList/readingListItems";
+import WorkspaceTabBar from "@/renderer/components/Workspace/WorkspaceTabBar";
 import WorkspaceTargetPanel from "@/renderer/components/Workspace/WorkspaceTargetPanel";
 import { clearWorkspaceBrowserTabCache } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTab, WorkspaceTarget } from "@/renderer/types/workspace";
@@ -84,14 +85,6 @@ const createWorkspaceTab = (target: WorkspaceTarget, isNew: boolean): WorkspaceT
     target,
     title: getTargetTitle(target),
   };
-};
-
-const preventMiddleClickDefault = (event: React.MouseEvent<HTMLElement>) => {
-  if (event.button !== 1) {
-    return;
-  }
-
-  event.preventDefault();
 };
 
 export default function WorkspaceView() {
@@ -256,66 +249,14 @@ export default function WorkspaceView() {
     updateTabs(nextTabs);
   }, [updateTabs]);
 
-  const handleTabAuxClick = useCallback((event: React.MouseEvent<HTMLElement>, tabId: string) => {
-    if (event.button !== 1) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    handleCloseTab(tabId);
-  }, [handleCloseTab]);
-
   return (
     <section className="workspace-view">
-      <div className="workspace-tabs" role="tablist" aria-label="Onglets workspace">
-        {tabs.length > 0 ? (
-          tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            return (
-              <div
-                key={tab.id}
-                className={[
-                  "workspace-tab",
-                  isActive ? "is-active" : "",
-                  tab.isNew && !isActive ? "is-new" : "",
-                ].filter(Boolean).join(" ")}
-                role="tab"
-                aria-selected={isActive}
-                title={tab.isNew && !isActive ? `${tab.title} - Nouvel onglet` : tab.title}
-                data-prevent-middle-click-autoscroll="true"
-                onMouseDown={preventMiddleClickDefault}
-                onAuxClick={(event) => handleTabAuxClick(event, tab.id)}
-              >
-                <button
-                  type="button"
-                  className="workspace-tab__button"
-                  onClick={() => activateTab(tab.id)}
-                  disabled={isActive}
-                  aria-disabled={isActive}
-                  title={tab.isNew && !isActive ? `${tab.title} - Nouvel onglet` : tab.title}
-                >
-                  <span className="workspace-tab__title">{tab.title}</span>
-                  {tab.isNew && !isActive ? (
-                    <span className="workspace-tab__new-badge">Nouveau</span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  className="workspace-tab__close"
-                  onClick={() => handleCloseTab(tab.id)}
-                  aria-label={`Fermer ${tab.title}`}
-                  title="Fermer"
-                >
-                  X
-                </button>
-              </div>
-            );
-          })
-        ) : (
-          <div className="workspace-tabs__empty">Aucun onglet ouvert</div>
-        )}
-      </div>
+      <WorkspaceTabBar
+        activeTabId={activeTabId}
+        tabs={tabs}
+        onActivateTab={activateTab}
+        onCloseTab={handleCloseTab}
+      />
 
       <div className="workspace-view__body">
         {tabs.length > 0 ? (
