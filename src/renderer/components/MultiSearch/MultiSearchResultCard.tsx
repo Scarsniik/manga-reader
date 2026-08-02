@@ -8,6 +8,7 @@ import {
 import ScraperCard, { type ScraperCardAction } from "@/renderer/components/ScraperCard/ScraperCard";
 import ScraperViewHistoryCard from "@/renderer/components/ScraperViewHistoryCard/ScraperViewHistoryCard";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
 import { BookmarkRibbonIcon, EyeIcon } from "@/renderer/components/icons";
 import type { Manga } from "@/renderer/types";
 import { getLanguageLabel } from "@/renderer/components/MultiSearch/multiSearchUtils";
@@ -95,12 +96,6 @@ const getOpenOptionClassName = (
   availability?.progress ? getProgressClassName(availability.progress.status) : "",
 ].join(" ").trim();
 
-const closeDetails = (details: HTMLDetailsElement | null) => {
-  if (details) {
-    details.open = false;
-  }
-};
-
 type CoverCandidate = {
   url?: string | null;
   refererUrl?: string | null;
@@ -145,8 +140,8 @@ export default function MultiSearchResultCard({
   onSelectCover,
   onSplitResult,
 }: Props) {
-  const sourceMenuRef = React.useRef<HTMLDetailsElement>(null);
-  const openMenuRef = React.useRef<HTMLDetailsElement>(null);
+  const [sourceMenuOpen, setSourceMenuOpen] = React.useState(false);
+  const [openMenuOpen, setOpenMenuOpen] = React.useState(false);
   const coverSource = React.useMemo(() => result.sources.find((source) => (
     source.result.thumbnailUrl?.trim() === result.coverUrl?.trim()
   )), [result.coverUrl, result.sources]);
@@ -398,43 +393,57 @@ export default function MultiSearchResultCard({
       ) : null}
       <span>{result.sources.length} source(s) trouvee(s)</span>
       {result.sources.length > 1 ? (
-        <details ref={sourceMenuRef} className="multi-search-card__source-menu">
-          <summary className="multi-search-card__source-trigger">
-            Scrappers : {scraperSourceCounts.length}
-          </summary>
-          <div className="multi-search-card__source-popover">
-            {result.sources.map((source, index) => {
-              const availability = sourceAvailability[index];
+        <AdaptiveDropdown
+          open={sourceMenuOpen}
+          onOpenChange={setSourceMenuOpen}
+          className="multi-search-card__source-menu"
+          contentClassName="multi-search-card__source-popover"
+          gap={4}
+          maxHeight={260}
+          renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+            <button
+              ref={setTriggerRef}
+              type="button"
+              className="multi-search-card__source-trigger"
+              aria-controls={contentId}
+              aria-expanded={isOpen}
+              onClick={toggle}
+            >
+              Scrappers : {scraperSourceCounts.length}
+            </button>
+          )}
+        >
+          {result.sources.map((source, index) => {
+            const availability = sourceAvailability[index];
 
-              return (
-                <div
-                  key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
-                  className="multi-search-card__source-row"
-                >
-                  <div>
-                    <strong>{source.scraper.name}</strong>
-                    <span title={getSourceLanguageTitle(source)}>
-                      <LanguageFlags languageCodes={source.sourceLanguageCodes} />
-                    </span>
-                  </div>
-                  <div className="multi-search-card__source-states">
-                    {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
-                    {availability?.inBookmarks ? (
-                      <span className="is-bookmark" title="Bookmark">
-                        <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
-                      </span>
-                    ) : null}
-                    {availability?.progress ? (
-                      <span className={getProgressClassName(availability.progress.status)}>
-                        {availability.progress.shortLabel}
-                      </span>
-                    ) : null}
-                  </div>
+            return (
+              <div
+                key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
+                className="multi-search-card__source-row"
+              >
+                <div>
+                  <strong>{source.scraper.name}</strong>
+                  <span title={getSourceLanguageTitle(source)}>
+                    <LanguageFlags languageCodes={source.sourceLanguageCodes} />
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </details>
+                <div className="multi-search-card__source-states">
+                  {availability?.inLibrary ? <span className="is-library">Bibliotheque</span> : null}
+                  {availability?.inBookmarks ? (
+                    <span className="is-bookmark" title="Bookmark">
+                      <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
+                    </span>
+                  ) : null}
+                  {availability?.progress ? (
+                    <span className={getProgressClassName(availability.progress.status)}>
+                      {availability.progress.shortLabel}
+                    </span>
+                  ) : null}
+                  </div>
+              </div>
+            );
+          })}
+        </AdaptiveDropdown>
       ) : scraperSourceCounts[0] ? (
         <span className="multi-search-card__source-inline">{scraperSourceCounts[0].name}</span>
       ) : null}
@@ -467,24 +476,6 @@ export default function MultiSearchResultCard({
     setCoverIndex(0);
   }, [coverUrlsKey]);
 
-  React.useEffect(() => {
-    const closeMenusOnOutsideClick = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      [sourceMenuRef.current, openMenuRef.current].forEach((details) => {
-        if (details?.open && !details.contains(target)) {
-          closeDetails(details);
-        }
-      });
-    };
-
-    document.addEventListener("pointerdown", closeMenusOnOutsideClick, true);
-    return () => document.removeEventListener("pointerdown", closeMenusOnOutsideClick, true);
-  }, []);
-
   if (result.sources.length === 1) {
     const source = result.sources[0];
     actions.push({
@@ -501,70 +492,87 @@ export default function MultiSearchResultCard({
       type: "custom",
       label: "Ouvrir avec",
       render: () => (
-        <details ref={openMenuRef} className="multi-search-card__open-menu">
-          <summary className="multi-search-card__open-trigger">
-            Ouvrir avec...
-          </summary>
-          <div className="multi-search-card__open-options">
-            {result.sources.map((source, index) => {
-              const availability = sourceAvailability[index];
-              const hasOpenTags = Boolean(availability?.progress || availability?.inBookmarks);
+        <AdaptiveDropdown
+          open={openMenuOpen}
+          onOpenChange={setOpenMenuOpen}
+          className="multi-search-card__open-menu"
+          contentClassName="multi-search-card__open-options"
+          contentRole="menu"
+          gap={4}
+          maxHeight={280}
+          renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+            <button
+              ref={setTriggerRef}
+              type="button"
+              className="multi-search-card__open-trigger"
+              aria-controls={contentId}
+              aria-expanded={isOpen}
+              aria-haspopup="menu"
+              onClick={toggle}
+            >
+              Ouvrir avec...
+            </button>
+          )}
+        >
+          {result.sources.map((source, index) => {
+            const availability = sourceAvailability[index];
+            const hasOpenTags = Boolean(availability?.progress || availability?.inBookmarks);
 
-              return (
-                <button
-                  key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
-                  type="button"
-                  className={getOpenOptionClassName(availability)}
-                  onClick={() => {
-                    closeDetails(openMenuRef.current);
-                    onOpenSource(source);
-                  }}
-                  onMouseDown={(event) => {
-                    if (event.button !== 1) {
-                      return;
-                    }
+            return (
+              <button
+                key={`${source.scraper.id}-${source.result.detailUrl || source.result.title}-${index}`}
+                type="button"
+                className={getOpenOptionClassName(availability)}
+                onClick={() => {
+                  setOpenMenuOpen(false);
+                  onOpenSource(source);
+                }}
+                onMouseDown={(event) => {
+                  if (event.button !== 1) {
+                    return;
+                  }
 
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  onAuxClick={(event) => {
-                    if (event.button !== 1) {
-                      return;
-                    }
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) {
+                    return;
+                  }
 
-                    event.preventDefault();
-                    event.stopPropagation();
-                    closeDetails(openMenuRef.current);
-                    onOpenSourceInWorkspace(source);
-                  }}
-                  disabled={!source.result.detailUrl}
-                  data-prevent-middle-click-autoscroll="true"
-                >
-                  <span className="multi-search-card__open-source-line">
-                    <span className="multi-search-card__open-source-language" title={getSourceLanguageTitle(source)}>
-                      <LanguageFlags languageCodes={source.sourceLanguageCodes} />
-                    </span>
-                    <strong className="multi-search-card__open-source-name">{source.scraper.name}</strong>
-                    {hasOpenTags ? (
-                      <span className="multi-search-card__open-source-tags">
-                        {availability?.progress ? (
-                          <span className={getProgressClassName(availability.progress.status)}>
-                            {availability.progress.shortLabel}
-                          </span>
-                        ) : null}
-                        {availability?.inBookmarks ? (
-                          <span className="is-bookmark" title="Bookmark">
-                            <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : null}
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setOpenMenuOpen(false);
+                  onOpenSourceInWorkspace(source);
+                }}
+                disabled={!source.result.detailUrl}
+                role="menuitem"
+                data-prevent-middle-click-autoscroll="true"
+              >
+                <span className="multi-search-card__open-source-line">
+                  <span className="multi-search-card__open-source-language" title={getSourceLanguageTitle(source)}>
+                    <LanguageFlags languageCodes={source.sourceLanguageCodes} />
                   </span>
-                </button>
-              );
-            })}
-          </div>
-        </details>
+                  <strong className="multi-search-card__open-source-name">{source.scraper.name}</strong>
+                  {hasOpenTags ? (
+                    <span className="multi-search-card__open-source-tags">
+                      {availability?.progress ? (
+                        <span className={getProgressClassName(availability.progress.status)}>
+                          {availability.progress.shortLabel}
+                        </span>
+                      ) : null}
+                      {availability?.inBookmarks ? (
+                        <span className="is-bookmark" title="Bookmark">
+                          <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+        </AdaptiveDropdown>
       ),
     });
   }

@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Field } from '../types'
-import TagItem from '@/renderer/components/Tag/TagItem'
-import './EntityPickerField.scss'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
+import TagItem from "@/renderer/components/Tag/TagItem";
+import type { Field } from "@/renderer/components/utils/Form/types";
+import "@/renderer/components/utils/Form/fields/EntityPickerField.scss";
 
 /**
  * Generic option shape for the picker. Works for tags, authors, series, etc.
@@ -49,7 +50,6 @@ export default function EntityPickerField({
   const DEFAULT_VISIBLE_RESULTS = 100
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
 
   const selected = value || []
   const hiddenRef = useRef<HTMLInputElement | null>(null)
@@ -82,16 +82,6 @@ export default function EntityPickerField({
 
   const hasHiddenResults = filtered.length > DEFAULT_VISIBLE_RESULTS
 
-  // close dropdown on outside click
-  useEffect(() => {
-    const onDocDown = (e: MouseEvent) => {
-      const target = e.target as Node | null
-      if (!containerRef.current || !target) return
-      if (!containerRef.current.contains(target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocDown)
-    return () => document.removeEventListener('mousedown', onDocDown)
-  }, [])
   const commit = useCallback((next: string[]) => {
     const nextValue = singleSelect ? (next[0] ?? '') : next
     if (hiddenRef.current) {
@@ -116,52 +106,59 @@ export default function EntityPickerField({
   const getById = useCallback((id: string) => options.find(x => x.id === id) || { id, name: id }, [options])
 
   return (
-    <div className="mh-entity-picker" ref={containerRef}>
+    <div className="mh-entity-picker">
       {/* Hidden input mirrors selected ids so Form can read a DOM snapshot synchronously */}
       <input type="hidden" name={field.name} ref={hiddenRef} value={hiddenValue} readOnly />
 
-      <div className="mh-entity-picker__row">
-        <input
-          type="text"
-          aria-label={field.label || field.name}
-          placeholder={placeholder || field.placeholder || 'Rechercher...'}
-          value={query}
-          readOnly={disableSearch}
-          onChange={e => { if (!disableSearch) { setQuery(e.target.value) } setOpen(true) }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={e => {
-            // support Escape to close
-            if (e.key === 'Escape') setOpen(false)
-          }}
-        />
-      </div>
-
-      {open ? (
-        <div className="mh-entity-picker__results" role="listbox" tabIndex={-1}>
-          {visibleResults.length > 0 ? (
-            visibleResults.map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                className="mh-entity-picker__result"
-                onMouseDown={e => e.preventDefault()}
-                onClick={() => add(opt.id)}
-                role="option"
-                aria-selected={false}
-              >
-                <p>{opt.name}</p>
-              </button>
-            ))
-          ) : (
-            <div className="mh-entity-picker__empty">Aucun resultat</div>
-          )}
-          {hasHiddenResults ? (
-            <div className="mh-entity-picker__hint">
-              {DEFAULT_VISIBLE_RESULTS} premiers resultats affiches sur {filtered.length}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <AdaptiveDropdown
+        open={open}
+        onOpenChange={setOpen}
+        className="mh-entity-picker__dropdown"
+        contentClassName="mh-entity-picker__results"
+        contentRole="listbox"
+        gap={8}
+        maxHeight={220}
+        renderTrigger={({ contentId, isOpen, setTriggerRef }) => (
+          <div className="mh-entity-picker__row">
+            <input
+              ref={setTriggerRef}
+              type="text"
+              aria-controls={contentId}
+              aria-expanded={isOpen}
+              aria-haspopup="listbox"
+              aria-label={field.label || field.name}
+              placeholder={placeholder || field.placeholder || 'Rechercher...'}
+              value={query}
+              readOnly={disableSearch}
+              onChange={e => { if (!disableSearch) { setQuery(e.target.value) } setOpen(true) }}
+              onFocus={() => setOpen(true)}
+            />
+          </div>
+        )}
+      >
+        {visibleResults.length > 0 ? (
+          visibleResults.map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              className="mh-entity-picker__result"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => add(opt.id)}
+              role="option"
+              aria-selected={false}
+            >
+              <p>{opt.name}</p>
+            </button>
+          ))
+        ) : (
+          <div className="mh-entity-picker__empty">Aucun resultat</div>
+        )}
+        {hasHiddenResults ? (
+          <div className="mh-entity-picker__hint">
+            {DEFAULT_VISIBLE_RESULTS} premiers resultats affiches sur {filtered.length}
+          </div>
+        ) : null}
+      </AdaptiveDropdown>
 
       <div className="mh-entity-picker__selected">
         {selected.map(id => {

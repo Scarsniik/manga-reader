@@ -10,6 +10,7 @@ import {
 import BookmarkOutlineIcon from "@/renderer/components/MangaManger/icons/bookmark-outline.svg?react";
 import HistoryClockIcon from "@/renderer/components/MangaManger/icons/history-clock.svg?react";
 import TagsIcon from "@/renderer/components/MangaManger/icons/tags.svg?react";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
 import ScraperFavicon from "@/renderer/components/ScraperFavicon/ScraperFavicon";
 
 export type MangaManagerViewOptionGroup = "navigation" | "source";
@@ -69,9 +70,7 @@ export default function MangaManagerViewMenu({
 }: Props) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
-    const rootRef = useRef<HTMLDivElement | null>(null);
     const searchRef = useRef<HTMLInputElement | null>(null);
-    const triggerRef = useRef<HTMLButtonElement | null>(null);
     const activeOption = useMemo(
         () => options.find((option) => option.id === activeViewId) ?? options[0] ?? null,
         [activeViewId, options],
@@ -103,36 +102,6 @@ export default function MangaManagerViewMenu({
         const animationFrame = window.requestAnimationFrame(() => searchRef.current?.focus());
         return () => window.cancelAnimationFrame(animationFrame);
     }, [open, showSearch]);
-
-    useEffect(() => {
-        if (!open) {
-            return undefined;
-        }
-
-        const closeOnOutsidePointer = (event: PointerEvent) => {
-            const root = rootRef.current;
-            if (!root || !(event.target instanceof Node) || root.contains(event.target)) {
-                return;
-            }
-
-            setOpen(false);
-        };
-
-        const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                setOpen(false);
-                triggerRef.current?.focus();
-            }
-        };
-
-        document.addEventListener("pointerdown", closeOnOutsidePointer, true);
-        document.addEventListener("keydown", closeOnEscape, true);
-
-        return () => {
-            document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
-            document.removeEventListener("keydown", closeOnEscape, true);
-        };
-    }, [open]);
 
     const handleSelect = useCallback((viewId: string) => {
         onSelect(viewId);
@@ -182,61 +151,67 @@ export default function MangaManagerViewMenu({
     };
 
     return (
-        <div className="mangaManager-view-menu" ref={rootRef}>
-            <button
-                ref={triggerRef}
-                type="button"
-                className="mangaManager-view-menu__trigger"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                onClick={() => setOpen((value) => !value)}
-            >
-                <span className="mangaManager-view-menu__trigger-content">
-                    <span className="mangaManager-view-menu__trigger-icon" aria-hidden="true">
-                        {activeOption
-                            ? <MangaManagerViewIconDisplay option={activeOption} />
-                            : renderViewIcon("library")}
+        <AdaptiveDropdown
+            open={open}
+            onOpenChange={setOpen}
+            className="mangaManager-view-menu"
+            contentClassName="mangaManager-view-menu__popover"
+            contentRole="menu"
+            gap={7}
+            maxHeight={480}
+            renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+                <button
+                    ref={setTriggerRef}
+                    type="button"
+                    className="mangaManager-view-menu__trigger"
+                    aria-controls={contentId}
+                    aria-haspopup="menu"
+                    aria-expanded={isOpen}
+                    onClick={toggle}
+                >
+                    <span className="mangaManager-view-menu__trigger-content">
+                        <span className="mangaManager-view-menu__trigger-icon" aria-hidden="true">
+                            {activeOption
+                                ? <MangaManagerViewIconDisplay option={activeOption} />
+                                : renderViewIcon("library")}
+                        </span>
+                        <span className="mangaManager-view-menu__trigger-label">{activeOption?.label ?? "Vue"}</span>
                     </span>
-                    <span className="mangaManager-view-menu__trigger-label">{activeOption?.label ?? "Vue"}</span>
-                </span>
-                <ChevronDownIcon aria-hidden="true" focusable="false" />
-            </button>
-
-            {open ? (
-                <div className="mangaManager-view-menu__popover" role="menu">
-                    {showSearch ? (
-                        <label className="mangaManager-view-menu__search">
-                            <MagnifyingGlassIcon aria-hidden="true" />
-                            <input
-                                ref={searchRef}
-                                type="search"
-                                value={query}
-                                onChange={(event) => setQuery(event.target.value)}
-                                placeholder="Rechercher une vue ou une source..."
-                                aria-label="Rechercher une vue ou une source"
-                            />
-                        </label>
-                    ) : null}
-
-                    <div className="mangaManager-view-menu__list">
-                        {groupedOptions.navigation.length > 0 ? (
-                            <div className="mangaManager-view-menu__section" role="group" aria-label="Navigation">
-                                <div className="mangaManager-view-menu__heading">Navigation</div>
-                                {groupedOptions.navigation.map(renderOption)}
-                            </div>
-                        ) : null}
-                        {groupedOptions.source.length > 0 ? (
-                            <div className="mangaManager-view-menu__section" role="group" aria-label="Sources">
-                                <div className="mangaManager-view-menu__heading">Sources</div>
-                                {groupedOptions.source.map(renderOption)}
-                            </div>
-                        ) : null}
-                        {filteredOptions.length === 0 ? (
-                            <div className="mangaManager-view-menu__empty">Aucun resultat</div>
-                        ) : null}
-                    </div>
-                </div>
+                    <ChevronDownIcon aria-hidden="true" focusable="false" />
+                </button>
+            )}
+        >
+            {showSearch ? (
+                <label className="mangaManager-view-menu__search">
+                    <MagnifyingGlassIcon aria-hidden="true" />
+                    <input
+                        ref={searchRef}
+                        type="search"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Rechercher une vue ou une source..."
+                        aria-label="Rechercher une vue ou une source"
+                    />
+                </label>
             ) : null}
-        </div>
+
+            <div className="mangaManager-view-menu__list">
+                {groupedOptions.navigation.length > 0 ? (
+                    <div className="mangaManager-view-menu__section" role="group" aria-label="Navigation">
+                        <div className="mangaManager-view-menu__heading">Navigation</div>
+                        {groupedOptions.navigation.map(renderOption)}
+                    </div>
+                ) : null}
+                {groupedOptions.source.length > 0 ? (
+                    <div className="mangaManager-view-menu__section" role="group" aria-label="Sources">
+                        <div className="mangaManager-view-menu__heading">Sources</div>
+                        {groupedOptions.source.map(renderOption)}
+                    </div>
+                ) : null}
+                {filteredOptions.length === 0 ? (
+                    <div className="mangaManager-view-menu__empty">Aucun resultat</div>
+                ) : null}
+            </div>
+        </AdaptiveDropdown>
     );
 }

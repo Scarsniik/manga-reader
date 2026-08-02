@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_PRODUCT_NAME } from "@/renderer/appIdentity";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
 import {
     APP_TITLE_BAR_CONTEXT_EVENT,
     type AppTitleBarContext,
@@ -65,7 +66,6 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
     const [controlsAvailable, setControlsAvailable] = useState(false);
     const [menuContext, setMenuContext] = useState<AppTitleBarContext>(DEFAULT_TITLE_BAR_CONTEXT);
     const [menuOpen, setMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement | null>(null);
     const menuActions = useMemo(() => getAvailableTitleBarMenuActions(menuContext), [menuContext]);
 
     useEffect(() => {
@@ -118,30 +118,6 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
         window.addEventListener(APP_TITLE_BAR_CONTEXT_EVENT, handleContextChanged as EventListener);
         return () => window.removeEventListener(APP_TITLE_BAR_CONTEXT_EVENT, handleContextChanged as EventListener);
     }, []);
-
-    useEffect(() => {
-        if (!menuOpen) {
-            return undefined;
-        }
-
-        const handlePointerDown = (event: PointerEvent) => {
-            if (!menuRef.current?.contains(event.target as Node)) {
-                setMenuOpen(false);
-            }
-        };
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                setMenuOpen(false);
-            }
-        };
-
-        document.addEventListener("pointerdown", handlePointerDown);
-        document.addEventListener("keydown", handleKeyDown);
-        return () => {
-            document.removeEventListener("pointerdown", handlePointerDown);
-            document.removeEventListener("keydown", handleKeyDown);
-        };
-    }, [menuOpen]);
 
     useEffect(() => {
         if (menuActions.length === 0) {
@@ -204,42 +180,49 @@ export default function AppTitleBar({ children, title = APP_PRODUCT_NAME }: AppT
             ) : null}
 
             {menuActions.length > 0 ? (
-                <div className="app-titlebar__menu" ref={menuRef}>
-                    <button
-                        type="button"
-                        className="app-titlebar__menu-trigger"
-                        aria-expanded={menuOpen}
-                        aria-haspopup="menu"
-                        onClick={() => setMenuOpen((isOpen) => !isOpen)}
-                    >
-                        <span className="app-titlebar__menu-trigger-icon" aria-hidden="true">
-                            <OpenBookIcon />
-                        </span>
-                        <span>Actions</span>
-                        <ChevronDownIcon className="app-titlebar__menu-chevron" aria-hidden="true" />
-                    </button>
-                    {menuOpen ? (
-                        <div className="app-titlebar__menu-dropdown" role="menu">
-                            <div className="app-titlebar__menu-heading">Actions rapides</div>
-                            {menuActions.map((action) => (
-                                <button
-                                    key={action.id}
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => {
-                                        setMenuOpen(false);
-                                        window.dispatchEvent(new CustomEvent(action.commandEventName));
-                                    }}
-                                >
-                                    <span className="app-titlebar__menu-item-icon" aria-hidden="true">
-                                        <OpenBookIcon />
-                                    </span>
-                                    <span>{action.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
-                </div>
+                <AdaptiveDropdown
+                    open={menuOpen}
+                    onOpenChange={setMenuOpen}
+                    className="app-titlebar__menu"
+                    contentClassName="app-titlebar__menu-dropdown"
+                    contentRole="menu"
+                    gap={5}
+                    renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+                        <button
+                            ref={setTriggerRef}
+                            type="button"
+                            className="app-titlebar__menu-trigger"
+                            aria-controls={contentId}
+                            aria-expanded={isOpen}
+                            aria-haspopup="menu"
+                            onClick={toggle}
+                        >
+                            <span className="app-titlebar__menu-trigger-icon" aria-hidden="true">
+                                <OpenBookIcon />
+                            </span>
+                            <span>Actions</span>
+                            <ChevronDownIcon className="app-titlebar__menu-chevron" aria-hidden="true" />
+                        </button>
+                    )}
+                >
+                    <div className="app-titlebar__menu-heading">Actions rapides</div>
+                    {menuActions.map((action) => (
+                        <button
+                            key={action.id}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                setMenuOpen(false);
+                                window.dispatchEvent(new CustomEvent(action.commandEventName));
+                            }}
+                        >
+                            <span className="app-titlebar__menu-item-icon" aria-hidden="true">
+                                <OpenBookIcon />
+                            </span>
+                            <span>{action.label}</span>
+                        </button>
+                    ))}
+                </AdaptiveDropdown>
             ) : null}
 
             <div className="app-titlebar__drag-space" />

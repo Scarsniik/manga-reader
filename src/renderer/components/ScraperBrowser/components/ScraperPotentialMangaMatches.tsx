@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
 import {
   BookmarkRibbonIcon,
   ChevronDownIcon,
@@ -61,30 +62,11 @@ function PotentialMatchNotice({
   onOpenMatchInWorkspace,
 }: NoticeProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!matches.length && open) {
       setOpen(false);
     }
-  }, [matches.length, open]);
-
-  useEffect(() => {
-    if (!open || !matches.length) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (rootRef.current && target instanceof Node && !rootRef.current.contains(target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
   }, [matches.length, open]);
 
   if (!matches.length) {
@@ -111,50 +93,67 @@ function PotentialMatchNotice({
   };
 
   return (
-    <section ref={rootRef} className={`scraper-browser__potential-match is-${kind}`}>
-      <button
-        type="button"
-        className="scraper-browser__potential-match-toggle"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        <span className="scraper-browser__potential-match-icon">{icon}</span>
-        <span className="scraper-browser__potential-match-label">{noticeTitle}</span>
-        <strong>{noticeSummary}</strong>
-        {loading ? <span className="scraper-browser__potential-match-loading">Analyse</span> : null}
-        <ChevronDownIcon aria-hidden="true" focusable="false" />
-      </button>
-
-      {open ? (
-        <div className="scraper-browser__potential-match-menu">
-          {matches.map((match) => (
-            <button
-              key={`${match.category}-${match.id}`}
-              type="button"
-              className="scraper-browser__potential-match-row"
-              onClick={() => onOpenMatch(match)}
-              onMouseDown={(event) => {
-                if (event.button === MIDDLE_BUTTON) {
-                  event.preventDefault();
-                }
-              }}
-              onAuxClick={(event) => handleMatchAuxClick(event, match)}
-              title={`${getTargetLabel(match)}. Clic molette : nouvel onglet workspace`}
-              data-prevent-middle-click-autoscroll="true"
-            >
-              <span className="scraper-browser__potential-match-main">
-                <span>{match.title}</span>
-                <small>{match.sourceLabel} - {match.detailLabel}</small>
-              </span>
-              <span className="scraper-browser__potential-match-action">
-                <DetailsCardIcon aria-hidden="true" focusable="false" />
-                {getTargetLabel(match)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </section>
+    <AdaptiveDropdown
+      open={open}
+      onOpenChange={setOpen}
+      className={`scraper-browser__potential-match is-${kind}`}
+      contentClassName="scraper-browser__potential-match-menu"
+      contentRole="menu"
+      gap={6}
+      maxHeight={280}
+      renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+        <button
+          ref={setTriggerRef}
+          type="button"
+          className="scraper-browser__potential-match-toggle"
+          onClick={toggle}
+          aria-controls={contentId}
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+        >
+          <span className="scraper-browser__potential-match-icon">{icon}</span>
+          <span className="scraper-browser__potential-match-label">{noticeTitle}</span>
+          <strong>{noticeSummary}</strong>
+          {loading ? <span className="scraper-browser__potential-match-loading">Analyse</span> : null}
+          <ChevronDownIcon aria-hidden="true" focusable="false" />
+        </button>
+      )}
+    >
+      {matches.map((match) => (
+        <button
+          key={`${match.category}-${match.id}`}
+          type="button"
+          className="scraper-browser__potential-match-row"
+          role="menuitem"
+          onClick={() => {
+            setOpen(false);
+            onOpenMatch(match);
+          }}
+          onMouseDown={(event) => {
+            if (event.button === MIDDLE_BUTTON) {
+              event.preventDefault();
+            }
+          }}
+          onAuxClick={(event) => {
+            if (event.button === MIDDLE_BUTTON) {
+              setOpen(false);
+            }
+            handleMatchAuxClick(event, match);
+          }}
+          title={`${getTargetLabel(match)}. Clic molette : nouvel onglet workspace`}
+          data-prevent-middle-click-autoscroll="true"
+        >
+          <span className="scraper-browser__potential-match-main">
+            <span>{match.title}</span>
+            <small>{match.sourceLabel} - {match.detailLabel}</small>
+          </span>
+          <span className="scraper-browser__potential-match-action">
+            <DetailsCardIcon aria-hidden="true" focusable="false" />
+            {getTargetLabel(match)}
+          </span>
+        </button>
+      ))}
+    </AdaptiveDropdown>
   );
 }
 
