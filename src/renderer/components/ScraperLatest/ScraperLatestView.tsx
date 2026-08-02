@@ -285,7 +285,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   >(() => new Map());
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
   const [scraperSearchMode, setScraperSearchMode] = React.useState<ScraperLatestSearchMode>("quick");
-  const [scraperContinueCount, setScraperContinueCount] = React.useState(1);
   const [scraperSessionSettings, setScraperSessionSettings] = React.useState<
     ScraperLatestSessionSettings | null
   >(null);
@@ -1413,12 +1412,11 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
         secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
         continuousActionLabel={activeTab === "scrapers" ? "Scanner sans quota" : undefined}
-        continueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
+        showContinueAction={activeTab === "scrapers"}
         continueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
         continueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
           ? "Aucune source n'a atteint son quota avec une suite disponible."
           : undefined}
-        continueCount={scraperContinueCount}
         replaceContinueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
         replaceContinueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
         replaceContinueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
@@ -1454,7 +1452,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         onSecondaryAction={activeTab === "scrapers" ? handleSearchDeeper : undefined}
         onContinuousAction={activeTab === "scrapers" ? handleContinuousScan : undefined}
         onContinue={activeTab === "scrapers" ? handleContinueScan : undefined}
-        onContinueCountChange={setScraperContinueCount}
         onReplaceContinue={activeTab === "scrapers" ? handleReplaceContinueScan : undefined}
         onOpenSettings={activeTab === "scrapers" ? handleOpenScraperSessionSettings : undefined}
         onOpenSource={sourceResults.handleOpenSource}

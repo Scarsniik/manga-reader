@@ -77,6 +77,7 @@ export type AppParams = {
     multiSearchViewMode?: string;
     multiSearchScrapeDetailsWithCards?: boolean;
     scraperAuthorCombinedView?: boolean;
+    scraperTagCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;
     scraperAuthorFavoritePageCount?: number;

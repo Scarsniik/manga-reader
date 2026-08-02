@@ -175,6 +175,11 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperTagCombinedView',
+          label: 'Afficher les pages tag en vue fusionnée',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperTagFavoriteShowUnseenFirst',
           label: 'Afficher les cards non vues en premier dans les tags favoris',
           type: 'checkbox',
@@ -440,6 +445,7 @@ export default function SettingsModalContent() {
       multiSearchMergedTitleLanguagePriority: mergedTitleLanguagePriority,
       multiSearchScrapeDetailsWithCards: !!values.multiSearchScrapeDetailsWithCards,
       scraperAuthorCombinedView: !!values.scraperAuthorCombinedView,
+      scraperTagCombinedView: !!values.scraperTagCombinedView,
       scraperAuthorFavoritePageCount: Number(values.scraperAuthorFavoritePageCount) || 1,
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperScrapeDetailsWithCards: !!values.scraperScrapeDetailsWithCards,

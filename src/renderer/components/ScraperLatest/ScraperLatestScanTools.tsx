@@ -1,17 +1,16 @@
 import React from "react";
+import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
 
 type Props = {
   loading: boolean;
   disabled: boolean;
   settingsLabel?: string;
   settingsActive: boolean;
-  continueLabel?: string;
+  showContinuation: boolean;
   continueDisabled: boolean;
   continueTitle: string;
-  continueCount: number;
   onOpenSettings?: () => void;
   onContinue?: (count: number) => void;
-  onContinueCountChange?: (count: number) => void;
 };
 
 export default function ScraperLatestScanTools({
@@ -19,16 +18,14 @@ export default function ScraperLatestScanTools({
   disabled,
   settingsLabel,
   settingsActive,
-  continueLabel,
+  showContinuation,
   continueDisabled,
   continueTitle,
-  continueCount,
   onOpenSettings,
   onContinue,
-  onContinueCountChange,
 }: Props) {
   const hasSettings = Boolean(settingsLabel && onOpenSettings);
-  const hasContinuation = Boolean(continueLabel && onContinue);
+  const hasContinuation = Boolean(showContinuation && onContinue);
 
   if (!hasSettings && !hasContinuation) {
     return null;
@@ -53,33 +50,12 @@ export default function ScraperLatestScanTools({
           </button>
         ) : null}
         {hasContinuation && onContinue ? (
-          <div className="scraper-latest-scan-tools__continuation">
-            <label className="scraper-latest-scan-tools__count">
-              <span>Passes</span>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={continueCount}
-                onChange={(event) => {
-                  onContinueCountChange?.(Number.parseInt(event.currentTarget.value, 10) || 1);
-                }}
-                disabled={loading || disabled}
-                aria-label="Nombre de continuations"
-              />
-            </label>
-            <span className="scraper-latest-scan-tools__tooltip" title={continueTitle}>
-              <button
-                type="button"
-                className="scraper-latest-scan-tools__continue"
-                onClick={() => onContinue(continueCount)}
-                disabled={continueDisabled}
-                title={continueTitle}
-              >
-                {loading ? "Chargement..." : continueLabel}
-              </button>
-            </span>
-          </div>
+          <ScraperPageAppendControl
+            loading={loading}
+            disabled={disabled || continueDisabled}
+            disabledTitle={continueTitle}
+            onAppendPages={onContinue}
+          />
         ) : null}
       </div>
     </div>

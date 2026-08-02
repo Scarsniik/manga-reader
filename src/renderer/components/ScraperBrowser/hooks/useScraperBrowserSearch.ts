@@ -1,4 +1,9 @@
-import React, { Dispatch, SetStateAction, useCallback } from 'react';
+import React, {
+  Dispatch,
+  SetStateAction,
+  useCallback,
+  useState,
+} from 'react';
 import { NavigateFunction } from 'react-router-dom';
 import {
   hasScraperFieldSelectorValue,

@@ -674,6 +674,7 @@ const defaultSettings = {
     multiSearchViewMode: DEFAULT_MULTI_SEARCH_VIEW_MODE,
     multiSearchScrapeDetailsWithCards: false,
     scraperAuthorCombinedView: false,
+    scraperTagCombinedView: false,
     scraperAuthorFavoriteShowUnseenFirst: false,
     scraperTagFavoriteShowUnseenFirst: true,
     scraperAuthorFavoritePageCount: DEFAULT_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT,
@@ -892,6 +893,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperAuthorCombinedView = typeof merged.scraperAuthorCombinedView === "boolean"
         ? merged.scraperAuthorCombinedView
         : defaultSettings.scraperAuthorCombinedView;
+    merged.scraperTagCombinedView = typeof merged.scraperTagCombinedView === "boolean"
+        ? merged.scraperTagCombinedView
+        : defaultSettings.scraperTagCombinedView;
     merged.scraperAuthorFavoriteShowUnseenFirst = typeof merged.scraperAuthorFavoriteShowUnseenFirst === "boolean"
         ? merged.scraperAuthorFavoriteShowUnseenFirst
         : defaultSettings.scraperAuthorFavoriteShowUnseenFirst;
@@ -1250,6 +1254,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;
+        nextSettings.scraperTagCombinedView = typeof nextSettings.scraperTagCombinedView === "boolean"
+            ? nextSettings.scraperTagCombinedView
+            : defaultSettings.scraperTagCombinedView;
         const legacyAuthorFavoriteScrapeAllPages = (nextSettings as Record<string, unknown>).scraperAuthorFavoriteScrapeAllPages;
         nextSettings.scraperAuthorFavoriteCacheResults = typeof nextSettings.scraperAuthorFavoriteCacheResults === "boolean"
             ? nextSettings.scraperAuthorFavoriteCacheResults

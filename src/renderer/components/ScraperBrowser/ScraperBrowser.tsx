@@ -20,6 +20,7 @@ import ScraperBrowserMessages from '@/renderer/components/ScraperBrowser/compone
 import ScraperBrowserToolbar from '@/renderer/components/ScraperBrowser/components/ScraperBrowserToolbar';
 import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components/ScraperDetailsPanel';
 import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperAuthorCombinedView';
+import ScraperTagCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperTagCombinedView';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
 import ScraperTagListView from '@/renderer/components/ScraperBrowser/components/ScraperTagListView';
 import MangaCorrespondenceDialog from '@/renderer/components/MangaCorrespondence/MangaCorrespondenceDialog';
@@ -270,6 +271,7 @@ export default function ScraperBrowser({
   );
   const showSavedScraperSearches = params?.showSavedScraperSearches !== false;
   const scraperAuthorCombinedViewEnabled = params?.scraperAuthorCombinedView === true;
+  const scraperTagCombinedViewEnabled = params?.scraperTagCombinedView === true;
   const homepageFeature = useMemo(() => getScraperFeature(scraper, 'homepage'), [scraper]);
   const searchFeature = useMemo(() => getScraperFeature(scraper, 'search'), [scraper]);
   const detailsFeature = useMemo(() => getScraperFeature(scraper, 'details'), [scraper]);
@@ -1529,6 +1531,9 @@ export default function ScraperBrowser({
   const handleSwitchAuthorCombinedView = useCallback((enabled: boolean) => {
     setParams({ scraperAuthorCombinedView: enabled }, { remount: false });
   }, [setParams]);
+  const handleSwitchTagCombinedView = useCallback((enabled: boolean) => {
+    setParams({ scraperTagCombinedView: enabled }, { remount: false });
+  }, [setParams]);
   const authorCombinedViewAction = mode === 'author' && !scraperAuthorCombinedViewEnabled ? (
     <button
       type="button"
@@ -1537,6 +1542,16 @@ export default function ScraperBrowser({
       title="Afficher cette page auteur avec la vue combinee"
     >
       Vue combinee
+    </button>
+  ) : null;
+  const tagCombinedViewAction = mode === 'tag' && !scraperTagCombinedViewEnabled ? (
+    <button
+      type="button"
+      className="scraper-browser__back-to-search"
+      onClick={() => handleSwitchTagCombinedView(true)}
+      title="Afficher cette page tag avec la vue fusionnee"
+    >
+      Vue fusionnee
     </button>
   ) : null;
   const authorMultiSearchAction = mode === 'author' ? (
@@ -1614,6 +1629,7 @@ export default function ScraperBrowser({
   ) : null;
   const tagHeaderAction = mode === 'tag' ? (
     <>
+      {tagCombinedViewAction}
       {tagFavoriteAction}
       {tagBlacklistAction}
     </>
@@ -1626,6 +1642,13 @@ export default function ScraperBrowser({
     mode === 'author'
     && !backgroundSearchJobId
     && scraperAuthorCombinedViewEnabled
+    && hasExecutedListing
+    && query.trim().length > 0,
+  );
+  const shouldShowTagCombinedView = Boolean(
+    mode === 'tag'
+    && !backgroundSearchJobId
+    && scraperTagCombinedViewEnabled
     && hasExecutedListing
     && query.trim().length > 0,
   );
@@ -2442,6 +2465,20 @@ export default function ScraperBrowser({
           favoriteAction={<>{authorCorrespondenceAction}{authorFavoriteAction}</>}
           onOpenMultiSearch={handleOpenAuthorMultiSearch}
           onSwitchToPagedView={() => handleSwitchAuthorCombinedView(false)}
+          onOpenSourceDetails={effectiveRouteSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
+        />
+      ) : shouldShowTagCombinedView && !resultOnly ? (
+        <ScraperTagCombinedView
+          scraper={scraper}
+          tagUrl={query.trim()}
+          tagTitle={tagResultsTitle}
+          cover={listingResults[0]?.thumbnailUrl}
+          scrapeDetailsWithCards={params?.scraperScrapeDetailsWithCards === true}
+          tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
+          tagFavorites={tagFavorites}
+          hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
+          headerAction={<>{tagFavoriteAction}{tagBlacklistAction}</>}
+          onSwitchToPagedView={() => handleSwitchTagCombinedView(false)}
           onOpenSourceDetails={effectiveRouteSyncEnabled ? undefined : handleOpenAuthorCombinedSource}
         />
       ) : !resultOnly ? (

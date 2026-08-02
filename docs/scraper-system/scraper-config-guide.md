@@ -605,6 +605,13 @@ tags blacklistes est active, meme si la card elle-meme n'expose pas encore ses t
 Les vues concernees affichent alors le nombre de cards masquees et proposent un basculement local
 vers l'affichage grise, sans changer le reglage global.
 
+Une page tag normale s'ouvre soit en vue paginee, soit en vue fusionnee selon le reglage
+`scraperTagCombinedView`. Le bouton `Vue fusionnee` remplace la grille paginee par la meme fusion de
+cards que celle des tags favoris ; `Vue par pages` permet de revenir a la pagination classique.
+Le controle partage `Scraper et ajouter` est reserve a la vue fusionnee. Il accepte un nombre entier
+d'au moins une page, scrape les pages suivantes dans l'ordre et les conserve avec les pages deja
+visibles. La plage de pages fusionnee reste affichee dans l'en-tete.
+
 ## Module Chapitres
 
 `Chapitres` extrait une liste de chapitres associes a une fiche manga. Il peut lire directement la

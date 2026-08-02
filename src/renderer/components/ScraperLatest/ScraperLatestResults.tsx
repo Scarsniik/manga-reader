@@ -52,10 +52,9 @@ type Props = {
   actionLabel?: string;
   secondaryActionLabel?: string;
   continuousActionLabel?: string;
-  continueActionLabel?: string;
+  showContinueAction?: boolean;
   continueActionDisabled?: boolean;
   continueActionTitle?: string;
-  continueCount?: number;
   replaceContinueActionLabel?: string;
   replaceContinueActionDisabled?: boolean;
   replaceContinueActionTitle?: string;
@@ -81,7 +80,6 @@ type Props = {
   onSecondaryAction?: () => void;
   onContinuousAction?: () => void;
   onContinue?: (count: number) => void;
-  onContinueCountChange?: (count: number) => void;
   onReplaceContinue?: () => void;
   onOpenSettings?: () => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
@@ -185,10 +183,9 @@ export default function ScraperLatestResults({
   actionLabel = "Recharger",
   secondaryActionLabel,
   continuousActionLabel,
-  continueActionLabel,
+  showContinueAction = false,
   continueActionDisabled = false,
   continueActionTitle,
-  continueCount = 1,
   replaceContinueActionLabel,
   replaceContinueActionDisabled = false,
   replaceContinueActionTitle,
@@ -214,7 +211,6 @@ export default function ScraperLatestResults({
   onSecondaryAction,
   onContinuousAction,
   onContinue,
-  onContinueCountChange,
   onReplaceContinue,
   onOpenSettings,
   onOpenSource,
@@ -286,14 +282,13 @@ export default function ScraperLatestResults({
     () => buildStatusSummary(statusItems),
     [statusItems],
   );
-  const normalizedContinueCount = Math.max(1, Math.floor(continueCount || 1));
   const isContinueDisabled = loading || actionsDisabled || continueActionDisabled;
   const isReplaceContinueDisabled = loading || actionsDisabled || replaceContinueActionDisabled;
   const resolvedContinueActionTitle = continueActionDisabled
     ? continueActionTitle ?? "Aucun resultat charge : lance un scan qui trouve au moins un resultat avant de continuer."
     : loading
       ? "Chargement en cours."
-      : `Continuer le scan ${normalizedContinueCount} fois.`;
+      : "Scraper et ajouter des pages aux resultats actuels.";
   const resolvedReplaceContinueActionTitle = replaceContinueActionDisabled
     ? replaceContinueActionTitle ?? "Aucune suite disponible."
     : loading
@@ -380,16 +375,14 @@ export default function ScraperLatestResults({
             disabled={actionsDisabled}
             settingsLabel={settingsActionLabel}
             settingsActive={settingsActionActive}
-            continueLabel={continueActionLabel}
+            showContinuation={showContinueAction}
             continueDisabled={isContinueDisabled}
             continueTitle={resolvedContinueActionTitle}
-            continueCount={normalizedContinueCount}
             onOpenSettings={onOpenSettings}
             onContinue={(count) => {
               setMergeRefreshKey((currentKey) => currentKey + 1);
               onContinue?.(count);
             }}
-            onContinueCountChange={onContinueCountChange}
           />
         ) : null}
         <div className="scraper-latest-results__summary">

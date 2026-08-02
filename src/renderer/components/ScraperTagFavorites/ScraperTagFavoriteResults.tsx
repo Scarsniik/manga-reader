@@ -31,11 +31,13 @@ import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
+import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
   runs: TagFavoriteSourceRun[];
   pageIndex: number;
+  visiblePageEndIndex: number;
   mergedResults: MultiSearchMergedResult[];
   totalResultCount: number;
   visibleSourceCount: number;
@@ -48,6 +50,7 @@ type Props = {
   error: string | null;
   canGoPrevious: boolean;
   canGoNext: boolean;
+  canAppendPages: boolean;
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -57,11 +60,15 @@ type Props = {
   tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   showUnseenFirst: boolean;
-  onBack: () => void;
+  backLabel?: string | null;
+  description?: string;
+  headerAction?: React.ReactNode;
+  onBack?: () => void;
   onReload: () => void;
-  onFindSimilarTags: () => void;
+  onFindSimilarTags?: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
+  onAppendPages: (pageCount: number) => void;
   onToggleLanguageFilterMode: (
     languageCode: string,
     mode: Exclude<MultiSearchLanguageFilterMode, "default">,
@@ -123,6 +130,7 @@ export default function ScraperTagFavoriteResults({
   favorite,
   runs,
   pageIndex,
+  visiblePageEndIndex,
   mergedResults,
   totalResultCount,
   visibleSourceCount,
@@ -135,6 +143,7 @@ export default function ScraperTagFavoriteResults({
   error,
   canGoPrevious,
   canGoNext,
+  canAppendPages,
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -144,11 +153,15 @@ export default function ScraperTagFavoriteResults({
   tagFavorites = [],
   hideBlacklistedCards = false,
   showUnseenFirst,
+  backLabel = "Retour aux tags favoris",
+  description,
+  headerAction = null,
   onBack,
   onReload,
   onFindSimilarTags,
   onPreviousPage,
   onNextPage,
+  onAppendPages,
   onToggleLanguageFilterMode,
   onTextFilterChange,
   onFillTextFilterFromBaseQuery,
@@ -200,30 +213,38 @@ export default function ScraperTagFavoriteResults({
     () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
     [sortedMergedResults, tagBlacklistByScraper],
   );
+  const visiblePageLabel = pageIndex === visiblePageEndIndex
+    ? `Page ${pageIndex + 1}`
+    : `Pages ${pageIndex + 1} a ${visiblePageEndIndex + 1} fusionnees`;
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
       <div className="scraper-author-favorites-view__header">
         <div>
-          <button
-            type="button"
-            className="scraper-author-favorites-view__back"
-            onClick={onBack}
-          >
-            Retour aux tags favoris
-          </button>
+          {backLabel && onBack ? (
+            <button
+              type="button"
+              className="scraper-author-favorites-view__back"
+              onClick={onBack}
+            >
+              {backLabel}
+            </button>
+          ) : null}
           <h2>{favorite.name}</h2>
-          <p>{favorite.sources.length} source(s) tag associee(s).</p>
+          <p>{description ?? `${favorite.sources.length} source(s) tag associee(s).`}</p>
         </div>
         <div className="scraper-author-favorites-view__header-actions">
-          <button
-            type="button"
-            className="scraper-author-favorites-view__multi-search"
-            onClick={onFindSimilarTags}
-          >
-            <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
-            <span>Tags similaires</span>
-          </button>
+          {headerAction}
+          {onFindSimilarTags ? (
+            <button
+              type="button"
+              className="scraper-author-favorites-view__multi-search"
+              onClick={onFindSimilarTags}
+            >
+              <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+              <span>Tags similaires</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="scraper-author-favorites-view__clear"
@@ -272,7 +293,7 @@ export default function ScraperTagFavoriteResults({
           <div>
             <h3>Resultats</h3>
             <p>
-              Page {pageIndex + 1}, {displayedMergedResults.length} carte(s), {visibleSourceCount} resultat(s)
+              {visiblePageLabel}, {displayedMergedResults.length} carte(s), {visibleSourceCount} resultat(s)
               source visible(s)
               {shouldHideBlacklistedCards && blacklistedMergedResultCount > 0
                 ? `, ${blacklistedMergedResultCount} masquee(s)`
@@ -296,6 +317,11 @@ export default function ScraperTagFavoriteResults({
             </div>
           </div>
           <div className="multi-search__section-actions">
+            <ScraperPageAppendControl
+              loading={loading}
+              disabled={!canAppendPages}
+              onAppendPages={onAppendPages}
+            />
             <BlacklistedCardsDisplayToggle
               blacklistedCardCount={blacklistedMergedResultCount}
               hideBlacklistedCards={hideBlacklistedCards}
@@ -348,7 +374,7 @@ export default function ScraperTagFavoriteResults({
 
         <div className="multi-search__section-head">
           <div>
-            <p>Page {pageIndex + 1}</p>
+            <p>{visiblePageLabel}</p>
           </div>
           <TagFavoritePaginationActions
             loading={loading}

@@ -67,6 +67,8 @@ La pagination reste globale au favori :
 
 - `Page suivante` charge la page suivante de chaque source qui peut continuer
 - `Page precedente` revient a la page deja chargee precedente
+- `Scraper et ajouter` accepte un nombre de pages superieur ou egal a 1, charge cette quantite sur
+  les sources encore paginables et conserve les pages deja visibles dans la fusion
 - les actions de pagination sont affichees au-dessus et au-dessous des resultats
 - la vue n'affiche pas de separation par scraper
 

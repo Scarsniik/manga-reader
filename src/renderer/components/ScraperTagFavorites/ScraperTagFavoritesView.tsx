@@ -69,15 +69,18 @@ export default function ScraperTagFavoritesView({
     runs,
     visibleSources,
     pageIndex,
+    visiblePageEndIndex,
     loading: loadingRuns,
     message: runMessage,
     error: runError,
     canGoPrevious,
     canGoNext,
+    canAppendPages,
     start,
     reload,
     goToPreviousPage,
     goToNextPage,
+    appendPages,
   } = useTagFavoriteRuns(selectedFavorite, scrapersById, {
     scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
   });
@@ -219,6 +222,7 @@ export default function ScraperTagFavoritesView({
         favorite={selectedFavorite}
         runs={runs}
         pageIndex={pageIndex}
+        visiblePageEndIndex={visiblePageEndIndex}
         mergedResults={visibleMergedResults}
         totalResultCount={mergedResults.length}
         visibleSourceCount={visibleMergedResultSourceCount}
@@ -231,6 +235,7 @@ export default function ScraperTagFavoritesView({
         error={runError || openError}
         canGoPrevious={canGoPrevious}
         canGoNext={canGoNext}
+        canAppendPages={canAppendPages}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}
         sourceProgressIndex={sourceProgressIndex}
@@ -245,6 +250,7 @@ export default function ScraperTagFavoritesView({
         onFindSimilarTags={() => handleFindSimilarTags(selectedFavorite)}
         onPreviousPage={() => void goToPreviousPage()}
         onNextPage={() => void goToNextPage()}
+        onAppendPages={(pageCount) => void appendPages(pageCount)}
         onToggleLanguageFilterMode={handleToggleLanguageFilterMode}
         onTextFilterChange={setResultTextFilter}
         onFillTextFilterFromBaseQuery={() => setResultTextFilter(selectedFavorite.name)}

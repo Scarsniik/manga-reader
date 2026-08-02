@@ -57,12 +57,13 @@ incluses, il continue la pagination normale au lieu de s'arreter a la premiere p
 ignoree par langue. Le parametre `scraperLatestDeepPageLimit` limite le nombre de pages consultees
 en scan profond quand il est superieur a 0 ; la valeur 0 signifie aucune limite de pages.
 
-Sous les trois modes de scan, une barre `Reglages et reprise` regroupe `Parametres session`, le
-nombre de passes et le bouton `Continuer`. Elle est placee avant le resume et la grille pour pouvoir
-ajuster ou relancer la collecte avant de parcourir les cards. Le bouton est actif
+Sous les trois modes de scan, une barre `Reglages et reprise` regroupe `Parametres session` et le
+controle partage `Scraper et ajouter`. Son champ numerique accepte au minimum une page et remplace
+l'ancien couple `Passes` / `Continuer`. La barre est placee avant le resume et la grille pour pouvoir
+ajuster ou relancer la collecte avant de parcourir les cards. Le controle est actif
 uniquement si au moins une source a atteint son quota de resultats et garde une suite possible. Une
-source arretee avant son quota, par exemple faute de nouveautes, devient non viable pour `Continuer`.
-Apres un scan rapide, chaque passe ajoute une nouvelle reprise rapide depuis le curseur dynamique du
+source arretee avant son quota, par exemple faute de nouveautes, ne peut pas etre reprise. Apres un
+scan rapide, chaque page demandee ajoute une nouvelle reprise rapide depuis le curseur dynamique du
 scan precedent, sans vider les resultats deja affiches.
 
 Un second bouton `Continuer` est affiche sous les resultats quand des cards sont visibles. Il reprend

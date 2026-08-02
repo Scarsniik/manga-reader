@@ -96,6 +96,7 @@ export default function useTagFavoriteRuns(
   const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
   const [runs, setRuns] = useState<TagFavoriteSourceRun[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
+  const [visiblePageEndIndex, setVisiblePageEndIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,13 +104,25 @@ export default function useTagFavoriteRuns(
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
   const runsRef = useRef<TagFavoriteSourceRun[]>([]);
   const visibleSources = useMemo(
-    () => runs.flatMap((run) => run.results.filter((result) => result.pageIndex === pageIndex)),
-    [pageIndex, runs],
+    () => runs.flatMap((run) => run.results.filter((result) => (
+      result.pageIndex >= pageIndex && result.pageIndex <= visiblePageEndIndex
+    ))),
+    [pageIndex, runs, visiblePageEndIndex],
   );
   const canGoPrevious = pageIndex > 0;
   const canGoNext = useMemo(
-    () => runs.some((run) => run.hasNextPage && run.status !== "loading"),
-    [runs],
+    () => runs.some((run) => (
+      run.loadedPages > pageIndex + 1
+      || (run.hasNextPage && run.status !== "loading")
+    )),
+    [pageIndex, runs],
+  );
+  const canAppendPages = useMemo(
+    () => runs.some((run) => (
+      run.loadedPages > visiblePageEndIndex + 1
+      || (run.hasNextPage && run.status !== "loading")
+    )),
+    [runs, visiblePageEndIndex],
   );
 
   useEffect(() => {
@@ -248,6 +261,7 @@ export default function useTagFavoriteRuns(
     if (!favorite) {
       setRuns([]);
       setPageIndex(0);
+      setVisiblePageEndIndex(0);
       setMessage(null);
       setError(null);
       return;
@@ -269,6 +283,7 @@ export default function useTagFavoriteRuns(
 
     setRuns(baseRuns);
     setPageIndex(normalizedPageIndex);
+    setVisiblePageEndIndex(normalizedPageIndex);
     setLoading(Boolean(baseRuns.length));
     setMessage(null);
     setError(baseRuns.length ? null : "Aucun scrapper disponible pour ce tag favori.");
@@ -309,22 +324,76 @@ export default function useTagFavoriteRuns(
       return;
     }
 
-    setPageIndex((currentPageIndex) => Math.max(0, currentPageIndex - 1));
+    const previousPageIndex = Math.max(0, pageIndex - 1);
+    setPageIndex(previousPageIndex);
+    setVisiblePageEndIndex(previousPageIndex);
     setMessage(`Retour a la page ${pageIndex}.`);
   }, [canGoPrevious, loading, pageIndex]);
+
+  const appendPages = useCallback(async (requestedPageCount: number) => {
+    const currentRuns = runsRef.current;
+    if (!favorite || loading || !currentRuns.length) {
+      return;
+    }
+
+    const pageCount = Number.isFinite(requestedPageCount)
+      ? Math.max(1, Math.floor(requestedPageCount))
+      : 1;
+    const currentVisibleEndIndex = visiblePageEndIndex;
+    const targetPageIndex = currentVisibleEndIndex + pageCount;
+    const token = tokenRef.current + 1;
+    tokenRef.current = token;
+
+    setLoading(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const loadedRuns = await loadPageForRuns(currentRuns, token, targetPageIndex);
+      if (token !== tokenRef.current) {
+        return;
+      }
+
+      const lastLoadedPageIndex = loadedRuns.reduce(
+        (highestPageIndex, run) => Math.max(highestPageIndex, run.loadedPages - 1),
+        currentVisibleEndIndex,
+      );
+      const nextVisibleEndIndex = Math.min(targetPageIndex, lastLoadedPageIndex);
+      const addedPageCount = Math.max(0, nextVisibleEndIndex - currentVisibleEndIndex);
+
+      setRuns(loadedRuns);
+      setVisiblePageEndIndex(nextVisibleEndIndex);
+      setMessage(addedPageCount > 0
+        ? `${addedPageCount} page(s) supplementaire(s) scrapee(s) et ajoutee(s) a la vue fusionnee.`
+        : "Aucune page supplementaire disponible.");
+    } catch (loadError) {
+      if (token === tokenRef.current) {
+        setError(loadError instanceof Error
+          ? loadError.message
+          : "Echec temporaire du chargement des pages supplementaires.");
+      }
+    } finally {
+      if (token === tokenRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [favorite, loadPageForRuns, loading, visiblePageEndIndex]);
 
   return {
     runs,
     visibleSources,
     pageIndex,
+    visiblePageEndIndex,
     loading,
     message,
     error,
     canGoPrevious,
     canGoNext,
+    canAppendPages,
     start,
     reload: () => loadPage(pageIndex),
     goToPreviousPage,
     goToNextPage,
+    appendPages,
   };
 }
