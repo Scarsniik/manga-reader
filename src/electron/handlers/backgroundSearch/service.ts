@@ -7,7 +7,9 @@ import type {
   BackgroundSearchProgress,
   BackgroundSearchQueueSummary,
   CompleteBackgroundSearchRequest,
+  ContinueBackgroundSearchRequest,
   CreateBackgroundSearchRequest,
+  SaveBackgroundSearchResultRequest,
   UpdateBackgroundSearchRequest,
 } from "../../../shared/backgroundSearch";
 import { BACKGROUND_SEARCH_SCHEMA_VERSION } from "../../../shared/backgroundSearch";
@@ -328,6 +330,77 @@ export const completeBackgroundSearch = async (
   return true;
 });
 
+export const saveBackgroundSearchResult = async (
+  request: SaveBackgroundSearchResultRequest,
+): Promise<boolean> => serializeMutation(async () => {
+  await initialize();
+  const current = findMetadata(request.jobId);
+  if (!current || current.status !== "completed") return false;
+  const job = await loadJob(request.jobId);
+  if (!job) return false;
+  const next = {
+    ...current,
+    updatedAt: nowIso(),
+    revision: current.revision + 1,
+    progress: typeof request.resultCount === "number"
+      ? { ...current.progress, resultCount: Math.max(0, Math.floor(request.resultCount)) }
+      : current.progress,
+    resultAvailable: true,
+  };
+  replaceMetadata(next);
+  await persistJobPayload({
+    ...job,
+    metadata: next,
+    result: request.result,
+  });
+  await persistMetadata();
+  broadcastChange(next, true);
+  return true;
+});
+
+export const continueBackgroundSearch = async (
+  request: ContinueBackgroundSearchRequest,
+): Promise<BackgroundSearchJobMetadata | null> => serializeMutation(async () => {
+  await initialize();
+  const current = findMetadata(request.jobId);
+  if (
+    !current
+    || current.kind !== "mangaCorrespondence"
+    || current.status !== "completed"
+  ) return null;
+  const job = await loadJob(request.jobId);
+  if (!job?.result) return null;
+  const timestamp = nowIso();
+  const next: BackgroundSearchJobMetadata = {
+    ...current,
+    status: "queued",
+    startedAt: undefined,
+    completedAt: undefined,
+    expiresAt: undefined,
+    updatedAt: timestamp,
+    revision: current.revision + 1,
+    progress: {
+      completedUnits: 0,
+      totalUnits: 0,
+      resultCount: current.progress.resultCount,
+      currentLabel: "Préparation de la passe suivante",
+    },
+    error: undefined,
+    inputAvailable: true,
+    resultAvailable: true,
+  };
+  replaceMetadata(next);
+  await persistJobPayload({
+    metadata: next,
+    input: request.input,
+    result: job.result,
+  });
+  await writeBackgroundSearchInput(next.id, request.input);
+  await persistMetadata();
+  broadcastChange(next, true);
+  return next;
+});
+
 export const failBackgroundSearch = async (jobId: string, error: string): Promise<boolean> => (
   finishWithStatus(jobId, "error", error)
 );
@@ -348,8 +421,8 @@ export const requeueRunningBackgroundSearches = async (): Promise<number> => ser
     startedAt: undefined,
     updatedAt: timestamp,
     revision: job.revision + 1,
-    progress: { completedUnits: 0, resultCount: 0 },
-    resultAvailable: false,
+    progress: { completedUnits: 0, resultCount: job.progress.resultCount },
+    resultAvailable: job.resultAvailable,
     error: undefined,
   }));
   const nextById = new Map(nextJobs.map((job) => [job.id, job]));
@@ -361,7 +434,7 @@ export const requeueRunningBackgroundSearches = async (): Promise<number> => ser
     await persistJobPayload({
       metadata: next,
       input: currentJob.input,
-      result: undefined,
+      result: currentJob.result,
     });
   }));
   await persistMetadata();

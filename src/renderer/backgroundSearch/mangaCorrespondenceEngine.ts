@@ -39,6 +39,8 @@ import type {
   BackgroundSearchExecutionResult,
   MangaCorrespondenceBackgroundResult,
   MangaCorrespondenceMatch,
+  MangaCorrespondenceRejectedCandidate,
+  MangaCorrespondenceRejectionReason,
 } from "@/renderer/backgroundSearch/types";
 import {
   doesCorrespondenceAnalyzedTitleMatchKnownTitle,
@@ -52,6 +54,7 @@ import {
   isClearlyDerivativeMangaCorrespondenceTitle,
   stripMangaCorrespondenceTrailingKnownAuthor,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
+import { scoreMangaCorrespondenceRejectedCandidate } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -73,6 +76,7 @@ type DiscoveryTask = {
 const MAX_DISCOVERY_TASKS = 80;
 const MAX_DISCOVERED_TITLES = 18;
 const MAX_DISCOVERED_AUTHORS = 18;
+const MAX_STORED_REJECTED_CANDIDATES = 500;
 
 const normalizeKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
@@ -107,12 +111,20 @@ const canSearchAuthors = (scraper: ScraperRecord): boolean => {
 const buildResult = (
   input: MangaCorrespondenceBackgroundInput,
   matches: Map<string, MangaCorrespondenceMatch>,
+  rejectedCandidates: Map<string, MangaCorrespondenceRejectedCandidate>,
+  rejectedCandidateCount: number,
   trace: MangaCorrespondenceTraceStep[],
   searchedTitles: string[],
   searchedAuthors: string[],
 ): MangaCorrespondenceBackgroundResult => ({
   request: input.request,
   matches: Array.from(matches.values()),
+  rejectedCandidates: Array.from(rejectedCandidates.values()).sort((left, right) => (
+    right.score - left.score
+    || left.source.result.title.localeCompare(right.source.result.title)
+  )),
+  rejectedCandidateCount,
+  passNumber: Math.max(1, Math.floor(input.continuation?.passNumber ?? 1)),
   trace: [...trace],
   searchedTitles: [...searchedTitles],
   searchedAuthors: [...searchedAuthors],
@@ -129,6 +141,9 @@ const sourceMatchesReference = (
   alternativeTitles: string[];
   authors: string[];
   chapter?: string;
+  chapterConfidence: MangaCorrespondenceRejectedCandidate["chapterConfidence"];
+  hasSequenceMarker: boolean;
+  derivative: boolean;
   matchedTerm?: string;
   discoverableTitles: string[];
 } => {
@@ -153,7 +168,8 @@ const sourceMatchesReference = (
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
   const analyzedTitleFields = uniqueText([analysis.title, ...titleAlternatives]);
-  const match = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title)
+  const derivative = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title);
+  const match = derivative
     ? undefined
     : knownTitles.map((title) => {
       const directMatch = doesCorrespondenceAnalyzedTitleMatchKnownTitle(
@@ -178,13 +194,18 @@ const sourceMatchesReference = (
     match?.directMatch === true,
     Boolean(match && match.mergeMatchKind !== null),
   );
-  const chapter = analysis.chapter
-    ?? inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
+  const inferredFirstChapter = analysis.chapter
+    ? undefined
+    : inferMangaCorrespondenceFirstChapter(analysis, knownTitles);
+  const chapter = analysis.chapter ?? inferredFirstChapter;
   return {
     analyzedTitle: analysis.title,
     alternativeTitles: titleAlternatives,
     authors,
     chapter,
+    chapterConfidence: analysis.chapter ? "high" : inferredFirstChapter ? "low" : "low",
+    hasSequenceMarker: analysis.sequenceMarkers.length > 0,
+    derivative,
     matchedTerm: match?.title,
     discoverableTitles,
   };
@@ -194,6 +215,7 @@ export const runMangaCorrespondenceSearch = async (
   input: MangaCorrespondenceBackgroundInput,
   signal: AbortSignal,
   onSnapshot: SnapshotCallback,
+  previousResult?: MangaCorrespondenceBackgroundResult,
 ): Promise<MangaCorrespondenceBackgroundResult> => {
   const scrapers = selectScrapers(input);
   if (!scrapers.length) throw new Error("Aucun scrapper compatible n'est sélectionné.");
@@ -206,16 +228,70 @@ export const runMangaCorrespondenceSearch = async (
     input.reference.rawTitle,
     getScraperTitleAnalysisFeatureConfig(getScraperFeature(referenceScraper, "titleAnalysis")),
   );
-  const knownTitles = uniqueText([input.reference.title, ...input.reference.alternativeTitles]);
+  const isContinuation = Boolean(input.continuation && previousResult);
+  const previousRejectedCandidates = previousResult?.rejectedCandidates ?? [];
+  const acceptedPreviousCandidates = previousRejectedCandidates.filter((candidate) => (
+    candidate.decision === "accepted"
+  ));
+  const requestedSeedCandidateKeys = input.continuation?.seedCandidateKeys;
+  const requestedSeedKeys = new Set(requestedSeedCandidateKeys ?? []);
+  const acceptedSearchSeeds = acceptedPreviousCandidates.filter((candidate) => (
+    candidate.useAsSearchSeed
+    && (requestedSeedCandidateKeys === undefined || requestedSeedKeys.has(candidate.key))
+  ));
+  const knownTitles = uniqueText([
+    input.reference.title,
+    ...input.reference.alternativeTitles,
+    ...acceptedSearchSeeds.flatMap((candidate) => [
+      candidate.analyzedTitle,
+      ...candidate.alternativeTitles,
+    ]),
+  ]);
   const referenceChapter = input.reference.chapter
     || referenceAnalysis.chapter
     || inferMangaCorrespondenceFirstChapter(referenceAnalysis, knownTitles);
-  const trace: MangaCorrespondenceTraceStep[] = [];
-  const matches = new Map<string, MangaCorrespondenceMatch>();
-  const knownAuthors = uniqueText(input.reference.authors);
+  const trace: MangaCorrespondenceTraceStep[] = isContinuation
+    ? [...(previousResult?.trace ?? [])]
+    : [];
+  const matches = new Map<string, MangaCorrespondenceMatch>(
+    (isContinuation ? previousResult?.matches ?? [] : []).map((match) => [match.key, match]),
+  );
+  acceptedPreviousCandidates.forEach((candidate) => {
+    if (matches.has(candidate.key)) return;
+    matches.set(candidate.key, {
+      key: candidate.key,
+      source: candidate.source,
+      analyzedTitle: candidate.analyzedTitle,
+      alternativeTitles: candidate.alternativeTitles,
+      authors: candidate.authors,
+      chapter: candidate.acceptedChapter || candidate.suggestedChapter,
+      matchedTerm: candidate.matchedTerm || input.reference.title,
+      discoveredByStepIds: [...candidate.discoveredByStepIds],
+      acceptedManually: true,
+    });
+  });
+  const currentPassNumber = Math.max(1, Math.floor(input.continuation?.passNumber ?? 1));
+  const acceptedSearchSeedKeys = new Set(acceptedSearchSeeds.map((candidate) => candidate.key));
+  const rejectedCandidates = new Map<string, MangaCorrespondenceRejectedCandidate>(
+    previousRejectedCandidates.map((candidate) => [candidate.key, {
+      ...candidate,
+      searchSeedUsedInPass: acceptedSearchSeedKeys.has(candidate.key)
+        ? currentPassNumber
+        : candidate.searchSeedUsedInPass,
+    }]),
+  );
+  const rejectedKeysSeen = new Set(previousRejectedCandidates.map((candidate) => candidate.key));
+  let rejectedCandidateCount = Math.max(
+    previousResult?.rejectedCandidateCount ?? 0,
+    rejectedKeysSeen.size,
+  );
+  const knownAuthors = uniqueText([
+    ...input.reference.authors,
+    ...acceptedSearchSeeds.flatMap((candidate) => candidate.authors),
+  ]);
   const romanizedTitleVariantsByKey = new Map<string, string[]>();
-  const searchedTitles: string[] = [];
-  const searchedAuthors: string[] = [];
+  const searchedTitles: string[] = isContinuation ? [...(previousResult?.searchedTitles ?? [])] : [];
+  const searchedAuthors: string[] = isContinuation ? [...(previousResult?.searchedAuthors ?? [])] : [];
   const queuedKeys = new Set<string>();
   const extractedAuthorSourceKeys = new Set<string>();
   const resolvedAuthorPageKeys = new Set<string>();
@@ -240,6 +316,21 @@ export const runMangaCorrespondenceSearch = async (
     trace.push(step);
     return step;
   };
+  const continuationStep = isContinuation ? addTrace(
+    "passStarted",
+    `Passe ${Math.max(2, Math.floor(input.continuation?.passNumber ?? 2))} lancée`,
+    `${acceptedSearchSeeds.length} proposition(s) utilisée(s) comme nouvelles pistes`,
+  ) : undefined;
+  if (continuationStep) {
+    acceptedPreviousCandidates.forEach((candidate) => {
+      addTrace(
+        "manualAcceptance",
+        "Proposition acceptée manuellement",
+        candidate.source.result.title,
+        continuationStep.id,
+      );
+    });
+  }
   const initialRomanizedVariants = await loadAdvancedJapaneseRomanizationVariants(
     knownTitles,
     { includeKanaOnly: true },
@@ -251,8 +342,18 @@ export const runMangaCorrespondenceSearch = async (
     }
   });
 
-  knownTitles.forEach((term) => addTask({ kind: "title", term }));
-  knownTitles.forEach((title) => {
+  const initialTitleTasks = isContinuation
+    ? uniqueText(acceptedSearchSeeds.flatMap((candidate) => [
+      candidate.analyzedTitle,
+      ...candidate.alternativeTitles,
+    ]))
+    : [...knownTitles];
+  initialTitleTasks.forEach((term) => addTask({
+    kind: "title",
+    term,
+    parentId: continuationStep?.id,
+  }));
+  (isContinuation ? initialTitleTasks : knownTitles).forEach((title) => {
     selectMangaCorrespondenceRomanizedSearchTerms(
       romanizedTitleVariantsByKey.get(normalizeKey(title)) ?? [],
     ).forEach((term) => {
@@ -269,14 +370,42 @@ export const runMangaCorrespondenceSearch = async (
       });
     });
   });
-  knownAuthors.forEach((term) => addTask({ kind: "author", term }));
-  input.reference.authorUrls.forEach((url) => {
+  const initialAuthorTasks = isContinuation
+    ? uniqueText(acceptedSearchSeeds.flatMap((candidate) => candidate.authors))
+    : [...knownAuthors];
+  initialAuthorTasks.forEach((term) => addTask({
+    kind: "author",
+    term,
+    parentId: continuationStep?.id,
+  }));
+  if (isContinuation) acceptedSearchSeeds.forEach((candidate) => {
+    const scraper = scrapers.find((entry) => entry.id === candidate.source.scraper.id);
+    if (!scraper) return;
+    uniqueText([
+      candidate.source.result.authorUrl,
+      ...(candidate.source.result.authorUrls ?? []),
+    ]).forEach((url) => addTask({
+      kind: "author",
+      term: candidate.authors[0] || url,
+      parentId: continuationStep?.id,
+      directTargets: [{ scraper, url }],
+    }));
+  });
+  if (!isContinuation) input.reference.authorUrls.forEach((url) => {
     const scraper = scrapers.find((entry) => entry.id === input.reference.scraperId);
     if (scraper) addTask({ kind: "author", term: knownAuthors[0] || url, directTargets: [{ scraper, url }] });
   });
 
   const emit = async (label?: string): Promise<void> => onSnapshot(
-    buildResult(input, matches, trace, searchedTitles, searchedAuthors),
+    buildResult(
+      input,
+      matches,
+      rejectedCandidates,
+      rejectedCandidateCount,
+      trace,
+      searchedTitles,
+      searchedAuthors,
+    ),
     {
       completedUnits: processedTasks,
       totalUnits: processedTasks + queue.length,
@@ -284,6 +413,80 @@ export const runMangaCorrespondenceSearch = async (
       currentLabel: label,
     },
   );
+  const storeRejectedCandidate = (
+    source: MultiSearchSourceResult,
+    analyzed: ReturnType<typeof sourceMatchesReference>,
+    rejectionReason: MangaCorrespondenceRejectionReason,
+    step: MangaCorrespondenceTraceStep,
+  ): void => {
+    const key = buildMultiSearchSourceIdentityKey(source);
+    const existing = rejectedCandidates.get(key);
+    const scored = scoreMangaCorrespondenceRejectedCandidate({
+      titleFields: [analyzed.analyzedTitle, ...analyzed.alternativeTitles],
+      candidateAuthors: analyzed.authors,
+      knownTitles,
+      knownAuthors,
+      rejectionReason,
+      matchedTerm: analyzed.matchedTerm,
+    });
+    const suggestedChapter = analyzed.chapter
+      || (!analyzed.hasSequenceMarker && scored.score >= 60 ? "1" : undefined);
+    rejectedCandidates.set(key, {
+      key,
+      source,
+      analyzedTitle: analyzed.analyzedTitle,
+      alternativeTitles: analyzed.alternativeTitles,
+      authors: analyzed.authors,
+      suggestedChapter,
+      chapterConfidence: analyzed.chapter ? analyzed.chapterConfidence : "low",
+      matchedTerm: analyzed.matchedTerm || scored.bestKnownTitle,
+      rejectionReason,
+      score: scored.score,
+      scoreReasons: scored.reasons,
+      discoveredByStepIds: uniqueText([...(existing?.discoveredByStepIds ?? []), step.id]),
+      decision: existing?.decision ?? "pending",
+      acceptedChapter: existing?.acceptedChapter,
+      useAsSearchSeed: existing?.useAsSearchSeed ?? true,
+    });
+    if (!rejectedKeysSeen.has(key)) {
+      rejectedKeysSeen.add(key);
+      rejectedCandidateCount += 1;
+    }
+  };
+  const pruneRejectedCandidates = (): void => {
+    if (rejectedCandidates.size <= MAX_STORED_REJECTED_CANDIDATES) return;
+    const reviewed = Array.from(rejectedCandidates.values()).filter((candidate) => (
+      candidate.decision !== "pending"
+    ));
+    const availablePendingSlots = Math.max(0, MAX_STORED_REJECTED_CANDIDATES - reviewed.length);
+    const pending = Array.from(rejectedCandidates.values())
+      .filter((candidate) => candidate.decision === "pending")
+      .sort((left, right) => right.score - left.score)
+      .slice(0, availablePendingSlots);
+    rejectedCandidates.clear();
+    [...reviewed, ...pending].forEach((candidate) => rejectedCandidates.set(candidate.key, candidate));
+  };
+  const refreshRejectedCandidateScores = (): void => {
+    rejectedCandidates.forEach((candidate, key) => {
+      const scored = scoreMangaCorrespondenceRejectedCandidate({
+        titleFields: [candidate.analyzedTitle, ...candidate.alternativeTitles],
+        candidateAuthors: candidate.authors,
+        knownTitles,
+        knownAuthors,
+        rejectionReason: candidate.rejectionReason,
+        matchedTerm: candidate.rejectionReason === "chapterMismatch"
+          ? candidate.matchedTerm
+          : undefined,
+      });
+      rejectedCandidates.set(key, {
+        ...candidate,
+        matchedTerm: candidate.matchedTerm || scored.bestKnownTitle,
+        score: scored.score,
+        scoreReasons: scored.reasons,
+      });
+    });
+    pruneRejectedCandidates();
+  };
   const discoverFromSources = async (
     sources: MultiSearchSourceResult[],
     step: MangaCorrespondenceTraceStep,
@@ -298,15 +501,28 @@ export const runMangaCorrespondenceSearch = async (
         knownAuthors,
         romanizedTitleVariantsByKey,
       );
-      if (!analyzed.matchedTerm) return;
+      if (!analyzed.matchedTerm) {
+        storeRejectedCandidate(
+          source,
+          analyzed,
+          analyzed.derivative ? "derivative" : "titleMismatch",
+          step,
+        );
+        return;
+      }
       if (
         input.request === "sameManga"
         && referenceChapter
         && analyzed.chapter
         && !doMangaCorrespondenceChaptersOverlap(referenceChapter, analyzed.chapter)
-      ) return;
+      ) {
+        storeRejectedCandidate(source, analyzed, "chapterMismatch", step);
+        return;
+      }
       const key = buildMultiSearchSourceIdentityKey(source);
+      if (rejectedCandidates.get(key)?.decision === "dismissed") return;
       const existing = matches.get(key);
+      rejectedCandidates.delete(key);
       matches.set(key, {
         key,
         source,
@@ -316,6 +532,7 @@ export const runMangaCorrespondenceSearch = async (
         chapter: analyzed.chapter,
         matchedTerm: analyzed.matchedTerm,
         discoveredByStepIds: uniqueText([...(existing?.discoveredByStepIds ?? []), step.id]),
+        acceptedManually: existing?.acceptedManually,
       });
       accepted += existing ? 0 : 1;
       acceptedSources.push(source);
@@ -341,6 +558,7 @@ export const runMangaCorrespondenceSearch = async (
         addTask({ kind: "title", term: title, parentId: titleStep.id });
       });
     });
+    pruneRejectedCandidates();
     const sourcesRequiringAuthorExtraction = acceptedSources.filter((source) => {
       const key = buildMultiSearchSourceIdentityKey(source);
       if (extractedAuthorSourceKeys.has(key)) return false;
@@ -577,5 +795,14 @@ export const runMangaCorrespondenceSearch = async (
     await emit(task.term);
   }
 
-  return buildResult(input, matches, trace, searchedTitles, searchedAuthors);
+  refreshRejectedCandidateScores();
+  return buildResult(
+    input,
+    matches,
+    rejectedCandidates,
+    rejectedCandidateCount,
+    trace,
+    searchedTitles,
+    searchedAuthors,
+  );
 };

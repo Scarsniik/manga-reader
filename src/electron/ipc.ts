@@ -118,6 +118,12 @@ ipcMain.handle("background-search-update", async (_event: IpcMainInvokeEvent, re
 ipcMain.handle("background-search-complete", async (_event: IpcMainInvokeEvent, request: any) => (
     backgroundSearch.completeBackgroundSearch(request)
 ));
+ipcMain.handle("background-search-save-result", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.saveBackgroundSearchResult(request)
+));
+ipcMain.handle("background-search-continue", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.continueBackgroundSearch(request)
+));
 ipcMain.handle("background-search-fail", async (_event: IpcMainInvokeEvent, jobId: string, error: string) => (
     backgroundSearch.failBackgroundSearch(jobId, error)
 ));

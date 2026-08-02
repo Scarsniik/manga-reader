@@ -92,6 +92,17 @@ export type CompleteBackgroundSearchRequest<TResult = unknown> = {
   result: TResult;
 };
 
+export type SaveBackgroundSearchResultRequest<TResult = unknown> = {
+  jobId: string;
+  result: TResult;
+  resultCount?: number;
+};
+
+export type ContinueBackgroundSearchRequest<TInput = unknown> = {
+  jobId: string;
+  input: TInput;
+};
+
 export type MultiSearchBackgroundInput = {
   query: string;
   scrapers: ScraperRecord[];
@@ -131,13 +142,19 @@ export type MangaCorrespondenceBackgroundInput = {
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
   enableRomajiPhoneticMerge: boolean;
+  continuation?: {
+    passNumber: number;
+    seedCandidateKeys?: string[];
+  };
 };
 
 export type MangaCorrespondenceTraceStepKind =
   | "titleSearch"
   | "titleDiscovered"
   | "authorDiscovered"
-  | "authorSearch";
+  | "authorSearch"
+  | "manualAcceptance"
+  | "passStarted";
 
 export type MangaCorrespondenceTraceStep = {
   id: string;

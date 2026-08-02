@@ -2,6 +2,7 @@ export {
   cancelBackgroundSearch,
   claimBackgroundSearchJob,
   completeBackgroundSearch,
+  continueBackgroundSearch,
   createBackgroundSearch,
   deleteBackgroundSearch,
   failBackgroundSearch,
@@ -9,5 +10,6 @@ export {
   getBackgroundSearchQueue,
   markBackgroundSearchOpened,
   retryBackgroundSearch,
+  saveBackgroundSearchResult,
   updateBackgroundSearch,
 } from "./service";

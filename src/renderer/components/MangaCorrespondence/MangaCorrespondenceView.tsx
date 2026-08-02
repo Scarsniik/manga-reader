@@ -4,6 +4,7 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import type {
   MangaCorrespondenceBackgroundResult,
   MangaCorrespondenceMatch,
+  MangaCorrespondenceRejectedCandidate,
 } from "@/renderer/backgroundSearch/types";
 import type { MangaCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
@@ -55,11 +56,20 @@ import {
   isClearlyDerivativeMangaCorrespondenceTitle,
   stripMangaCorrespondenceTrailingKnownAuthor,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
+import { getMangaCorrespondenceScoreBand } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
+import MangaCorrespondenceRejectedReviewDialog from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceRejectedReviewDialog";
+import {
+  buildMangaCorrespondenceContinuationInput,
+  countAcceptedMangaCorrespondenceRejections,
+  getEffectiveMangaCorrespondenceMatches,
+  updateMangaCorrespondenceRejectedReview,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
 type Props = { backgroundSearchJobId?: string; resultOnly?: boolean };
 type DisplayMode = "mergedChapters" | "groupedChapters" | "classic";
+type RejectedFilter = "likely" | "possible" | "all" | "accepted" | "dismissed";
 type ChapterMatchGroup = {
   chapter: string;
   matches: MangaCorrespondenceMatch[];
@@ -68,6 +78,14 @@ type ChapterCardGroup = {
   chapter: string;
   cards: MultiSearchMergedResult[];
 };
+type RejectedCardGroup = {
+  result: MultiSearchMergedResult;
+  candidates: MangaCorrespondenceRejectedCandidate[];
+  score: number;
+};
+
+const REJECTED_RESULTS_PAGE_SIZE = 24;
+const EMPTY_REJECTED_CANDIDATES: MangaCorrespondenceRejectedCandidate[] = [];
 
 const EMPTY_PROGRESS_INDEX: MultiSearchProgressIndex = {
   recordsById: new Map(),
@@ -111,7 +129,7 @@ const buildChapterCard = (
 };
 
 export default function MangaCorrespondenceView({ backgroundSearchJobId, resultOnly = false }: Props) {
-  const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
+  const { job, loading, error, cancel, reload } = useBackgroundSearchJob(backgroundSearchJobId);
   const { params } = useParams();
   const { openModal, closeModal } = useModal();
   const [displayMode, setDisplayMode] = useState<DisplayMode>("mergedChapters");
@@ -119,6 +137,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const [excludedReadingListChapters, setExcludedReadingListChapters] = useState<Set<string>>(
     () => new Set(),
   );
+  const [rejectedFilter, setRejectedFilter] = useState<RejectedFilter>("all");
+  const [rejectedVisibleLimit, setRejectedVisibleLimit] = useState(REJECTED_RESULTS_PAGE_SIZE);
+  const [continuing, setContinuing] = useState(false);
+  const [rejectedActionError, setRejectedActionError] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
@@ -127,11 +149,18 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     enableRomajiPhoneticMerge: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
   }), [params?.multiSearchMergedTitleLanguagePriority]);
+  const effectiveMatches = useMemo(
+    () => getEffectiveMangaCorrespondenceMatches(
+      result,
+      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    ),
+    [input?.reference.title, job?.metadata.primaryTerm, result],
+  );
   const eligibleMatches = useMemo(
-    () => (result?.matches ?? []).filter((match) => (
+    () => effectiveMatches.filter((match) => (
       !isClearlyDerivativeMangaCorrespondenceTitle(match.source.result.title)
     )),
-    [result?.matches],
+    [effectiveMatches],
   );
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
@@ -150,7 +179,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         input?.reference.title ?? "",
         ...(input?.reference.alternativeTitles ?? []),
       ]);
-      const chapter = titleAnalysis.chapter || inferredFirstChapter || "Non renseigné";
+      const chapter = match.chapter || titleAnalysis.chapter || inferredFirstChapter || "Non renseigné";
       byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())
@@ -218,10 +247,67 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     () => filterMultiSearchMergedResultsByLanguage(chapterCards, languageFilterModes),
     [chapterCards, languageFilterModes],
   );
+  const rejectedCandidates = result?.rejectedCandidates ?? EMPTY_REJECTED_CANDIDATES;
+  const rejectedCounts = useMemo(() => ({
+    likely: rejectedCandidates.filter((candidate) => (
+      candidate.decision === "pending" && getMangaCorrespondenceScoreBand(candidate.score) === "likely"
+    )).length,
+    possible: rejectedCandidates.filter((candidate) => (
+      candidate.decision === "pending" && getMangaCorrespondenceScoreBand(candidate.score) === "possible"
+    )).length,
+    all: rejectedCandidates.filter((candidate) => candidate.decision === "pending").length,
+    accepted: rejectedCandidates.filter((candidate) => candidate.decision === "accepted").length,
+    dismissed: rejectedCandidates.filter((candidate) => candidate.decision === "dismissed").length,
+  }), [rejectedCandidates]);
+  const filteredRejectedCandidates = useMemo(() => rejectedCandidates.filter((candidate) => {
+    if (rejectedFilter === "accepted") return candidate.decision === "accepted";
+    if (rejectedFilter === "dismissed") return candidate.decision === "dismissed";
+    if (candidate.decision !== "pending") return false;
+    if (rejectedFilter === "all") return true;
+    return getMangaCorrespondenceScoreBand(candidate.score) === rejectedFilter;
+  }), [rejectedCandidates, rejectedFilter]);
+  const rejectedCardGroups = useMemo<RejectedCardGroup[]>(() => {
+    const candidatesBySourceKey = new Map(filteredRejectedCandidates.map((candidate) => (
+      [buildMultiSearchSourceIdentityKey(candidate.source), candidate]
+    )));
+    const merged = mergeMultiSearchResults(
+      filteredRejectedCandidates.map((candidate) => candidate.source),
+      mergeOptions,
+    );
+    return filterMultiSearchMergedResultsByLanguage(merged, languageFilterModes).map((mergedResult) => {
+      const candidates = mergedResult.sources.flatMap((source) => {
+        const candidate = candidatesBySourceKey.get(buildMultiSearchSourceIdentityKey(source));
+        return candidate ? [candidate] : [];
+      });
+      return {
+        result: mergedResult,
+        candidates,
+        score: Math.max(0, ...candidates.map((candidate) => candidate.score)),
+      };
+    }).filter((group) => group.candidates.length > 0).sort((left, right) => (
+      right.score - left.score
+      || left.result.title.localeCompare(right.result.title)
+    ));
+  }, [filteredRejectedCandidates, languageFilterModes, mergeOptions]);
+  const visibleRejectedCardGroups = rejectedCardGroups.slice(0, rejectedVisibleLimit);
+  const acceptedRejectedCount = countAcceptedMangaCorrespondenceRejections(result);
+  const acceptedSearchSeedCount = rejectedCandidates.filter((candidate) => (
+    candidate.decision === "accepted"
+    && candidate.useAsSearchSeed
+    && candidate.searchSeedUsedInPass === undefined
+  )).length;
 
   useEffect(() => {
     setExcludedReadingListChapters(new Set());
+    setRejectedFilter("all");
+    setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
+    setRejectedActionError(null);
+    setContinuing(false);
   }, [backgroundSearchJobId]);
+
+  useEffect(() => {
+    setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
+  }, [rejectedFilter]);
 
   const toggleReadingListChapter = (chapter: string) => {
     setExcludedReadingListChapters((current) => (
@@ -261,6 +347,75 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       mangaUrl: sourceUrl,
       bookmarksFilterScraperId: null,
     }) });
+  };
+  const persistRejectedReview = async (
+    candidates: MangaCorrespondenceRejectedCandidate[],
+    decision: MangaCorrespondenceRejectedCandidate["decision"],
+    chapter?: string,
+    useAsSearchSeed = true,
+  ): Promise<void> => {
+    if (!result || !backgroundSearchJobId) {
+      throw new Error("Le résultat de cette recherche n’est plus disponible.");
+    }
+    const nextResult = updateMangaCorrespondenceRejectedReview(result, {
+      candidateKeys: candidates.map((candidate) => candidate.key),
+      decision,
+      chapter,
+      useAsSearchSeed,
+    });
+    const resultCount = getEffectiveMangaCorrespondenceMatches(
+      nextResult,
+      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    ).length;
+    const saved = await window.api?.saveBackgroundSearchResult?.({
+      jobId: backgroundSearchJobId,
+      result: nextResult,
+      resultCount,
+    });
+    if (!saved) throw new Error("La décision n’a pas pu être enregistrée.");
+    closeModal();
+    await reload();
+  };
+  const openRejectedReview = (group: RejectedCardGroup) => {
+    openModal({
+      title: "Examiner une proposition écartée",
+      className: "manga-correspondence-rejected-modal",
+      content: (
+        <MangaCorrespondenceRejectedReviewDialog
+          candidates={group.candidates}
+          onCancel={closeModal}
+          onOpenSource={(candidate) => openSource(candidate.source, true)}
+          onDismiss={() => persistRejectedReview(group.candidates, "dismissed")}
+          onAccept={(chapter, useAsSearchSeed) => persistRejectedReview(
+            group.candidates,
+            "accepted",
+            chapter,
+            useAsSearchSeed,
+          )}
+        />
+      ),
+    });
+  };
+  const continueCorrespondenceSearch = async () => {
+    if (!backgroundSearchJobId || !input || !result || !acceptedSearchSeedCount) return;
+    setContinuing(true);
+    setRejectedActionError(null);
+    try {
+      const continued = await window.api?.continueBackgroundSearch?.({
+        jobId: backgroundSearchJobId,
+        input: buildMangaCorrespondenceContinuationInput(input, result),
+      });
+      if (!continued) throw new Error("La deuxième passe n’a pas pu être lancée.");
+      await reload();
+    } catch (continueError) {
+      setRejectedActionError(
+        continueError instanceof Error
+          ? continueError.message
+          : "La deuxième passe n’a pas pu être lancée.",
+      );
+    } finally {
+      setContinuing(false);
+    }
   };
   const createReadingList = async (
     items: ReadingListItem[],
@@ -395,6 +550,43 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       })}
     </div>
   );
+  const renderRejectedCards = (groups: RejectedCardGroup[]) => (
+    <div className="manga-correspondence-view__results manga-correspondence-view__rejected-grid">
+      {groups.map((group) => {
+        const decision = group.candidates[0]?.decision ?? "pending";
+        return (
+          <div
+            key={group.result.id}
+            className={`manga-correspondence-view__rejected-card is-${decision}`}
+          >
+            <MultiSearchResultCard
+              result={group.result}
+              libraryMangas={[]}
+              bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
+              sourceProgressIndex={EMPTY_PROGRESS_INDEX}
+              viewHistoryRecordsById={EMPTY_HISTORY}
+              newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
+              viewHistoryRecordingDisabled
+              onOpenSource={(source) => openSource(source)}
+              onOpenSourceInWorkspace={(source) => openSource(source, true)}
+              onOpenProgressReader={() => undefined}
+              onSetSourcesRead={() => undefined}
+            />
+            <button
+              type="button"
+              className={`manga-correspondence-view__rejected-score is-${getMangaCorrespondenceScoreBand(group.score)}`}
+              onClick={() => openRejectedReview(group)}
+              disabled={job?.metadata.status !== "completed"}
+              aria-label={`Examiner cette proposition, score ${group.score} sur 100`}
+            >
+              <strong>{group.score}</strong>
+              <span>{decision === "accepted" ? "Acceptée" : decision === "dismissed" ? "Écartée" : "Examiner"}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
@@ -413,7 +605,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         <div>
           <p className="manga-correspondence-view__eyebrow">Recherche intelligente</p>
           <h2>{job.metadata.primaryTerm}</h2>
-          <p>{displayedCardCount} card(s) · {eligibleMatches.length} source(s) · {active ? "Recherche en cours" : "Recherche terminée"}</p>
+          <p>{displayedCardCount} card(s) · {eligibleMatches.length} source(s) · Passe {result?.passNumber ?? 1} · {active ? "Recherche en cours" : "Recherche terminée"}</p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}
@@ -452,7 +644,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           onToggleFilterMode={toggleLanguageFilter}
         />
       </div>
-      {active && !result?.matches.length ? (
+      {active && !eligibleMatches.length ? (
         <div className="empty">La recherche est en cours. Les correspondances apparaîtront ici dès qu’elles seront trouvées.</div>
       ) : displayMode === "groupedChapters" ? (
         visibleGroupedChapterCards.length
@@ -461,6 +653,81 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       ) : displayedCards.length ? renderCards(displayedCards, displayMode === "mergedChapters") : (
         <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
       )}
+      {(result?.rejectedCandidateCount ?? 0) > 0 || rejectedCandidates.length > 0 ? (
+        <details className="manga-correspondence-view__rejected">
+          <summary>
+            <span>Propositions écartées</span>
+            <strong>{rejectedCounts.all} à examiner</strong>
+            <small>
+              {rejectedCandidates.length} conservée(s) sur {result?.rejectedCandidateCount ?? rejectedCandidates.length} candidate(s) analysée(s)
+            </small>
+          </summary>
+          <div className="manga-correspondence-view__rejected-content">
+            {acceptedRejectedCount ? (
+              <div className="manga-correspondence-view__second-pass">
+                <div>
+                  <strong>{acceptedRejectedCount} proposition(s) acceptée(s)</strong>
+                  <span>{acceptedSearchSeedCount} nouvelle(s) piste(s) prête(s) à être explorée(s)</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={active || continuing || acceptedSearchSeedCount === 0}
+                  onClick={() => void continueCorrespondenceSearch()}
+                >
+                  {active && (result?.passNumber ?? 1) > 1
+                    ? `Passe ${result?.passNumber} en cours…`
+                    : continuing
+                      ? "Lancement…"
+                      : acceptedSearchSeedCount === 0
+                        ? "Pistes déjà explorées"
+                        : `Lancer la passe ${(result?.passNumber ?? 1) + 1}`}
+                </button>
+              </div>
+            ) : null}
+            {rejectedActionError ? (
+              <p className="manga-correspondence-view__rejected-error">{rejectedActionError}</p>
+            ) : null}
+            <div className="manga-correspondence-view__rejected-filters" aria-label="Filtrer les propositions écartées">
+              {([
+                ["likely", "Très probables", rejectedCounts.likely],
+                ["possible", "Possibles", rejectedCounts.possible],
+                ["all", "Toutes", rejectedCounts.all],
+                ["accepted", "Acceptées", rejectedCounts.accepted],
+                ["dismissed", "Écartées", rejectedCounts.dismissed],
+              ] as Array<[RejectedFilter, string, number]>).map(([filter, label, count]) => (
+                <button
+                  type="button"
+                  key={filter}
+                  className={rejectedFilter === filter ? "is-active" : ""}
+                  onClick={() => setRejectedFilter(filter)}
+                >
+                  {label} <span>{count}</span>
+                </button>
+              ))}
+            </div>
+            {active ? (
+              <p className="manga-correspondence-view__rejected-hint">
+                Les propositions continuent d’être classées. Leur examen sera disponible à la fin de la passe.
+              </p>
+            ) : null}
+            {visibleRejectedCardGroups.length ? renderRejectedCards(visibleRejectedCardGroups) : (
+              <div className="empty">Aucune proposition dans cette catégorie.</div>
+            )}
+            {visibleRejectedCardGroups.length < rejectedCardGroups.length ? (
+              <button
+                type="button"
+                className="manga-correspondence-view__rejected-more"
+                onClick={() => setRejectedVisibleLimit((current) => current + REJECTED_RESULTS_PAGE_SIZE)}
+              >
+                Afficher {Math.min(
+                  REJECTED_RESULTS_PAGE_SIZE,
+                  rejectedCardGroups.length - visibleRejectedCardGroups.length,
+                )} proposition(s) de plus
+              </button>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

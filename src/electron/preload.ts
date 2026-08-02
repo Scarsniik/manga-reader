@@ -36,7 +36,9 @@ import type { JapaneseInflectionRequest } from "../shared/japaneseInflection";
 import type {
     BackgroundSearchChangeEvent,
     CompleteBackgroundSearchRequest,
+    ContinueBackgroundSearchRequest,
     CreateBackgroundSearchRequest,
+    SaveBackgroundSearchResultRequest,
     UpdateBackgroundSearchRequest,
 } from "../shared/backgroundSearch";
 import type {
@@ -343,6 +345,8 @@ contextBridge.exposeInMainWorld('api', {
     claimBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-claim", jobId),
     updateBackgroundSearch: (request: UpdateBackgroundSearchRequest) => ipcRenderer.invoke("background-search-update", request),
     completeBackgroundSearch: (request: CompleteBackgroundSearchRequest) => ipcRenderer.invoke("background-search-complete", request),
+    saveBackgroundSearchResult: (request: SaveBackgroundSearchResultRequest) => ipcRenderer.invoke("background-search-save-result", request),
+    continueBackgroundSearch: (request: ContinueBackgroundSearchRequest) => ipcRenderer.invoke("background-search-continue", request),
     failBackgroundSearch: (jobId: string, error: string) => ipcRenderer.invoke("background-search-fail", jobId, error),
     cancelBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-cancel", jobId),
     retryBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-retry", jobId),

@@ -48,6 +48,7 @@ import type {
   BackgroundListingRun,
   BackgroundSearchExecutionResult,
   ListingBackgroundResult,
+  MangaCorrespondenceBackgroundResult,
   MultiSearchBackgroundResult,
 } from "@/renderer/backgroundSearch/types";
 import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
@@ -608,6 +609,9 @@ export const executeBackgroundSearch = async (
       job.input as MangaCorrespondenceBackgroundInput,
       signal,
       onSnapshot,
+      job.result && "matches" in (job.result as BackgroundSearchExecutionResult)
+        ? job.result as MangaCorrespondenceBackgroundResult
+        : undefined,
     ),
     authorCorrespondence: () => runAuthorCorrespondenceSearch(
       job.input as AuthorCorrespondenceBackgroundInput,

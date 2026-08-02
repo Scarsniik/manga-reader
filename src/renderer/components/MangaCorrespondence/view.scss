@@ -674,6 +674,359 @@
   color: #dda4a4;
 }
 
+.manga-correspondence-view__rejected {
+  overflow: hidden;
+  border: 1px solid #34302a;
+  border-radius: 14px;
+  background: #10100f;
+}
+
+.manga-correspondence-view__rejected > summary {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 15px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.manga-correspondence-view__rejected > summary::marker {
+  color: #d7a956;
+}
+
+.manga-correspondence-view__rejected > summary span {
+  color: #f0e5d1;
+  font-weight: 800;
+}
+
+.manga-correspondence-view__rejected > summary strong {
+  color: #e6bb70;
+  font-size: 12px;
+}
+
+.manga-correspondence-view__rejected > summary small {
+  justify-self: end;
+  color: #8f8a80;
+}
+
+.manga-correspondence-view__rejected[open] > summary {
+  border-bottom: 1px solid #34302a;
+}
+
+.manga-correspondence-view__rejected-content {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.manga-correspondence-view__second-pass {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(88, 185, 135, .36);
+  border-radius: 11px;
+  background: rgba(88, 185, 135, .08);
+}
+
+.manga-correspondence-view__second-pass > div {
+  display: grid;
+  gap: 3px;
+}
+
+.manga-correspondence-view__second-pass span {
+  color: #9fb1a7;
+  font-size: 12px;
+}
+
+.manga-correspondence-view__second-pass button,
+.manga-correspondence-view__rejected-more,
+.manga-correspondence-view__rejected-filters button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #3a3a38;
+  border-radius: 8px;
+  background: #191918;
+  color: #ddd;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manga-correspondence-view__second-pass button {
+  border-color: rgba(88, 185, 135, .5);
+  background: rgba(88, 185, 135, .14);
+  color: #d8ffe9;
+}
+
+.manga-correspondence-view__second-pass button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.manga-correspondence-view__rejected-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.manga-correspondence-view__rejected-filters button span {
+  margin-left: 4px;
+  color: #999;
+}
+
+.manga-correspondence-view__rejected-filters button.is-active {
+  border-color: rgba(217, 169, 86, .62);
+  background: rgba(217, 169, 86, .14);
+  color: #ffe8bd;
+}
+
+.manga-correspondence-view__rejected-hint,
+.manga-correspondence-view__rejected-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(217, 169, 86, .08);
+  color: #c9b58f;
+  font-size: 12px;
+}
+
+.manga-correspondence-view__rejected-error {
+  background: rgba(214, 98, 98, .1);
+  color: #efb2b2;
+}
+
+.manga-correspondence-view__rejected-card {
+  position: relative;
+  min-width: 0;
+}
+
+.manga-correspondence-view__rejected-card > .scraper-card {
+  outline: 1px solid rgba(217, 169, 86, .28);
+  outline-offset: -1px;
+}
+
+.manga-correspondence-view__rejected-card.is-accepted > .scraper-card {
+  outline-color: rgba(88, 185, 135, .48);
+}
+
+.manga-correspondence-view__rejected-card.is-dismissed > .scraper-card {
+  opacity: .56;
+  filter: saturate(.5);
+}
+
+.manga-correspondence-view__rejected-score {
+  position: absolute;
+  z-index: 4;
+  top: 9px;
+  left: 9px;
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid rgba(217, 169, 86, .55);
+  border-radius: 999px;
+  background: rgba(19, 17, 13, .94);
+  color: #ffe3ae;
+  font: inherit;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .34);
+  cursor: pointer;
+}
+
+.manga-correspondence-view__rejected-score strong {
+  font-size: 13px;
+}
+
+.manga-correspondence-view__rejected-score span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.manga-correspondence-view__rejected-score.is-likely {
+  border-color: rgba(88, 185, 135, .68);
+  color: #c9f4db;
+}
+
+.manga-correspondence-view__rejected-score.is-distant {
+  border-color: rgba(140, 140, 140, .48);
+  color: #c6c6c6;
+}
+
+.manga-correspondence-view__rejected-score:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.manga-correspondence-view__rejected-more {
+  justify-self: center;
+}
+
+.manga-correspondence-rejected-modal {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.manga-correspondence-rejected-dialog {
+  display: grid;
+  gap: 14px;
+  color: #e8e8e8;
+}
+
+.manga-correspondence-rejected-dialog__score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(217, 169, 86, .4);
+  border-radius: 10px;
+  background: rgba(217, 169, 86, .08);
+}
+
+.manga-correspondence-rejected-dialog__score strong {
+  color: #ffe1a8;
+  font-size: 22px;
+}
+
+.manga-correspondence-rejected-dialog__score span,
+.manga-correspondence-rejected-dialog__summary span,
+.manga-correspondence-rejected-dialog__field small {
+  color: #9e9e9e;
+  font-size: 12px;
+}
+
+.manga-correspondence-rejected-dialog__summary {
+  display: grid;
+  gap: 8px;
+}
+
+.manga-correspondence-rejected-dialog__summary > div {
+  display: grid;
+  gap: 2px;
+}
+
+.manga-correspondence-rejected-dialog__summary strong {
+  line-height: 1.35;
+}
+
+.manga-correspondence-rejected-dialog__reasons {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+  color: #c7c7c7;
+  font-size: 13px;
+}
+
+.manga-correspondence-rejected-dialog__field {
+  display: grid;
+  gap: 6px;
+}
+
+.manga-correspondence-rejected-dialog__field > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 750;
+}
+
+.manga-correspondence-rejected-dialog__field input {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #393939;
+  border-radius: 8px;
+  background: #121212;
+  color: #ededed;
+  font: inherit;
+}
+
+.manga-correspondence-rejected-dialog__seed {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #d2d2d2;
+  font-size: 13px;
+}
+
+.manga-correspondence-rejected-dialog__sources {
+  display: grid;
+  max-height: 210px;
+  gap: 7px;
+  overflow: auto;
+}
+
+.manga-correspondence-rejected-dialog__sources button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  background: #141414;
+  color: #ddd;
+  text-align: left;
+  cursor: pointer;
+}
+
+.manga-correspondence-rejected-dialog__sources strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manga-correspondence-rejected-dialog__sources span,
+.manga-correspondence-rejected-dialog__sources small {
+  color: #949494;
+  font-size: 11px;
+}
+
+.manga-correspondence-rejected-dialog__error {
+  margin: 0;
+  color: #ef9b9b;
+}
+
+.manga-correspondence-rejected-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.manga-correspondence-rejected-dialog__actions button {
+  min-height: 37px;
+  padding: 0 14px;
+  border: 1px solid rgba(93, 156, 255, .45);
+  border-radius: 8px;
+  background: rgba(93, 156, 255, .14);
+  color: #e6f0ff;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manga-correspondence-rejected-dialog__actions button.secondary {
+  border-color: #383838;
+  background: #191919;
+  color: #d7d7d7;
+}
+
+.manga-correspondence-rejected-dialog__actions button.danger {
+  border-color: rgba(214, 98, 98, .42);
+  background: rgba(214, 98, 98, .1);
+  color: #ffcaca;
+}
+
+.manga-correspondence-rejected-dialog__actions button:disabled {
+  opacity: .5;
+  cursor: wait;
+}
+
 @media (max-width: 680px) {
   .manga-correspondence-view { padding: 10px; }
   .manga-correspondence-view__summary { align-items: flex-start; padding: 15px; }
@@ -681,5 +1034,9 @@
   .manga-correspondence-view__controls > * { width: 100%; }
   .manga-correspondence-view__chapter-group-header { align-items: flex-start; }
   .manga-correspondence-view__chapter-group-header > div { display: grid; gap: 3px; }
+  .manga-correspondence-view__rejected > summary { grid-template-columns: 1fr auto; }
+  .manga-correspondence-view__rejected > summary small { grid-column: 1 / -1; justify-self: start; }
+  .manga-correspondence-view__second-pass { align-items: stretch; flex-direction: column; }
+  .manga-correspondence-rejected-dialog__sources button { grid-template-columns: 1fr; }
   .manga-correspondence-reading-list-dialog__source-control { grid-template-columns: 1fr; }
 }

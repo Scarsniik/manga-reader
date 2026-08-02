@@ -42,11 +42,41 @@ export type MangaCorrespondenceMatch = {
   chapter?: string;
   matchedTerm: string;
   discoveredByStepIds: string[];
+  acceptedManually?: boolean;
+};
+
+export type MangaCorrespondenceRejectionReason =
+  | "titleMismatch"
+  | "chapterMismatch"
+  | "derivative";
+
+export type MangaCorrespondenceRejectedDecision = "pending" | "accepted" | "dismissed";
+
+export type MangaCorrespondenceRejectedCandidate = {
+  key: string;
+  source: MultiSearchSourceResult;
+  analyzedTitle: string;
+  alternativeTitles: string[];
+  authors: string[];
+  suggestedChapter?: string;
+  chapterConfidence: "high" | "medium" | "low";
+  matchedTerm?: string;
+  rejectionReason: MangaCorrespondenceRejectionReason;
+  score: number;
+  scoreReasons: string[];
+  discoveredByStepIds: string[];
+  decision: MangaCorrespondenceRejectedDecision;
+  acceptedChapter?: string;
+  useAsSearchSeed: boolean;
+  searchSeedUsedInPass?: number;
 };
 
 export type MangaCorrespondenceBackgroundResult = {
   request: MangaCorrespondenceRequest;
   matches: MangaCorrespondenceMatch[];
+  rejectedCandidates: MangaCorrespondenceRejectedCandidate[];
+  rejectedCandidateCount: number;
+  passNumber: number;
   trace: MangaCorrespondenceTraceStep[];
   searchedTitles: string[];
   searchedAuthors: string[];

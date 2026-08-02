@@ -28,6 +28,10 @@ const source = `
   export { stripMangaCorrespondenceTrailingKnownAuthor } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
   export { buildMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
   export { parseMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
+  export { scoreMangaCorrespondenceRejectedCandidate } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
+  export { buildMangaCorrespondenceContinuationInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
+  export { getEffectiveMangaCorrespondenceMatches } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
+  export { updateMangaCorrespondenceRejectedReview } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -69,6 +73,10 @@ const {
   stripMangaCorrespondenceTrailingKnownAuthor,
   buildMangaCorrespondenceTitleInput,
   parseMangaCorrespondenceTitleInput,
+  scoreMangaCorrespondenceRejectedCandidate,
+  buildMangaCorrespondenceContinuationInput,
+  getEffectiveMangaCorrespondenceMatches,
+  updateMangaCorrespondenceRejectedReview,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -823,6 +831,96 @@ test("invalidated correspondence chapters are omitted without mutating the searc
   assert.deepEqual(Array.from(initialExclusions), ["2"]);
   assert.deepEqual(Array.from(withChapterThreeExcluded), ["2", "3"]);
   assert.deepEqual(Array.from(withChapterTwoRestored), ["3"]);
+});
+
+test("rejected correspondence scoring surfaces a partially translated title from the same author", () => {
+  const scored = scoreMangaCorrespondenceRejectedCandidate({
+    titleFields: [
+      "Kinjo Yuuwaku white rose Oba-san no Himeta, Ero Shitagi Hen",
+    ],
+    candidateAuthors: ["Hyji"],
+    knownTitles: ["Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta"],
+    knownAuthors: ["Hyji"],
+    rejectionReason: "titleMismatch",
+  });
+
+  assert.ok(scored.score >= 75, `expected a likely score, received ${scored.score}`);
+  assert.ok(scored.reasons.includes("Auteur identique"));
+  assert.ok(scored.reasons.some((reason) => reason.includes("traduit")));
+});
+
+test("rejected correspondence scoring keeps another work by the same author below likely", () => {
+  const scored = scoreMangaCorrespondenceRejectedCandidate({
+    titleFields: ["Boku ga Okaa-san to Konna Koto ni Nacchau Hanashi 11"],
+    candidateAuthors: ["Hyji"],
+    knownTitles: ["Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta"],
+    knownAuthors: ["Hyji"],
+    rejectionReason: "titleMismatch",
+  });
+
+  assert.ok(scored.score < 75, `expected a non-likely score, received ${scored.score}`);
+});
+
+test("accepted rejected candidates join the effective results with the reviewed chapter", () => {
+  const source = buildMergeSource(
+    "Kinjo Yuuwaku white rose Oba-san no Himeta, Ero Shitagi Hen",
+    "en",
+    "https://example.test/rejected",
+    "https://example.test/rejected.jpg",
+  );
+  const initial = {
+    request: "otherChapters",
+    matches: [],
+    rejectedCandidates: [{
+      key: "rejected-1",
+      source,
+      analyzedTitle: source.result.title,
+      alternativeTitles: [],
+      authors: ["Hyji"],
+      suggestedChapter: "1",
+      chapterConfidence: "low",
+      rejectionReason: "titleMismatch",
+      score: 84,
+      scoreReasons: ["Auteur identique"],
+      discoveredByStepIds: ["step-1"],
+      decision: "pending",
+      useAsSearchSeed: true,
+    }],
+    rejectedCandidateCount: 1,
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: [],
+  };
+  const reviewed = updateMangaCorrespondenceRejectedReview(initial, {
+    candidateKeys: ["rejected-1"],
+    decision: "accepted",
+    chapter: "3",
+    useAsSearchSeed: true,
+  });
+  const matches = getEffectiveMangaCorrespondenceMatches(reviewed, "Reference");
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].chapter, "3");
+  assert.equal(matches[0].acceptedManually, true);
+  assert.equal(reviewed.rejectedCandidates[0].decision, "accepted");
+});
+
+test("a continuation increments the pass without mutating the original input", () => {
+  const input = { reference: { title: "Reference" } };
+  const result = {
+    passNumber: 2,
+    rejectedCandidates: [
+      { key: "new", decision: "accepted", useAsSearchSeed: true },
+      { key: "used", decision: "accepted", useAsSearchSeed: true, searchSeedUsedInPass: 2 },
+      { key: "display-only", decision: "accepted", useAsSearchSeed: false },
+    ],
+  };
+  const continuation = buildMangaCorrespondenceContinuationInput(input, result);
+
+  assert.equal(continuation.continuation.passNumber, 3);
+  assert.deepEqual(continuation.continuation.seedCandidateKeys, ["new"]);
+  assert.equal(input.continuation, undefined);
 });
 
 const buildMergeSource = (title, languageCode, detailUrl, thumbnailUrl) => ({
