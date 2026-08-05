@@ -60,12 +60,19 @@ import {
 } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 import { getMangaCorrespondenceScoreBand } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
 import MangaCorrespondenceRejectedReviewDialog from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceRejectedReviewDialog";
+import MangaCorrespondenceChapterEditDialog, {
+  type MangaCorrespondenceChapterEditEntry,
+} from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceChapterEditDialog";
 import {
   buildMangaCorrespondenceContinuationInput,
   countAcceptedMangaCorrespondenceRejections,
   getEffectiveMangaCorrespondenceMatches,
   updateMangaCorrespondenceRejectedReview,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
+import {
+  resetMangaCorrespondenceChapterOverrides,
+  updateMangaCorrespondenceChapterOverrides,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -84,6 +91,11 @@ type RejectedCardGroup = {
   result: MultiSearchMergedResult;
   candidates: MangaCorrespondenceRejectedCandidate[];
   score: number;
+};
+type MatchChapterResolution = {
+  detectedChapter: string;
+  effectiveChapter: string;
+  detection: ReturnType<typeof analyzeMangaCorrespondenceTitle>["chapterDetection"];
 };
 
 const REJECTED_RESULTS_PAGE_SIZE = 24;
@@ -166,16 +178,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     )),
     [effectiveMatches],
   );
-  const eligibleMatches = useMemo(
-    () => correspondenceMatches.filter((match) => (
-      !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(match.source))
-    )),
-    [correspondenceMatches, excludedSourceKeys],
-  );
-  const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
-  const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
-  const allChapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
-    const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
+  const chapterResolutionByMatchKey = useMemo(() => {
+    const resolutions = new Map<string, MatchChapterResolution>();
     correspondenceMatches.forEach((match) => {
       const titleAnalysis = analyzeMangaCorrespondenceTitle(
         stripMangaCorrespondenceTrailingKnownAuthor(
@@ -189,22 +193,63 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         input?.reference.title ?? "",
         ...(input?.reference.alternativeTitles ?? []),
       ]);
-      const chapter = resolveMangaCorrespondenceMatchChapter(
+      const preferAnalyzedChapter = titleAnalysis.chapterDetection?.source === "compoundTitle"
+        || titleAnalysis.chapterDetection?.source === "explicitVolume";
+      const detectedChapter = resolveMangaCorrespondenceMatchChapter(
         match.chapter,
         titleAnalysis.chapter,
         inferredFirstChapter,
         match.acceptedManually,
+        undefined,
+        preferAnalyzedChapter,
       );
+      resolutions.set(match.key, {
+        detectedChapter,
+        effectiveChapter: resolveMangaCorrespondenceMatchChapter(
+          match.chapter,
+          titleAnalysis.chapter,
+          inferredFirstChapter,
+          match.acceptedManually,
+          match.chapterOverride?.value,
+          preferAnalyzedChapter,
+        ),
+        detection: titleAnalysis.chapterDetection,
+      });
+    });
+    return resolutions;
+  }, [
+    correspondenceMatches,
+    input?.reference.alternativeTitles,
+    input?.reference.authors,
+    input?.reference.title,
+  ]);
+  const correspondenceMatchBySourceKey = useMemo(() => new Map(
+    correspondenceMatches.map((match) => [
+      buildMultiSearchSourceIdentityKey(match.source),
+      match,
+    ]),
+  ), [correspondenceMatches]);
+  const eligibleMatches = useMemo(
+    () => correspondenceMatches.filter((match) => (
+      !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(match.source))
+    )),
+    [correspondenceMatches, excludedSourceKeys],
+  );
+  const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
+  const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
+  const allChapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
+    const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
+    correspondenceMatches.forEach((match) => {
+      const chapter = chapterResolutionByMatchKey.get(match.key)?.effectiveChapter
+        ?? "Non renseigné";
       byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
     });
     return Array.from(byChapter.entries())
       .sort(([left], [right]) => compareMangaCorrespondenceChapters(left, right))
       .map(([chapter, matches]) => ({ chapter, matches }));
   }, [
+    chapterResolutionByMatchKey,
     correspondenceMatches,
-    input?.reference.alternativeTitles,
-    input?.reference.authors,
-    input?.reference.title,
   ]);
   const chapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => (
     allChapterMatchGroups.flatMap((group) => {
@@ -392,6 +437,90 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       bookmarksFilterScraperId: null,
     }) });
   };
+  const persistChapterOverrides = async (
+    matches: MangaCorrespondenceMatch[],
+    mode: "match" | "group",
+    value: string | null,
+    replaceMatchOverrides: boolean,
+  ): Promise<void> => {
+    if (!result || !backgroundSearchJobId) {
+      throw new Error("Le résultat de cette recherche n’est plus disponible.");
+    }
+    const nextResult = updateMangaCorrespondenceChapterOverrides(result, {
+      matchKeys: matches.map((match) => match.key),
+      value,
+      scope: mode,
+      preserveMatchOverrides: mode === "group" && !replaceMatchOverrides,
+    });
+    const resultCount = getEffectiveMangaCorrespondenceMatches(
+      nextResult,
+      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    ).length;
+    const saved = await window.api?.saveBackgroundSearchResult?.({
+      jobId: backgroundSearchJobId,
+      result: nextResult,
+      resultCount,
+    });
+    if (!saved) throw new Error("La correction n’a pas pu être enregistrée.");
+    closeModal();
+    await reload();
+  };
+  const resetChapterOverrides = async (
+    matches: MangaCorrespondenceMatch[],
+    mode: "match" | "group",
+  ): Promise<void> => {
+    if (!result || !backgroundSearchJobId) {
+      throw new Error("Le résultat de cette recherche n’est plus disponible.");
+    }
+    const nextResult = resetMangaCorrespondenceChapterOverrides(
+      result,
+      matches.map((match) => match.key),
+      mode,
+    );
+    const saved = await window.api?.saveBackgroundSearchResult?.({
+      jobId: backgroundSearchJobId,
+      result: nextResult,
+      resultCount: correspondenceMatches.length,
+    });
+    if (!saved) throw new Error("La détection automatique n’a pas pu être restaurée.");
+    closeModal();
+    await reload();
+  };
+  const openChapterEditor = (
+    matches: MangaCorrespondenceMatch[],
+    mode: "match" | "group",
+    currentChapter: string,
+  ) => {
+    const entries: MangaCorrespondenceChapterEditEntry[] = matches.map((match) => {
+      const resolution = chapterResolutionByMatchKey.get(match.key);
+      return {
+        key: match.key,
+        rawTitle: match.source.result.title,
+        detectedChapter: resolution?.detectedChapter ?? "Non renseigné",
+        chapterOverride: match.chapterOverride,
+        detection: resolution?.detection,
+      };
+    });
+    openModal({
+      title: mode === "group" ? "Corriger une catégorie" : "Corriger une carte",
+      className: "manga-correspondence-chapter-edit-modal",
+      content: (
+        <MangaCorrespondenceChapterEditDialog
+          mode={mode}
+          entries={entries}
+          currentChapter={currentChapter}
+          onCancel={closeModal}
+          onSave={(value, replaceMatchOverrides) => persistChapterOverrides(
+            matches,
+            mode,
+            value,
+            replaceMatchOverrides,
+          )}
+          onReset={() => resetChapterOverrides(matches, mode)}
+        />
+      ),
+    });
+  };
   const persistRejectedReview = async (
     candidates: MangaCorrespondenceRejectedCandidate[],
     decision: MangaCorrespondenceRejectedCandidate["decision"],
@@ -513,6 +642,14 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           : undefined;
         const sourceKey = source ? buildMultiSearchSourceIdentityKey(source) : undefined;
         const isSourceExcluded = sourceKey ? excludedSourceKeys.has(sourceKey) : false;
+        const editableMatch = sourceKey ? correspondenceMatchBySourceKey.get(sourceKey) : undefined;
+        const editableChapter = editableMatch
+          ? chapterResolutionByMatchKey.get(editableMatch.key)?.effectiveChapter
+          : undefined;
+        const categoryMatches = chapter ? Array.from(new Map(item.sources.flatMap((itemSource) => {
+          const match = correspondenceMatchBySourceKey.get(buildMultiSearchSourceIdentityKey(itemSource));
+          return match ? [[match.key, match] as const] : [];
+        })).values()) : [];
         return (
           <div
             key={item.id}
@@ -528,15 +665,28 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                   {isSourceExcluded
                     ? `${source.scraper.name} · source retirée des résultats`
                     : `${source.scraper.name} · source conservée`}
+                  {editableMatch?.chapterOverride ? " · numéro corrigé" : ""}
                 </span>
-                <button
-                  type="button"
-                  className={isSourceExcluded ? "is-excluded" : ""}
-                  aria-pressed={isSourceExcluded}
-                  onClick={() => toggleSourceExclusion(sourceKey)}
-                >
-                  {isSourceExcluded ? "Réintégrer" : "Retirer"}
-                </button>
+                <div className="manga-correspondence-view__list-preparation-actions">
+                  {editableMatch && editableChapter ? (
+                    <button
+                      type="button"
+                      className="is-correction"
+                      disabled={job?.metadata.status !== "completed"}
+                      onClick={() => openChapterEditor([editableMatch], "match", editableChapter)}
+                    >
+                      Corriger
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={isSourceExcluded ? "is-excluded" : ""}
+                    aria-pressed={isSourceExcluded}
+                    onClick={() => toggleSourceExclusion(sourceKey)}
+                  >
+                    {isSourceExcluded ? "Réintégrer" : "Retirer"}
+                  </button>
+                </div>
               </div>
             ) : chapter ? (
               <div
@@ -550,16 +700,26 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                     ? `Liste de lecture · ${formatMangaCorrespondenceChapterLabel(chapter)}`
                     : "Hors liste · numéro de chapitre non déterminé"}
                 </span>
-                {isReadingListChapter ? (
+                <div className="manga-correspondence-view__list-preparation-actions">
                   <button
                     type="button"
-                    className={isExcluded ? "is-excluded" : ""}
-                    aria-pressed={isExcluded}
-                    onClick={() => toggleReadingListChapter(chapter)}
+                    className="is-correction"
+                    disabled={job?.metadata.status !== "completed" || !categoryMatches.length}
+                    onClick={() => openChapterEditor(categoryMatches, "group", chapter)}
                   >
-                    {isExcluded ? "Réintégrer" : "Invalider"}
+                    Corriger
                   </button>
-                ) : null}
+                  {isReadingListChapter ? (
+                    <button
+                      type="button"
+                      className={isExcluded ? "is-excluded" : ""}
+                      aria-pressed={isExcluded}
+                      onClick={() => toggleReadingListChapter(chapter)}
+                    >
+                      {isExcluded ? "Réintégrer" : "Invalider"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             <MultiSearchResultCard
@@ -596,6 +756,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
             card.sources.length !== 1
             || !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
           ));
+        const groupMatches = Array.from(new Map(cards.flatMap((card) => (
+          card.sources.flatMap((source) => {
+            const match = correspondenceMatchBySourceKey.get(buildMultiSearchSourceIdentityKey(source));
+            return match ? [[match.key, match] as const] : [];
+          })
+        ))).values());
         return (
           <section
             key={chapter}
@@ -614,16 +780,26 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                   {excludedCardCount ? ` · ${excludedCardCount} retirée(s)` : ""}
                 </span>
               </div>
-              {isReadingListChapter ? (
+              <div className="manga-correspondence-view__chapter-group-actions">
                 <button
                   type="button"
-                  className={isExcluded ? "is-excluded" : ""}
-                  aria-pressed={isExcluded}
-                  onClick={() => toggleReadingListChapter(chapter)}
+                  className="is-correction"
+                  disabled={job?.metadata.status !== "completed" || !groupMatches.length}
+                  onClick={() => openChapterEditor(groupMatches, "group", chapter)}
                 >
-                  {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
+                  Corriger la catégorie
                 </button>
-              ) : null}
+                {isReadingListChapter ? (
+                  <button
+                    type="button"
+                    className={isExcluded ? "is-excluded" : ""}
+                    aria-pressed={isExcluded}
+                    onClick={() => toggleReadingListChapter(chapter)}
+                  >
+                    {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
+                  </button>
+                ) : null}
+              </div>
             </header>
             {displayedGroupCards.length ? renderCards(displayedGroupCards, false, true) : (
               <p className="manga-correspondence-view__chapter-group-empty">

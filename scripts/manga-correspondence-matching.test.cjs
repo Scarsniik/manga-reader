@@ -34,6 +34,8 @@ const source = `
   export { buildMangaCorrespondenceContinuationInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
   export { getEffectiveMangaCorrespondenceMatches } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
   export { updateMangaCorrespondenceRejectedReview } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
+  export { updateMangaCorrespondenceChapterOverrides } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
+  export { resetMangaCorrespondenceChapterOverrides } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -81,6 +83,8 @@ const {
   buildMangaCorrespondenceContinuationInput,
   getEffectiveMangaCorrespondenceMatches,
   updateMangaCorrespondenceRejectedReview,
+  updateMangaCorrespondenceChapterOverrides,
+  resetMangaCorrespondenceChapterOverrides,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -330,6 +334,67 @@ test("correspondence parsing tolerates event prefixes and nested release metadat
   assert.deepEqual(compilationResult.suffixTags, ["Digital"]);
 });
 
+test("correspondence parsing recognizes COMITIA and Futaket as event prefixes", () => {
+  const comitia = analyzeMangaCorrespondenceTitle(
+    "(COMITIA151) [Otonano Omochiya (Hirokawa)] Otonano Omochiya 28 [English]",
+    null,
+  );
+  const futaket = analyzeMangaCorrespondenceTitle(
+    "[Futaket 30] [Otonano Omochiya (Hirokawa)] Otonano Omochiya 7",
+    null,
+  );
+
+  for (const result of [comitia, futaket]) {
+    assert.equal(result.title, "Otonano Omochiya");
+    assert.equal(result.circle, "Otonano Omochiya");
+    assert.deepEqual(result.authors, ["Hirokawa"]);
+  }
+  assert.equal(comitia.chapter, "28");
+  assert.equal(futaket.chapter, "7");
+});
+
+test("correspondence parsing keeps the primary number of compound release titles", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Otonano Omochiya (Hirokawa)] Otonano Omochiya 12 Futaba no Ohanashi Matome 2 [English]",
+    null,
+  );
+
+  assert.equal(result.title, "Otonano Omochiya");
+  assert.equal(result.chapter, "12");
+  assert.deepEqual(result.chapterDetection, {
+    source: "compoundTitle",
+    confidence: "medium",
+    secondaryChapter: "2",
+    secondaryLabel: "Futaba no Ohanashi Matome",
+  });
+});
+
+test("correspondence parsing separates multiple creators inside a circle prefix", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Otonano Omochiya (Hirokawa,Yukito)] Otonano Omochiya Vol.13 [Chinese]",
+    null,
+  );
+
+  assert.equal(result.circle, "Otonano Omochiya");
+  assert.deepEqual(result.authors, ["Hirokawa", "Yukito"]);
+  assert.equal(result.chapter, "13");
+});
+
+test("correspondence parsing uses explicit volume and Kan markers as release numbers", () => {
+  const compactVolume = analyzeMangaCorrespondenceTitle("Otonano Omochiya Vol.13", null);
+  const romajiVolume = analyzeMangaCorrespondenceTitle("Otonano Omochiya 3 Kan", null);
+  const japaneseVolume = analyzeMangaCorrespondenceTitle("大人のおもちや6巻", null);
+
+  for (const [result, expectedChapter] of [
+    [compactVolume, "13"],
+    [romajiVolume, "3"],
+    [japaneseVolume, "6"],
+  ]) {
+    assert.equal(result.chapter, expectedChapter);
+    assert.equal(result.chapterDetection?.source, "explicitVolume");
+  }
+});
+
 test("correspondence parsing tolerates alternate titles with punctuated chapters", () => {
   const result = analyzeMangaCorrespondenceTitle(
     "[Popochichi (Yahiro Pochi)] Rental Kanojo Osawari Shimasu 08 (Kanojo, Okarishimasu) | Touch -A- Girlfriend 08! [English] [Team Rabu2] [Digital]",
@@ -458,6 +523,50 @@ test("stored inferred chapters yield to improved parsing unless manually reviewe
   assert.equal(resolveMangaCorrespondenceMatchChapter(undefined, "10", undefined), "10");
   assert.equal(resolveMangaCorrespondenceMatchChapter("9", "8", undefined), "9");
   assert.equal(resolveMangaCorrespondenceMatchChapter("3", "11", undefined, true), "3");
+  assert.equal(resolveMangaCorrespondenceMatchChapter("2", "12", undefined, false, undefined, true), "12");
+  assert.equal(resolveMangaCorrespondenceMatchChapter("3", "11", undefined, true, "12"), "12");
+  assert.equal(resolveMangaCorrespondenceMatchChapter("3", "11", undefined, true, null), "Non renseigné");
+});
+
+test("chapter overrides preserve card corrections during category changes", () => {
+  const baseResult = {
+    request: "otherChapters",
+    matches: [{ key: "a" }, { key: "b" }],
+    rejectedCandidates: [],
+    rejectedCandidateCount: 0,
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: [],
+  };
+  const grouped = updateMangaCorrespondenceChapterOverrides(baseResult, {
+    matchKeys: ["a", "b"],
+    value: "12",
+    scope: "group",
+    updatedAt: "2026-08-05T00:00:00.000Z",
+  });
+  const correctedCard = updateMangaCorrespondenceChapterOverrides(grouped, {
+    matchKeys: ["a"],
+    value: "13",
+    scope: "match",
+    updatedAt: "2026-08-05T00:01:00.000Z",
+  });
+  const regrouped = updateMangaCorrespondenceChapterOverrides(correctedCard, {
+    matchKeys: ["a", "b"],
+    value: "15",
+    scope: "group",
+    preserveMatchOverrides: true,
+    updatedAt: "2026-08-05T00:02:00.000Z",
+  });
+
+  assert.equal(regrouped.matches[0].chapterOverride.value, "13");
+  assert.equal(regrouped.matches[0].chapterOverride.scope, "match");
+  assert.equal(regrouped.matches[1].chapterOverride.value, "15");
+  const resetGroup = resetMangaCorrespondenceChapterOverrides(regrouped, ["a", "b"], "group");
+  assert.equal(resetGroup.matches[0].chapterOverride.value, "13");
+  assert.equal(resetGroup.matches[1].chapterOverride, undefined);
+  const resetCard = resetMangaCorrespondenceChapterOverrides(resetGroup, ["a"], "match");
+  assert.equal(resetCard.matches[0].chapterOverride, undefined);
 });
 
 test("correspondence treats an explicit main story release as chapter one", () => {

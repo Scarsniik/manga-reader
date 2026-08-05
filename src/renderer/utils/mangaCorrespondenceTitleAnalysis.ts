@@ -20,6 +20,14 @@ import {
 
 export type MangaCorrespondenceTitleAnalysis = ScraperTitleAnalysisResult & {
   chapter?: string;
+  chapterDetection?: MangaCorrespondenceChapterDetection;
+};
+
+export type MangaCorrespondenceChapterDetection = {
+  source: "explicitChapter" | "explicitVolume" | "compoundTitle" | "bareTitleNumber" | "releaseDescriptor";
+  confidence: "high" | "medium" | "low";
+  secondaryChapter?: string;
+  secondaryLabel?: string;
 };
 
 const CHAPTER_NUMBER_SOURCE = "[0-9０-９]{1,4}(?:[.,][0-9０-９]+)?";
@@ -27,6 +35,10 @@ const CHAPTER_VALUE_SOURCE = `${CHAPTER_NUMBER_SOURCE}(?:\\s*[-–—~〜～]\\s
 const TRAILING_CHAPTER_MODIFIER_SOURCE = "(?:\\s*\\+\\s*(?:bonus|omake|extra|おまけ))?";
 const TRAILING_BARE_CHAPTER_PATTERN = new RegExp(
   `^(?<title>.*?\\S)\\s+(?:\\(\\s*(?<parenthesizedChapter>${CHAPTER_VALUE_SOURCE})\\s*\\)|(?<bareChapter>${CHAPTER_VALUE_SOURCE}))${TRAILING_CHAPTER_MODIFIER_SOURCE}\\s*[!！]?$`,
+  "iu",
+);
+const COMPOUND_NUMBERED_RELEASE_PATTERN = new RegExp(
+  `^(?<title>.*\\S)\\s+(?<chapter>${CHAPTER_NUMBER_SOURCE})\\s+(?<secondaryLabel>(?=[^\\r\\n]*\\p{L})\\S(?:.*?\\S)?)\\s+(?<secondaryChapter>${CHAPTER_NUMBER_SOURCE})\\s*$`,
   "iu",
 );
 const TRAILING_JAPANESE_CHAPTER_PATTERN = new RegExp(
@@ -66,7 +78,7 @@ const TILDE_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s*[~〜～]\s*.*$/iu;
 const INLINE_RELEASE_STATUS_PATTERN = /\s*\[(?:ongoing|complete|completed)\]\s*/giu;
 const TRAILING_SUFFIX_PATTERN = /\s*(?:\[([^\]]*)\]|\{([^}]*)\}|=([^=]*)=)\s*$/u;
 const TRAILING_METADATA_PARENTHESES_PATTERN = /\s*\((uncensored|censured|censored|decensored|digital|translated|colou?red|textless|hq|lq|high[\s-]*quality|low[\s-]*quality)\)\s*$/iu;
-const LEADING_EVENT_PATTERN = /^\s*\((?:(?:c\d+|20\d{2}[^)]*)|(?:[^)]*(?:akihabara|comiket|comic|doujin)[^)]*))\)\s*/iu;
+const LEADING_EVENT_PATTERN = /^\s*[\[(（](?:(?:c\d+|comitia\s*\d+|futaket\s*\d+|20\d{2}[^\])）]*)|(?:[^\])）]*(?:akihabara|comiket|comic|doujin|comitia|futaket)[^\])）]*))[\])）]\s*/iu;
 const LEADING_AUTHOR_PATTERN = /^\s*\[([^\]]*)\]\s*/u;
 const LEADING_NESTED_CREATOR_PATTERN = /^\s*[\[(（]\s*([^()[\]（）]+?)\s*[（(]\s*([^()（）]+?)\s*[）)]\s*[\]）)]\s*/u;
 const LEADING_SIMPLE_CREATOR_PATTERN = /^\s*\(([^()]*)\)\s*/u;
@@ -211,6 +223,7 @@ type CorrespondenceTitleSegment = {
   chapter?: string;
   releaseChapter?: string;
   sequenceMarkers: ScraperTitleSequenceMarker[];
+  chapterDetection?: MangaCorrespondenceChapterDetection;
 };
 
 const analyzeCorrespondenceTitleSegment = (
@@ -219,20 +232,54 @@ const analyzeCorrespondenceTitleSegment = (
   const withoutInlineStatus = normalizeTitleAnalysisText(
     value.replace(INLINE_RELEASE_STATUS_PATTERN, " "),
   );
+  const compoundMatch = withoutInlineStatus.match(COMPOUND_NUMBERED_RELEASE_PATTERN);
+  if (
+    compoundMatch?.groups?.title
+    && compoundMatch.groups.chapter
+    && compoundMatch.groups.secondaryChapter
+    && compoundMatch.groups.secondaryLabel
+  ) {
+    const chapter = normalizeChapter(compoundMatch.groups.chapter);
+    return {
+      title: normalizeTitleBeforeChapter(compoundMatch.groups.title),
+      chapter,
+      sequenceMarkers: [buildBareChapterMarker(chapter)],
+      chapterDetection: {
+        source: "compoundTitle",
+        confidence: "medium",
+        secondaryChapter: normalizeChapter(compoundMatch.groups.secondaryChapter),
+        secondaryLabel: normalizeTitleAnalysisText(compoundMatch.groups.secondaryLabel),
+      },
+    };
+  }
   const release = stripTrailingReleaseDescriptor(withoutInlineStatus);
   const decorated = stripDecoratedChapterSubtitle(release.title);
   const explicitSequence = extractTitleSequenceMarkers(decorated.title);
   const bareSequence = stripTrailingBareChapter(explicitSequence.title);
   const explicitChapter = explicitSequence.sequenceMarkers
     .find((marker) => marker.kind === "chapter")?.value;
+  const explicitVolume = explicitSequence.sequenceMarkers
+    .find((marker) => marker.kind === "volume")?.value;
+  const detectedChapter = explicitChapter
+    ? normalizeChapter(explicitChapter)
+    : explicitVolume
+      ? normalizeChapter(explicitVolume)
+      : decorated.chapter ?? bareSequence.chapter;
 
   return {
     title: normalizeTitleAnalysisText(bareSequence.title),
-    chapter: explicitChapter
-      ? normalizeChapter(explicitChapter)
-      : decorated.chapter ?? bareSequence.chapter,
+    chapter: detectedChapter,
     releaseChapter: release.releaseChapter,
     sequenceMarkers: explicitSequence.sequenceMarkers,
+    chapterDetection: release.releaseChapter
+      ? { source: "releaseDescriptor", confidence: "high" }
+      : explicitChapter
+        ? { source: "explicitChapter", confidence: "high" }
+        : explicitVolume
+          ? { source: "explicitVolume", confidence: "high" }
+          : detectedChapter
+            ? { source: "bareTitleNumber", confidence: "medium" }
+            : undefined,
   };
 };
 
@@ -272,6 +319,10 @@ const uniqueText = (values: string[]): string[] => {
   });
 };
 
+const splitCreatorNames = (value: string): string[] => uniqueText(
+  normalizeTitleAnalysisText(value).split(/\s*(?:,|&|\/)\s*/u),
+);
+
 const resolveAnalysisConfig = (
   config: ScraperTitleAnalysisConfig | null | undefined,
 ): ScraperTitleAnalysisConfig => {
@@ -300,6 +351,7 @@ type HeuristicCorrespondenceAnalysis = {
   unmatchedParts: string[];
   sequenceMarkers: ScraperTitleSequenceMarker[];
   chapter?: string;
+  chapterDetection?: MangaCorrespondenceChapterDetection;
 };
 
 const extractTrailingSuffixValues = (
@@ -391,22 +443,20 @@ const analyzeHeuristicCorrespondenceTitle = (
   const simpleCreatorMatch = remaining.match(LEADING_SIMPLE_CREATOR_PATTERN);
   if (nestedCreatorMatch?.[1] && nestedCreatorMatch[2]) {
     circle = normalizeTitleAnalysisText(nestedCreatorMatch[1]);
-    authors = uniqueText([normalizeTitleAnalysisText(nestedCreatorMatch[2])]);
+    authors = splitCreatorNames(nestedCreatorMatch[2]);
     remaining = normalizeTitleAnalysisText(remaining.slice(nestedCreatorMatch[0].length));
   } else if (authorMatch?.[1]) {
     const prefix = normalizeTitleAnalysisText(authorMatch[1]);
     const circleAuthorMatch = prefix.match(/^(.*?)\s*\(([^()]*)\)\s*$/u);
     if (circleAuthorMatch) {
       circle = normalizeTitleAnalysisText(circleAuthorMatch[1]);
-      authors = uniqueText([normalizeTitleAnalysisText(circleAuthorMatch[2])]);
+      authors = splitCreatorNames(circleAuthorMatch[2]);
     } else {
-      authors = uniqueText(prefix.split(/\s*(?:,|&|\/)\s*/u));
+      authors = splitCreatorNames(prefix);
     }
     remaining = normalizeTitleAnalysisText(remaining.slice(authorMatch[0].length));
   } else if (simpleCreatorMatch?.[1]) {
-    authors = uniqueText(
-      normalizeTitleAnalysisText(simpleCreatorMatch[1]).split(/\s*(?:,|&|\/)\s*/u),
-    );
+    authors = splitCreatorNames(simpleCreatorMatch[1]);
     remaining = normalizeTitleAnalysisText(remaining.slice(simpleCreatorMatch[0].length));
   }
 
@@ -458,6 +508,7 @@ const analyzeHeuristicCorrespondenceTitle = (
       ? [...sequenceMarkers, buildBareChapterMarker(chapter)]
       : sequenceMarkers,
     chapter: classifiedChapter,
+    chapterDetection: primary.chapterDetection,
   };
 };
 
@@ -504,6 +555,7 @@ export const analyzeMangaCorrespondenceTitle = (
       ? [...parserSequenceMarkers, buildBareChapterMarker(chapter)]
       : parserSequenceMarkers,
     chapter: classifiedChapter,
+    chapterDetection: analyzedTitles.find((entry) => entry.chapterDetection)?.chapterDetection,
   };
   if (!heuristicAnalysis) return parserOnlyResult;
 
@@ -568,5 +620,8 @@ export const analyzeMangaCorrespondenceTitle = (
       ? [...selectedSequenceMarkers, buildBareChapterMarker(finalChapter)]
       : selectedSequenceMarkers,
     chapter: finalChapter,
+    chapterDetection: shouldUseHeuristicStructure
+      ? heuristicAnalysis.chapterDetection ?? parserOnlyResult.chapterDetection
+      : parserOnlyResult.chapterDetection ?? heuristicAnalysis.chapterDetection,
   };
 };

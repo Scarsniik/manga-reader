@@ -203,7 +203,9 @@ const sourceMatchesReference = (
     alternativeTitles: titleAlternatives,
     authors,
     chapter,
-    chapterConfidence: analysis.chapter ? "high" : inferredFirstChapter ? "low" : "low",
+    chapterConfidence: analysis.chapter
+      ? analysis.chapterDetection?.confidence ?? "medium"
+      : "low",
     hasSequenceMarker: analysis.sequenceMarkers.length > 0,
     derivative,
     matchedTerm: match?.title,
@@ -265,6 +267,7 @@ export const runMangaCorrespondenceSearch = async (
       alternativeTitles: candidate.alternativeTitles,
       authors: candidate.authors,
       chapter: candidate.acceptedChapter || candidate.suggestedChapter,
+      chapterOverride: candidate.chapterOverride,
       matchedTerm: candidate.matchedTerm || input.reference.title,
       discoveredByStepIds: [...candidate.discoveredByStepIds],
       acceptedManually: true,
@@ -292,7 +295,10 @@ export const runMangaCorrespondenceSearch = async (
   const romanizedTitleVariantsByKey = new Map<string, string[]>();
   const searchedTitles: string[] = isContinuation ? [...(previousResult?.searchedTitles ?? [])] : [];
   const searchedAuthors: string[] = isContinuation ? [...(previousResult?.searchedAuthors ?? [])] : [];
-  const queuedKeys = new Set<string>();
+  const queuedKeys = new Set<string>([
+    ...searchedTitles.map((term) => `title:${normalizeKey(term)}:`),
+    ...searchedAuthors.map((term) => `author:${normalizeKey(term)}:`),
+  ]);
   const extractedAuthorSourceKeys = new Set<string>();
   const resolvedAuthorPageKeys = new Set<string>();
   const queue: DiscoveryTask[] = [];
@@ -446,6 +452,7 @@ export const runMangaCorrespondenceSearch = async (
       discoveredByStepIds: uniqueText([...(existing?.discoveredByStepIds ?? []), step.id]),
       decision: existing?.decision ?? "pending",
       acceptedChapter: existing?.acceptedChapter,
+      chapterOverride: existing?.chapterOverride,
       useAsSearchSeed: existing?.useAsSearchSeed ?? true,
     });
     if (!rejectedKeysSeen.has(key)) {
@@ -530,6 +537,7 @@ export const runMangaCorrespondenceSearch = async (
         alternativeTitles: analyzed.alternativeTitles,
         authors: analyzed.authors,
         chapter: analyzed.chapter,
+        chapterOverride: existing?.chapterOverride,
         matchedTerm: analyzed.matchedTerm,
         discoveredByStepIds: uniqueText([...(existing?.discoveredByStepIds ?? []), step.id]),
         acceptedManually: existing?.acceptedManually,

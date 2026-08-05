@@ -48,9 +48,16 @@ export type MangaCorrespondenceMatch = {
   alternativeTitles: string[];
   authors: string[];
   chapter?: string;
+  chapterOverride?: MangaCorrespondenceChapterOverride;
   matchedTerm: string;
   discoveredByStepIds: string[];
   acceptedManually?: boolean;
+};
+
+export type MangaCorrespondenceChapterOverride = {
+  value: string | null;
+  scope: "match" | "group";
+  updatedAt: string;
 };
 
 export type MangaCorrespondenceRejectionReason =
@@ -75,6 +82,7 @@ export type MangaCorrespondenceRejectedCandidate = {
   discoveredByStepIds: string[];
   decision: MangaCorrespondenceRejectedDecision;
   acceptedChapter?: string;
+  chapterOverride?: MangaCorrespondenceChapterOverride;
   useAsSearchSeed: boolean;
   searchSeedUsedInPass?: number;
 };

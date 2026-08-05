@@ -166,8 +166,12 @@ export const resolveMangaCorrespondenceMatchChapter = (
   analyzedChapter: string | undefined,
   inferredChapter: string | undefined,
   acceptedManually = false,
+  chapterOverride?: string | null,
+  preferAnalyzedChapter = false,
 ): string => {
+  if (chapterOverride !== undefined) return chapterOverride || "Non renseigné";
   if (acceptedManually && storedChapter) return storedChapter;
+  if (preferAnalyzedChapter && analyzedChapter) return analyzedChapter;
   if (storedChapter) {
     return storedChapter === "1" && analyzedChapter && analyzedChapter !== "1"
       ? analyzedChapter

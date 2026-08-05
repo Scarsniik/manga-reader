@@ -31,6 +31,7 @@
     "package:all": "npm run package:app:installer && npm run package:ocr-runtime",
     "package:app": "npm run package:app:installer",
     "package:app:installer": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win nsis --publish never",
+    "reinstall:app": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/reinstall-app.ps1",
     "package:app:portable": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win portable --publish never",
     "package:app:dir": "npm run build:electron && npm run build && npm run clean:package && npx electron-builder --config electron-builder.config.cjs --win dir --publish never",
     "package:win-unpacked": "npm run package:app:dir",

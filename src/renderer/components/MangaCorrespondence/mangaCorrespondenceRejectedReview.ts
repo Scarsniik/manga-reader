@@ -47,6 +47,7 @@ const rejectedCandidateToMatch = (
   alternativeTitles: candidate.alternativeTitles,
   authors: candidate.authors,
   chapter: candidate.acceptedChapter || candidate.suggestedChapter,
+  chapterOverride: candidate.chapterOverride,
   matchedTerm: candidate.matchedTerm || fallbackTitle,
   discoveredByStepIds: candidate.discoveredByStepIds,
   acceptedManually: true,
