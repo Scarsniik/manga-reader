@@ -152,7 +152,8 @@ function Stop-ApplicationProcesses {
     } while ($remaining -and [DateTime]::UtcNow -lt $deadline)
 
     foreach ($process in $remaining) {
-        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        # An Electron child can exit between the last snapshot and this call.
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     }
 }
 
