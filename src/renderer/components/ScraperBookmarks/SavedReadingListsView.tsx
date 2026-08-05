@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OpenBookIcon, TrashCanIcon } from "@/renderer/components/icons";
 import type { ReaderLocationState } from "@/renderer/components/Reader/types";
-import { normalizeReaderAssetSrc } from "@/renderer/components/Reader/utils";
+import ReadingListCoverImage from "@/renderer/components/ReadingList/ReadingListCoverImage";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import type { SavedReadingList } from "@/shared/readingList";
 import "@/renderer/components/ScraperBookmarks/savedReadingLists.scss";
@@ -71,14 +71,12 @@ function SavedReadingListRow({
       >
         <span className="saved-reading-list-row__covers" aria-hidden="true">
           {previewItems.map((item, index) => {
-            const coverSrc = normalizeReaderAssetSrc(item.metadata.cover ?? null);
-
             return (
               <span
                 key={`${item.id}:${index}`}
                 className="saved-reading-list-row__cover"
               >
-                {coverSrc ? <img src={coverSrc} alt="" /> : <span>—</span>}
+                <ReadingListCoverImage item={item} alt="" fallback={<span>—</span>} />
               </span>
             );
           })}

@@ -7,6 +7,7 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { ReadingListItem } from "@/renderer/types/readingList";
+import { buildReadingListCoverCandidates } from "@/renderer/components/ReadingList/readingListCovers";
 import { getLanguageLabel } from "@/renderer/utils/languageDetection";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import {
@@ -51,25 +52,33 @@ const sourceMatchesLanguage = (
 
 const buildReadingListItem = (
   source: MultiSearchSourceResult,
-): ReadingListItem => ({
-  id: generateId(),
-  metadata: {
-    title: source.result.title,
-    cover: source.result.thumbnailUrl || null,
-    authors: source.result.authorNames?.length
-      ? source.result.authorNames
-      : source.tentativeAuthorNames,
-    tags: source.result.tags ?? [],
-    languageCodes: getMultiSearchSourceLanguageValues(source)
-      .filter((code) => code !== UNKNOWN_MULTI_SEARCH_VALUE),
-  },
-  sourceTarget: {
-    kind: "scraper.details",
-    scraperId: source.scraper.id,
-    sourceUrl: source.result.detailUrl as string,
-    title: source.result.title,
-  },
-});
+): ReadingListItem => {
+  const coverCandidates = buildReadingListCoverCandidates(
+    source.result.thumbnailUrl,
+    source.result.thumbnailCandidates,
+  );
+
+  return {
+    id: generateId(),
+    metadata: {
+      title: source.result.title,
+      cover: coverCandidates[0] ?? null,
+      ...(coverCandidates.length > 1 ? { coverCandidates } : {}),
+      authors: source.result.authorNames?.length
+        ? source.result.authorNames
+        : source.tentativeAuthorNames,
+      tags: source.result.tags ?? [],
+      languageCodes: getMultiSearchSourceLanguageValues(source)
+        .filter((code) => code !== UNKNOWN_MULTI_SEARCH_VALUE),
+    },
+    sourceTarget: {
+      kind: "scraper.details",
+      scraperId: source.scraper.id,
+      sourceUrl: source.result.detailUrl as string,
+      title: source.result.title,
+    },
+  };
+};
 
 const getReplacementSources = (
   chapter: MangaCorrespondenceReadingListChapter,

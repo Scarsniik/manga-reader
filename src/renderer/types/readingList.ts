@@ -3,6 +3,7 @@ import type { ReaderWorkspaceTarget, ScraperDetailsWorkspaceTarget } from "@/ren
 export type ReadingListItemMetadata = {
   title: string;
   cover?: string | null;
+  coverCandidates?: string[];
   authors?: string[];
   tags?: string[];
   languageCodes?: string[];

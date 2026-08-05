@@ -152,6 +152,7 @@ const sanitizeItemMetadata = (value: unknown): SavedReadingListItemMetadata | nu
   }
 
   const cover = normalizeOptionalTextOrNull(value.cover);
+  const coverCandidates = normalizeTextList(value.coverCandidates);
   const authors = normalizeTextList(value.authors);
   const tags = normalizeTextList(value.tags);
   const languageCodes = normalizeTextList(value.languageCodes);
@@ -159,6 +160,7 @@ const sanitizeItemMetadata = (value: unknown): SavedReadingListItemMetadata | nu
   return {
     title,
     ...(cover !== undefined ? { cover } : {}),
+    ...(coverCandidates !== undefined ? { coverCandidates } : {}),
     ...(authors !== undefined ? { authors } : {}),
     ...(tags !== undefined ? { tags } : {}),
     ...(languageCodes !== undefined ? { languageCodes } : {}),

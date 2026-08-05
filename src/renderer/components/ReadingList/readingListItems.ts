@@ -3,6 +3,7 @@ import type { ReadingListItem } from "@/renderer/types/readingList";
 import type { WorkspaceTab } from "@/renderer/types/workspace";
 import type { ScraperBookmarkRecord } from "@/shared/scraper";
 import generateId from "@/utils/id";
+import { buildReadingListCoverCandidates } from "@/renderer/components/ReadingList/readingListCovers";
 
 export const isReadingListSourceTab = (tab: WorkspaceTab): boolean => (
   tab.target.kind === "reader" || tab.target.kind === "scraper.details"
@@ -12,12 +13,17 @@ export const buildReadingListItemFromTab = (tab: WorkspaceTab): ReadingListItem 
   if (tab.target.kind === "reader") {
     const details = tab.target.locationState?.scraperBrowserReturn?.detailsResult;
     const scraperReader = tab.target.locationState?.scraperReader;
+    const coverCandidates = buildReadingListCoverCandidates(
+      scraperReader?.cover || details?.cover,
+      details?.coverCandidates,
+    );
 
     return {
       id: generateId(),
       metadata: {
         title: tab.target.title?.trim() || scraperReader?.title?.trim() || tab.title,
-        cover: scraperReader?.cover || details?.cover || null,
+        cover: coverCandidates[0] ?? null,
+        ...(coverCandidates.length > 1 ? { coverCandidates } : {}),
         authors: details?.authors ?? [],
         tags: details?.tags ?? [],
         languageCodes: details?.languageCodes ?? (scraperReader?.language ? [scraperReader.language] : []),
@@ -31,12 +37,17 @@ export const buildReadingListItemFromTab = (tab: WorkspaceTab): ReadingListItem 
     const cachedEntry = readWorkspaceBrowserTabCache(tab.id, targetKey);
     const details = cachedEntry?.initialState.detailsResult;
     const canonicalSourceUrl = details?.finalUrl || details?.requestedUrl || tab.target.sourceUrl;
+    const coverCandidates = buildReadingListCoverCandidates(
+      details?.cover,
+      details?.coverCandidates,
+    );
 
     return {
       id: generateId(),
       metadata: {
         title: details?.title?.trim() || tab.target.title?.trim() || tab.title,
-        cover: details?.cover || null,
+        cover: coverCandidates[0] ?? null,
+        ...(coverCandidates.length > 1 ? { coverCandidates } : {}),
         authors: details?.authors ?? [],
         tags: details?.tags ?? [],
         languageCodes: details?.languageCodes ?? [],

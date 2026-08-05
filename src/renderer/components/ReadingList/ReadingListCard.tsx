@@ -3,7 +3,7 @@ import type {
   ReadingListItem,
   ReadingListItemStatus,
 } from "@/renderer/types/readingList";
-import { normalizeReaderAssetSrc } from "@/renderer/components/Reader/utils";
+import ReadingListCoverImage from "@/renderer/components/ReadingList/ReadingListCoverImage";
 
 type Props = {
   index: number;
@@ -22,8 +22,6 @@ export default function ReadingListCard({
   showReadingStatus = false,
   status,
 }: Props) {
-  const coverSrc = normalizeReaderAssetSrc(item.metadata.cover ?? null);
-
   return (
     <article
       className={[
@@ -43,11 +41,11 @@ export default function ReadingListCard({
       ) : null}
 
       <div className="reading-list-card__cover">
-        {coverSrc ? (
-          <img src={coverSrc} alt={`Couverture de ${item.metadata.title}`} />
-        ) : (
-          <div className="reading-list-card__cover-placeholder">Aucune couverture</div>
-        )}
+        <ReadingListCoverImage
+          item={item}
+          alt={`Couverture de ${item.metadata.title}`}
+          fallback={<div className="reading-list-card__cover-placeholder">Aucune couverture</div>}
+        />
         <span className="reading-list-card__position">{index + 1}</span>
       </div>
 

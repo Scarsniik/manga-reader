@@ -20,6 +20,7 @@ export type SavedReadingListSourceTarget<TReaderLocationState = unknown> =
 export type SavedReadingListItemMetadata = {
   title: string;
   cover?: string | null;
+  coverCandidates?: string[];
   authors?: string[];
   tags?: string[];
   languageCodes?: string[];
