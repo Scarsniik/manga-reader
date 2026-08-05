@@ -8,10 +8,11 @@ import {
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from "@/renderer/types/workspace";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
-  extractScraperSearchPageFromDocumentWithImageFallbacks,
+  fetchResolvedScraperListingPage,
   formatScraperValueForDisplay,
   getScraperFeature,
   getScraperTagFeatureConfig,
+  hasTagPagePlaceholder,
   isScraperFeatureConfigured,
   resolveScraperTagTargetUrl,
 } from "@/renderer/utils/scraperRuntime";
@@ -103,29 +104,15 @@ export default function WorkspaceScraperTagPanel({
       const targetUrl = resolveScraperTagTargetUrl(nextScraper.baseUrl, tagConfig, query, {
         pageIndex: 0,
       });
-      const documentResult = await api.fetchScraperDocument({
-        baseUrl: nextScraper.baseUrl,
+      const tagPage = await fetchResolvedScraperListingPage({
+        scraper: nextScraper,
+        config: tagConfig,
         targetUrl,
+        pageIndex: 0,
+        usesTemplatePaging: hasTagPagePlaceholder(tagConfig),
+        responseLabel: "La page tag",
+        failureMessage: "Impossible de charger la page tag demandee.",
       });
-
-      if (!documentResult?.ok || !documentResult.html) {
-        setScraper(nextScraper);
-        setInitialState(null);
-        setError(
-          documentResult?.error
-          || (typeof documentResult?.status === "number"
-            ? `La page tag a repondu avec le code HTTP ${documentResult.status}.`
-            : "Impossible de charger la page tag demandee."),
-        );
-        return;
-      }
-
-      const parser = new DOMParser();
-      const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const tagPage = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, tagConfig, {
-        requestedUrl: documentResult.requestedUrl,
-        finalUrl: documentResult.finalUrl,
-      }, async (request) => api.fetchScraperDocument(request));
       const displayQuery = formatScraperValueForDisplay(query);
       const resolvedTagName = tagPage.listingNames?.[0] || title || displayQuery;
       const nextInitialState: ScraperBrowserInitialState = {

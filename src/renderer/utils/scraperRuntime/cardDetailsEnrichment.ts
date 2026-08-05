@@ -14,15 +14,19 @@ import type {
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
 } from "@/renderer/utils/scraperRuntime/types";
+import { runTasksWithConcurrency } from "@/renderer/utils/runWithConcurrency";
 
 const SCRAPER_CARD_DETAILS_CONCURRENCY = 3;
 
-type CardDetailsEnrichmentOptions = {
+export type ScraperCardDetailsCache = Map<string, Promise<ScraperRuntimeDetailsResult | null>>;
+
+export type CardDetailsEnrichmentOptions = {
   enabled: boolean;
   scraper: ScraperRecord;
   detailsConfig: ScraperDetailsFeatureConfig | null | undefined;
   fetchDocument: ScraperDocumentFetcher | undefined;
   concurrency?: number;
+  detailsCache?: ScraperCardDetailsCache;
 };
 
 const uniqueTextValues = (values: Array<string | null | undefined>): string[] => {
@@ -46,7 +50,7 @@ const optionalText = (value: string | null | undefined): string | undefined => {
   return normalized || undefined;
 };
 
-const mergeCardWithDetails = (
+export const mergeScraperCardWithDetails = (
   item: ScraperSearchResultItem,
   details: ScraperRuntimeDetailsResult,
 ): ScraperSearchResultItem => {
@@ -92,24 +96,51 @@ const mergeCardWithDetails = (
   };
 };
 
-const runCardDetailTasks = async (
-  tasks: Array<() => Promise<void>>,
-  concurrency: number,
-): Promise<void> => {
-  let nextIndex = 0;
+export const createScraperCardDetailsCache = (): ScraperCardDetailsCache => new Map();
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, tasks.length) },
-    async () => {
-      while (nextIndex < tasks.length) {
-        const taskIndex = nextIndex;
-        nextIndex += 1;
-        await tasks[taskIndex]();
-      }
-    },
-  );
+export const resolveScraperCardDetails = async (options: {
+  scraper: ScraperRecord;
+  detailsConfig: ScraperDetailsFeatureConfig | null | undefined;
+  detailUrl: string | null | undefined;
+  fetchDocument: ScraperDocumentFetcher | undefined;
+  detailsCache?: ScraperCardDetailsCache;
+}): Promise<ScraperRuntimeDetailsResult | null> => {
+  const { scraper, detailsConfig, detailUrl, fetchDocument, detailsCache } = options;
+  if (!detailUrl || !fetchDocument || !canEnrichScraperCardsWithDetails(detailsConfig)) return null;
 
-  await Promise.all(workers);
+  const targetUrl = resolveScraperDetailsTargetUrl(scraper.baseUrl, detailsConfig, detailUrl);
+  const cacheKey = `${scraper.id}::${targetUrl}`;
+  const existing = detailsCache?.get(cacheKey);
+  if (existing) return existing;
+
+  const request = (async (): Promise<ScraperRuntimeDetailsResult | null> => {
+    const documentResult = await fetchDocument({
+      baseUrl: scraper.baseUrl,
+      targetUrl,
+    });
+    if (!documentResult?.ok || !documentResult.html) return null;
+
+    const parser = new DOMParser();
+    const documentNode = parser.parseFromString(documentResult.html, "text/html");
+    const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
+      requestedUrl: documentResult.requestedUrl,
+      finalUrl: documentResult.finalUrl,
+      status: documentResult.status,
+      contentType: documentResult.contentType,
+      html: documentResult.html,
+    });
+    if (!hasRenderableDetails(details)) return null;
+    collectScraperDetailsTagsForTagListCacheSafe(scraper, details);
+    return details;
+  })();
+
+  detailsCache?.set(cacheKey, request);
+  try {
+    return await request;
+  } catch (error) {
+    if (detailsCache?.get(cacheKey) === request) detailsCache.delete(cacheKey);
+    throw error;
+  }
 };
 
 export const canEnrichScraperCardsWithDetails = (
@@ -147,38 +178,18 @@ export const enrichScraperSearchPageWithDetails = async (
     }
 
     try {
-      const targetUrl = resolveScraperDetailsTargetUrl(
-        options.scraper.baseUrl,
+      const details = await resolveScraperCardDetails({
+        scraper: options.scraper,
         detailsConfig,
-        item.detailUrl,
-      );
-      const documentResult = await fetchDocument({
-        baseUrl: options.scraper.baseUrl,
-        targetUrl,
+        detailUrl: item.detailUrl,
+        fetchDocument,
+        detailsCache: options.detailsCache,
       });
-
-      if (!documentResult?.ok || !documentResult.html) {
+      if (!details) {
         failed += 1;
         return;
       }
-
-      const parser = new DOMParser();
-      const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
-        requestedUrl: documentResult.requestedUrl,
-        finalUrl: documentResult.finalUrl,
-        status: documentResult.status,
-        contentType: documentResult.contentType,
-        html: documentResult.html,
-      });
-
-      if (!hasRenderableDetails(details)) {
-        failed += 1;
-        return;
-      }
-
-      collectScraperDetailsTagsForTagListCacheSafe(options.scraper, details);
-      enrichedItems[index] = mergeCardWithDetails(item, details);
+      enrichedItems[index] = mergeScraperCardWithDetails(item, details);
       succeeded += 1;
     } catch {
       failed += 1;
@@ -189,7 +200,7 @@ export const enrichScraperSearchPageWithDetails = async (
     1,
     Math.floor(Number(options.concurrency) || SCRAPER_CARD_DETAILS_CONCURRENCY),
   );
-  await runCardDetailTasks(tasks, concurrency);
+  await runTasksWithConcurrency(tasks, concurrency);
 
   return {
     ...page,

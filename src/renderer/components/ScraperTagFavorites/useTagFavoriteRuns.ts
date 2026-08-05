@@ -5,7 +5,6 @@ import type {
   ScraperTagFavoriteSource,
 } from "@/shared/scraper";
 import {
-  buildSourceResults,
   fetchTagPageWithRetry,
   getPaceConfig,
   getTagConfig,
@@ -13,10 +12,13 @@ import {
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
-import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
-import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
+import {
+  createScraperCardDetailsCache,
+  isScraperListingPaginationEndError,
+} from "@/renderer/utils/scraperRuntime";
+import { keepNewSourceResults } from "@/renderer/components/MultiSearch/multiSearchRunState";
+import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 
 export type TagFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -54,40 +56,6 @@ const buildInitialRun = (
   hasNextPage: true,
 });
 
-const normalizeResultUrl = (source: MultiSearchSourceResult): string => {
-  const value = source.result.detailUrl?.trim();
-  if (!value) {
-    return "";
-  }
-
-  try {
-    return new URL(value).toString();
-  } catch {
-    return value;
-  }
-};
-
-const keepNewSourceResults = (
-  existingResults: MultiSearchSourceResult[],
-  pageResults: MultiSearchSourceResult[],
-): MultiSearchSourceResult[] => {
-  const seenUrls = new Set(existingResults.map(normalizeResultUrl).filter(Boolean));
-
-  return pageResults.filter((source) => {
-    const url = normalizeResultUrl(source);
-    if (!url) {
-      return true;
-    }
-
-    if (seenUrls.has(url)) {
-      return false;
-    }
-
-    seenUrls.add(url);
-    return true;
-  });
-};
-
 export default function useTagFavoriteRuns(
   favorite: ScraperTagFavoriteRecord | null,
   scrapersById: Map<string, ScraperRecord>,
@@ -101,6 +69,7 @@ export default function useTagFavoriteRuns(
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
+  const detailsCacheRef = useRef(createScraperCardDetailsCache());
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
   const runsRef = useRef<TagFavoriteSourceRun[]>([]);
   const visibleSources = useMemo(
@@ -172,18 +141,19 @@ export default function useTagFavoriteRuns(
         paceConfigRef.current,
         {
           scrapeDetailsWithCards,
+          detailsCache: detailsCacheRef.current,
         },
       );
-      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(run.scraper, {
-          ...page,
-          items: appendScraperSearchResultTagToItems(
-            page.items,
-            run.favoriteSource.name,
-            run.favoriteSource.tagUrl,
-          ),
-        }, nextPageIndex, run.favoriteSource.name),
-      );
+      const { sources: pageResults } = await processScraperListingPage({
+        scraper: run.scraper,
+        page,
+        pageIndex: nextPageIndex,
+        searchTerm: run.favoriteSource.name,
+        resultTag: {
+          name: run.favoriteSource.name,
+          url: run.favoriteSource.tagUrl,
+        },
+      });
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextRun: TagFavoriteSourceRun = {
@@ -308,6 +278,7 @@ export default function useTagFavoriteRuns(
   }, [favorite, loadPageForRuns, scrapersById]);
 
   const start = useCallback(async () => {
+    detailsCacheRef.current = createScraperCardDetailsCache();
     await loadPage(0, true);
   }, [loadPage]);
 

@@ -6,7 +6,6 @@ import type {
 } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
-  buildSourceResults,
   fetchAuthorPageWithRetry,
   fetchSearchPageWithRetry,
   getAuthorConfig,
@@ -21,7 +20,6 @@ import { extractMultiSearchAuthors } from "@/renderer/components/MultiSearch/mul
 import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
-import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advancedJapaneseRomanization";
 import { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
@@ -30,10 +28,12 @@ import {
   inferMangaCorrespondenceFirstChapter,
 } from "@/renderer/utils/mangaCorrespondenceChapter";
 import {
+  createScraperCardDetailsCache,
   getScraperFeature,
   getScraperTitleAnalysisFeatureConfig,
   isScraperFeatureConfigured,
 } from "@/renderer/utils/scraperRuntime";
+import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
 import type {
   BackgroundSearchExecutionResult,
@@ -224,6 +224,7 @@ export const runMangaCorrespondenceSearch = async (
 
   const concurrency = Math.max(1, Math.floor(input.scrapingConcurrency));
   const pace = { ...getPaceConfig(input.paceMode), concurrency };
+  const detailsCache = createScraperCardDetailsCache();
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
   const referenceScraper = scrapers.find((scraper) => scraper.id === input.reference.scraperId) ?? scrapers[0];
   const referenceAnalysis = analyzeMangaCorrespondenceTitle(
@@ -615,10 +616,14 @@ export const runMangaCorrespondenceSearch = async (
         const requestedPageUrl = nextPageUrl;
         const page = await fetchSearchPageWithRetry(scraper, getSearchConfig(scraper), term, pageIndex, nextPageUrl, pace, {
           scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+          detailsCache,
         });
-        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(scraper, page, pageIndex, term),
-        );
+        const { sources: pageSources } = await processScraperListingPage({
+          scraper,
+          page,
+          pageIndex,
+          searchTerm: term,
+        });
         const newSources = pageSources.filter((source) => {
           const key = buildMultiSearchSourceIdentityKey(source);
           if (resultKeys.has(key)) return false;
@@ -660,11 +665,14 @@ export const runMangaCorrespondenceSearch = async (
           nextPageUrl,
           pace,
           templateContext ?? null,
-          { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+          { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
         );
-        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(scraper, page, pageIndex, term),
-        );
+        const { sources: pageSources } = await processScraperListingPage({
+          scraper,
+          page,
+          pageIndex,
+          searchTerm: term,
+        });
         const newSources = pageSources.filter((source) => {
           const key = buildMultiSearchSourceIdentityKey(source);
           if (resultKeys.has(key)) return false;

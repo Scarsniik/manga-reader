@@ -1,5 +1,4 @@
 import {
-  FetchScraperDocumentResult,
   hasScraperFieldSelectorValue,
   ScraperAuthorFeatureConfig,
   ScraperCardListConfig,
@@ -11,8 +10,10 @@ import {
   ScraperTagFeatureConfig,
 } from "@/shared/scraper";
 import {
-  extractScraperSearchPageFromDocumentWithImageFallbacks,
   enrichScraperSearchPageWithDetails,
+  attachScraperRequestDiagnostics,
+  fetchResolvedScraperListingPage,
+  fetchScraperPageWithRetry,
   getScraperFeature,
   getScraperAuthorFeatureConfig,
   getScraperDetailsFeatureConfig,
@@ -22,7 +23,6 @@ import {
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasTagPagePlaceholder,
-  isScraperListingPaginationEndError,
   resolveScraperHomepageRequestConfig,
   resolveScraperHomepageTargetUrl,
   resolveScraperSearchRequestConfig,
@@ -30,8 +30,8 @@ import {
   resolveScraperAuthorTargetUrl,
   resolveScraperTagTargetUrl,
   type ScraperDocumentFetcher,
+  type ScraperCardDetailsCache,
   ScraperRuntimeSearchPageResult,
-  throwIfScraperListingPaginationEnded,
   throwIfScraperListingNextPageUnavailable,
 } from "@/renderer/utils/scraperRuntime";
 import {
@@ -47,7 +47,7 @@ import type {
 } from "@/renderer/components/MultiSearch/types";
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 import type { ScraperRequestDiagnosticContext } from "@/shared/scraperLatestDiagnostics";
-import { appendScraperLatestDiagnosticEvent } from "@/renderer/utils/scraperLatestDiagnostics";
+import { runTasksWithConcurrency } from "@/renderer/utils/runWithConcurrency";
 
 export type PaceConfig = {
   concurrency: number;
@@ -59,23 +59,8 @@ export type ScraperCardDetailsFetchOptions = {
   scrapeDetailsWithCards?: boolean;
   detailConcurrency?: number;
   diagnostics?: ScraperRequestDiagnosticContext;
+  detailsCache?: ScraperCardDetailsCache;
 };
-
-const attachRequestDiagnostics = <Request extends Record<string, unknown>>(
-  request: Request,
-  diagnostics?: ScraperRequestDiagnosticContext,
-  purpose?: string,
-): Request & { diagnostics?: ScraperRequestDiagnosticContext } => ({
-  ...request,
-  ...(diagnostics
-    ? {
-      diagnostics: {
-        ...diagnostics,
-        purpose: purpose ?? diagnostics.purpose,
-      },
-    }
-    : {}),
-});
 
 export const getPaceConfig = (paceMode: MultiSearchPaceMode): PaceConfig => (
   paceMode === "careful"
@@ -91,84 +76,22 @@ export const getPaceConfig = (paceMode: MultiSearchPaceMode): PaceConfig => (
     }
 );
 
-const wait = (delayMs: number): Promise<void> => (
-  delayMs > 0
-    ? new Promise((resolve) => window.setTimeout(resolve, delayMs))
-    : Promise.resolve()
-);
-
 const fetchPageWithRetry = async (
   pageIndex: number,
   paceConfig: PaceConfig,
   loadPage: () => Promise<ScraperRuntimeSearchPageResult>,
   failureMessage: string,
   diagnostics?: ScraperRequestDiagnosticContext,
-): Promise<ScraperRuntimeSearchPageResult> => {
-  let lastError: unknown = null;
+): Promise<ScraperRuntimeSearchPageResult> => fetchScraperPageWithRetry({
+  pageIndex,
+  retryCount: paceConfig.retryCount,
+  pageDelayMs: paceConfig.pageDelayMs,
+  loadPage,
+  failureMessage,
+  diagnostics,
+});
 
-  for (let attempt = 0; attempt <= paceConfig.retryCount; attempt += 1) {
-    try {
-      if (attempt > 0 || pageIndex > 0) {
-        appendScraperLatestDiagnosticEvent(
-          diagnostics ? { profileId: diagnostics.profileId } : null,
-          "pace.wait",
-          {
-            pageIndex,
-            attempt,
-            delayMs: paceConfig.pageDelayMs,
-            reason: attempt > 0 ? "retry-before-attempt" : "page-pacing",
-          },
-          diagnostics?.sourceKey,
-        );
-        await wait(paceConfig.pageDelayMs);
-      }
-
-      return await loadPage();
-    } catch (error) {
-      if (isScraperListingPaginationEndError(error)) {
-        throw error;
-      }
-
-      lastError = error;
-      if (attempt < paceConfig.retryCount) {
-        appendScraperLatestDiagnosticEvent(
-          diagnostics ? { profileId: diagnostics.profileId } : null,
-          "pace.wait",
-          {
-            pageIndex,
-            attempt,
-            delayMs: paceConfig.pageDelayMs,
-            reason: "retry-after-failure",
-          },
-          diagnostics?.sourceKey,
-        );
-        await wait(paceConfig.pageDelayMs);
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error(failureMessage);
-};
-
-export const runWithConcurrency = async (
-  tasks: Array<() => Promise<void>>,
-  concurrency: number,
-): Promise<void> => {
-  let nextIndex = 0;
-
-  const workers = Array.from(
-    { length: Math.min(Math.max(1, concurrency), tasks.length) },
-    async () => {
-      while (nextIndex < tasks.length) {
-        const taskIndex = nextIndex;
-        nextIndex += 1;
-        await tasks[taskIndex]();
-      }
-    },
-  );
-
-  await Promise.all(workers);
-};
+export const runWithConcurrency = runTasksWithConcurrency;
 
 export const getSearchConfig = (scraper: ScraperRecord): ScraperSearchFeatureConfig => {
   const searchConfig = getScraperSearchFeatureConfig(getScraperFeature(scraper, "search"));
@@ -232,6 +155,7 @@ const enrichListingPageWithDetails = (
     detailsConfig: getScraperDetailsFeatureConfig(getScraperFeature(scraper, "details")),
     fetchDocument: fetchScraperDocument,
     concurrency: options?.detailConcurrency,
+    detailsCache: options?.detailsCache,
   })
 );
 
@@ -243,11 +167,6 @@ const fetchSearchPage = async (
   nextPageUrl?: string,
   options?: ScraperCardDetailsFetchOptions,
 ): Promise<ScraperRuntimeSearchPageResult> => {
-  const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-  if (typeof fetchScraperDocument !== "function") {
-    throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
-  }
-
   const usesTemplatePaging = hasSearchPagePlaceholder(searchConfig);
   const targetUrl = usesTemplatePaging || pageIndex === 0
     ? resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig, query, { pageIndex })
@@ -258,41 +177,17 @@ const fetchSearchPage = async (
     throw new Error("Aucune page suivante n'est disponible pour ce scrapper.");
   }
 
-  const documentResult = await fetchScraperDocument(attachRequestDiagnostics({
-    baseUrl: scraper.baseUrl,
+  return fetchResolvedScraperListingPage({
+    scraper,
+    config: searchConfig,
     targetUrl,
+    pageIndex,
+    usesTemplatePaging,
     requestConfig: resolveScraperSearchRequestConfig(searchConfig, query, { pageIndex }),
-  }, options?.diagnostics)) as FetchScraperDocumentResult;
-
-  if (!documentResult?.ok || !documentResult.html) {
-    throwIfScraperListingPaginationEnded(documentResult, {
-      pageIndex,
-      targetUrl,
-      usesTemplatePaging,
-    });
-
-    throw new Error(
-      documentResult?.error
-      || (typeof documentResult?.status === "number"
-        ? `La recherche a repondu avec le code HTTP ${documentResult.status}.`
-        : "Impossible de charger la page de recherche."),
-    );
-  }
-
-  const parser = new DOMParser();
-  const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
-    requestedUrl: documentResult.requestedUrl,
-    finalUrl: documentResult.finalUrl,
-  }, async (request) => fetchScraperDocument(attachRequestDiagnostics(
-    request,
-    options?.diagnostics,
-    `${options?.diagnostics?.purpose ?? "listing"}.asset`,
-  )));
-
-  return enrichListingPageWithDetails(scraper, page, async (request) => fetchScraperDocument(
-    attachRequestDiagnostics(request, options?.diagnostics),
-  ), options);
+    responseLabel: "La recherche",
+    failureMessage: "Impossible de charger la page de recherche.",
+    ...options,
+  });
 };
 
 export const fetchSearchPageWithRetry = async (
@@ -334,13 +229,9 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
     scrapeDetailsWithCards?: boolean;
     detailConcurrency?: number;
     diagnostics?: ScraperRequestDiagnosticContext;
+    detailsCache?: ScraperCardDetailsCache;
   },
 ): Promise<ScraperRuntimeSearchPageResult> => {
-  const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-  if (typeof fetchScraperDocument !== "function") {
-    throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
-  }
-
   const usesTemplatePaging = options.hasPagePlaceholder(config);
   const targetUrl = usesTemplatePaging || pageIndex === 0
     ? options.resolveTargetUrl(scraper.baseUrl, config, query, pageIndex)
@@ -351,41 +242,20 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
     throw new Error("Aucune page suivante n'est disponible pour ce scrapper.");
   }
 
-  const documentResult = await fetchScraperDocument(attachRequestDiagnostics({
-    baseUrl: scraper.baseUrl,
+  return fetchResolvedScraperListingPage({
+    scraper,
+    config,
     targetUrl,
+    pageIndex,
+    usesTemplatePaging,
     requestConfig: options.resolveRequestConfig?.(config, query, pageIndex),
-  }, options.diagnostics)) as FetchScraperDocumentResult;
-
-  if (!documentResult?.ok || !documentResult.html) {
-    throwIfScraperListingPaginationEnded(documentResult, {
-      pageIndex,
-      targetUrl,
-      usesTemplatePaging,
-    });
-
-    throw new Error(
-      documentResult?.error
-      || (typeof documentResult?.status === "number"
-        ? `La page ${options.label} a repondu avec le code HTTP ${documentResult.status}.`
-        : `Impossible de charger la page ${options.label}.`),
-    );
-  }
-
-  const parser = new DOMParser();
-  const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, config, {
-    requestedUrl: documentResult.requestedUrl,
-    finalUrl: documentResult.finalUrl,
-  }, async (request) => fetchScraperDocument(attachRequestDiagnostics(
-    request,
-    options.diagnostics,
-    `${options.diagnostics?.purpose ?? "listing"}.asset`,
-  )));
-
-  return enrichListingPageWithDetails(scraper, page, async (request) => fetchScraperDocument(
-    attachRequestDiagnostics(request, options.diagnostics),
-  ), options);
+    responseLabel: `La page ${options.label}`,
+    failureMessage: `Impossible de charger la page ${options.label}.`,
+    scrapeDetailsWithCards: options.scrapeDetailsWithCards,
+    detailConcurrency: options.detailConcurrency,
+    diagnostics: options.diagnostics,
+    detailsCache: options.detailsCache,
+  });
 };
 
 const fetchAuthorPage = async (
@@ -608,7 +478,7 @@ export const enrichSourceResultsWithCardDetails = async (
     currentPageUrl: "",
     items: sources.map((source) => source.result),
   }, async (request) => fetchScraperDocument(
-    attachRequestDiagnostics(request, options?.diagnostics),
+    attachScraperRequestDiagnostics(request, options?.diagnostics),
   ), options);
 
   return buildSourceResultsFromItems(

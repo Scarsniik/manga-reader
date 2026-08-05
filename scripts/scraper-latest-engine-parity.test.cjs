@@ -52,6 +52,52 @@ test("foreground and background latest searches call the same engine", () => {
   assert.equal((foregroundSource.match(/fetchHomepagePageWithRetry/g) ?? []).length, 0);
 });
 
+test("foreground and background searches keep the shared runtime boundaries", () => {
+  const browserSource = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch.ts"),
+    "utf8",
+  );
+  const foregroundMultiSearch = fs.readFileSync(
+    path.resolve("src/renderer/components/MultiSearch/useMultiSearch.ts"),
+    "utf8",
+  );
+  const backgroundSource = fs.readFileSync(
+    path.resolve("src/renderer/backgroundSearch/backgroundSearchEngine.ts"),
+    "utf8",
+  );
+  const authorFavorites = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns.ts"),
+    "utf8",
+  );
+  const tagFavorites = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperTagFavorites/useTagFavoriteRuns.ts"),
+    "utf8",
+  );
+  const authorExtraction = fs.readFileSync(
+    path.resolve("src/renderer/components/MultiSearch/multiSearchAuthors.ts"),
+    "utf8",
+  );
+  const workspaceAuthor = fs.readFileSync(
+    path.resolve("src/renderer/components/Workspace/WorkspaceScraperAuthorPanel.tsx"),
+    "utf8",
+  );
+  const workspaceTag = fs.readFileSync(
+    path.resolve("src/renderer/components/Workspace/WorkspaceScraperTagPanel.tsx"),
+    "utf8",
+  );
+
+  assert.match(browserSource, /fetchResolvedScraperListingPage\s*\(/);
+  assert.match(foregroundMultiSearch, /executeMultiSearchTermPage\s*\(/);
+  assert.match(backgroundSource, /executeMultiSearchTermPage\s*\(/);
+  assert.match(backgroundSource, /processScraperListingPage\s*\(/);
+  assert.match(authorFavorites, /processScraperListingPage\s*\(/);
+  assert.match(tagFavorites, /processScraperListingPage\s*\(/);
+  assert.match(authorExtraction, /resolveScraperCardDetails\s*\(/);
+  assert.doesNotMatch(authorExtraction, /extractScraperDetailsFromDocumentWithImageFallbacks/);
+  assert.match(workspaceAuthor, /fetchResolvedScraperListingPage\s*\(/);
+  assert.match(workspaceTag, /fetchResolvedScraperListingPage\s*\(/);
+});
+
 test("latest listing thumbnails keep fallbacks without validating images during scraping", async () => {
   const { document } = parseHTML(`
     <section class="results">

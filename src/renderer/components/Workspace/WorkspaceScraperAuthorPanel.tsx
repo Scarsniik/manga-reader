@@ -8,10 +8,11 @@ import {
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from "@/renderer/types/workspace";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
-  extractScraperSearchPageFromDocumentWithImageFallbacks,
+  fetchResolvedScraperListingPage,
   formatScraperValueForDisplay,
   getScraperAuthorFeatureConfig,
   getScraperFeature,
+  hasAuthorPagePlaceholder,
   isScraperFeatureConfigured,
   resolveScraperAuthorTargetUrl,
 } from "@/renderer/utils/scraperRuntime";
@@ -110,29 +111,15 @@ export default function WorkspaceScraperAuthorPanel({
         pageIndex: 0,
         templateContext,
       });
-      const documentResult = await api.fetchScraperDocument({
-        baseUrl: nextScraper.baseUrl,
+      const authorPage = await fetchResolvedScraperListingPage({
+        scraper: nextScraper,
+        config: authorConfig,
         targetUrl,
+        pageIndex: 0,
+        usesTemplatePaging: hasAuthorPagePlaceholder(authorConfig),
+        responseLabel: "La page auteur",
+        failureMessage: "Impossible de charger la page auteur demandee.",
       });
-
-      if (!documentResult?.ok || !documentResult.html) {
-        setScraper(nextScraper);
-        setInitialState(null);
-        setError(
-          documentResult?.error
-          || (typeof documentResult?.status === "number"
-            ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
-            : "Impossible de charger la page auteur demandee."),
-        );
-        return;
-      }
-
-      const parser = new DOMParser();
-      const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const authorPage = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
-        requestedUrl: documentResult.requestedUrl,
-        finalUrl: documentResult.finalUrl,
-      }, async (request) => api.fetchScraperDocument(request));
       const displayQuery = formatScraperValueForDisplay(query);
       const resolvedAuthorName = authorPage.authorNames?.[0] || title || displayQuery;
       const nextInitialState: ScraperBrowserInitialState = {

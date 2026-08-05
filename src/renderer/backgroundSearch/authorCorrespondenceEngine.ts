@@ -10,7 +10,6 @@ import type {
 } from "@/renderer/backgroundSearch/types";
 import { extractMultiSearchAuthors } from "@/renderer/components/MultiSearch/multiSearchAuthors";
 import {
-  buildSourceResults,
   fetchAuthorPageWithRetry,
   fetchSearchPageWithRetry,
   getAuthorConfig,
@@ -22,13 +21,14 @@ import {
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
-import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
+import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
 import {
   buildAuthorCorrespondenceMatchKey,
   normalizeAuthorCorrespondenceTarget,
 } from "@/renderer/utils/authorCorrespondenceIdentity";
 import {
+  createScraperCardDetailsCache,
   getScraperFeature,
   isScraperFeatureConfigured,
   isScraperListingPaginationEndError,
@@ -139,6 +139,7 @@ export const runAuthorCorrespondenceSearch = async (
 
   const concurrency = Math.max(1, Math.floor(input.scrapingConcurrency));
   const pace = { ...getPaceConfig(input.paceMode), concurrency };
+  const detailsCache = createScraperCardDetailsCache();
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
   const candidates = new Map<string, Candidate>();
   const matches = new Map<string, AuthorCorrespondenceMatch>();
@@ -225,11 +226,15 @@ export const runAuthorCorrespondenceSearch = async (
           pageIndex,
           nextPageUrl,
           pace,
-          { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+          { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
         );
-        results.push(...await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(scraper, page, pageIndex, name),
-        ));
+        const { sources } = await processScraperListingPage({
+          scraper,
+          page,
+          pageIndex,
+          searchTerm: name,
+        });
+        results.push(...sources);
         nextPageUrl = page.nextPageUrl;
         if (!resolveHasNextPage(getSearchConfig(scraper), page)) break;
       } catch (error) {
@@ -272,7 +277,7 @@ export const runAuthorCorrespondenceSearch = async (
               undefined,
               pace,
               null,
-              { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+              { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
             );
             if (!page.items.length) continue;
             addCandidate(candidates, {
@@ -309,17 +314,16 @@ export const runAuthorCorrespondenceSearch = async (
         undefined,
         pace,
         candidate.templateContext ?? null,
-        { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
+        { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
       );
-      const previewSources = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(
-          scraper,
-          page,
-          0,
-          candidate.authorName,
-          [candidate.authorName, ...names],
-        ).slice(0, PREVIEW_RESULT_LIMIT),
-      );
+      const { sources } = await processScraperListingPage({
+        scraper,
+        page: { ...page, items: page.items.slice(0, PREVIEW_RESULT_LIMIT) },
+        pageIndex: 0,
+        searchTerm: candidate.authorName,
+        contextualAuthorNames: [candidate.authorName, ...names],
+      });
+      const previewSources = sources;
       upsertMatch(candidate, previewSources, page.currentPageUrl);
       await emit(candidate.authorName);
     } catch (error) {

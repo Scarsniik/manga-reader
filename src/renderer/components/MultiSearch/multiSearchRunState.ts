@@ -4,6 +4,10 @@ import type {
   MultiSearchSourceResult,
   MultiSearchTermRun,
 } from "@/renderer/components/MultiSearch/types";
+import {
+  buildScraperSearchResultIdentity,
+  filterNewItemsByIdentity,
+} from "@/renderer/utils/scraperSearchResultIdentity";
 
 const buildInitialTermRun = (term: string): MultiSearchTermRun => ({
   term,
@@ -85,36 +89,11 @@ export const upsertTermRun = (
   ));
 };
 
-const normalizeResultUrl = (source: MultiSearchSourceResult): string => {
-  const value = source.result.detailUrl?.trim();
-  if (!value) {
-    return "";
-  }
-
-  try {
-    return new URL(value).toString();
-  } catch {
-    return value;
-  }
-};
-
 export const keepNewSourceResults = (
   existingResults: MultiSearchSourceResult[],
   pageResults: MultiSearchSourceResult[],
-): MultiSearchSourceResult[] => {
-  const seenUrls = new Set(existingResults.map(normalizeResultUrl).filter(Boolean));
-
-  return pageResults.filter((source) => {
-    const url = normalizeResultUrl(source);
-    if (!url) {
-      return true;
-    }
-
-    if (seenUrls.has(url)) {
-      return false;
-    }
-
-    seenUrls.add(url);
-    return true;
-  });
-};
+): MultiSearchSourceResult[] => filterNewItemsByIdentity(
+  existingResults,
+  pageResults,
+  (source) => buildScraperSearchResultIdentity(source.scraper.id, source.result, "none"),
+);

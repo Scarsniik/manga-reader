@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ScraperRecord } from "@/shared/scraper";
 import {
-  buildSourceResults,
-  fetchSearchPageWithRetry,
   getPaceConfig,
-  getSearchConfig,
-  resolveHasNextPage,
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
@@ -22,13 +18,14 @@ import {
   cancelMultiSearchRun,
   ensureRunSearchTerms,
   isMultiSearchRunActive,
-  keepNewSourceResults,
   summarizeTermRuns,
   upsertTermRun,
 } from "@/renderer/components/MultiSearch/multiSearchRunState";
-import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
-import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
-import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
+import {
+  createScraperCardDetailsCache,
+  isScraperListingPaginationEndError,
+} from "@/renderer/utils/scraperRuntime";
+import { executeMultiSearchTermPage } from "@/renderer/components/MultiSearch/multiSearchPageExecution";
 
 type RunSearchOptions = {
   query: string;
@@ -49,6 +46,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
   const lastPaceModeRef = useRef<MultiSearchPaceMode>("fast");
   const lastScrapeDetailsWithCardsRef = useRef(scrapeDetailsWithCards);
   const lastIncludedLanguageCodesRef = useRef<string[]>([]);
+  const detailsCacheRef = useRef(createScraperCardDetailsCache());
   const {
     clearRunUpdates,
     flushRunUpdates,
@@ -134,52 +132,41 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     });
 
     try {
-      const searchConfig = getSearchConfig(run.scraper);
       const pageIndex = termRun.loadedPages;
-      const page = await fetchSearchPageWithRetry(
-        run.scraper,
-        searchConfig,
-        searchTerm,
+      const pageExecution = await executeMultiSearchTermPage({
+        scraper: run.scraper,
+        term: searchTerm,
         pageIndex,
-        termRun.nextPageUrl,
+        nextPageUrl: termRun.nextPageUrl,
+        existingResults: run.results,
         paceConfig,
-        {
-          scrapeDetailsWithCards: lastScrapeDetailsWithCardsRef.current,
-        },
-      );
+        includedLanguageCodes: lastIncludedLanguageCodesRef.current,
+        scrapeDetailsWithCards: lastScrapeDetailsWithCardsRef.current,
+        detailsCache: detailsCacheRef.current,
+      });
       if (isRunCancelled(token, run.scraper.id)) {
         return null;
       }
 
-      const includedPageResults = buildSourceResults(run.scraper, page, pageIndex, searchTerm)
-        .filter((source) => doesMultiSearchSourceMatchIncludedLanguages(
-          source,
-          lastIncludedLanguageCodesRef.current,
-        ));
-      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        includedPageResults,
-      );
-      const newPageResults = keepNewSourceResults(run.results, pageResults);
-      const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextTermRun: MultiSearchTermRun = {
         ...termRun,
-        loadedPages: pageIndex + 1,
-        hasNextPage: !hasOnlyDuplicateUrls && resolveHasNextPage(searchConfig, page),
-        currentPageUrl: page.currentPageUrl,
-        nextPageUrl: page.nextPageUrl,
+        loadedPages: pageExecution.loadedPages,
+        hasNextPage: pageExecution.hasNextPage,
+        currentPageUrl: pageExecution.currentPageUrl,
+        nextPageUrl: pageExecution.nextPageUrl,
       };
       const nextSearchTerms = upsertTermRun(run.searchTerms, nextTermRun);
       const paginationSummary = summarizeTermRuns(nextSearchTerms);
       const nextRun: MultiSearchScraperRun = {
         ...run,
         status: "done",
-        results: [...run.results, ...newPageResults],
+        results: [...run.results, ...pageExecution.newPageResults],
         searchTerms: nextSearchTerms,
         ...paginationSummary,
         error: undefined,
       };
 
-      queueRunUpdate(token, nextRun, newPageResults.length, !nextRun.hasNextPage);
+      queueRunUpdate(token, nextRun, pageExecution.newPageResults.length, !nextRun.hasNextPage);
       return nextRun;
     } catch (loadError) {
       if (isRunCancelled(token, run.scraper.id)) {
@@ -290,6 +277,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     lastPaceModeRef.current = paceMode;
     lastScrapeDetailsWithCardsRef.current = scrapeDetailsWithCards;
     lastIncludedLanguageCodesRef.current = includedLanguageCodes;
+    detailsCacheRef.current = createScraperCardDetailsCache();
     clearRunUpdates();
     const paceConfig = getPaceConfig(paceMode);
     const pageLimit = maxPages === null ? null : Math.max(1, maxPages);

@@ -1,21 +1,20 @@
 import {
   hasScraperFieldSelectorValue,
-  type FetchScraperDocumentResult,
 } from "@/shared/scraper";
 import {
-  extractScraperDetailsFromDocumentWithImageFallbacks,
+  createScraperCardDetailsCache,
   formatScraperValueForDisplay,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   isScraperFeatureConfigured,
-  resolveScraperDetailsTargetUrl,
+  resolveScraperCardDetails,
+  type ScraperCardDetailsCache,
 } from "@/renderer/utils/scraperRuntime";
 import {
   getPaceConfig,
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
-import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
 import type {
   MultiSearchPaceMode,
   MultiSearchSourceResult,
@@ -242,6 +241,7 @@ export const buildMultiSearchAuthorExtractionFromLoadedMetadata = (
 const fetchDetailsAuthors = async (
   authorsByKey: Map<string, MultiSearchAuthorResult>,
   source: MultiSearchSourceResult,
+  detailsCache: ScraperCardDetailsCache,
 ): Promise<boolean> => {
   const api = (window as any).api;
   if (!api || typeof api.fetchScraperDocument !== "function" || !source.result.detailUrl) {
@@ -254,30 +254,14 @@ const fetchDetailsAuthors = async (
     return false;
   }
 
-  const targetUrl = resolveScraperDetailsTargetUrl(
-    source.scraper.baseUrl,
+  const details = await resolveScraperCardDetails({
+    scraper: source.scraper,
     detailsConfig,
-    source.result.detailUrl,
-  );
-  const documentResult = await api.fetchScraperDocument({
-    baseUrl: source.scraper.baseUrl,
-    targetUrl,
-  }) as FetchScraperDocumentResult;
-
-  if (!documentResult?.ok || !documentResult.html) {
-    return false;
-  }
-
-  const parser = new DOMParser();
-  const documentNode = parser.parseFromString(documentResult.html, "text/html");
-  const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
-    requestedUrl: documentResult.requestedUrl,
-    finalUrl: documentResult.finalUrl,
-    status: documentResult.status,
-    contentType: documentResult.contentType,
-    html: documentResult.html,
-  }, async (request) => api.fetchScraperDocument(request));
-  collectScraperDetailsTagsForTagListCacheSafe(source.scraper, details);
+    detailUrl: source.result.detailUrl,
+    fetchDocument: async (request) => api.fetchScraperDocument(request),
+    detailsCache,
+  });
+  if (!details) return false;
 
   return details.authorUrls.reduce((hasAuthor, authorUrl, index) => (
     addAuthorResult(
@@ -294,6 +278,7 @@ const fetchDetailsAuthorsWithRetry = async (
   authorsByKey: Map<string, MultiSearchAuthorResult>,
   source: MultiSearchSourceResult,
   paceConfig: PaceConfig,
+  detailsCache: ScraperCardDetailsCache,
   signal?: AbortSignal,
 ): Promise<boolean> => {
   let lastError: unknown = null;
@@ -305,7 +290,7 @@ const fetchDetailsAuthorsWithRetry = async (
         await wait(paceConfig.pageDelayMs);
       }
 
-      return await fetchDetailsAuthors(authorsByKey, source);
+      return await fetchDetailsAuthors(authorsByKey, source, detailsCache);
     } catch (error) {
       lastError = error;
       if (attempt < paceConfig.retryCount) {
@@ -336,6 +321,7 @@ export const extractMultiSearchAuthors = async (
   };
   const totalSourceCount = sources.length;
   let failedDetailsSourceCount = 0;
+  const detailsCache = createScraperCardDetailsCache();
   onProgress?.({
     processedSourceCount,
     totalSourceCount,
@@ -353,6 +339,7 @@ export const extractMultiSearchAuthors = async (
         authorsByKey,
         source,
         paceConfig,
+        detailsCache,
         runtimeOptions?.signal,
       );
       if (!foundDetailsAuthor) {

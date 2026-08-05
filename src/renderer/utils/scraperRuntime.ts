@@ -11,5 +11,6 @@ export * from "@/renderer/utils/scraperRuntime/pageTemplates";
 export * from "@/renderer/utils/scraperRuntime/detailsExtraction";
 export * from "@/renderer/utils/scraperRuntime/detailsRenderable";
 export * from "@/renderer/utils/scraperRuntime/cardDetailsEnrichment";
+export * from "@/renderer/utils/scraperRuntime/listingPageExecution";
 export * from "@/renderer/utils/scraperRuntime/chapters";
 export * from "@/renderer/utils/scraperRuntime/pageUrls";

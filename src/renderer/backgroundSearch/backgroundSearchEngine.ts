@@ -43,10 +43,10 @@ import type {
   MultiSearchTermRun,
 } from "@/renderer/components/MultiSearch/types";
 import {
+  createScraperCardDetailsCache,
   isScraperListingPaginationEndError,
   type ScraperRuntimeSearchPageResult,
 } from "@/renderer/utils/scraperRuntime";
-import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import type {
   BackgroundListingRun,
@@ -76,7 +76,7 @@ import {
   resolveBackgroundListingAcceptedTarget,
   shouldContinueBackgroundBlacklistBackfill,
 } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
-import { enrichScraperLatestCandidatesForSlots } from "@/renderer/components/ScraperLatest/scraperLatestCandidateEnrichment";
+import { enrichCandidatesForTarget } from "@/renderer/utils/progressiveCandidateEnrichment";
 import {
   buildScraperListingPageRequestKey,
   createScraperListingPagePrefetchCache,
@@ -103,6 +103,12 @@ import type {
   ScraperLatestDiagnosticSession,
   ScraperRequestDiagnosticContext,
 } from "@/shared/scraperLatestDiagnostics";
+import { executeMultiSearchTermPage } from "@/renderer/components/MultiSearch/multiSearchPageExecution";
+import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import {
+  appendUniqueItemsByIdentity,
+  buildScraperSearchResultIdentity,
+} from "@/renderer/utils/scraperSearchResultIdentity";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -116,21 +122,13 @@ const throwIfAborted = (signal: AbortSignal): void => {
 };
 
 const normalizeResultUrl = (source: MultiSearchSourceResult): string => (
-  source.result.detailUrl?.trim() || `${source.scraper.id}:${source.result.title}`
+  buildScraperSearchResultIdentity(source.scraper.id, source.result, "title")
 );
 
 const appendUniqueResults = (
   existing: MultiSearchSourceResult[],
   incoming: MultiSearchSourceResult[],
-): MultiSearchSourceResult[] => {
-  const seen = new Set(existing.map(normalizeResultUrl));
-  return [...existing, ...incoming.filter((source) => {
-    const key = normalizeResultUrl(source);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  })];
-};
+): MultiSearchSourceResult[] => appendUniqueItemsByIdentity(existing, incoming, normalizeResultUrl);
 
 const countMultiSearchResults = (runs: MultiSearchScraperRun[]): number => (
   runs.reduce((count, run) => count + run.results.length, 0)
@@ -150,6 +148,7 @@ const runMultiSearch = async (
   if (!input.scrapers.length) throw new Error("Aucun scrapper compatible n'est selectionne.");
 
   const pace = getPaceConfig(input.paceMode);
+  const detailsCache = createScraperCardDetailsCache();
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
   const runs: MultiSearchScraperRun[] = input.scrapers.map((scraper) => ({
     scraper,
@@ -173,7 +172,6 @@ const runMultiSearch = async (
     runs[runIndex] = run;
     await emit(run.scraper.name);
     try {
-      const config = getSearchConfig(run.scraper);
       for (let pageOffset = 0; pageOffset < maxPages; pageOffset += 1) {
         throwIfAborted(signal);
         let loadedAnyPage = false;
@@ -185,28 +183,24 @@ const runMultiSearch = async (
           }
           throwIfAborted(signal);
           try {
-            const page = await fetchSearchPageWithRetry(
-              run.scraper,
-              config,
-              termRun.term,
-              termRun.loadedPages,
-              termRun.nextPageUrl,
-              pace,
-              { scrapeDetailsWithCards: input.scrapeDetailsWithCards },
-            );
-            const sources = await enrichSourceResultsWithJapaneseRomanization(
-              buildSourceResults(run.scraper, page, termRun.loadedPages, termRun.term)
-                .filter((source) => doesMultiSearchSourceMatchIncludedLanguages(source, input.includedLanguageCodes)),
-            );
-            const nextResults = appendUniqueResults(run.results, sources);
-            const onlyDuplicates = sources.length > 0 && nextResults.length === run.results.length;
-            run = { ...run, results: nextResults };
+            const pageExecution = await executeMultiSearchTermPage({
+              scraper: run.scraper,
+              term: termRun.term,
+              pageIndex: termRun.loadedPages,
+              nextPageUrl: termRun.nextPageUrl,
+              existingResults: run.results,
+              paceConfig: pace,
+              includedLanguageCodes: input.includedLanguageCodes,
+              scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+              detailsCache,
+            });
+            run = { ...run, results: [...run.results, ...pageExecution.newPageResults] };
             nextTerms.push({
               ...termRun,
-              loadedPages: termRun.loadedPages + 1,
-              hasNextPage: !onlyDuplicates && resolveHasNextPage(config, page),
-              currentPageUrl: page.currentPageUrl,
-              nextPageUrl: page.nextPageUrl,
+              loadedPages: pageExecution.loadedPages,
+              hasNextPage: pageExecution.hasNextPage,
+              currentPageUrl: pageExecution.currentPageUrl,
+              nextPageUrl: pageExecution.nextPageUrl,
             });
             loadedAnyPage = true;
           } catch (error) {
@@ -401,6 +395,7 @@ const runListings = async (
     ? await loadLatestAuthorCacheAssignments(input)
     : new Map<string, ScraperAuthorFavoriteCacheSource | null>();
   const pace = getPaceConfig(input.paceMode);
+  const detailsCache = createScraperCardDetailsCache();
   const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
   const configuredMaxPages = kind === "latestSources"
     ? resolveScraperLatestSourcePageLimit(input.maxPages)
@@ -627,9 +622,9 @@ const runListings = async (
 
     let excludedByEnrichedLanguageCount = 0;
     let excludedByBlacklistedTagCount = 0;
-    const enrichment = await enrichScraperLatestCandidatesForSlots({
+    const enrichment = await enrichCandidatesForTarget({
       candidates: state.pendingCandidates,
-      remainingResultSlots,
+      targetCount: remainingResultSlots,
       enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
         await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
           scrapeDetailsWithCards: true,
@@ -640,6 +635,7 @@ const runListings = async (
             sourceKey: run.key,
             pageIndex: run.loadedPages,
           } : undefined,
+          detailsCache,
         }),
       ),
       isAccepted: (item) => {
@@ -797,33 +793,25 @@ const runListings = async (
           () => fetchSourceListingPage(runIndex, pageIndex, requestedPageUrl, "listing-demand"),
         );
         const listingLoadedAt = performance.now();
-        const pageWithResultTag = source.resultTag
-          ? {
-            ...page,
-            items: appendScraperSearchResultTagToItems(
-              page.items,
-              source.resultTag.name,
-              source.resultTag.url,
-            ),
-          }
-          : page;
-        const pageSources = await enrichSourceResultsWithJapaneseRomanization(
-          buildSourceResults(
-            run.scraper,
-            pageWithResultTag,
-            pageIndex,
-            run.name,
-            sourceMode === "author" ? [run.name] : [],
-          ),
-        );
+        const processedPage = await processScraperListingPage({
+          scraper: run.scraper,
+          page,
+          pageIndex,
+          searchTerm: run.name,
+          contextualAuthorNames: sourceMode === "author" ? [run.name] : [],
+          includedLanguageCodes: input.includedLanguageCodes,
+          resultTag: source.resultTag,
+        });
+        const pageSources = processedPage.sources;
         const newPageSources = pageSources.filter((item) => {
           const key = normalizeResultUrl(item);
           if (state.seenCandidateResultKeys.has(key)) return false;
           state.seenCandidateResultKeys.add(key);
           return true;
         });
+        const includedPageSourceKeys = new Set(processedPage.includedSources.map(normalizeResultUrl));
         const includedPageSources = newPageSources.filter((item) => (
-          doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
+          includedPageSourceKeys.has(normalizeResultUrl(item))
         ));
         const quickSeenProgress = resolveBackgroundQuickSeenProgress(
           includedPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
@@ -873,9 +861,9 @@ const runListings = async (
         let excludedByBlacklistedTagCount = 0;
         let newEligibleSources: MultiSearchSourceResult[];
         if (input.scrapeDetailsWithCards === true && rawUnseenSources.length > 0) {
-          const enrichment = await enrichScraperLatestCandidatesForSlots({
+          const enrichment = await enrichCandidatesForTarget({
             candidates: rawUnseenSources,
-            remainingResultSlots,
+            targetCount: remainingResultSlots,
             enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
               await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
                 scrapeDetailsWithCards: true,
@@ -886,6 +874,7 @@ const runListings = async (
                   sourceKey: source.id,
                   pageIndex,
                 } : undefined,
+                detailsCache,
               }),
             ),
             isAccepted: (item) => {

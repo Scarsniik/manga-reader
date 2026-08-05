@@ -26,8 +26,7 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   buildScraperListingPaginationEndPage,
-  enrichScraperSearchPageWithDetails,
-  extractScraperSearchPageFromDocumentWithImageFallbacks,
+  fetchResolvedScraperListingPage,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
@@ -41,7 +40,6 @@ import {
   resolveScraperTagTargetUrl,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
-  throwIfScraperListingPaginationEnded,
 } from '@/renderer/utils/scraperRuntime';
 import {
   parseScraperRouteState,
@@ -314,211 +312,50 @@ export function useScraperBrowserSearch({
   setLoading,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserSearchOptions) {
-  const fetchHomepagePage = useCallback(async (
+  const fetchListingPage = useCallback(async (
+    listingMode: ScraperListingMode,
     targetUrl: string,
     options?: FetchListingPageOptions,
   ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (
-      !homepageConfig?.urlTemplate
-      || !homepageConfig.resultItemSelector
-      || !hasScraperFieldSelectorValue(homepageConfig.titleSelector)
-    ) {
-      throw new Error('Le composant Homepage n\'est pas encore suffisamment configure pour etre execute.');
+    const config = listingMode === 'homepage'
+      ? homepageConfig
+      : listingMode === 'search'
+        ? searchConfig
+        : listingMode === 'author'
+          ? authorConfig
+          : tagConfig;
+    if (!config?.resultItemSelector || !hasScraperFieldSelectorValue(config.titleSelector)) {
+      throw new Error(`Le composant ${getListingModeLabel(listingMode)} n'est pas encore suffisamment configure pour etre execute.`);
     }
-
-    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-    if (typeof fetchScraperDocument !== 'function') {
-      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
-    }
-
-    const documentResult = await fetchScraperDocument({
-      baseUrl: scraper.baseUrl,
-      targetUrl,
-      requestConfig: resolveScraperHomepageRequestConfig(homepageConfig, {
-        pageIndex: options?.pageIndex ?? 0,
-      }),
-    });
-
-    if (!documentResult?.ok || !documentResult.html) {
-      throwIfScraperListingPaginationEnded(documentResult, {
-        pageIndex: options?.pageIndex ?? 0,
-        targetUrl,
-        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
-      });
-
-      throw new Error(
-        documentResult?.error
-          || (typeof documentResult?.status === 'number'
-            ? `La homepage a repondu avec le code HTTP ${documentResult.status}.`
-            : 'Impossible de charger la homepage.'),
-      );
-    }
-
-    const parser = new DOMParser();
-    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, homepageConfig, {
-      requestedUrl: documentResult.requestedUrl,
-      finalUrl: documentResult.finalUrl,
-    }, async (request) => fetchScraperDocument(request));
-
-    return enrichScraperSearchPageWithDetails(page, {
-      enabled: scrapeDetailsWithCards,
+    const pageIndex = options?.pageIndex ?? 0;
+    const requestConfig = listingMode === 'homepage'
+      ? resolveScraperHomepageRequestConfig(config as ScraperHomepageFeatureConfig, { pageIndex })
+      : listingMode === 'search'
+        ? resolveScraperSearchRequestConfig(
+          config as ScraperSearchFeatureConfig,
+          options?.query || '',
+          { pageIndex },
+        )
+        : undefined;
+    const responseLabel = listingMode === 'homepage'
+      ? 'La homepage'
+      : listingMode === 'search'
+        ? 'La recherche'
+        : `La page ${getListingModeLabel(listingMode).replace('page ', '')}`;
+    return fetchResolvedScraperListingPage({
       scraper,
-      detailsConfig,
-      fetchDocument: async (request) => fetchScraperDocument(request),
-    });
-  }, [detailsConfig, homepageConfig, scrapeDetailsWithCards, scraper]);
-
-  const fetchSearchPage = useCallback(async (
-    targetUrl: string,
-    options?: FetchListingPageOptions,
-  ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (
-      !searchConfig?.urlTemplate
-      || !searchConfig.resultItemSelector
-      || !hasScraperFieldSelectorValue(searchConfig.titleSelector)
-    ) {
-      throw new Error('Le composant Recherche n\'est pas encore suffisamment configure pour etre execute.');
-    }
-
-    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-    if (typeof fetchScraperDocument !== 'function') {
-      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
-    }
-
-    const documentResult = await fetchScraperDocument({
-      baseUrl: scraper.baseUrl,
+      config,
       targetUrl,
-      requestConfig: resolveScraperSearchRequestConfig(searchConfig, options?.query || '', {
-        pageIndex: options?.pageIndex ?? 0,
-      }),
+      pageIndex,
+      usesTemplatePaging: Boolean(options?.usesTemplatePaging),
+      requestConfig,
+      responseLabel,
+      failureMessage: listingMode === 'homepage'
+        ? 'Impossible de charger la homepage.'
+        : `Impossible de charger la ${getListingModeLabel(listingMode)}.`,
+      scrapeDetailsWithCards,
     });
-
-    if (!documentResult?.ok || !documentResult.html) {
-      throwIfScraperListingPaginationEnded(documentResult, {
-        pageIndex: options?.pageIndex ?? 0,
-        targetUrl,
-        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
-      });
-
-      throw new Error(
-        documentResult?.error
-          || (typeof documentResult?.status === 'number'
-            ? `La recherche a repondu avec le code HTTP ${documentResult.status}.`
-            : 'Impossible de charger la page de recherche.'),
-      );
-    }
-
-    const parser = new DOMParser();
-    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, searchConfig, {
-      requestedUrl: documentResult.requestedUrl,
-      finalUrl: documentResult.finalUrl,
-    }, async (request) => fetchScraperDocument(request));
-
-    return enrichScraperSearchPageWithDetails(page, {
-      enabled: scrapeDetailsWithCards,
-      scraper,
-      detailsConfig,
-      fetchDocument: async (request) => fetchScraperDocument(request),
-    });
-  }, [detailsConfig, scraper, scrapeDetailsWithCards, searchConfig]);
-
-  const fetchAuthorPage = useCallback(async (
-    targetUrl: string,
-    options?: FetchListingPageOptions,
-  ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (!authorConfig?.resultItemSelector || !hasScraperFieldSelectorValue(authorConfig.titleSelector)) {
-      throw new Error('Le composant Auteur n\'est pas encore suffisamment configure pour etre execute.');
-    }
-
-    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-    if (typeof fetchScraperDocument !== 'function') {
-      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
-    }
-
-    const documentResult = await fetchScraperDocument({
-      baseUrl: scraper.baseUrl,
-      targetUrl,
-    });
-
-    if (!documentResult?.ok || !documentResult.html) {
-      throwIfScraperListingPaginationEnded(documentResult, {
-        pageIndex: options?.pageIndex ?? 0,
-        targetUrl,
-        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
-      });
-
-      throw new Error(
-        documentResult?.error
-          || (typeof documentResult?.status === 'number'
-            ? `La page auteur a repondu avec le code HTTP ${documentResult.status}.`
-            : 'Impossible de charger la page auteur.'),
-      );
-    }
-
-    const parser = new DOMParser();
-    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, authorConfig, {
-      requestedUrl: documentResult.requestedUrl,
-      finalUrl: documentResult.finalUrl,
-    }, async (request) => fetchScraperDocument(request));
-
-    return enrichScraperSearchPageWithDetails(page, {
-      enabled: scrapeDetailsWithCards,
-      scraper,
-      detailsConfig,
-      fetchDocument: async (request) => fetchScraperDocument(request),
-    });
-  }, [authorConfig, detailsConfig, scraper, scrapeDetailsWithCards]);
-
-  const fetchTagPage = useCallback(async (
-    targetUrl: string,
-    options?: FetchListingPageOptions,
-  ): Promise<ScraperRuntimeSearchPageResult> => {
-    if (!tagConfig?.resultItemSelector || !hasScraperFieldSelectorValue(tagConfig.titleSelector)) {
-      throw new Error('Le composant Tag n\'est pas encore suffisamment configure pour etre execute.');
-    }
-
-    const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
-    if (typeof fetchScraperDocument !== 'function') {
-      throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
-    }
-
-    const documentResult = await fetchScraperDocument({
-      baseUrl: scraper.baseUrl,
-      targetUrl,
-    });
-
-    if (!documentResult?.ok || !documentResult.html) {
-      throwIfScraperListingPaginationEnded(documentResult, {
-        pageIndex: options?.pageIndex ?? 0,
-        targetUrl,
-        usesTemplatePaging: Boolean(options?.usesTemplatePaging),
-      });
-
-      throw new Error(
-        documentResult?.error
-          || (typeof documentResult?.status === 'number'
-            ? `La page tag a repondu avec le code HTTP ${documentResult.status}.`
-            : 'Impossible de charger la page tag.'),
-      );
-    }
-
-    const parser = new DOMParser();
-    const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-    const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, tagConfig, {
-      requestedUrl: documentResult.requestedUrl,
-      finalUrl: documentResult.finalUrl,
-    }, async (request) => fetchScraperDocument(request));
-
-    return enrichScraperSearchPageWithDetails(page, {
-      enabled: scrapeDetailsWithCards,
-      scraper,
-      detailsConfig,
-      fetchDocument: async (request) => fetchScraperDocument(request),
-    });
-  }, [detailsConfig, scraper, scrapeDetailsWithCards, tagConfig]);
+  }, [authorConfig, homepageConfig, scrapeDetailsWithCards, scraper, searchConfig, tagConfig]);
 
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
     listingMode === 'author'
@@ -549,17 +386,11 @@ export function useScraperBrowserSearch({
       pageIndex: number,
       pageUsesTemplatePaging: boolean,
     ): Promise<ScraperRuntimeSearchPageResult> => (
-      listingMode === 'author'
-        ? fetchAuthorPage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
-        : listingMode === 'tag'
-          ? fetchTagPage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
-        : listingMode === 'homepage'
-          ? fetchHomepagePage(targetUrl, { pageIndex, usesTemplatePaging: pageUsesTemplatePaging })
-        : fetchSearchPage(targetUrl, {
-          query: nextQuery,
-          pageIndex,
-          usesTemplatePaging: pageUsesTemplatePaging,
-        })
+      fetchListingPage(listingMode, targetUrl, {
+        query: nextQuery,
+        pageIndex,
+        usesTemplatePaging: pageUsesTemplatePaging,
+      })
     );
 
     const resolveTargetUrl = (pageIndex: number): string => (
@@ -625,10 +456,7 @@ export function useScraperBrowserSearch({
   }, [
     authorConfig,
     authorTemplateContext,
-    fetchAuthorPage,
-    fetchHomepagePage,
-    fetchSearchPage,
-    fetchTagPage,
+    fetchListingPage,
     getUsesTemplatePaging,
     homepageConfig,
     scraper.baseUrl,
@@ -826,17 +654,10 @@ export function useScraperBrowserSearch({
         pageIndex: nextPageIndex,
         usesTemplatePaging,
       };
-      const nextPage = mode === 'author'
-        ? await fetchAuthorPage(nextPageTargetUrl, nextPageOptions)
-        : mode === 'tag'
-          ? await fetchTagPage(nextPageTargetUrl, nextPageOptions)
-        : mode === 'homepage'
-          ? await fetchHomepagePage(nextPageTargetUrl, nextPageOptions)
-        : await fetchSearchPage(nextPageTargetUrl, {
-          query,
-          pageIndex: nextPageIndex,
-          usesTemplatePaging,
-        });
+      const nextPage = await fetchListingPage(mode, nextPageTargetUrl, {
+        ...nextPageOptions,
+        query,
+      });
       if (!nextPage.items.length) {
         setRuntimeMessage(
           mode === 'author'
@@ -881,10 +702,7 @@ export function useScraperBrowserSearch({
   }, [
     authorConfig,
     authorTemplateContext,
-    fetchAuthorPage,
-    fetchHomepagePage,
-    fetchSearchPage,
-    fetchTagPage,
+    fetchListingPage,
     getUsesTemplatePaging,
     listingPage,
     listingPageIndex,
@@ -920,18 +738,10 @@ export function useScraperBrowserSearch({
     setRuntimeError(null);
 
     try {
-      const previousPage = mode === 'author'
-        ? await fetchAuthorPage(previousPageUrl)
-        : mode === 'tag'
-          ? await fetchTagPage(previousPageUrl)
-        : mode === 'homepage'
-          ? await fetchHomepagePage(previousPageUrl, {
-            pageIndex: Math.max(0, listingPageIndex - 1),
-          })
-        : await fetchSearchPage(previousPageUrl, {
-          query,
-          pageIndex: Math.max(0, listingPageIndex - 1),
-        });
+      const previousPage = await fetchListingPage(mode, previousPageUrl, {
+        query,
+        pageIndex: Math.max(0, listingPageIndex - 1),
+      });
       setListingPage(previousPage);
       setListingResults(previousPage.items);
       setHasExecutedListing(true);
@@ -952,10 +762,7 @@ export function useScraperBrowserSearch({
       setLoading(false);
     }
   }, [
-    fetchAuthorPage,
-    fetchHomepagePage,
-    fetchSearchPage,
-    fetchTagPage,
+    fetchListingPage,
     listingPageIndex,
     listingVisitedPageUrls,
     mode,

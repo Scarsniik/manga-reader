@@ -8,7 +8,6 @@ import type {
   ScraperRecord,
 } from "@/shared/scraper";
 import {
-  buildSourceResults,
   buildSourceResultsFromItems,
   fetchAuthorPageWithRetry,
   getAuthorConfig,
@@ -20,8 +19,13 @@ import {
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
+import {
+  createScraperCardDetailsCache,
+  isScraperListingPaginationEndError,
+} from "@/renderer/utils/scraperRuntime";
 import { findAuthorFavoriteCachedSource } from "@/renderer/utils/scraperAuthorFavoriteCache";
+import { keepNewSourceResults } from "@/renderer/components/MultiSearch/multiSearchRunState";
+import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 
 export type AuthorFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -81,40 +85,6 @@ const canPersistRunsCache = (sourceRuns: AuthorFavoriteSourceRun[]): boolean => 
   sourceRuns.length > 0
   && sourceRuns.every((run) => run.status !== "error" && !run.error && !run.hasNextPage)
 );
-
-const normalizeResultUrl = (source: MultiSearchSourceResult): string => {
-  const value = source.result.detailUrl?.trim();
-  if (!value) {
-    return "";
-  }
-
-  try {
-    return new URL(value).toString();
-  } catch {
-    return value;
-  }
-};
-
-const keepNewSourceResults = (
-  existingResults: MultiSearchSourceResult[],
-  pageResults: MultiSearchSourceResult[],
-): MultiSearchSourceResult[] => {
-  const seenUrls = new Set(existingResults.map(normalizeResultUrl).filter(Boolean));
-
-  return pageResults.filter((source) => {
-    const url = normalizeResultUrl(source);
-    if (!url) {
-      return true;
-    }
-
-    if (seenUrls.has(url)) {
-      return false;
-    }
-
-    seenUrls.add(url);
-    return true;
-  });
-};
 
 const getAuthorFavoriteCacheApi = () => (window as any).api ?? {};
 
@@ -196,6 +166,7 @@ export default function useAuthorFavoriteRuns(
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
+  const detailsCacheRef = useRef(createScraperCardDetailsCache());
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
   const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
   const contextualAuthorNames = useMemo(() => Array.from(new Set(
@@ -250,18 +221,17 @@ export default function useAuthorFavoriteRuns(
         run.favoriteSource.templateContext ?? null,
         {
           scrapeDetailsWithCards,
+          detailsCache: detailsCacheRef.current,
         },
       );
-      const pageResults = await enrichSourceResultsWithJapaneseRomanization(
-        buildSourceResults(
-          run.scraper,
-          page,
-          pageIndex,
-          run.favoriteSource.name,
-          contextualAuthorNames,
-        )
-          .filter((source) => doesMultiSearchSourceMatchIncludedLanguages(source, includedLanguageCodes)),
-      );
+      const { includedSources: pageResults } = await processScraperListingPage({
+        scraper: run.scraper,
+        page,
+        pageIndex,
+        searchTerm: run.favoriteSource.name,
+        contextualAuthorNames,
+        includedLanguageCodes,
+      });
       const newPageResults = keepNewSourceResults(run.results, pageResults);
       const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
       const nextRun: AuthorFavoriteSourceRun = {
@@ -478,6 +448,7 @@ export default function useAuthorFavoriteRuns(
   }, [cacheResults, favorite]);
 
   const start = useCallback(async () => {
+    detailsCacheRef.current = createScraperCardDetailsCache();
     if (!favorite) {
       setRuns([]);
       setMessage(null);
