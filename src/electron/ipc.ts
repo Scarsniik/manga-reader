@@ -466,6 +466,15 @@ ipcMain.handle("save-scraper-draft", async (event: IpcMainInvokeEvent, request: 
     return updated;
 });
 ipcMain.handle("fetch-scraper-document", async (event: IpcMainInvokeEvent, request: any) => scrapers.fetchScraperDocument(event, request));
+ipcMain.handle("scraper-latest-diagnostics-start", async (event: IpcMainInvokeEvent, request: any) => (
+  scrapers.startScraperLatestDiagnostics(event, request)
+));
+ipcMain.handle("scraper-latest-diagnostics-event", async (event: IpcMainInvokeEvent, request: any) => (
+  scrapers.appendScraperLatestDiagnosticEvent(event, request)
+));
+ipcMain.handle("scraper-latest-diagnostics-finish", async (event: IpcMainInvokeEvent, request: any) => (
+  scrapers.finishScraperLatestDiagnostics(event, request)
+));
 ipcMain.handle("save-scraper-feature-config", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.saveScraperFeatureConfig(event, request);
     notifyScrapersUpdated();

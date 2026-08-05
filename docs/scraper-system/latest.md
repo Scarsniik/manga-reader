@@ -1,6 +1,6 @@
 # Mode Nouveautes
 
-Date : 2026-05-25
+Date : 2026-08-03
 
 Le mode `Nouveautes` affiche des resultats fusionnes qui sont encore consideres comme nouveaux par
 l'historique de vue des cards. La vue ouvre d'abord l'onglet `Sources`, puis propose l'onglet
@@ -54,17 +54,19 @@ au seuil `scraperLatestLanguageRejectLimit`, y compris pendant une collecte en a
 Le scan profond utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
 d'anciennes cards jamais vues. Si aucun checkpoint exact n'existe pour la requete et les langues
 incluses, il continue la pagination normale au lieu de s'arreter a la premiere page deja connue ou
-ignoree par langue. Le parametre `scraperLatestDeepPageLimit` limite le nombre de pages consultees
-en scan profond quand il est superieur a 0 ; la valeur 0 signifie aucune limite de pages.
+ignoree par langue. Le checkpoint version 2 memorise la prochaine page non traitee meme lorsqu'aucune
+card de la page precedente n'a ete acceptee. Les anciens checkpoints ancres sur une card restent lus :
+leur page est rejouee une fois pour ne rien sauter. Le parametre `scraperLatestDeepPageLimit` limite le
+nombre de pages consultees par source et par lancement. Sa valeur par defaut est 50 et son minimum est 1.
 
 Sous les trois modes de scan, une barre `Reglages et reprise` regroupe `Parametres session` et le
 controle partage `Scraper et ajouter`. Son champ numerique accepte au minimum une page et remplace
 l'ancien couple `Passes` / `Continuer`. La barre est placee avant le resume et la grille pour pouvoir
-ajuster ou relancer la collecte avant de parcourir les cards. Le controle est actif
-uniquement si au moins une source a atteint son quota de resultats et garde une suite possible. Une
-source arretee avant son quota, par exemple faute de nouveautes, ne peut pas etre reprise. Apres un
-scan rapide, chaque page demandee ajoute une nouvelle reprise rapide depuis le curseur dynamique du
-scan precedent, sans vider les resultats deja affiches.
+ajuster ou relancer la collecte avant de parcourir les cards. Le controle est actif uniquement si le
+quota concerne a ete atteint et qu'au moins une source garde une suite possible. Une collecte arretee
+avant son quota, par exemple faute de nouveautes, ne peut pas etre reprise. Apres un scan rapide,
+chaque page demandee ajoute une nouvelle reprise rapide depuis le curseur dynamique du scan precedent,
+sans vider les resultats deja affiches.
 
 Un second bouton `Continuer` est affiche sous les resultats quand des cards sont visibles. Il reprend
 le meme curseur rapide, mais remplace la liste courante par les resultats de la nouvelle reprise.
@@ -107,22 +109,77 @@ Chaque scraper choisit son module de collecte :
 - `Homepage` charge le module `Homepage`
 - `Recherche` charge le module `Recherche` avec `homeSearch.query` comme requete par defaut
 
-Le parametre global `scraperLatestResultLimit` a un minimum de 1 et pas de limite haute. Il s'applique
-par source incluse. Si une valeur tres grande est configuree, le runtime suit ce choix et peut donc
-charger beaucoup de pages.
+Les quotas ont un minimum de 1 et pas de limite haute. Le parametre
+`scraperLatestResultLimitMode` choisit leur mode de calcul :
+
+- `total`, valeur par defaut, applique `scraperLatestScraperResultLimit` au total des scrapers inclus
+  et `scraperLatestTagResultLimit` separement a chaque tag favori, toutes ses sources confondues
+- `perSource` conserve l'ancien comportement et applique le quota correspondant a chaque source
+
+En mode `total`, le runtime repartit chaque tour en lots optimistes equilibres dans chaque groupe de
+quota : un groupe pour les scrapers et un groupe distinct pour chaque tag favori. Le lot de chaque
+source est recalcule apres chaque tour a partir de ses resultats reellement conserves. Avec un objectif
+de 20, deux sources commencent donc avec un objectif de 10 chacune ; si elles conservent ensuite 6 et
+9 cards, le tour suivant demande respectivement 4 et 1 cards. Une source arrivee en fin de pagination
+est retiree et son deficit est redistribue aux sources encore disponibles. Une source qui ne produit
+aucun resultat avant la limite de refus par langue ou le plafond de pages est egalement retiree du
+quota : cette indisponibilite est memorisee 24 heures pour la meme source, le meme tag et les memes
+langues. Un rejet ordinaire, une erreur ou une source qui a deja produit un resultat ne suffit pas a
+modifier les quotas ; sinon, seule une fin de pagination
+confirmee libere la part manquante d'une source.
+
+Chaque source conserve son curseur de pagination et les nouveautes restantes de la page deja chargee.
+Les pages de liste dont le lot a besoin sont prechargees avant le traitement des details. Une page
+supplementaire est aussi anticipee des que les candidates encore en tampon ne peuvent plus remplir le
+lot courant. Le cache ne garde qu'une page pertinente par source et les requetes prechargees utilisent
+le meme plafond global que le reste du scraping. Une continuation ajoute un nouveau quota a chaque
+groupe, au lieu d'ajouter un quota pour chaque source.
+
+La collecte normale et la collecte en arriere-plan appellent le meme moteur `runScraperLatestSearch`.
+Le hook React de la vue normale ne contient plus de seconde implementation du scraping. Les cards
+legeres restantes sont conservees en tampon et les pages de detail ne sont
+chargees que jusqu'au remplissage du quota courant, y compris lorsque des candidates sont rejetees
+par la langue, l'historique ou la blacklist.
+
+Les URLs candidates des miniatures sont extraites sans requete de validation pendant la lecture des
+pages de liste ou des fiches detail. La premiere URL est utilisee pour la card et les suivantes ne sont
+essayees par l'image affichee qu'en cas d'erreur de chargement. Une candidate rejetee avant affichage
+ne declenche donc aucune requete de miniature.
+
+Le mode `Scanner sans quota` ignore ce choix, puisqu'il continue jusqu'a la zone deja vue ou jusqu'a
+son garde-fou.
+
+`scraperLatestResultLimit` reste conserve comme valeur historique de compatibilite. Si une valeur tres
+grande est configuree, le runtime suit ce choix et peut donc charger beaucoup de pages.
 L'en-tete des resultats propose aussi des parametres de session pour remplacer temporairement le
-nombre de resultats par scrapper et par tag favori, le nombre de scrapings simultanes, la limite du
+mode de calcul, les quotas des scrappers et des tags favoris, le nombre de scrapings simultanes, la limite du
 scan profond, le garde-fou du scan sans quota, le seuil de cards vues d'affilee en scan rapide et la
 limite de refus par langue. Ces
 valeurs ne sont pas sauvegardees dans les settings globaux et le resume commence par un message
 `Override de session actif` tant qu'elles sont utilisees.
-Le parametre global `scraperLatestConcurrency` a un minimum de 1 et pas de limite haute. Il indique
-combien de sources peuvent etre chargees en parallele dans les onglets `Sources` et `Auteurs` du
-mode `Nouveautes`. La valeur par defaut est 2.
+Le parametre global `scraperLatestConcurrency` a un minimum de 1 et pas de limite haute. Il plafonne
+les requetes de scraping simultanees, y compris les pages de liste prechargees et les pages de detail,
+et limite aussi les sources executees en parallele dans les onglets `Sources` et `Auteurs` du mode
+`Nouveautes`. La valeur par defaut est 2.
 Le parametre global `scraperLatestQuickConsecutiveSeenStopThreshold` a un minimum de 0. Il indique
 combien de cards deja vues d'affilee sont tolerees avant que le scan rapide s'arrete. Le parametre
-global `scraperLatestDeepPageLimit` a un minimum de 0. Avec 0, le scan profond continue
-jusqu'a trouver assez de nouveautes ou jusqu'a la fin de pagination.
+global `scraperLatestDeepPageLimit` a un minimum de 1 et vaut 50 par defaut.
+
+## Diagnostic de performances
+
+L'onglet `Developpeur` des parametres permet d'activer les rapports de performance des nouveautes.
+Le reglage est desactive par defaut et s'applique au moteur commun, donc aussi bien au premier plan
+qu'a l'arriere-plan. Lorsqu'il est active, chaque recherche produit un profil JSONL dans
+`data/scraper-latest-diagnostics` sous le dossier utilisateur de l'application. Le profil separe le
+temps passe dans la file du limiteur global du temps HTTP reel. Il trace aussi les lots par source,
+les tours de quota, l'attente du planificateur, les pages prechargees puis reutilisees ou abandonnees,
+et le nombre de fiches detail chargees par rapport aux resultats gardes.
+
+La commande `npm run diagnostics:scraper-latest` analyse le profil le plus recent et ecrit un fichier
+`*.summary.json` a cote du JSONL. Elle signale les attentes de file anormales, les requetes lentes,
+les barrieres entre sources, les rejets couteux et un faible taux d'utilisation du prechargement.
+Un profil precis peut etre analyse avec
+`npm run diagnostics:scraper-latest -- --file <chemin-du-profil.jsonl>`.
 
 La selection propose aussi `Inconnue`. Elle garde les cards sans langue detectee quand une
 restriction de langue est activee. Sans cette option, les cards sans langue detectee sont ignorees

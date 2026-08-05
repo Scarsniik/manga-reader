@@ -42,6 +42,11 @@ import type {
     UpdateBackgroundSearchRequest,
 } from "../shared/backgroundSearch";
 import type {
+    ScraperLatestDiagnosticEventRequest,
+    ScraperLatestDiagnosticFinishRequest,
+    ScraperLatestDiagnosticStartRequest,
+} from "../shared/scraperLatestDiagnostics";
+import type {
     SaveReadingListRequest,
     SavedReadingList,
 } from "../shared/readingList";
@@ -521,6 +526,9 @@ contextBridge.exposeInMainWorld('api', {
     deleteScraper: (scraperId: string) => ipcRenderer.invoke('delete-scraper', scraperId),
     saveScraperDraft: (request: SaveScraperDraftRequest) => ipcRenderer.invoke('save-scraper-draft', request),
     fetchScraperDocument: (request: FetchScraperDocumentRequest) => ipcRenderer.invoke('fetch-scraper-document', request),
+    startScraperLatestDiagnostics: (request: ScraperLatestDiagnosticStartRequest) => ipcRenderer.invoke('scraper-latest-diagnostics-start', request),
+    appendScraperLatestDiagnosticEvent: (request: ScraperLatestDiagnosticEventRequest) => ipcRenderer.invoke('scraper-latest-diagnostics-event', request),
+    finishScraperLatestDiagnostics: (request: ScraperLatestDiagnosticFinishRequest) => ipcRenderer.invoke('scraper-latest-diagnostics-finish', request),
     saveScraperFeatureConfig: (request: SaveScraperFeatureRequest) => ipcRenderer.invoke('save-scraper-feature-config', request),
     saveScraperGlobalConfig: (request: SaveScraperGlobalConfigRequest) => ipcRenderer.invoke('save-scraper-global-config', request),
     getScraperReaderProgress: (scraperMangaId: string) => ipcRenderer.invoke('get-scraper-reader-progress', scraperMangaId),

@@ -5,12 +5,23 @@ const esbuild = require("esbuild");
 
 const source = `
   export {
+    resolveBackgroundListingTotalGroupKey,
+    isBackgroundListingSourceUnavailableForQuota,
+    runBackgroundListingTotalGroup,
     resolveBackgroundLanguageProgress,
     resolveBackgroundListingConcurrency,
     resolveBackgroundListingResultLimit,
     resolveBackgroundQuickSeenProgress,
     usesBackgroundQuickSeenBoundary,
   } from "@/renderer/backgroundSearch/backgroundListingExecution";
+  export {
+    enrichScraperLatestCandidatesForSlots,
+  } from "@/renderer/components/ScraperLatest/scraperLatestCandidateEnrichment";
+  export {
+    buildScraperLatestCursorCheckpointRequest,
+    resolveScraperLatestCheckpointQuotaUnavailableReason,
+    SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS,
+  } from "@/renderer/utils/scraperLatestCheckpoints";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "background-listing-execution-test.ts" },
@@ -28,12 +39,212 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  enrichScraperLatestCandidatesForSlots,
+  resolveBackgroundListingTotalGroupKey,
+  isBackgroundListingSourceUnavailableForQuota,
+  runBackgroundListingTotalGroup,
   resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
   resolveBackgroundListingResultLimit,
   resolveBackgroundQuickSeenProgress,
   usesBackgroundQuickSeenBoundary,
+  buildScraperLatestCursorCheckpointRequest,
+  resolveScraperLatestCheckpointQuotaUnavailableReason,
+  SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS,
 } = bundledModule.exports;
+
+test("normal and background latest scans share quota-aware detail enrichment", async () => {
+  const batchSizes = [];
+  const result = await enrichScraperLatestCandidatesForSlots({
+    candidates: [1, 2, 3, 4, 5, 6],
+    remainingResultSlots: 2,
+    enrichBatch: async (batch) => {
+      batchSizes.push(batch.length);
+      return batch;
+    },
+    isAccepted: (candidate) => candidate % 2 === 0,
+  });
+
+  assert.deepEqual(batchSizes, [2, 1, 1]);
+  assert.deepEqual(result.acceptedCandidates, [2, 4]);
+  assert.deepEqual(result.remainingCandidates, [5, 6]);
+  assert.equal(result.processedCandidateCount, 4);
+});
+
+test("detail batches report rejections early enough to preload the next listing page", async () => {
+  const progress = [];
+  await enrichScraperLatestCandidatesForSlots({
+    candidates: [1, 2, 3, 4, 5, 6],
+    remainingResultSlots: 6,
+    maxBatchSize: 2,
+    enrichBatch: async (batch) => batch,
+    isAccepted: (candidate) => candidate !== 1,
+    onProgress: (snapshot) => progress.push(snapshot),
+  });
+
+  assert.equal(progress[0].acceptedCandidateCount, 0);
+  assert.ok(progress.some((snapshot) => (
+    snapshot.processedCandidateCount < 6
+    && snapshot.acceptedCandidateCount + snapshot.remainingCandidateCount < snapshot.targetCount
+  )));
+});
+
+test("total latest quotas group regular scrapers together and each favorite tag separately", () => {
+  assert.equal(resolveBackgroundListingTotalGroupKey({ id: "homepage-a", mode: "homepage" }), "scraper");
+  assert.equal(resolveBackgroundListingTotalGroupKey({
+    id: "tag:glasses:source-a:https://example.test/tag/glasses",
+    mode: "tag",
+    favoriteId: "glasses",
+  }), "tag:glasses");
+  assert.equal(resolveBackgroundListingTotalGroupKey({
+    id: "tag:hairy:source-b:https://example.test/tag/hairy",
+    mode: "tag",
+  }), "tag:hairy");
+});
+
+test("total latest quotas stop execution as soon as the group target is reached", async () => {
+  const counts = [0, 0, 0];
+  const calls = [];
+  const summary = await runBackgroundListingTotalGroup({
+    sourceIndexes: [0, 1, 2],
+    resultLimit: 5,
+    getResultCount: (sourceIndex) => counts[sourceIndex],
+    canContinue: () => true,
+    execute: async (sourceIndex, targetResultCount) => {
+      calls.push(sourceIndex);
+      counts[sourceIndex] = targetResultCount;
+    },
+  });
+
+  assert.deepEqual(counts, [2, 2, 1]);
+  assert.deepEqual(calls, [0, 1, 2]);
+  assert.deepEqual(summary, { quotaReached: true, resultCount: 5 });
+});
+
+test("total latest quotas redistribute missing results without scraping exhausted sources again", async () => {
+  const counts = [0, 0];
+  const calls = [];
+  await runBackgroundListingTotalGroup({
+    sourceIndexes: [0, 1],
+    resultLimit: 3,
+    getResultCount: (sourceIndex) => counts[sourceIndex],
+    canContinue: (sourceIndex) => sourceIndex === 1 || calls.filter((value) => value === 0).length === 0,
+    isUnavailable: (sourceIndex) => sourceIndex === 0 && calls.includes(0),
+    execute: async (sourceIndex, targetResultCount) => {
+      calls.push(sourceIndex);
+      if (sourceIndex === 1) counts[sourceIndex] = targetResultCount;
+    },
+  });
+
+  assert.deepEqual(counts, [0, 3]);
+  assert.deepEqual(calls, [0, 1, 1]);
+});
+
+test("total latest quotas do not compensate a source that still has pages after rejections", async () => {
+  const counts = [0, 0];
+  const calls = [];
+  const summary = await runBackgroundListingTotalGroup({
+    sourceIndexes: [0, 1],
+    resultLimit: 20,
+    getResultCount: (sourceIndex) => counts[sourceIndex],
+    canContinue: () => true,
+    isUnavailable: () => false,
+    execute: async (sourceIndex, targetResultCount) => {
+      calls.push([sourceIndex, targetResultCount]);
+      if (sourceIndex === 1) counts[sourceIndex] = targetResultCount;
+    },
+  });
+
+  assert.deepEqual(counts, [0, 10]);
+  assert.deepEqual(calls, [[0, 10], [1, 10], [0, 10]]);
+  assert.deepEqual(summary, { quotaReached: false, resultCount: 10 });
+});
+
+test("total latest quotas redistribute sources that cannot satisfy the filtered quota", () => {
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 0,
+    languageRejectLimitReached: true,
+  }), true);
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 0,
+    safetyLimitReached: true,
+  }), true);
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 0,
+    sourceExhausted: true,
+  }), true);
+});
+
+test("total latest quotas keep partial and ordinarily rejected sources fixed", () => {
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 1,
+    languageRejectLimitReached: true,
+  }), false);
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 1,
+    safetyLimitReached: true,
+  }), false);
+  assert.equal(isBackgroundListingSourceUnavailableForQuota({
+    resultCount: 0,
+  }), false);
+});
+
+test("filtered quota unavailability is cached for equivalent scans and expires", () => {
+  const now = Date.parse("2026-08-05T00:00:00.000Z");
+  const request = buildScraperLatestCursorCheckpointRequest({
+    scraper: { id: "source-a", updatedAt: "2026-08-01T00:00:00.000Z" },
+    module: "tag",
+    query: "https://example.test/tag/glasses",
+    includedLanguageCodes: ["en"],
+    pageIndex: 49,
+    page: {
+      items: [],
+      currentPageUrl: "https://example.test/tag/glasses?page=50",
+      nextPageUrl: "https://example.test/tag/glasses?page=51",
+    },
+    quotaUnavailableReason: "pageLimitWithoutResults",
+    now,
+  });
+  const checkpoint = {
+    ...request,
+    id: "checkpoint-a",
+    query: request.query ?? "",
+    includedLanguageCodes: request.includedLanguageCodes ?? [],
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now),
+    "pageLimitWithoutResults",
+  );
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(
+      checkpoint,
+      now + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS,
+    ),
+    null,
+  );
+});
+
+test("a cached unavailable source gives its quota to an available source", async () => {
+  const counts = [0, 0];
+  const calls = [];
+  const summary = await runBackgroundListingTotalGroup({
+    sourceIndexes: [0, 1],
+    resultLimit: 4,
+    getResultCount: (sourceIndex) => counts[sourceIndex],
+    canContinue: (sourceIndex) => sourceIndex === 1,
+    isUnavailable: (sourceIndex) => sourceIndex === 0,
+    execute: async (sourceIndex, targetResultCount) => {
+      calls.push([sourceIndex, targetResultCount]);
+      counts[sourceIndex] = targetResultCount;
+    },
+  });
+
+  assert.deepEqual(calls, [[1, 2], [1, 4]]);
+  assert.deepEqual(counts, [0, 4]);
+  assert.deepEqual(summary, { quotaReached: true, resultCount: 4 });
+});
 
 test("background listings keep the concurrency selected by the search", () => {
   assert.equal(resolveBackgroundListingConcurrency(30, 2), 30);

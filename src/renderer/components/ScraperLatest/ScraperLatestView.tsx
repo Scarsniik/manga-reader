@@ -5,9 +5,11 @@ import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
   ScraperRecord,
+  ScraperLatestResultLimitMode,
   ScraperTagFavoriteRecord,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
+import { normalizeScraperLatestDeepPageLimit } from "@/shared/scraperLatestSettings";
 import { HistoryTabs } from "@/renderer/components/History/HistoryControls";
 import useParams from "@/renderer/hooks/useParams";
 import { useModal } from "@/renderer/hooks/useModal";
@@ -55,6 +57,7 @@ import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import { loadUsableAuthorFavoriteCaches } from "@/renderer/utils/scraperAuthorFavoriteCache";
+import { resolveScraperLatestTotalGroupKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -175,14 +178,17 @@ const getScraperResultLimit = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 20;
 };
 
+const getScraperResultLimitMode = (value: unknown): ScraperLatestResultLimitMode => (
+  value === "perSource" ? "perSource" : "total"
+);
+
 const getScraperLanguageRejectLimit = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 60;
 };
 
 const getScraperDeepPageLimit = (value: unknown): number => {
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+  return normalizeScraperLatestDeepPageLimit(value);
 };
 
 const getScraperContinuousPageSafetyLimit = (value: unknown): number => {
@@ -353,6 +359,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const defaultTagResultLimit = getScraperResultLimit(
     params?.scraperLatestTagResultLimit ?? params?.scraperLatestResultLimit,
   );
+  const defaultResultLimitMode = getScraperResultLimitMode(params?.scraperLatestResultLimitMode);
   const defaultScraperLanguageRejectLimit = getScraperLanguageRejectLimit(params?.scraperLatestLanguageRejectLimit);
   const defaultScraperDeepPageLimit = getScraperDeepPageLimit(params?.scraperLatestDeepPageLimit);
   const defaultScraperContinuousPageSafetyLimit = getScraperContinuousPageSafetyLimit(
@@ -364,6 +371,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const defaultScraperLatestConcurrency = getScraperLatestConcurrency(params?.scraperLatestConcurrency);
   const scraperResultLimit = scraperSessionSettings?.scraperResultLimit ?? defaultScraperResultLimit;
   const tagResultLimit = scraperSessionSettings?.tagResultLimit ?? defaultTagResultLimit;
+  const scraperResultLimitMode = attachedSearch.job?.metadata.kind === "latestSources"
+    ? getScraperResultLimitMode(attachedInput?.resultLimitMode ?? "total")
+    : scraperSessionSettings?.resultLimitMode ?? defaultResultLimitMode;
   const scraperLanguageRejectLimit = scraperSessionSettings?.languageRejectLimit ?? defaultScraperLanguageRejectLimit;
   const scraperDeepPageLimit = scraperSessionSettings?.deepPageLimit ?? defaultScraperDeepPageLimit;
   const scraperContinuousPageSafetyLimit = scraperSessionSettings?.continuousPageSafetyLimit
@@ -569,6 +579,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
 
       return enrichSourceResultsWithCardDetails(scraper, sources, {
         scrapeDetailsWithCards: true,
+        detailConcurrency: scraperLatestConcurrency,
       });
     }))
       .then((groups) => {
@@ -609,7 +620,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     blacklistEnrichedSourcesByKey,
     hasStoredBlacklistDecision,
     params?.scraperBlacklistedTagsByScraper,
+    params?.scraperLatestPerformanceReportsEnabled,
     params?.scraperScrapeDetailsWithCards,
+    scraperLatestConcurrency,
   ]);
 
   React.useEffect(() => {
@@ -650,12 +663,14 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         continuousPageSafetyLimit: scraperContinuousPageSafetyLimit,
         concurrency: scraperLatestConcurrency,
         tagResultLimit,
+        resultLimitMode: scraperResultLimitMode,
         languageRejectLimit: scraperLanguageRejectLimit,
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
         excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
         tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
+        performanceReportsEnabled: params?.scraperLatestPerformanceReportsEnabled === true,
       },
     );
   }, [
@@ -670,6 +685,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    scraperResultLimitMode,
     scraperRuns.start,
     shouldHideBlacklistedLatestCards,
     scrapers,
@@ -757,6 +773,11 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       }))
       : scraperRuns.runs.map((run) => {
         const runResultLimit = run.sourceKind === "tagFavorite" ? tagResultLimit : scraperResultLimit;
+        const totalResultCount = scraperRuns.runs.reduce((count, candidate) => {
+          const belongsToSameQuota = resolveScraperLatestTotalGroupKey(candidate)
+            === resolveScraperLatestTotalGroupKey(run);
+          return belongsToSameQuota ? count + candidate.results.length : count;
+        }, 0);
         const canContinue = run.canContinue === true;
         return {
           key: run.key,
@@ -769,7 +790,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             run.module === "search" ? "Recherche" : run.module === "tag" ? "Tag favori" : "Homepage",
             run.continuousScan
               ? `${run.results.length} non vue(s)`
-              : `${run.results.length}/${runResultLimit} non vue(s)`,
+              : scraperResultLimitMode === "total"
+                ? `${run.results.length} non vue(s) - quota total ${totalResultCount}/${runResultLimit}`
+                : `${run.results.length}/${runResultLimit} non vue(s)`,
             run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
             run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
             run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
@@ -785,7 +808,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           error: run.error,
         };
       })
-  ), [activeTab, attachedResult?.runs, attachedSearch.attached, authorRuns.runs, getStatusState, scraperResultLimit, scraperRuns.runs, tagResultLimit]);
+  ), [activeTab, attachedResult?.runs, attachedSearch.attached, authorRuns.runs, getStatusState, scraperResultLimit, scraperResultLimitMode, scraperRuns.runs, tagResultLimit]);
 
   const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
     setParams({
@@ -916,9 +939,11 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       "toutes",
     );
     const includesAllTagFavorites = scraperIncludedTagFavoriteIds.includes(LATEST_ALL_TAG_FAVORITES_VALUE);
+    const quotaModeLabel = scraperResultLimitMode === "total" ? "total scrappers / par tag" : "par source";
     const sessionOverrideSummary = hasScraperSessionSettingsOverride
       ? [
-        `Override de session actif : ${scraperResultLimit} resultat(s) par scrapper`,
+        `Override de session actif : quota ${quotaModeLabel}`,
+        `${scraperResultLimit} resultat(s) pour les scrappers`,
         `${tagResultLimit} par tag favori`,
         `${scraperLatestConcurrency} source(s) en parallele`,
         `scan profond ${scraperDeepPageLimit} page(s)`,
@@ -927,7 +952,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         `refus langue ${scraperLanguageRejectLimit}. `,
       ].join(", ")
       : "";
-    const baseSummary = `${sessionOverrideSummary}Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par tag favori.`;
+    const baseSummary = scraperResultLimitMode === "total"
+      ? `${sessionOverrideSummary}Charge au total jusqu'a ${scraperResultLimit} resultat(s) non vu(s) pour les scrappers et ${tagResultLimit} par tag favori.`
+      : `${sessionOverrideSummary}Charge jusqu'a ${scraperResultLimit} resultat(s) non vu(s) par scrapper et ${tagResultLimit} par source de tag favori.`;
     const concurrencySummary = ` Jusqu'a ${scraperLatestConcurrency} source(s) chargee(s) en parallele.`;
     const scraperFilterSummary = !enabledLatestScrapers.length
       ? " Aucun scrapper actif dans les nouveautes."
@@ -945,9 +972,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           : includesAllTagFavorites
             ? " Tags favoris inclus : tous."
             : ` Tags favoris inclus : ${includedTagFavoriteLabel}.`;
-    const deepPageLimitSummary = scraperDeepPageLimit > 0
-      ? ` Scan profond limite a ${scraperDeepPageLimit} page(s).`
-      : " Scan profond sans limite de pages.";
+    const deepPageLimitSummary = ` Scan profond limite a ${scraperDeepPageLimit} page(s) par source.`;
     const continuousPageSafetyLimitSummary = ` Scan sans quota limite a ${scraperContinuousPageSafetyLimit} page(s) par source.`;
     const quickSeenStopSummary = ` Scan rapide : ${scraperQuickConsecutiveSeenStopThreshold} card(s) vue(s) d'affilee toleree(s) avant arret.`;
     const languageRejectSummary = scraperLanguageRejectLimit > 0
@@ -971,6 +996,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    scraperResultLimitMode,
     tagResultLimit,
     tagFavorites,
     tagFavoritesLoaded,
@@ -988,6 +1014,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const handleOpenScraperSessionSettings = React.useCallback(() => {
     openModal(buildScraperLatestSessionSettingsModal({
       defaults: {
+        resultLimitMode: defaultResultLimitMode,
         scraperResultLimit: defaultScraperResultLimit,
         tagResultLimit: defaultTagResultLimit,
         concurrency: defaultScraperLatestConcurrency,
@@ -997,6 +1024,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         languageRejectLimit: defaultScraperLanguageRejectLimit,
       },
       initialValues: {
+        resultLimitMode: scraperResultLimitMode,
         scraperResultLimit,
         tagResultLimit,
         concurrency: scraperLatestConcurrency,
@@ -1013,9 +1041,10 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     defaultScraperDeepPageLimit,
     defaultScraperContinuousPageSafetyLimit,
     defaultScraperLanguageRejectLimit,
-    defaultScraperLatestConcurrency,
+    scraperLatestConcurrency,
     defaultScraperQuickConsecutiveSeenStopThreshold,
     defaultScraperResultLimit,
+    defaultResultLimitMode,
     defaultTagResultLimit,
     hasScraperSessionSettingsOverride,
     scraperDeepPageLimit,
@@ -1025,6 +1054,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperQuickConsecutiveSeenStopThreshold,
     openModal,
     scraperResultLimit,
+    scraperResultLimitMode,
     tagResultLimit,
   ]);
 
@@ -1050,7 +1080,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       }))
       : [
         ...includedLatestScrapers.map((scraper) => ({
-          id: scraper.id,
+          id: `scraper:${scraper.id}`,
           name: scraper.name,
           scraper,
           query: scraper.globalConfig.latest.module === "search"
@@ -1066,6 +1096,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             name: `${favorite.name} · ${source.name} · ${scraper.name}`,
             scraper,
             query: source.tagUrl,
+            favoriteId: favorite.id,
             mode: "tag" as const,
             resultLimit: searchMode === "continuous" ? 0 : tagResultLimit,
             resultTag: {
@@ -1080,13 +1111,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       maxPages: isAuthors
         ? authorPageCount
         : searchMode === "deep"
-          ? scraperDeepPageLimit > 0 ? scraperDeepPageLimit : null
+          ? scraperDeepPageLimit
           : searchMode === "continuous"
             ? scraperContinuousPageSafetyLimit
           : 1,
       resultLimit: isAuthors || searchMode === "continuous" ? 0 : scraperResultLimit,
+      tagResultLimit: isAuthors || searchMode === "continuous" ? 0 : tagResultLimit,
+      resultLimitMode: isAuthors ? undefined : scraperResultLimitMode,
       paceMode: "careful",
-      concurrency: defaultScraperLatestConcurrency,
+      concurrency: scraperLatestConcurrency,
       includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
       excludeBlacklistedTagCards: isAuthors ? false : shouldHideBlacklistedLatestCards,
@@ -1097,6 +1130,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       searchMode,
       quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
       languageRejectLimit: isAuthors ? undefined : scraperLanguageRejectLimit,
+      performanceReportsEnabled: isAuthors
+        ? false
+        : params?.scraperLatestPerformanceReportsEnabled === true,
       useAuthorFavoriteCache: isAuthors
         ? params?.scraperLatestAuthorsUseCache !== false
         : undefined,
@@ -1127,6 +1163,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     defaultScraperLatestConcurrency,
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
+    scraperResultLimitMode,
     scrapersById,
     shouldHideBlacklistedLatestCards,
     tagResultLimit,

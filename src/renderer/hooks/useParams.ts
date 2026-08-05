@@ -2,6 +2,7 @@ import useRefresh from '@/renderer/hooks/useRefresh';
 import { useEffect, useState, useCallback } from 'react';
 import type { LibrarySearchFilterState, SavedLibrarySearch, SavedScraperSearch } from '@/renderer/types';
 import type { ScraperTagBlacklistByScraper } from '@/renderer/utils/scraperTagBlacklist';
+import type { ScraperLatestResultLimitMode } from '@/shared/scraper';
 
 export type ScraperTagListSortMode = 'alpha' | 'count';
 export type ScraperTagListSortDirection = 'asc' | 'desc';
@@ -89,11 +90,13 @@ export type AppParams = {
     scraperLatestResultLimit?: number;
     scraperLatestScraperResultLimit?: number;
     scraperLatestTagResultLimit?: number;
+    scraperLatestResultLimitMode?: ScraperLatestResultLimitMode;
     scraperLatestConcurrency?: number;
     scraperLatestDeepPageLimit?: number;
     scraperLatestContinuousPageSafetyLimit?: number;
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestLanguageRejectLimit?: number;
+    scraperLatestPerformanceReportsEnabled?: boolean;
     scraperLatestAuthorsUseCache?: boolean;
     scraperLatestAuthorCacheMaxAgeHours?: number;
     scraperLatestIncludedLanguageCodes?: string[];

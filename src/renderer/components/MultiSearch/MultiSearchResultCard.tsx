@@ -150,7 +150,15 @@ export default function MultiSearchResultCard({
       url: result.coverUrl,
       refererUrl: coverSource?.result.detailUrl || coverSource?.scraper.baseUrl,
     },
-  ]), [coverSource, result.coverUrl]);
+    ...(coverSource?.result.thumbnailCandidates ?? []).map((url) => ({
+      url,
+      refererUrl: coverSource?.result.detailUrl || coverSource?.scraper.baseUrl,
+    })),
+    ...result.sources.flatMap((source) => (source.result.thumbnailCandidates ?? []).map((url) => ({
+      url,
+      refererUrl: source.result.detailUrl || source.scraper.baseUrl,
+    }))),
+  ]), [coverSource, result.coverUrl, result.sources]);
   const coverUrlsKey = coverUrls.join("\n");
   const [coverIndex, setCoverIndex] = React.useState(0);
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : undefined;

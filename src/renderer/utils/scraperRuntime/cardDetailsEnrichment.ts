@@ -4,7 +4,7 @@ import {
   type ScraperRecord,
   type ScraperSearchResultItem,
 } from "@/shared/scraper";
-import { extractScraperDetailsFromDocumentWithImageFallbacks } from "@/renderer/utils/scraperRuntime/detailsExtraction";
+import { extractScraperDetailsFromDocument } from "@/renderer/utils/scraperRuntime/detailsExtraction";
 import { hasRenderableDetails } from "@/renderer/utils/scraperRuntime/detailsRenderable";
 import { resolveScraperDetailsTargetUrl } from "@/renderer/utils/scraperRuntime/urlResolution";
 import { mergeScraperTagValuePairs } from "@/renderer/utils/scraperRuntime/tagValuePairs";
@@ -22,6 +22,7 @@ type CardDetailsEnrichmentOptions = {
   scraper: ScraperRecord;
   detailsConfig: ScraperDetailsFeatureConfig | null | undefined;
   fetchDocument: ScraperDocumentFetcher | undefined;
+  concurrency?: number;
 };
 
 const uniqueTextValues = (values: Array<string | null | undefined>): string[] => {
@@ -67,6 +68,12 @@ const mergeCardWithDetails = (
     { tags: item.tags, tagUrls: item.tagUrls },
     { tags: details.tags, tagUrls: details.tagUrls },
   );
+  const thumbnailCandidates = uniqueTextValues([
+    ...(item.thumbnailCandidates ?? []),
+    item.thumbnailUrl,
+    ...(details.coverCandidates ?? []),
+    details.cover,
+  ]);
 
   return {
     ...item,
@@ -77,18 +84,22 @@ const mergeCardWithDetails = (
     authorNames: authorNames.length ? authorNames : item.authorNames,
     tags: tagValues.tags.length ? tagValues.tags : item.tags,
     tagUrls: tagValues.tagUrls.length ? tagValues.tagUrls : item.tagUrls,
-    thumbnailUrl: optionalText(item.thumbnailUrl) || optionalText(details.cover),
+    thumbnailUrl: thumbnailCandidates[0],
+    thumbnailCandidates: thumbnailCandidates.length > 1 ? thumbnailCandidates : undefined,
     summary: optionalText(item.summary) || optionalText(details.description),
     pageCount: optionalText(item.pageCount) || optionalText(details.pageCount),
     languageCodes: nextLanguageCodes.length ? nextLanguageCodes : item.languageCodes,
   };
 };
 
-const runCardDetailTasks = async (tasks: Array<() => Promise<void>>): Promise<void> => {
+const runCardDetailTasks = async (
+  tasks: Array<() => Promise<void>>,
+  concurrency: number,
+): Promise<void> => {
   let nextIndex = 0;
 
   const workers = Array.from(
-    { length: Math.min(SCRAPER_CARD_DETAILS_CONCURRENCY, tasks.length) },
+    { length: Math.min(concurrency, tasks.length) },
     async () => {
       while (nextIndex < tasks.length) {
         const taskIndex = nextIndex;
@@ -153,13 +164,13 @@ export const enrichScraperSearchPageWithDetails = async (
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(documentResult.html, "text/html");
-      const details = await extractScraperDetailsFromDocumentWithImageFallbacks(documentNode, detailsConfig, {
+      const details = extractScraperDetailsFromDocument(documentNode, detailsConfig, {
         requestedUrl: documentResult.requestedUrl,
         finalUrl: documentResult.finalUrl,
         status: documentResult.status,
         contentType: documentResult.contentType,
         html: documentResult.html,
-      }, fetchDocument);
+      });
 
       if (!hasRenderableDetails(details)) {
         failed += 1;
@@ -174,7 +185,11 @@ export const enrichScraperSearchPageWithDetails = async (
     }
   });
 
-  await runCardDetailTasks(tasks);
+  const concurrency = Math.max(
+    1,
+    Math.floor(Number(options.concurrency) || SCRAPER_CARD_DETAILS_CONCURRENCY),
+  );
+  await runCardDetailTasks(tasks, concurrency);
 
   return {
     ...page,

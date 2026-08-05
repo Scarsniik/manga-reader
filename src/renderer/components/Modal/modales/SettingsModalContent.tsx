@@ -23,6 +23,7 @@ import '@/renderer/components/Modal/modales/settings-style.scss'
 
 const OPTIONS_SUBMIT_BUTTON_ID = 'settings-options-submit'
 const READER_SUBMIT_BUTTON_ID = 'settings-reader-submit'
+const DEVELOPER_SUBMIT_BUTTON_ID = 'settings-developer-submit'
 
 declare global {
   interface Window {
@@ -34,7 +35,7 @@ export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
   const { setModalActions } = useModal()
   const [activeTab, setActiveTab] = React.useState<
-    'options' | 'reader' | 'shortcuts' | 'statistics' | 'version-installation'
+    'options' | 'reader' | 'shortcuts' | 'statistics' | 'developer' | 'version-installation'
   >('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
@@ -43,6 +44,8 @@ export default function SettingsModalContent() {
     ? OPTIONS_SUBMIT_BUTTON_ID
     : activeTab === 'reader'
       ? READER_SUBMIT_BUTTON_ID
+      : activeTab === 'developer'
+        ? DEVELOPER_SUBMIT_BUTTON_ID
       : null
 
   React.useEffect(() => {
@@ -197,15 +200,24 @@ export default function SettingsModalContent() {
           },
         },
         {
+          name: 'scraperLatestResultLimitMode',
+          label: 'Calcul du quota de nouveautés',
+          type: 'select',
+          options: [
+            { value: 'total', label: 'Total scrappers / par tag favori' },
+            { value: 'perSource', label: 'Par source' },
+          ],
+        },
+        {
           name: 'scraperLatestScraperResultLimit',
-          label: 'Résultats nouveautés par scrapper',
+          label: 'Quota de nouveautés des scrappers',
           type: 'number',
           min: 1,
           step: 1,
         },
         {
           name: 'scraperLatestTagResultLimit',
-          label: 'Résultats nouveautés par tag favori',
+          label: 'Quota de nouveautés par tag favori',
           type: 'number',
           min: 1,
           step: 1,
@@ -236,9 +248,9 @@ export default function SettingsModalContent() {
         },
         {
           name: 'scraperLatestDeepPageLimit',
-          label: 'Pages max du scan profond nouveautés (0 = infini)',
+          label: 'Pages max par source du scan profond nouveautés',
           type: 'number',
-          min: 0,
+          min: 1,
           step: 1,
         },
         {
@@ -393,6 +405,22 @@ export default function SettingsModalContent() {
     },
   ]
 
+  const developerFields: FormItem[] = [
+    {
+      type: 'section',
+      id: 'latest-performance-reports',
+      title: 'Diagnostic des nouveautés',
+      description: 'Désactivé par défaut. Le réglage s’applique aux recherches normales et en arrière-plan.',
+      fields: [
+        {
+          name: 'scraperLatestPerformanceReportsEnabled',
+          label: 'Générer un rapport de performance pour les recherches de nouveautés',
+          type: 'checkbox',
+        },
+      ],
+    },
+  ]
+
   const onSubmit = async (values: Record<string, any>) => {
     const persistMangaFilters = values.persistMangaFilters !== false
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
@@ -460,10 +488,15 @@ export default function SettingsModalContent() {
       scraperLatestTagResultLimit: Number.isFinite(scraperLatestTagResultLimit)
         ? Math.max(1, Math.floor(scraperLatestTagResultLimit))
         : 20,
+      scraperLatestResultLimitMode: values.scraperLatestResultLimitMode === 'perSource'
+        ? 'perSource'
+        : 'total',
       scraperLatestConcurrency: Number.isFinite(scraperLatestConcurrency)
         ? Math.max(1, Math.floor(scraperLatestConcurrency))
         : 2,
-      scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit) ? scraperLatestDeepPageLimit : 0,
+      scraperLatestDeepPageLimit: Number.isFinite(scraperLatestDeepPageLimit)
+        ? Math.max(1, Math.floor(scraperLatestDeepPageLimit))
+        : 50,
       scraperLatestContinuousPageSafetyLimit: Number.isFinite(scraperLatestContinuousPageSafetyLimit)
         ? Math.max(1, Math.floor(scraperLatestContinuousPageSafetyLimit))
         : 100,
@@ -505,6 +538,12 @@ export default function SettingsModalContent() {
     }
   }, [])
 
+  const onDeveloperSubmit = React.useCallback(async (values: Record<string, any>) => {
+    await setParams({
+      scraperLatestPerformanceReportsEnabled: values.scraperLatestPerformanceReportsEnabled === true,
+    }, { remount: false })
+  }, [setParams])
+
   if (loading) return <div>Chargement...</div>
 
   return (
@@ -516,6 +555,13 @@ export default function SettingsModalContent() {
           onClick={() => setActiveTab('options')}
         >
           Options
+        </button>
+        <button
+          type="button"
+          className={`settings-modal-tab ${activeTab === 'developer' ? 'active' : ''}`}
+          onClick={() => setActiveTab('developer')}
+        >
+          Développeur
         </button>
         <button
           type="button"
@@ -600,6 +646,19 @@ export default function SettingsModalContent() {
         {activeTab === 'statistics' ? (
           <div className="settings-modal-panel">
             <StatisticsPanel />
+          </div>
+        ) : null}
+
+        {activeTab === 'developer' ? (
+          <div className="settings-modal-panel">
+            <Form
+              fields={developerFields}
+              onSubmit={onDeveloperSubmit}
+              initialValues={params || {}}
+              submitLabel="Enregistrer"
+              formId="settings-developer-form"
+              submitButtonId={DEVELOPER_SUBMIT_BUTTON_ID}
+            />
           </div>
         ) : null}
 

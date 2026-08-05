@@ -9,7 +9,14 @@ import { getSettings } from "../params";
 import { AdjustableRequestScheduler } from "../../utils/adjustableRequestScheduler";
 import type { IpcMainInvokeEvent } from "electron";
 
-type ReleaseRequestSlot = () => void;
+export type AcquiredScraperRequestSlot = {
+  release: () => void;
+  activeAfterAcquire: number;
+  pendingAfterAcquire: number;
+  groupKey?: string;
+  groupMaxConcurrent?: number;
+  minDelayMs?: number;
+};
 
 type ScraperRequestLimitContext = {
   key: string;
@@ -117,12 +124,12 @@ const isBackgroundSearchRequest = (event: IpcMainInvokeEvent): boolean => {
 export const acquireScraperRequestSlot = async (
   event: IpcMainInvokeEvent,
   request: FetchScraperDocumentRequest,
-): Promise<ReleaseRequestSlot> => {
+): Promise<AcquiredScraperRequestSlot> => {
   const [, context] = await Promise.all([
     ensureGlobalConcurrencyInitialized(),
     resolveRequestLimitContext(request),
   ]);
-  return requestScheduler.acquire({
+  const release = await requestScheduler.acquire({
     groupKey: context?.key,
     groupMaxConcurrent: context?.limits.maxConcurrentRequests,
     minDelayMs: context?.limits.minDelayMs,
@@ -130,4 +137,12 @@ export const acquireScraperRequestSlot = async (
       ? BACKGROUND_REQUEST_PRIORITY
       : INTERACTIVE_REQUEST_PRIORITY,
   });
+  return {
+    release,
+    activeAfterAcquire: requestScheduler.active,
+    pendingAfterAcquire: requestScheduler.pending,
+    groupKey: context?.key,
+    groupMaxConcurrent: context?.limits.maxConcurrentRequests,
+    minDelayMs: context?.limits.minDelayMs,
+  };
 };

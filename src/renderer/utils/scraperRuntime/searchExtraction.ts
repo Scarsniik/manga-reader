@@ -12,7 +12,6 @@ import {
   extractTextFieldSelectorValuesFromRoot,
   extractUrlFieldSelectorValuesFromRoot,
   getImageSelectorCandidateUrls,
-  resolveImageSelectorValueFromRoot,
   toAbsoluteScraperUrl,
   uniqueValues,
 } from "@/renderer/utils/scraperRuntime/selectorExtraction";
@@ -74,7 +73,7 @@ const buildSearchResultItem = (
   item: Element,
   config: ScraperCardListConfig,
   documentUrl: string,
-  thumbnailUrl: string | undefined,
+  thumbnailCandidates: string[],
 ): ScraperSearchResultItem | null => {
   const title = extractFieldSelectorValuesFromRoot(item, config.titleSelector)[0];
   if (!title) {
@@ -105,7 +104,8 @@ const buildSearchResultItem = (
       ? authorUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
       : undefined,
     authorNames: authorNameValues.length ? authorNameValues : undefined,
-    thumbnailUrl,
+    thumbnailUrl: thumbnailCandidates[0],
+    thumbnailCandidates: thumbnailCandidates.length > 1 ? thumbnailCandidates : undefined,
     summary: summaryValue,
     pageCount: pageCountValue,
     languageCodes: extractLanguageCodesFromRoot(item, config.languageDetection, title),
@@ -147,8 +147,8 @@ export const extractScraperSearchPageFromDocument = (
         config,
         context.documentUrl,
         config.thumbnailSelector
-          ? getImageSelectorCandidateUrls(item, config.thumbnailSelector, context.documentUrl)[0]
-          : undefined,
+          ? getImageSelectorCandidateUrls(item, config.thumbnailSelector, context.documentUrl)
+          : [],
       ),
     )
     .filter((result): result is ScraperSearchResultItem => Boolean(result));
@@ -175,15 +175,15 @@ export const extractScraperSearchPageFromDocumentWithImageFallbacks = async (
   fetchDocument: ScraperDocumentFetcher | undefined,
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const context = buildSearchPageExtractionContext(doc, config, requestMeta);
-  const extractedResults = await Promise.all(
-    context.resultItems.map(async (item) =>
+  const extractedResults = context.resultItems.map((item) =>
       buildSearchResultItem(
         item,
         config,
         context.documentUrl,
-        await resolveImageSelectorValueFromRoot(item, config.thumbnailSelector, context.documentUrl, fetchDocument),
+        config.thumbnailSelector
+          ? getImageSelectorCandidateUrls(item, config.thumbnailSelector, context.documentUrl)
+          : [],
       ),
-    ),
   );
 
   return buildSearchPageResult(

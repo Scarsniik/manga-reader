@@ -8,6 +8,7 @@ import {
   type SaveScraperLatestCheckpointRequest,
   type ScraperLatestCheckpointModule,
   type ScraperLatestCheckpointRecord,
+  type ScraperLatestQuotaUnavailableReason,
 } from "../../scraper";
 import {
   ensureDataDir,
@@ -56,6 +57,10 @@ const sanitizeIsoDate = (value: unknown, fallback: string): string => {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
 };
 
+const sanitizeQuotaUnavailableReason = (value: unknown): ScraperLatestQuotaUnavailableReason | undefined => (
+  value === "languageRejectLimit" || value === "pageLimitWithoutResults" ? value : undefined
+);
+
 const sanitizeCheckpointRecord = (
   value: Partial<ScraperLatestCheckpointRecord | SaveScraperLatestCheckpointRequest> | null | undefined,
   now = new Date().toISOString(),
@@ -69,8 +74,9 @@ const sanitizeCheckpointRecord = (
   const query = normalizeScraperLatestCheckpointQuery(value.query);
   const includedLanguageCodes = normalizeScraperLatestCheckpointLanguageCodes(value.includedLanguageCodes);
   const anchorIdentity = sanitizeScraperViewHistoryCardIdentity(value.anchorIdentity ?? {});
+  const hasCursor = value.cursorVersion === 2 && Number.isFinite(Number(value.nextPageIndex));
 
-  if (!scraperId || !module || !anchorIdentity) {
+  if (!scraperId || !module || (!anchorIdentity && !hasCursor)) {
     return null;
   }
 
@@ -80,9 +86,14 @@ const sanitizeCheckpointRecord = (
     query,
     includedLanguageCodes,
   });
-  const anchorCardId = normalizeText(value.anchorCardId) || buildScraperViewHistoryCardId(anchorIdentity);
+  const anchorCardId = normalizeText(value.anchorCardId)
+    || (anchorIdentity ? buildScraperViewHistoryCardId(anchorIdentity) : "");
+  const quotaUnavailableReason = sanitizeQuotaUnavailableReason(value.quotaUnavailableReason);
+  const quotaUnavailableUntil = quotaUnavailableReason
+    ? sanitizeIsoDate(value.quotaUnavailableUntil, "")
+    : "";
 
-  if (!id || !anchorCardId) {
+  if (!id || (!anchorCardId && !hasCursor)) {
     return null;
   }
 
@@ -94,10 +105,18 @@ const sanitizeCheckpointRecord = (
     includedLanguageCodes,
     scraperUpdatedAt: sanitizeOptionalText(value.scraperUpdatedAt),
     pageIndex: sanitizePageIndex(value.pageIndex),
+    ...(hasCursor ? {
+      cursorVersion: 2 as const,
+      nextPageIndex: sanitizePageIndex(value.nextPageIndex),
+    } : {}),
     currentPageUrl: sanitizeOptionalText(value.currentPageUrl),
     nextPageUrl: sanitizeOptionalText(value.nextPageUrl),
-    anchorCardId,
-    anchorIdentity,
+    ...(anchorCardId ? { anchorCardId } : {}),
+    ...(anchorIdentity ? { anchorIdentity } : {}),
+    ...(quotaUnavailableReason && quotaUnavailableUntil ? {
+      quotaUnavailableReason,
+      quotaUnavailableUntil,
+    } : {}),
     updatedAt: sanitizeIsoDate((value as ScraperLatestCheckpointRecord).updatedAt, now),
   };
 };

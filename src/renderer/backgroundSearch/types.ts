@@ -1,5 +1,5 @@
 import type { MultiSearchScraperRun, MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import type { ScraperRecord } from "@/shared/scraper";
+import type { ScraperLatestCheckpointRecord, ScraperRecord } from "@/shared/scraper";
 import type {
   MangaCorrespondenceRequest,
   MangaCorrespondenceTraceStep,
@@ -12,12 +12,20 @@ export type BackgroundListingRun = {
   query: string;
   status: "waiting" | "loading" | "done" | "error" | "cancelled";
   results: MultiSearchSourceResult[];
+  pendingResults?: MultiSearchSourceResult[];
+  pendingCandidates?: MultiSearchSourceResult[];
   cacheResults?: MultiSearchSourceResult[];
   fromCache?: boolean;
   loadedPages: number;
+  checkedPages?: number;
   hasNextPage: boolean;
   currentPageUrl?: string;
   nextPageUrl?: string;
+  checkpoint?: ScraperLatestCheckpointRecord | null;
+  checkpointUsed?: boolean;
+  sourceExhausted?: boolean;
+  quickConsecutiveSeenResultCount?: number;
+  safetyLimitReached?: boolean;
   excludedByLanguageCount?: number;
   includedByLanguageCount?: number;
   languageRejectLimitReached?: boolean;

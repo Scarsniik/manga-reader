@@ -499,6 +499,7 @@ const buildScraperDetailsResult = (
     contentType: requestMeta.contentType,
     title,
     cover: fieldValuesByKey.cover?.[0],
+    coverCandidates: uniqueValues(fieldValuesByKey.cover ?? []),
     description: fieldValuesByKey.description?.[0],
     authors: uniqueValues(fieldValuesByKey.authors ?? []),
     authorUrls: extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta),

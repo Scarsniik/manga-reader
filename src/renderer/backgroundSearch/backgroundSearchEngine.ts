@@ -11,6 +11,7 @@ import {
   buildScraperViewHistoryCardId,
   type ScraperAuthorFavoriteCacheSource,
   type ScraperAuthorFavoriteRecord,
+  type ScraperLatestCheckpointRecord,
   type ScraperSearchResultItem,
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
@@ -41,7 +42,10 @@ import type {
   MultiSearchSourceResult,
   MultiSearchTermRun,
 } from "@/renderer/components/MultiSearch/types";
-import { isScraperListingPaginationEndError } from "@/renderer/utils/scraperRuntime";
+import {
+  isScraperListingPaginationEndError,
+  type ScraperRuntimeSearchPageResult,
+} from "@/renderer/utils/scraperRuntime";
 import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import type {
@@ -54,23 +58,51 @@ import type {
 import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
 import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
 import {
+  isBackgroundListingSourceUnavailableForQuota,
   resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
   resolveBackgroundListingResultLimit,
+  resolveBackgroundListingTotalGroupKey,
+  resolveScraperLatestSourcePageLimit,
   resolveBackgroundQuickSeenProgress,
+  runBackgroundListingTotalGroup,
   usesBackgroundQuickSeenBoundary,
 } from "@/renderer/backgroundSearch/backgroundListingExecution";
 import {
   BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
   filterBackgroundListingSourcesByBlacklist,
+  isBackgroundListingBackfillPage,
   isBackgroundListingPaginationStalled,
   resolveBackgroundListingAcceptedTarget,
   shouldContinueBackgroundBlacklistBackfill,
 } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+import { enrichScraperLatestCandidatesForSlots } from "@/renderer/components/ScraperLatest/scraperLatestCandidateEnrichment";
+import {
+  buildScraperListingPageRequestKey,
+  createScraperListingPagePrefetchCache,
+} from "@/renderer/utils/scraperLatestExecutionPlanning";
 import {
   findAuthorFavoriteCachedSource,
   loadUsableAuthorFavoriteCaches,
 } from "@/renderer/utils/scraperAuthorFavoriteCache";
+import {
+  buildScraperLatestCursorCheckpointRequest,
+  getScraperLatestCheckpointForKey,
+  getScraperLatestCheckpoints,
+  resolveScraperLatestCheckpointQuotaUnavailableReason,
+  saveScraperLatestCheckpoint,
+  resolveScraperLatestCheckpointCursor,
+} from "@/renderer/utils/scraperLatestCheckpoints";
+import {
+  appendScraperLatestDiagnosticEvent,
+  finishScraperLatestDiagnosticSession,
+  shouldGenerateScraperLatestPerformanceReport,
+  startScraperLatestDiagnosticSession,
+} from "@/renderer/utils/scraperLatestDiagnostics";
+import type {
+  ScraperLatestDiagnosticSession,
+  ScraperRequestDiagnosticContext,
+} from "@/shared/scraperLatestDiagnostics";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -311,11 +343,56 @@ const loadLatestAuthorCacheAssignments = async (
   return assignments;
 };
 
+type ListingSourceExecutionState = {
+  rawQuotaResultKeys: Set<string>;
+  seenCandidateResultKeys: Set<string>;
+  pendingResults: MultiSearchSourceResult[];
+  pendingCandidates: MultiSearchSourceResult[];
+  acceptedResultTarget: number;
+  consecutiveStagnantBackfillPages: number;
+  consecutiveSeenResultCount: number;
+  sourceHasNextPage: boolean;
+  sourceExhausted: boolean;
+};
+
+type LatestListingExecutionOptions = {
+  initialRuns?: BackgroundListingRun[];
+  appendToExistingResults?: boolean;
+};
+
+const createBackgroundConcurrencyRunner = (concurrency: number) => {
+  const queuedTasks: Array<() => void> = [];
+  let activeTaskCount = 0;
+
+  const runNextTask = () => {
+    while (activeTaskCount < concurrency && queuedTasks.length) {
+      const queuedTask = queuedTasks.shift();
+      if (!queuedTask) return;
+      activeTaskCount += 1;
+      queuedTask();
+    }
+  };
+
+  return <Result,>(task: () => Promise<Result>): Promise<Result> => new Promise((resolve, reject) => {
+    queuedTasks.push(() => {
+      void task()
+        .then(resolve, reject)
+        .finally(() => {
+          activeTaskCount -= 1;
+          runNextTask();
+        });
+    });
+    runNextTask();
+  });
+};
+
 const runListings = async (
   kind: BackgroundSearchKind,
   input: ListingBackgroundInput,
   signal: AbortSignal,
   onSnapshot: SnapshotCallback,
+  diagnosticSession?: ScraperLatestDiagnosticSession | null,
+  executionOptions: LatestListingExecutionOptions = {},
 ): Promise<ListingBackgroundResult> => {
   if (!input.sources.length) throw new Error("Aucune source n'est disponible.");
   const filterHistory = kind === "latestSources" || kind === "latestAuthors";
@@ -325,17 +402,172 @@ const runListings = async (
     : new Map<string, ScraperAuthorFavoriteCacheSource | null>();
   const pace = getPaceConfig(input.paceMode);
   const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
-  const configuredMaxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
-  const runs: BackgroundListingRun[] = input.sources.map((source) => ({
-    key: source.id,
-    name: source.name,
-    scraper: source.scraper,
-    query: source.query,
-    status: "waiting",
-    results: [],
-    loadedPages: 0,
-    hasNextPage: true,
-  }));
+  const configuredMaxPages = kind === "latestSources"
+    ? resolveScraperLatestSourcePageLimit(input.maxPages)
+    : input.maxPages === null
+      ? 250
+      : Math.max(1, input.maxPages);
+  const backfillBlacklistedResults = kind === "latestSources"
+    && input.excludeBlacklistedTagCards === true;
+  const checkpoints: ScraperLatestCheckpointRecord[] = kind === "latestSources" && input.searchMode === "deep"
+    ? await getScraperLatestCheckpoints()
+    : [];
+  const initialRunsByKey = new Map((executionOptions.initialRuns ?? []).map((run) => [run.key, run]));
+  const runs: BackgroundListingRun[] = input.sources.map((source) => {
+    const initialRun = initialRunsByKey.get(source.id);
+    const module = source.mode === "tag" ? "tag" : source.mode === "search" ? "search" : "homepage";
+    const checkpoint = !initialRun && checkpoints.length
+      ? getScraperLatestCheckpointForKey(checkpoints, {
+        scraperId: source.scraper.id,
+        module,
+        query: module === "homepage" ? "" : source.query,
+        includedLanguageCodes: input.includedLanguageCodes,
+      }, source.scraper.updatedAt)
+      : null;
+    const checkpointCursor = resolveScraperLatestCheckpointCursor(checkpoint);
+    const checkpointQuotaUnavailableReason = !initialRun
+      ? resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint)
+      : null;
+    const loadedPages = initialRun?.loadedPages
+      ?? checkpointCursor?.loadedPages
+      ?? 0;
+    return {
+      key: source.id,
+      name: source.name,
+      scraper: source.scraper,
+      query: source.query,
+      status: "waiting",
+      results: initialRun?.results ?? [],
+      pendingResults: initialRun?.pendingResults ?? [],
+      pendingCandidates: initialRun?.pendingCandidates ?? [],
+      loadedPages,
+      checkedPages: 0,
+      hasNextPage: initialRun?.hasNextPage ?? checkpointQuotaUnavailableReason === null,
+      currentPageUrl: initialRun?.currentPageUrl ?? checkpoint?.currentPageUrl,
+      nextPageUrl: initialRun?.nextPageUrl ?? checkpointCursor?.nextPageUrl,
+      checkpoint,
+      checkpointUsed: Boolean(checkpoint),
+      sourceExhausted: initialRun?.sourceExhausted === true,
+      safetyLimitReached: initialRun?.safetyLimitReached === true
+        || checkpointQuotaUnavailableReason === "pageLimitWithoutResults",
+      languageRejectLimitReached: initialRun?.languageRejectLimitReached === true
+        || checkpointQuotaUnavailableReason === "languageRejectLimit",
+      quickConsecutiveSeenResultCount: initialRun?.quickConsecutiveSeenResultCount ?? 0,
+      excludedByLanguageCount: initialRun?.excludedByLanguageCount,
+      includedByLanguageCount: initialRun?.includedByLanguageCount,
+      excludedByBlacklistedTagCount: initialRun?.excludedByBlacklistedTagCount,
+    };
+  });
+  const executionPageLimits = runs.map((run) => run.loadedPages + configuredMaxPages);
+  const executionStartPageIndexes = runs.map((run) => run.loadedPages);
+  const executionStates: ListingSourceExecutionState[] = input.sources.map((_source, sourceIndex) => {
+    const initialRun = runs[sourceIndex];
+    const initialResults = initialRun.results ?? [];
+    const pendingResults = initialRun.pendingResults ?? [];
+    const pendingCandidates = initialRun.pendingCandidates ?? [];
+    return {
+      rawQuotaResultKeys: new Set(initialResults.map(normalizeResultUrl)),
+      seenCandidateResultKeys: new Set([
+        ...initialResults,
+        ...pendingResults,
+        ...pendingCandidates,
+      ].map(normalizeResultUrl)),
+      pendingResults: [...pendingResults],
+      pendingCandidates: [...pendingCandidates],
+      acceptedResultTarget: 0,
+      consecutiveStagnantBackfillPages: 0,
+      consecutiveSeenResultCount: initialRun.quickConsecutiveSeenResultCount ?? 0,
+      sourceHasNextPage: initialRun.hasNextPage,
+      sourceExhausted: initialRun.sourceExhausted === true,
+    };
+  });
+  const listingPagePrefetchCache = createScraperListingPagePrefetchCache<ScraperRuntimeSearchPageResult>((event) => {
+    appendScraperLatestDiagnosticEvent(
+      diagnosticSession,
+      `prefetch.${event.type}`,
+      {
+        requestKey: event.requestKey,
+        replacedRequestKey: event.replacedRequestKey,
+        entryCount: event.entryCount,
+      },
+      event.sourceKey,
+    );
+  });
+  const fetchSourceListingPage = (
+    sourceIndex: number,
+    pageIndex: number,
+    nextPageUrl?: string,
+    purpose = "listing-demand",
+  ): Promise<ScraperRuntimeSearchPageResult> => {
+    const source = input.sources[sourceIndex];
+    const run = runs[sourceIndex];
+    const sourceMode = source.mode ?? (kind === "latestSources" ? "homepage" : "author");
+    const diagnostics: ScraperRequestDiagnosticContext | undefined = diagnosticSession ? {
+      profileId: diagnosticSession.profileId,
+      purpose,
+      sourceKey: source.id,
+      pageIndex,
+    } : undefined;
+    if (sourceMode === "homepage") {
+      return fetchHomepagePageWithRetry(
+        run.scraper,
+        getHomepageConfig(run.scraper),
+        pageIndex,
+        nextPageUrl,
+        pace,
+        { scrapeDetailsWithCards: false, diagnostics },
+      );
+    }
+    if (sourceMode === "search") {
+      return fetchSearchPageWithRetry(
+        run.scraper,
+        getSearchConfig(run.scraper),
+        run.query,
+        pageIndex,
+        nextPageUrl,
+        pace,
+        { scrapeDetailsWithCards: false, diagnostics },
+      );
+    }
+    if (sourceMode === "tag") {
+      return fetchTagPageWithRetry(
+        run.scraper,
+        getTagConfig(run.scraper),
+        run.query,
+        pageIndex,
+        nextPageUrl,
+        pace,
+        { scrapeDetailsWithCards: false, diagnostics },
+      );
+    }
+    return fetchAuthorPageWithRetry(
+      run.scraper,
+      getAuthorConfig(run.scraper),
+      run.query,
+      pageIndex,
+      nextPageUrl,
+      pace,
+      source.templateContext ?? null,
+      { scrapeDetailsWithCards: false, diagnostics },
+    );
+  };
+  const preloadSourceListingPage = (
+    sourceIndex: number,
+    pageIndex: number,
+    nextPageUrl?: string,
+  ): void => {
+    if (pageIndex >= executionPageLimits[sourceIndex] || signal.aborted) {
+      return;
+    }
+
+    const sourceKey = input.sources[sourceIndex].id;
+    const requestKey = buildScraperListingPageRequestKey(pageIndex, nextPageUrl);
+    listingPagePrefetchCache.preload(
+      sourceKey,
+      requestKey,
+      () => fetchSourceListingPage(sourceIndex, pageIndex, nextPageUrl, "listing-prefetch"),
+    );
+  };
   const emit = async (label?: string): Promise<void> => onSnapshot({ runs: [...runs] }, {
     completedUnits: runs.filter((run) => run.status === "done" || run.status === "error").length,
     totalUnits: runs.length,
@@ -346,14 +578,154 @@ const runListings = async (
     ),
     currentLabel: label,
   });
-  await emit();
 
-  await runWithConcurrency(runs.map((initialRun, runIndex) => async () => {
-    let run: BackgroundListingRun = { ...initialRun, status: "loading" };
+  const canSourceProduceMoreResults = (runIndex: number): boolean => {
+    const run = runs[runIndex];
+    const state = executionStates[runIndex];
+    if (run.status === "error" || run.status === "cancelled") return false;
+    if (run.languageRejectLimitReached) return false;
+    if (state.pendingResults.length > 0) return true;
+    if (state.pendingCandidates.length > 0) return true;
+    if (!state.sourceHasNextPage || run.loadedPages >= executionPageLimits[runIndex]) return false;
+    return true;
+  };
+
+  const storeAvailableResults = (
+    run: BackgroundListingRun,
+    state: ListingSourceExecutionState,
+    acceptedResults: MultiSearchSourceResult[],
+    resultLimit: number,
+  ): BackgroundListingRun => {
+    let availableResults = appendUniqueResults(run.results, state.pendingResults);
+    availableResults = appendUniqueResults(availableResults, acceptedResults);
+    if (resultLimit <= 0) {
+      state.pendingResults = [];
+      return { ...run, results: availableResults };
+    }
+
+    state.pendingResults = availableResults.slice(resultLimit);
+    return { ...run, results: availableResults.slice(0, resultLimit) };
+  };
+
+  const consumeBufferedResults = async (
+    currentRun: BackgroundListingRun,
+    state: ListingSourceExecutionState,
+    resultLimit: number,
+    onNeedsListingPage?: () => void,
+  ): Promise<BackgroundListingRun> => {
+    let run = storeAvailableResults(currentRun, state, [], resultLimit);
+    const remainingResultSlots = resultLimit <= 0
+      ? state.pendingCandidates.length
+      : Math.max(0, resultLimit - run.results.length);
+    if (
+      input.scrapeDetailsWithCards !== true
+      || remainingResultSlots === 0
+      || state.pendingCandidates.length === 0
+    ) {
+      return run;
+    }
+
+    let excludedByEnrichedLanguageCount = 0;
+    let excludedByBlacklistedTagCount = 0;
+    const enrichment = await enrichScraperLatestCandidatesForSlots({
+      candidates: state.pendingCandidates,
+      remainingResultSlots,
+      enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
+        await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
+          scrapeDetailsWithCards: true,
+          detailConcurrency: concurrency,
+          diagnostics: diagnosticSession ? {
+            profileId: diagnosticSession.profileId,
+            purpose: "card-details-buffered",
+            sourceKey: run.key,
+            pageIndex: run.loadedPages,
+          } : undefined,
+        }),
+      ),
+      isAccepted: (item) => {
+        if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
+          excludedByEnrichedLanguageCount += 1;
+          return false;
+        }
+        if (filterHistory && isKnownResult(knownHistoryIds, run.scraper.id, item.result)) {
+          return false;
+        }
+        if (kind === "latestSources") {
+          const blacklistFilter = filterBackgroundListingSourcesByBlacklist([item], input);
+          if (blacklistFilter.excludedCount > 0) {
+            excludedByBlacklistedTagCount += blacklistFilter.excludedCount;
+            return false;
+          }
+        }
+        return true;
+      },
+      maxBatchSize: concurrency,
+      onProgress: ({ acceptedCandidateCount, remainingCandidateCount, targetCount }) => {
+        if (acceptedCandidateCount + remainingCandidateCount < targetCount) {
+          onNeedsListingPage?.();
+        }
+      },
+    });
+    state.pendingCandidates = enrichment.remainingCandidates;
+    run = storeAvailableResults(run, state, enrichment.acceptedCandidates, resultLimit);
+    const excludedByLanguageCount = (run.excludedByLanguageCount ?? 0)
+      + excludedByEnrichedLanguageCount;
+    const includedByLanguageCount = Math.max(
+      0,
+      (run.includedByLanguageCount ?? 0) - excludedByEnrichedLanguageCount,
+    );
+    const normalizedLanguageRejectLimit = Math.max(
+      0,
+      Math.floor(Number(input.languageRejectLimit) || 0),
+    );
+    return {
+      ...run,
+      excludedByLanguageCount,
+      includedByLanguageCount,
+      languageRejectLimitReached: normalizedLanguageRejectLimit > 0
+        && includedByLanguageCount === 0
+        && excludedByLanguageCount >= normalizedLanguageRejectLimit,
+      excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
+        + excludedByBlacklistedTagCount,
+    };
+  };
+
+  const executeSource = async (
+    runIndex: number,
+    resultLimitOverride?: number,
+    keepOpenForSharedQuota = false,
+  ): Promise<void> => {
+    let run: BackgroundListingRun = { ...runs[runIndex], status: "loading" };
+    const source = input.sources[runIndex];
+    const state = executionStates[runIndex];
+    const beforeResultCount = run.results.length;
+    let lastProcessedPage: { pageIndex: number; page: ScraperRuntimeSearchPageResult } | null = null;
+    const batchStartedAt = performance.now();
+    let diagnosticBatchCompleted = false;
+    const completeDiagnosticBatch = (): void => {
+      if (diagnosticBatchCompleted) return;
+      diagnosticBatchCompleted = true;
+      appendScraperLatestDiagnosticEvent(diagnosticSession, "source.batch-completed", {
+        durationMs: Math.round(performance.now() - batchStartedAt),
+        beforeResultCount,
+        resultCount: run.results.length,
+        addedResultCount: Math.max(0, run.results.length - beforeResultCount),
+        targetResultCount: resultLimitOverride,
+        loadedPages: run.loadedPages,
+        status: run.status,
+        hasNextPage: run.hasNextPage,
+      }, source.id);
+    };
+    appendScraperLatestDiagnosticEvent(diagnosticSession, "source.batch-started", {
+      currentResultCount: beforeResultCount,
+      targetResultCount: resultLimitOverride,
+      loadedPages: run.loadedPages,
+      pendingResultCount: state.pendingResults.length,
+      pendingCandidateCount: state.pendingCandidates.length,
+    }, source.id);
     runs[runIndex] = run;
     await emit(run.name);
     try {
-      const source = input.sources[runIndex];
       if (latestAuthorCacheAssignments.has(source.id)) {
         const cachedSource = latestAuthorCacheAssignments.get(source.id);
         const cachedResults = cachedSource
@@ -380,66 +752,51 @@ const runListings = async (
           currentPageUrl: cachedSource?.currentPageUrl,
           nextPageUrl: cachedSource?.nextPageUrl,
         };
+        state.sourceHasNextPage = false;
         runs[runIndex] = run;
         await emit(run.name);
+        completeDiagnosticBatch();
         return;
       }
 
-      const resultLimit = resolveBackgroundListingResultLimit(
+      const resultLimit = resultLimitOverride ?? resolveBackgroundListingResultLimit(
         source.resultLimit,
         input.resultLimit,
         kind === "latestAuthors",
       );
-      const backfillBlacklistedResults = kind === "latestSources"
-        && input.excludeBlacklistedTagCards === true;
-      const executionPageLimit = backfillBlacklistedResults && input.searchMode !== "continuous"
-        ? 250
-        : configuredMaxPages;
-      const rawQuotaResultKeys = new Set<string>();
-      const seenCandidateResultKeys = new Set<string>();
-      let acceptedResultTarget = 0;
-      let consecutiveStagnantBackfillPages = 0;
-      let consecutiveSeenResultCount = 0;
-      for (let pageIndex = 0; pageIndex < executionPageLimit; pageIndex += 1) {
+      if (backfillBlacklistedResults) {
+        state.acceptedResultTarget = resolveBackgroundListingAcceptedTarget(
+          state.rawQuotaResultKeys.size,
+          resultLimit,
+        );
+      }
+      const preloadCurrentListingPage = () => {
+        if (state.sourceHasNextPage) {
+          preloadSourceListingPage(runIndex, run.loadedPages, run.nextPageUrl);
+        }
+      };
+      run = await consumeBufferedResults(
+        run,
+        state,
+        backfillBlacklistedResults ? state.acceptedResultTarget : resultLimit,
+        preloadCurrentListingPage,
+      );
+      runs[runIndex] = run;
+
+      let shouldLoadAnotherPage = !run.languageRejectLimitReached
+        && (resultLimit === 0 || run.results.length < resultLimit);
+      while (run.loadedPages < executionPageLimits[runIndex] && shouldLoadAnotherPage) {
         throwIfAborted(signal);
+        const pageIndex = run.loadedPages;
         const sourceMode = source.mode ?? (kind === "latestSources" ? "homepage" : "author");
         const requestedPageUrl = run.nextPageUrl;
-        const page = sourceMode === "homepage"
-          ? await fetchHomepagePageWithRetry(
-            run.scraper,
-            getHomepageConfig(run.scraper),
-            pageIndex,
-            run.nextPageUrl,
-            pace,
-            { scrapeDetailsWithCards: false },
-          ) : sourceMode === "search"
-          ? await fetchSearchPageWithRetry(
-            run.scraper,
-            getSearchConfig(run.scraper),
-            run.query,
-            pageIndex,
-            run.nextPageUrl,
-            pace,
-            { scrapeDetailsWithCards: false },
-          ) : sourceMode === "tag"
-          ? await fetchTagPageWithRetry(
-            run.scraper,
-            getTagConfig(run.scraper),
-            run.query,
-            pageIndex,
-            run.nextPageUrl,
-            pace,
-            { scrapeDetailsWithCards: false },
-          ) : await fetchAuthorPageWithRetry(
-            run.scraper,
-            getAuthorConfig(run.scraper),
-            run.query,
-            pageIndex,
-            run.nextPageUrl,
-            pace,
-            source.templateContext ?? null,
-            { scrapeDetailsWithCards: false },
-          );
+        const pageStartedAt = performance.now();
+        const page = await listingPagePrefetchCache.load(
+          source.id,
+          buildScraperListingPageRequestKey(pageIndex, requestedPageUrl),
+          () => fetchSourceListingPage(runIndex, pageIndex, requestedPageUrl, "listing-demand"),
+        );
+        const listingLoadedAt = performance.now();
         const pageWithResultTag = source.resultTag
           ? {
             ...page,
@@ -461,8 +818,8 @@ const runListings = async (
         );
         const newPageSources = pageSources.filter((item) => {
           const key = normalizeResultUrl(item);
-          if (seenCandidateResultKeys.has(key)) return false;
-          seenCandidateResultKeys.add(key);
+          if (state.seenCandidateResultKeys.has(key)) return false;
+          state.seenCandidateResultKeys.add(key);
           return true;
         });
         const includedPageSources = newPageSources.filter((item) => (
@@ -470,22 +827,103 @@ const runListings = async (
         ));
         const quickSeenProgress = resolveBackgroundQuickSeenProgress(
           includedPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
-          consecutiveSeenResultCount,
+          state.consecutiveSeenResultCount,
           input.quickConsecutiveSeenStopThreshold,
         );
-        consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
+        state.consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
         const rawUnseenSources = includedPageSources
           .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
-        const detailedSources = await enrichSourceResultsWithCardDetails(run.scraper, rawUnseenSources, {
-          scrapeDetailsWithCards: input.scrapeDetailsWithCards,
-        });
-        const enrichedSources = await enrichSourceResultsWithJapaneseRomanization(detailedSources);
-        const languageEligibleSources = enrichedSources.filter((item) => (
-          doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
-        ));
-        const enrichedLanguageExcludedCount = enrichedSources.length - languageEligibleSources.length;
-        const newEligibleSources = languageEligibleSources
-          .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
+        const sourceHasNextPage = sourceMode === "homepage"
+          ? resolveHasNextHomepagePage(getHomepageConfig(run.scraper), page)
+          : sourceMode === "search"
+            ? resolveHasNextPage(getSearchConfig(run.scraper), page)
+            : sourceMode === "tag"
+              ? resolveHasNextTagPage(getTagConfig(run.scraper), page)
+              : resolveHasNextAuthorPage(getAuthorConfig(run.scraper), page);
+        const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
+        const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
+        const quickHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
+          && (input.searchMode === "quick" || input.searchMode === "continuous")
+          && quickSeenProgress.boundaryReached
+          && !(pageIndex === 0 && rawUnseenSources.length > 0);
+        const canPreloadFollowingPage = sourceHasNextPage
+          && !paginationStalled
+          && !duplicatePage
+          && !quickHistoryBoundaryReached
+          && pageIndex + 1 < executionPageLimits[runIndex];
+        const preloadFollowingPage = () => {
+          if (canPreloadFollowingPage) {
+            preloadSourceListingPage(runIndex, pageIndex + 1, page.nextPageUrl);
+          }
+        };
+        if (backfillBlacklistedResults && pageIndex < executionPageLimits[runIndex]) {
+          rawUnseenSources.forEach((item) => state.rawQuotaResultKeys.add(normalizeResultUrl(item)));
+          state.acceptedResultTarget = resolveBackgroundListingAcceptedTarget(
+            state.rawQuotaResultKeys.size,
+            resultLimit,
+          );
+        }
+        const storedResultLimit = backfillBlacklistedResults
+          ? state.acceptedResultTarget
+          : resultLimit;
+        const remainingResultSlots = storedResultLimit <= 0
+          ? rawUnseenSources.length
+          : Math.max(0, storedResultLimit - run.results.length);
+        let enrichedLanguageExcludedCount = 0;
+        let excludedByBlacklistedTagCount = 0;
+        let newEligibleSources: MultiSearchSourceResult[];
+        if (input.scrapeDetailsWithCards === true && rawUnseenSources.length > 0) {
+          const enrichment = await enrichScraperLatestCandidatesForSlots({
+            candidates: rawUnseenSources,
+            remainingResultSlots,
+            enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
+              await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
+                scrapeDetailsWithCards: true,
+                detailConcurrency: concurrency,
+                diagnostics: diagnosticSession ? {
+                  profileId: diagnosticSession.profileId,
+                  purpose: "card-details",
+                  sourceKey: source.id,
+                  pageIndex,
+                } : undefined,
+              }),
+            ),
+            isAccepted: (item) => {
+              if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
+                enrichedLanguageExcludedCount += 1;
+                return false;
+              }
+              if (filterHistory && isKnownResult(knownHistoryIds, run.scraper.id, item.result)) {
+                return false;
+              }
+              if (kind === "latestSources") {
+                const blacklistFilter = filterBackgroundListingSourcesByBlacklist([item], input);
+                if (blacklistFilter.excludedCount > 0) {
+                  excludedByBlacklistedTagCount += blacklistFilter.excludedCount;
+                  return false;
+                }
+              }
+              return true;
+            },
+            maxBatchSize: concurrency,
+            onProgress: ({ acceptedCandidateCount, remainingCandidateCount, targetCount }) => {
+              if (acceptedCandidateCount + remainingCandidateCount < targetCount) {
+                preloadFollowingPage();
+              }
+            },
+          });
+          newEligibleSources = enrichment.acceptedCandidates;
+          state.pendingCandidates.push(...enrichment.remainingCandidates);
+        } else {
+          const blacklistFilter = kind === "latestSources"
+            ? filterBackgroundListingSourcesByBlacklist(rawUnseenSources, input)
+            : { accepted: rawUnseenSources, excludedCount: 0 };
+          newEligibleSources = blacklistFilter.accepted;
+          excludedByBlacklistedTagCount = blacklistFilter.excludedCount;
+        }
+        if (newEligibleSources.length < remainingResultSlots) {
+          preloadFollowingPage();
+        }
         const languageProgress = resolveBackgroundLanguageProgress(
           run.excludedByLanguageCount ?? 0,
           run.includedByLanguageCount ?? 0,
@@ -494,94 +932,159 @@ const runListings = async (
           enrichedLanguageExcludedCount,
           input.languageRejectLimit,
         );
-        if (backfillBlacklistedResults && pageIndex < configuredMaxPages) {
-          newEligibleSources.forEach((item) => rawQuotaResultKeys.add(normalizeResultUrl(item)));
-          acceptedResultTarget = resolveBackgroundListingAcceptedTarget(
-            rawQuotaResultKeys.size,
-            resultLimit,
-          );
-        }
-        const blacklistFilter = kind === "latestSources"
-          ? filterBackgroundListingSourcesByBlacklist(newEligibleSources, input)
-          : { accepted: newEligibleSources, excludedCount: 0 };
-        let nextResults = appendUniqueResults(run.results, blacklistFilter.accepted);
+        run = storeAvailableResults(
+          run,
+          state,
+          newEligibleSources,
+          storedResultLimit,
+        );
         const nextCacheResults = kind === "latestAuthors"
           ? appendUniqueResults(run.cacheResults ?? [], includedPageSources)
           : undefined;
-        const storedResultLimit = backfillBlacklistedResults ? acceptedResultTarget : resultLimit;
-        if (storedResultLimit > 0) nextResults = nextResults.slice(0, storedResultLimit);
-        const sourceHasNextPage = sourceMode === "homepage"
-          ? resolveHasNextHomepagePage(getHomepageConfig(run.scraper), page)
-          : sourceMode === "search"
-            ? resolveHasNextPage(getSearchConfig(run.scraper), page)
-            : sourceMode === "tag"
-              ? resolveHasNextTagPage(getTagConfig(run.scraper), page)
-              : resolveHasNextAuthorPage(getAuthorConfig(run.scraper), page);
-        const isBackfillPage = pageIndex >= configuredMaxPages;
-        consecutiveStagnantBackfillPages = backfillBlacklistedResults
+        const isBackfillPage = isBackgroundListingBackfillPage({
+          pageIndex,
+          executionStartPageIndex: executionStartPageIndexes[runIndex],
+          configuredMaxPages,
+        });
+        state.consecutiveStagnantBackfillPages = backfillBlacklistedResults
           && isBackfillPage
           && newEligibleSources.length === 0
-          ? consecutiveStagnantBackfillPages + 1
+          ? state.consecutiveStagnantBackfillPages + 1
           : 0;
-        const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
-        const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
-        const quickHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
-          && (input.searchMode === "quick" || input.searchMode === "continuous")
-          && quickSeenProgress.boundaryReached
-          && !(pageIndex === 0 && rawUnseenSources.length > 0);
         const backfillStalled = backfillBlacklistedResults
           && isBackfillPage
-          && consecutiveStagnantBackfillPages >= BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES;
-        const canLoadAnotherPage = sourceHasNextPage
+          && state.consecutiveStagnantBackfillPages >= BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES;
+        state.sourceHasNextPage = sourceHasNextPage
           && !paginationStalled
           && !duplicatePage
           && !quickHistoryBoundaryReached
           && !languageProgress.boundaryReached
           && !backfillStalled;
-        const hasNextPage = backfillBlacklistedResults
+        state.sourceExhausted = state.sourceExhausted
+          || !sourceHasNextPage
+          || paginationStalled
+          || duplicatePage;
+        shouldLoadAnotherPage = backfillBlacklistedResults
           ? shouldContinueBackgroundBlacklistBackfill({
-            sourceHasNextPage: canLoadAnotherPage,
+            sourceHasNextPage: state.sourceHasNextPage,
             nextPageIndex: pageIndex + 1,
-            configuredMaxPages,
+            configuredMaxPages: executionPageLimits[runIndex],
             resultLimit,
-            acceptedResultTarget,
-            storedResultCount: nextResults.length,
+            acceptedResultTarget: state.acceptedResultTarget,
+            storedResultCount: run.results.length,
           })
-          : canLoadAnotherPage && (resultLimit === 0 || nextResults.length < resultLimit);
+          : state.sourceHasNextPage && (resultLimit === 0 || run.results.length < resultLimit);
         run = {
           ...run,
-          results: nextResults,
           cacheResults: nextCacheResults,
           loadedPages: pageIndex + 1,
-          hasNextPage,
+          checkedPages: (run.checkedPages ?? 0) + 1,
+          hasNextPage: shouldLoadAnotherPage,
           currentPageUrl: page.currentPageUrl,
           nextPageUrl: page.nextPageUrl,
           excludedByLanguageCount: languageProgress.excludedCount,
           includedByLanguageCount: languageProgress.includedCount,
           languageRejectLimitReached: languageProgress.boundaryReached,
           excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
-            + blacklistFilter.excludedCount,
+            + excludedByBlacklistedTagCount,
+          pendingResults: state.pendingResults,
+          pendingCandidates: state.pendingCandidates,
+          quickConsecutiveSeenResultCount: state.consecutiveSeenResultCount,
+          sourceExhausted: state.sourceExhausted,
         };
+        lastProcessedPage = { pageIndex, page };
         runs[runIndex] = run;
+        if (keepOpenForSharedQuota) {
+          run = { ...run, hasNextPage: canSourceProduceMoreResults(runIndex) };
+          runs[runIndex] = run;
+        }
+        appendScraperLatestDiagnosticEvent(diagnosticSession, "page.processing-completed", {
+          pageIndex,
+          totalMs: Math.round(performance.now() - pageStartedAt),
+          listingLoadMs: Math.round(listingLoadedAt - pageStartedAt),
+          postListingMs: Math.round(performance.now() - listingLoadedAt),
+          pageResultCount: pageSources.length,
+          uniqueResultCount: newPageSources.length,
+          unseenResultCount: rawUnseenSources.length,
+          acceptedResultCount: newEligibleSources.length,
+          excludedByLanguageCount: newPageSources.length - includedPageSources.length
+            + enrichedLanguageExcludedCount,
+          excludedByBlacklistedTagCount,
+        }, source.id);
         await emit(run.name);
-        if (!run.hasNextPage) break;
       }
-      if (
-        (input.maxPages === null || backfillBlacklistedResults || input.searchMode === "continuous")
-        && run.hasNextPage
-      ) {
-        throw new Error("Limite de sécurité atteinte pendant le chargement complet.");
+      const targetReached = resultLimit > 0 && run.results.length >= resultLimit;
+      const pageLimitReachedBeforeTarget = (
+        !targetReached
+        && run.loadedPages >= executionPageLimits[runIndex]
+        && state.sourceHasNextPage
+      );
+      if (pageLimitReachedBeforeTarget) {
+        if (kind === "latestSources") {
+          run = { ...run, safetyLimitReached: true };
+        } else if (input.maxPages === null) {
+          throw new Error("Limite de sécurité atteinte pendant le chargement complet.");
+        }
       }
-      run = { ...run, status: "done" };
+      if (kind === "latestSources" && input.searchMode === "deep" && lastProcessedPage) {
+        const checkpointModule = source.mode === "tag"
+          ? "tag"
+          : source.mode === "search"
+            ? "search"
+            : "homepage";
+        try {
+          const savedCheckpoint = await saveScraperLatestCheckpoint(
+            buildScraperLatestCursorCheckpointRequest({
+              scraper: run.scraper,
+              module: checkpointModule,
+              query: run.query,
+              includedLanguageCodes: input.includedLanguageCodes,
+              pageIndex: lastProcessedPage.pageIndex,
+              page: lastProcessedPage.page,
+              quotaUnavailableReason: run.results.length === 0
+                ? run.languageRejectLimitReached
+                  ? "languageRejectLimit"
+                  : run.safetyLimitReached
+                    ? "pageLimitWithoutResults"
+                    : null
+                : null,
+            }),
+          );
+          run = { ...run, checkpoint: savedCheckpoint ?? run.checkpoint };
+        } catch (checkpointError) {
+          console.warn("Failed to save scraper latest cursor checkpoint", checkpointError);
+        }
+      }
+      const canContinue = canSourceProduceMoreResults(runIndex);
+      run = {
+        ...run,
+        status: keepOpenForSharedQuota && canContinue ? "waiting" : "done",
+        hasNextPage: kind === "latestSources"
+          ? state.sourceHasNextPage && !run.languageRejectLimitReached
+          : keepOpenForSharedQuota
+            ? canContinue
+            : run.hasNextPage,
+        pendingResults: state.pendingResults,
+        pendingCandidates: state.pendingCandidates,
+        quickConsecutiveSeenResultCount: state.consecutiveSeenResultCount,
+        sourceExhausted: state.sourceExhausted,
+      };
     } catch (error) {
       if (signal.aborted) {
         run = { ...run, status: "cancelled" };
       } else if (
         isScraperListingPaginationEndError(error)
-        && (run.results.length > 0 || (run.cacheResults?.length ?? 0) > 0)
+        && (
+          kind === "latestSources"
+          || run.results.length > 0
+          || (run.cacheResults?.length ?? 0) > 0
+        )
       ) {
-        run = { ...run, status: "done", hasNextPage: false };
+        state.sourceHasNextPage = false;
+        state.sourceExhausted = true;
+        run = { ...run, status: "done", hasNextPage: false, sourceExhausted: true };
       } else {
+        state.sourceHasNextPage = false;
         run = {
           ...run,
           status: "error",
@@ -592,10 +1095,200 @@ const runListings = async (
     }
     runs[runIndex] = run;
     await emit(run.name);
-  }), concurrency);
+    completeDiagnosticBatch();
+  };
+
+  await emit();
+  const totalMode = kind === "latestSources"
+    && input.resultLimitMode === "total"
+    && input.searchMode !== "continuous";
+  if (!totalMode) {
+    await runWithConcurrency(runs.map((_run, runIndex) => () => {
+      const baseResultLimit = resolveBackgroundListingResultLimit(
+        input.sources[runIndex].resultLimit,
+        input.resultLimit,
+        kind === "latestAuthors",
+      );
+      const targetResultLimit = executionOptions.appendToExistingResults && baseResultLimit > 0
+        ? runs[runIndex].results.length + baseResultLimit
+        : undefined;
+      return executeSource(runIndex, targetResultLimit);
+    }), concurrency);
+  } else {
+    const runWithSharedConcurrency = createBackgroundConcurrencyRunner(concurrency);
+    const sourceIndexesByGroup = new Map<string, number[]>();
+    input.sources.forEach((source, sourceIndex) => {
+      const groupKey = resolveBackgroundListingTotalGroupKey(source);
+      const sourceIndexes = sourceIndexesByGroup.get(groupKey) ?? [];
+      sourceIndexes.push(sourceIndex);
+      sourceIndexesByGroup.set(groupKey, sourceIndexes);
+    });
+    await Promise.all(Array.from(sourceIndexesByGroup.entries()).map(async ([groupKey, sourceIndexes]) => {
+      const groupResultLimit = Math.max(0, Math.floor(Number(
+        groupKey === "scraper" ? input.resultLimit : input.tagResultLimit,
+      ) || 0));
+      appendScraperLatestDiagnosticEvent(diagnosticSession, "quota.group-started", {
+        groupKey,
+        sourceCount: sourceIndexes.length,
+        initialResultCount: sourceIndexes.reduce((count, sourceIndex) => (
+          count + runs[sourceIndex].results.length
+        ), 0),
+        targetResultCount: executionOptions.appendToExistingResults
+          ? groupResultLimit + sourceIndexes.reduce((count, sourceIndex) => (
+            count + runs[sourceIndex].results.length
+          ), 0)
+          : groupResultLimit,
+      });
+      if (groupResultLimit === 0) {
+        await Promise.all(sourceIndexes.map((sourceIndex) => (
+          runWithSharedConcurrency(() => executeSource(sourceIndex))
+        )));
+      } else {
+        await runBackgroundListingTotalGroup({
+          sourceIndexes,
+          resultLimit: groupResultLimit,
+          getResultCount: (sourceIndex) => runs[sourceIndex].results.length,
+          canContinue: canSourceProduceMoreResults,
+          isUnavailable: (sourceIndex) => isBackgroundListingSourceUnavailableForQuota({
+            resultCount: runs[sourceIndex].results.length,
+            sourceExhausted: executionStates[sourceIndex].sourceExhausted,
+            languageRejectLimitReached: runs[sourceIndex].languageRejectLimitReached,
+            safetyLimitReached: runs[sourceIndex].safetyLimitReached,
+          }),
+          appendToExistingResults: executionOptions.appendToExistingResults,
+          onRoundStart: (batches, roundNumber) => {
+            appendScraperLatestDiagnosticEvent(diagnosticSession, "quota.round-started", {
+              groupKey,
+              roundNumber,
+              resultCount: sourceIndexes.reduce((count, sourceIndex) => (
+                count + runs[sourceIndex].results.length
+              ), 0),
+              targetResultCount: groupResultLimit,
+              batches: batches.map((batch) => ({
+                sourceKey: input.sources[batch.sourceIndex].id,
+                requestedResultCount: batch.requestedResultCount,
+                targetResultCount: batch.targetResultCount,
+              })),
+            });
+          },
+          onRoundComplete: (_batches, roundNumber, durationMs) => {
+            appendScraperLatestDiagnosticEvent(diagnosticSession, "quota.round-completed", {
+              groupKey,
+              roundNumber,
+              durationMs: Math.round(durationMs),
+            });
+          },
+          beforeExecute: (batches) => {
+            batches.forEach(({ sourceIndex, requestedResultCount }) => {
+              const run = runs[sourceIndex];
+              const state = executionStates[sourceIndex];
+              const bufferedResultCount = state.pendingResults.length + state.pendingCandidates.length;
+              if (
+                state.sourceHasNextPage
+                && run.loadedPages < executionPageLimits[sourceIndex]
+                && requestedResultCount > bufferedResultCount
+              ) {
+                preloadSourceListingPage(sourceIndex, run.loadedPages, run.nextPageUrl);
+              }
+            });
+          },
+          execute: (sourceIndex, targetResultCount) => {
+            const queuedAt = performance.now();
+            return runWithSharedConcurrency(async () => {
+              appendScraperLatestDiagnosticEvent(diagnosticSession, "scheduler.slot-acquired", {
+                groupKey,
+                waitMs: Math.round(performance.now() - queuedAt),
+                targetResultCount,
+              }, input.sources[sourceIndex].id);
+              await executeSource(sourceIndex, targetResultCount, true);
+            });
+          },
+        });
+      }
+
+      const groupResultCount = sourceIndexes.reduce((count, sourceIndex) => (
+        count + runs[sourceIndex].results.length
+      ), 0);
+      appendScraperLatestDiagnosticEvent(diagnosticSession, "quota.group-completed", {
+        groupKey,
+        resultCount: groupResultCount,
+        targetResultCount: groupResultLimit,
+        quotaReached: groupResultLimit > 0 && groupResultCount >= groupResultLimit,
+      });
+
+      sourceIndexes.forEach((sourceIndex) => {
+        const run = runs[sourceIndex];
+        if (run.status !== "error" && run.status !== "cancelled") {
+          runs[sourceIndex] = {
+            ...run,
+            status: "done",
+            hasNextPage: executionStates[sourceIndex].sourceHasNextPage
+              && !run.languageRejectLimitReached,
+          };
+        }
+      });
+      await emit();
+    }));
+  }
 
   throwIfAborted(signal);
   return { runs };
+};
+
+export type ScraperLatestSearchExecutionOptions = LatestListingExecutionOptions & {
+  mode: "foreground" | "background";
+  backgroundJobId?: string;
+};
+
+type ScraperLatestSnapshotCallback = (
+  result: ListingBackgroundResult,
+  progress: BackgroundSearchProgress,
+) => Promise<void>;
+
+export const runScraperLatestSearch = async (
+  input: ListingBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ScraperLatestSearchExecutionOptions,
+): Promise<ListingBackgroundResult> => {
+  const pace = getPaceConfig(input.paceMode);
+  const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
+  const diagnosticSession = shouldGenerateScraperLatestPerformanceReport(input.performanceReportsEnabled)
+    ? await startScraperLatestDiagnosticSession({
+      mode: options.mode,
+      searchMode: input.searchMode ?? "quick",
+      resultLimitMode: input.resultLimitMode ?? "total",
+      resultLimit: Math.max(0, Math.floor(Number(input.resultLimit) || 0)),
+      tagResultLimit: Math.max(0, Math.floor(Number(input.tagResultLimit) || 0)),
+      concurrency,
+      sourceCount: input.sources.length,
+      backgroundJobId: options.backgroundJobId,
+    })
+    : null;
+  let status: "completed" | "cancelled" | "error" = "completed";
+  let diagnosticError: string | undefined;
+  let finalResultCount = 0;
+  try {
+    const result = await runListings(
+      "latestSources",
+      input,
+      signal,
+      (result, progress) => onSnapshot(result as ListingBackgroundResult, progress),
+      diagnosticSession,
+      options,
+    );
+    finalResultCount = countListingResults(result.runs);
+    return result;
+  } catch (error) {
+    status = signal.aborted ? "cancelled" : "error";
+    diagnosticError = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally {
+    await finishScraperLatestDiagnosticSession(diagnosticSession, status, {
+      error: diagnosticError,
+      finalResultCount,
+    });
+  }
 };
 
 export const executeBackgroundSearch = async (
@@ -603,6 +1296,13 @@ export const executeBackgroundSearch = async (
   signal: AbortSignal,
   onSnapshot: SnapshotCallback,
 ): Promise<BackgroundSearchExecutionResult> => {
+  const runLatestSources = async (): Promise<ListingBackgroundResult> => {
+    const input = job.input as ListingBackgroundInput;
+    return runScraperLatestSearch(input, signal, onSnapshot, {
+      mode: "background",
+      backgroundJobId: job.metadata.id,
+    });
+  };
   const adapters: Record<BackgroundSearchKind, () => Promise<BackgroundSearchExecutionResult>> = {
     multiSearch: () => runMultiSearch(job.input as MultiSearchBackgroundInput, signal, onSnapshot),
     mangaCorrespondence: () => runMangaCorrespondenceSearch(
@@ -619,7 +1319,7 @@ export const executeBackgroundSearch = async (
       onSnapshot,
     ),
     scraperAuthor: () => runListings("scraperAuthor", job.input as ListingBackgroundInput, signal, onSnapshot),
-    latestSources: () => runListings("latestSources", job.input as ListingBackgroundInput, signal, onSnapshot),
+    latestSources: runLatestSources,
     latestAuthors: () => runListings("latestAuthors", job.input as ListingBackgroundInput, signal, onSnapshot),
     authorFavoriteRefresh: () => runListings(
       "authorFavoriteRefresh",

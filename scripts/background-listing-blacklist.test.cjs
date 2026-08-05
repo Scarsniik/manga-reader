@@ -7,10 +7,15 @@ const source = `
   export {
     BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
     filterBackgroundListingSourcesByBlacklist,
+    isBackgroundListingBackfillPage,
     isBackgroundListingPaginationStalled,
     resolveBackgroundListingAcceptedTarget,
     shouldContinueBackgroundBlacklistBackfill,
   } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+  export {
+    isScraperListingPaginationEndError,
+    throwIfScraperListingNextPageUnavailable,
+  } from "@/renderer/utils/scraperRuntime/listingPagination";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "background-listing-blacklist-test.ts" },
@@ -30,9 +35,12 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 const {
   BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
   filterBackgroundListingSourcesByBlacklist,
+  isBackgroundListingBackfillPage,
   isBackgroundListingPaginationStalled,
   resolveBackgroundListingAcceptedTarget,
   shouldContinueBackgroundBlacklistBackfill,
+  isScraperListingPaginationEndError,
+  throwIfScraperListingNextPageUnavailable,
 } = bundledModule.exports;
 
 const makeSource = (scraperId, title, tags = [], tagUrls = []) => ({
@@ -114,4 +122,38 @@ test("background blacklist backfill detects a pagination URL that no longer adva
     "https://example.test/?page=2",
   ), false);
   assert.equal(BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES, 3);
+});
+
+test("blacklist backfill counts pages from the current checkpoint", () => {
+  assert.equal(isBackgroundListingBackfillPage({
+    pageIndex: 144,
+    executionStartPageIndex: 141,
+    configuredMaxPages: 50,
+  }), false);
+  assert.equal(isBackgroundListingBackfillPage({
+    pageIndex: 191,
+    executionStartPageIndex: 141,
+    configuredMaxPages: 50,
+  }), true);
+});
+
+test("a missing next-page URL is classified as a real pagination end", () => {
+  assert.throws(
+    () => throwIfScraperListingNextPageUnavailable({
+      pageIndex: 1,
+      usesTemplatePaging: false,
+      nextPageUrl: undefined,
+    }),
+    (error) => isScraperListingPaginationEndError(error),
+  );
+  assert.doesNotThrow(() => throwIfScraperListingNextPageUnavailable({
+    pageIndex: 0,
+    usesTemplatePaging: false,
+    nextPageUrl: undefined,
+  }));
+  assert.doesNotThrow(() => throwIfScraperListingNextPageUnavailable({
+    pageIndex: 12,
+    usesTemplatePaging: true,
+    nextPageUrl: undefined,
+  }));
 });

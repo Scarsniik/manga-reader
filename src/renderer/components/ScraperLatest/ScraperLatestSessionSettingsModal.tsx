@@ -1,8 +1,10 @@
 import React from "react";
+import type { ScraperLatestResultLimitMode } from "@/shared/scraper";
 import type { ModalOptions } from "@/renderer/context/ModalContext";
 import { useModal } from "@/renderer/hooks/useModal";
 
 export type ScraperLatestSessionSettings = {
+  resultLimitMode: ScraperLatestResultLimitMode;
   scraperResultLimit: number;
   tagResultLimit: number;
   concurrency: number;
@@ -44,6 +46,7 @@ function ScraperLatestSessionSettingsModalContent({
   onClear,
 }: Props) {
   const { closeModal } = useModal();
+  const [resultLimitMode, setResultLimitMode] = React.useState(initialValues.resultLimitMode);
   const [scraperResultLimit, setScraperResultLimit] = React.useState(initialValues.scraperResultLimit);
   const [tagResultLimit, setTagResultLimit] = React.useState(initialValues.tagResultLimit);
   const [concurrency, setConcurrency] = React.useState(initialValues.concurrency);
@@ -59,10 +62,11 @@ function ScraperLatestSessionSettingsModalContent({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     onApply({
+      resultLimitMode,
       scraperResultLimit: normalizeResultLimit(scraperResultLimit),
       tagResultLimit: normalizeResultLimit(tagResultLimit),
       concurrency: normalizeResultLimit(concurrency),
-      deepPageLimit: normalizeNonNegativeLimit(deepPageLimit),
+      deepPageLimit: normalizeResultLimit(deepPageLimit),
       continuousPageSafetyLimit: normalizeResultLimit(continuousPageSafetyLimit),
       quickConsecutiveSeenStopThreshold: normalizeNonNegativeLimit(quickConsecutiveSeenStopThreshold),
       languageRejectLimit: normalizeNonNegativeLimit(languageRejectLimit),
@@ -83,7 +87,19 @@ function ScraperLatestSessionSettingsModalContent({
       </p>
 
       <label className="scraper-latest-session-settings-modal__field">
-        <span>Resultats par scrapper</span>
+        <span>Calcul du quota</span>
+        <select
+          value={resultLimitMode}
+          onChange={(event) => setResultLimitMode(event.currentTarget.value === "perSource" ? "perSource" : "total")}
+        >
+          <option value="total">Total scrappers / par tag favori</option>
+          <option value="perSource">Par source</option>
+        </select>
+        <small>{`Parametre global : ${defaults.resultLimitMode === "total" ? "total scrappers / par tag" : "par source"}`}</small>
+      </label>
+
+      <label className="scraper-latest-session-settings-modal__field">
+        <span>Quota des scrappers</span>
         <input
           type="number"
           min={1}
@@ -95,7 +111,7 @@ function ScraperLatestSessionSettingsModalContent({
       </label>
 
       <label className="scraper-latest-session-settings-modal__field">
-        <span>Resultats par tag favori</span>
+        <span>Quota par tag favori</span>
         <input
           type="number"
           min={1}
@@ -122,12 +138,12 @@ function ScraperLatestSessionSettingsModalContent({
         <span>Pages max du scan profond</span>
         <input
           type="number"
-          min={0}
+          min={1}
           step={1}
           value={deepPageLimit}
-          onChange={(event) => setDeepPageLimit(Number.parseInt(event.currentTarget.value, 10) || 0)}
+          onChange={(event) => setDeepPageLimit(Number.parseInt(event.currentTarget.value, 10) || 1)}
         />
-        <small>{`Parametre global : ${defaults.deepPageLimit} (0 = infini)`}</small>
+        <small>{`Parametre global : ${defaults.deepPageLimit} pages par source`}</small>
       </label>
 
       <label className="scraper-latest-session-settings-modal__field">

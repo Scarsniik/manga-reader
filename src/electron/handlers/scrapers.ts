@@ -7,6 +7,11 @@ export {
   setGlobalScraperRequestConcurrency,
 } from "./scrapers/requestLimiter";
 export {
+  appendScraperLatestDiagnosticEvent,
+  finishScraperLatestDiagnostics,
+  startScraperLatestDiagnostics,
+} from "./scrapers/latestDiagnostics";
+export {
   cancelAllScraperDownloadJobs,
   cancelScraperDownloadJob,
   getScraperDownloadQueueStatus,

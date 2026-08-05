@@ -1,4 +1,4 @@
-import type { ScraperRecord } from "./scraper";
+import type { ScraperLatestResultLimitMode, ScraperRecord } from "./scraper";
 
 export const BACKGROUND_SEARCH_SCHEMA_VERSION = 1;
 
@@ -210,6 +210,8 @@ export type ListingBackgroundInput = {
   favoriteUpdatedAt?: string;
   maxPages: number | null;
   resultLimit?: number;
+  tagResultLimit?: number;
+  resultLimitMode?: ScraperLatestResultLimitMode;
   paceMode: "fast" | "careful";
   concurrency?: number;
   excludeBlacklistedTagCards?: boolean;
@@ -226,6 +228,7 @@ export type ListingBackgroundInput = {
   searchMode?: "quick" | "continuous" | "deep";
   quickConsecutiveSeenStopThreshold?: number;
   languageRejectLimit?: number;
+  performanceReportsEnabled?: boolean;
   useAuthorFavoriteCache?: boolean;
   authorFavoriteCacheMaxAgeHours?: number;
 };

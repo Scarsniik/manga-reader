@@ -21,6 +21,11 @@ import {
   SCRAPER_DOCUMENT_ACCEPT,
 } from "./documentFetch";
 import { acquireScraperRequestSlot } from "./requestLimiter";
+import {
+  beginScraperRequestDiagnostic,
+  completeScraperRequestDiagnostic,
+  recordScraperRequestAcquired,
+} from "./latestDiagnostics";
 
 const MAX_VALIDATED_IMAGE_BYTES = 16 * 1024 * 1024;
 
@@ -136,7 +141,31 @@ export async function fetchScraperDocument(
   }
 
   const controller = new AbortController();
-  const releaseRequestSlot = await acquireScraperRequestSlot(event, request);
+  const diagnosticToken = beginScraperRequestDiagnostic(request.diagnostics, {
+    requestedUrl,
+    scraperId: request.scraperId,
+  });
+  let acquiredSlot: Awaited<ReturnType<typeof acquireScraperRequestSlot>>;
+  try {
+    acquiredSlot = await acquireScraperRequestSlot(event, request);
+  } catch (error) {
+    completeScraperRequestDiagnostic(diagnosticToken, request.diagnostics, {
+      executionMs: 0,
+      error: error instanceof Error ? error.message : "Echec de la file de requetes.",
+    });
+    throw error;
+  }
+  const requestStartedAt = Date.now();
+  recordScraperRequestAcquired(diagnosticToken, request.diagnostics, {
+    activeAfterAcquire: acquiredSlot.activeAfterAcquire,
+    pendingAfterAcquire: acquiredSlot.pendingAfterAcquire,
+    groupKey: acquiredSlot.groupKey,
+    groupMaxConcurrent: acquiredSlot.groupMaxConcurrent,
+    minDelayMs: acquiredSlot.minDelayMs,
+  });
+  let diagnosticStatus: number | undefined;
+  let diagnosticOk: boolean | undefined;
+  let diagnosticError: string | undefined;
   const timeout = setTimeout(() => {
     controller.abort();
   }, DEFAULT_SCRAPER_VALIDATION_TIMEOUT_MS);
@@ -148,6 +177,8 @@ export async function fetchScraperDocument(
     );
     let fetchResult = await fetchWithRedirectCookies(requestedUrl, fetchInit, controller.signal);
     let response = fetchResult.response;
+    diagnosticStatus = response.status;
+    diagnosticOk = response.ok;
     let contentType = response.headers.get("content-type") ?? undefined;
     let html: string | undefined;
 
@@ -213,6 +244,8 @@ export async function fetchScraperDocument(
           fetchResult.cookies,
         );
         response = fetchResult.response;
+        diagnosticStatus = response.status;
+        diagnosticOk = response.ok;
         contentType = response.headers.get("content-type") ?? undefined;
 
         if (response.ok && isImageContentType(contentType)) {
@@ -261,6 +294,7 @@ export async function fetchScraperDocument(
       error: response.ok ? undefined : `La page a repondu avec le code HTTP ${response.status}.`,
     };
   } catch (error) {
+    diagnosticError = error instanceof Error ? error.message : "Echec de la requete.";
     return {
       ok: false,
       checkedAt,
@@ -269,6 +303,12 @@ export async function fetchScraperDocument(
     };
   } finally {
     clearTimeout(timeout);
-    releaseRequestSlot();
+    acquiredSlot.release();
+    completeScraperRequestDiagnostic(diagnosticToken, request.diagnostics, {
+      executionMs: Date.now() - requestStartedAt,
+      status: diagnosticStatus,
+      ok: diagnosticOk,
+      error: diagnosticError,
+    });
   }
 }

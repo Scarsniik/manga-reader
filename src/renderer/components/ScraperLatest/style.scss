@@ -404,7 +404,8 @@
   font-weight: 700;
 }
 
-.scraper-latest-session-settings-modal__field input {
+.scraper-latest-session-settings-modal__field input,
+.scraper-latest-session-settings-modal__field select {
   min-height: 36px;
   border: 1px solid #2f2f2f;
   border-radius: 8px;

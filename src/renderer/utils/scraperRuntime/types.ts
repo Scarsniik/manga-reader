@@ -40,6 +40,7 @@ export type ScraperRuntimeDetailsResult = {
   contentType?: string;
   title?: string;
   cover?: string;
+  coverCandidates?: string[];
   description?: string;
   authors: string[];
   authorUrls: string[];

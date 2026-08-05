@@ -21,6 +21,20 @@ export const isScraperListingPaginationEndError = (
   error: unknown,
 ): error is ScraperListingPaginationEndError => error instanceof ScraperListingPaginationEndError;
 
+export const throwIfScraperListingNextPageUnavailable = ({
+  pageIndex,
+  usesTemplatePaging,
+  nextPageUrl,
+}: {
+  pageIndex: number;
+  usesTemplatePaging: boolean;
+  nextPageUrl?: string;
+}): void => {
+  if (pageIndex > 0 && !usesTemplatePaging && !nextPageUrl) {
+    throw new ScraperListingPaginationEndError(pageIndex, 0, "");
+  }
+};
+
 export const isTerminalScraperListingPaginationResponse = (
   result: FetchScraperDocumentResult | null | undefined,
   pageIndex: number,

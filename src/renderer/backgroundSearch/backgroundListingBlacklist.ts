@@ -12,6 +12,19 @@ export type FilteredBackgroundListingSources = {
 
 export const BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES = 3;
 
+export const isBackgroundListingBackfillPage = ({
+  pageIndex,
+  executionStartPageIndex,
+  configuredMaxPages,
+}: {
+  pageIndex: number;
+  executionStartPageIndex: number;
+  configuredMaxPages: number;
+}): boolean => (
+  Math.max(0, Math.floor(pageIndex) - Math.max(0, Math.floor(executionStartPageIndex)))
+  >= Math.max(1, Math.floor(configuredMaxPages))
+);
+
 const normalizePaginationUrl = (value: string): string => {
   try {
     const url = new URL(value);

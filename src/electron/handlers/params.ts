@@ -8,6 +8,10 @@ import {
     DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     normalizeScraperViewHistorySettings,
 } from "../scraper";
+import {
+    DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
+    normalizeScraperLatestDeepPageLimit,
+} from "../../shared/scraperLatestSettings";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
@@ -72,10 +76,9 @@ const MIN_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 1;
 const MAX_SCRAPER_AUTHOR_FAVORITE_PAGE_COUNT = 20;
 const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT = 20;
 const MIN_SCRAPER_LATEST_RESULT_LIMIT = 1;
+const DEFAULT_SCRAPER_LATEST_RESULT_LIMIT_MODE = "total";
 const DEFAULT_SCRAPER_LATEST_CONCURRENCY = 2;
 const MIN_SCRAPER_LATEST_CONCURRENCY = 1;
-const DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
-const MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT = 0;
 const DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT = 100;
 const MIN_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT = 1;
 const DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD = 2;
@@ -499,19 +502,15 @@ const normalizeScraperLatestResultLimit = (value: unknown): number => (
     )
 );
 
+const normalizeScraperLatestResultLimitMode = (value: unknown): "total" | "perSource" => (
+    value === "perSource" ? "perSource" : DEFAULT_SCRAPER_LATEST_RESULT_LIMIT_MODE
+);
+
 const normalizeScraperLatestConcurrency = (value: unknown): number => (
     normalizeIntegerSettingWithoutMax(
         value,
         DEFAULT_SCRAPER_LATEST_CONCURRENCY,
         MIN_SCRAPER_LATEST_CONCURRENCY,
-    )
-);
-
-const normalizeScraperLatestDeepPageLimit = (value: unknown): number => (
-    normalizeIntegerSettingWithoutMax(
-        value,
-        DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
-        MIN_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     )
 );
 
@@ -685,11 +684,13 @@ const defaultSettings = {
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestScraperResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestTagResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
+    scraperLatestResultLimitMode: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT_MODE as "total" | "perSource",
     scraperLatestConcurrency: DEFAULT_SCRAPER_LATEST_CONCURRENCY,
     scraperLatestDeepPageLimit: DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     scraperLatestContinuousPageSafetyLimit: DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
+    scraperLatestPerformanceReportsEnabled: false,
     scraperLatestAuthorsUseCache: true,
     scraperLatestAuthorCacheMaxAgeHours: DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
     scraperLatestIncludedLanguageCodes: [] as string[],
@@ -814,8 +815,14 @@ const normalizeSettings = (value: unknown) => {
             ? merged.scraperLatestTagResultLimit
             : merged.scraperLatestResultLimit,
     );
+    merged.scraperLatestResultLimitMode = normalizeScraperLatestResultLimitMode(
+        merged.scraperLatestResultLimitMode,
+    );
     merged.scraperLatestConcurrency = normalizeScraperLatestConcurrency(merged.scraperLatestConcurrency);
     merged.scraperLatestDeepPageLimit = normalizeScraperLatestDeepPageLimit(merged.scraperLatestDeepPageLimit);
+    merged.scraperLatestPerformanceReportsEnabled = typeof merged.scraperLatestPerformanceReportsEnabled === "boolean"
+        ? merged.scraperLatestPerformanceReportsEnabled
+        : defaultSettings.scraperLatestPerformanceReportsEnabled;
     merged.scraperLatestContinuousPageSafetyLimit = normalizeScraperLatestContinuousPageSafetyLimit(
         merged.scraperLatestContinuousPageSafetyLimit,
     );
@@ -1189,6 +1196,9 @@ export async function saveSettings(event: any, settings: any) {
                 ? nextSettings.scraperLatestResultLimit
                 : nextSettings.scraperLatestTagResultLimit,
         );
+        nextSettings.scraperLatestResultLimitMode = normalizeScraperLatestResultLimitMode(
+            nextSettings.scraperLatestResultLimitMode,
+        );
         nextSettings.scraperLatestConcurrency = normalizeScraperLatestConcurrency(
             nextSettings.scraperLatestConcurrency,
         );
@@ -1204,6 +1214,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperLatestLanguageRejectLimit = normalizeScraperLatestLanguageRejectLimit(
             nextSettings.scraperLatestLanguageRejectLimit,
         );
+        nextSettings.scraperLatestPerformanceReportsEnabled = typeof nextSettings.scraperLatestPerformanceReportsEnabled === "boolean"
+            ? nextSettings.scraperLatestPerformanceReportsEnabled
+            : defaultSettings.scraperLatestPerformanceReportsEnabled;
         nextSettings.scraperLatestAuthorsUseCache = typeof nextSettings.scraperLatestAuthorsUseCache === "boolean"
             ? nextSettings.scraperLatestAuthorsUseCache
             : defaultSettings.scraperLatestAuthorsUseCache;

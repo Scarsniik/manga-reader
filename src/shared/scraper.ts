@@ -481,6 +481,7 @@ export interface ScraperSearchResultItem {
   tags?: string[];
   tagUrls?: string[];
   thumbnailUrl?: string;
+  thumbnailCandidates?: string[];
   summary?: string;
   pageCount?: string;
   languageCodes?: string[];
@@ -577,6 +578,7 @@ export interface FetchScraperDocumentRequest {
   targetUrl: string;
   requestConfig?: ScraperRequestConfig;
   validateImage?: boolean;
+  diagnostics?: import("@/shared/scraperLatestDiagnostics").ScraperRequestDiagnosticContext;
 }
 
 export interface FetchScraperDocumentResult {
@@ -916,6 +918,8 @@ export interface SetScraperCardReadRequest extends ScraperViewHistoryCardIdentit
 }
 
 export type ScraperLatestCheckpointModule = "homepage" | "search" | "tag";
+export type ScraperLatestResultLimitMode = "total" | "perSource";
+export type ScraperLatestQuotaUnavailableReason = "languageRejectLimit" | "pageLimitWithoutResults";
 
 export interface ScraperLatestCheckpointKey {
   scraperId: string;
@@ -930,20 +934,28 @@ export interface ScraperLatestCheckpointRecord extends ScraperLatestCheckpointKe
   includedLanguageCodes: string[];
   scraperUpdatedAt?: string;
   pageIndex: number;
+  cursorVersion?: 2;
+  nextPageIndex?: number;
   currentPageUrl?: string;
   nextPageUrl?: string;
-  anchorCardId: string;
-  anchorIdentity: ScraperViewHistoryCardIdentity;
+  anchorCardId?: string;
+  anchorIdentity?: ScraperViewHistoryCardIdentity;
+  quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason;
+  quotaUnavailableUntil?: string;
   updatedAt: string;
 }
 
 export interface SaveScraperLatestCheckpointRequest extends ScraperLatestCheckpointKey {
   scraperUpdatedAt?: string;
   pageIndex: number;
+  cursorVersion?: 2;
+  nextPageIndex?: number;
   currentPageUrl?: string | null;
   nextPageUrl?: string | null;
   anchorCardId?: string | null;
-  anchorIdentity: ScraperViewHistoryCardIdentity;
+  anchorIdentity?: ScraperViewHistoryCardIdentity | null;
+  quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason | null;
+  quotaUnavailableUntil?: string | null;
 }
 
 export const DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
