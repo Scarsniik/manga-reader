@@ -157,6 +157,68 @@ function Stop-ApplicationProcesses {
     }
 }
 
+function Get-LockedInstallationFiles {
+    param([AllowNull()][string]$InstallationDirectory)
+
+    if (
+        [string]::IsNullOrWhiteSpace($InstallationDirectory) -or
+        -not (Test-Path -LiteralPath $InstallationDirectory -PathType Container)
+    ) {
+        return @()
+    }
+
+    $probeSuffix = ".reinstall-lock-check-$PID"
+    $lockedFiles = [System.Collections.Generic.List[string]]::new()
+    $installedFiles = Get-ChildItem `
+        -LiteralPath $InstallationDirectory `
+        -File `
+        -Recurse `
+        -Force
+
+    foreach ($file in $installedFiles) {
+        $probePath = "{0}{1}" -f $file.FullName, $probeSuffix
+        $fileWasMoved = $false
+
+        try {
+            [System.IO.File]::Move($file.FullName, $probePath)
+            $fileWasMoved = $true
+            [System.IO.File]::Move($probePath, $file.FullName)
+            $fileWasMoved = $false
+        } catch {
+            if ($fileWasMoved -and (Test-Path -LiteralPath $probePath -PathType Leaf)) {
+                try {
+                    [System.IO.File]::Move($probePath, $file.FullName)
+                    $fileWasMoved = $false
+                } catch {
+                    throw "Unable to restore the lock-check file '$probePath'."
+                }
+            }
+
+            $lockedFiles.Add($file.FullName)
+        }
+    }
+
+    return $lockedFiles.ToArray()
+}
+
+function Assert-InstallationFilesAreReplaceable {
+    param([AllowNull()][string]$InstallationDirectory)
+
+    $lockedFiles = @(Get-LockedInstallationFiles -InstallationDirectory $InstallationDirectory)
+    if ($lockedFiles.Count -eq 0) {
+        return
+    }
+
+    $lockedFileList = ($lockedFiles | ForEach-Object { "- $_" }) -join [Environment]::NewLine
+    throw @"
+The existing installation is open in another program and cannot be replaced.
+Locked files:
+$lockedFileList
+Close the program using these files, then run 'npm run reinstall:app -- -SkipBuild'.
+The installer was not started and the existing installation was left unchanged.
+"@
+}
+
 function Get-InstallerPath {
     param(
         [Parameter(Mandatory = $true)][object]$Identity,
@@ -279,6 +341,7 @@ if (-not $SkipBuild) {
 $installerPath = Get-InstallerPath -Identity $identity -Version ([string]$packageJson.version)
 Write-Step "Stopping $($identity.productName)"
 Stop-ApplicationProcesses -Identity $identity
+Assert-InstallationFilesAreReplaceable -InstallationDirectory $installationDirectory
 
 Write-Step "Installing silently from $installerPath"
 Install-ApplicationSilently -InstallerPath $installerPath -InstallationDirectory $installationDirectory
