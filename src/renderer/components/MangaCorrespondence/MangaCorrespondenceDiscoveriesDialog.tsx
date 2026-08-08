@@ -101,6 +101,7 @@ export default function MangaCorrespondenceDiscoveriesDialog({
             ])),
             evidenceCount: Math.max(entry.evidenceCount, discovery.evidenceCount),
             status: "active",
+            automaticInvalidation: undefined,
           }
           : entry);
       }, current));
@@ -201,13 +202,21 @@ export default function MangaCorrespondenceDiscoveriesDialog({
               disabled={disabled || submitting}
               onChange={(event) => setDraftDiscoveries((current) => current.map((entry) => (
                 entry.key === discovery.key
-                  ? { ...entry, status: event.target.checked ? "active" : "invalidated" }
+                  ? {
+                    ...entry,
+                    status: event.target.checked ? "active" : "invalidated",
+                    ...(event.target.checked ? { automaticInvalidation: undefined } : {}),
+                  }
                   : entry
               )))}
             />
             <span>
               <strong>{discovery.value}</strong>
-              <small>{discovery.scraperName} · {ORIGIN_LABELS[discovery.origin]}{discovery.evidenceCount > 1 ? ` · ${discovery.evidenceCount} preuves` : ""}</small>
+              <small>
+                {discovery.scraperName} · {ORIGIN_LABELS[discovery.origin]}
+                {discovery.evidenceCount > 1 ? ` · ${discovery.evidenceCount} preuves` : ""}
+                {discovery.automaticInvalidation ? ` · ${discovery.automaticInvalidation.message}` : ""}
+              </small>
             </span>
             {discovery.kind === "author" && discovery.authorPageUrl ? (
               <button

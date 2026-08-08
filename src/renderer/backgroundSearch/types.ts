@@ -25,6 +25,11 @@ export type MangaCorrespondenceDiscovery = {
   evidenceCount: number;
   status: MangaCorrespondenceDiscoveryStatus;
   propagationConfidence?: "reference" | "directTitle" | "fuzzyTitle" | "manual";
+  automaticInvalidation?: {
+    code: "unproductiveTitle";
+    message: string;
+    invalidatedAt: string;
+  };
   foundAt: string;
 };
 
@@ -33,6 +38,7 @@ export type MangaCorrespondenceEngineCheckpointTask = {
   term: string;
   parentId?: string;
   initialGeneratedVariant?: boolean;
+  protectedSeed?: boolean;
   directOnly?: boolean;
   directTargets?: Array<{
     scraperId: string;
@@ -145,7 +151,23 @@ export type MangaCorrespondenceBackgroundResult = {
   searchedAuthors: string[];
   discoveries?: MangaCorrespondenceDiscovery[];
   resultDecisions?: MangaCorrespondenceResultDecision[];
+  warnings?: MangaCorrespondenceWarning[];
   checkpoint?: MangaCorrespondenceEngineCheckpoint;
+};
+
+export type MangaCorrespondenceWarning = {
+  key: string;
+  code:
+    | "unproductivePages"
+    | "authorExpansion"
+    | "automaticTitleInvalidation"
+    | "taskExpansion";
+  message: string;
+  createdAt: string;
+  term?: string;
+  scraperId?: string;
+  scraperName?: string;
+  evidence?: Record<string, number | string | boolean>;
 };
 
 export type AuthorCorrespondenceMatch = {

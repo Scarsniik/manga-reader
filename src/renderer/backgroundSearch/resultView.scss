@@ -131,6 +131,19 @@
   min-width: 0;
 }
 
+.background-search-result-view__warning {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(221, 166, 65, .45);
+  border-radius: 9px;
+  background: rgba(221, 166, 65, .1);
+  color: #ead29f;
+  font-size: .75rem;
+}
+
+.background-search-result-view__warning strong { color: #ffe5ad; }
+
 @media (max-width: 760px) {
   .background-search-result-view { padding: 14px; }
   .background-search-result-view__header { align-items: stretch; flex-direction: column; }

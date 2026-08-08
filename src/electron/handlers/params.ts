@@ -12,6 +12,10 @@ import {
     DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     normalizeScraperLatestDeepPageLimit,
 } from "../../shared/scraperLatestSettings";
+import {
+    MANGA_CORRESPONDENCE_SAFETY_PARAM_DEFAULTS,
+    normalizeMangaCorrespondenceSafetyParams,
+} from "../../shared/mangaCorrespondenceSafetySettings";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
@@ -705,6 +709,7 @@ const defaultSettings = {
     backgroundSearchStorageMode: "memory" as "memory" | "temporaryFile",
     backgroundSearchTemporaryRetentionHours: DEFAULT_BACKGROUND_SEARCH_RETENTION_HOURS,
     backgroundSearchMaxConcurrent: DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT,
+    ...MANGA_CORRESPONDENCE_SAFETY_PARAM_DEFAULTS,
     multiSearchBackgroundEnabled: false,
     scraperAuthorBackgroundEnabled: false,
     scraperLatestSourcesBackgroundEnabled: false,
@@ -873,6 +878,7 @@ const normalizeSettings = (value: unknown) => {
         1,
         8,
     );
+    Object.assign(merged, normalizeMangaCorrespondenceSafetyParams(merged));
     merged.multiSearchShowUnseenFirst = typeof merged.multiSearchShowUnseenFirst === "boolean"
         ? merged.multiSearchShowUnseenFirst
         : defaultSettings.multiSearchShowUnseenFirst;
@@ -1247,6 +1253,7 @@ export async function saveSettings(event: any, settings: any) {
             nextSettings.scraperLatestIncludedTagFavoriteIds,
         );
         Object.assign(nextSettings, normalizeScraperViewHistorySettings(nextSettings));
+        Object.assign(nextSettings, normalizeMangaCorrespondenceSafetyParams(nextSettings));
         nextSettings.multiSearchEnableRomajiPhoneticMerge = typeof nextSettings.multiSearchEnableRomajiPhoneticMerge === "boolean"
             ? nextSettings.multiSearchEnableRomajiPhoneticMerge
             : defaultSettings.multiSearchEnableRomajiPhoneticMerge;

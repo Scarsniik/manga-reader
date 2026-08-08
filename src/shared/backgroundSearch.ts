@@ -1,4 +1,5 @@
 import type { ScraperLatestResultLimitMode, ScraperRecord } from "./scraper";
+import type { MangaCorrespondenceSafetySettings } from "./mangaCorrespondenceSafetySettings";
 
 export const BACKGROUND_SEARCH_SCHEMA_VERSION = 1;
 
@@ -168,6 +169,7 @@ export type MangaCorrespondenceBackgroundInput = {
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
   enableRomajiPhoneticMerge: boolean;
+  safety?: MangaCorrespondenceSafetySettings;
   purpose?: "correspondence" | "authorDiscovery";
   continuation?: {
     passNumber: number;
@@ -217,6 +219,7 @@ export type AuthorCorrespondenceBackgroundInput = {
   paceMode: "fast" | "careful";
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
+  correspondenceSafety?: MangaCorrespondenceSafetySettings;
   mangaSeed?: {
     reference: MangaCorrespondenceReference;
     enableRomajiPhoneticMerge: boolean;

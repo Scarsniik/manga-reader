@@ -38,6 +38,7 @@ import {
   type SearchExecutionContext,
 } from "@/renderer/searchEngines/searchExecutionContext";
 import { buildScraperListingPageRequestKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
+import { normalizeMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import type { ScraperRuntimeSearchPageResult } from "@/renderer/utils/scraperRuntime";
 
 type SnapshotCallback = (
@@ -144,7 +145,12 @@ export const runAuthorCorrespondenceSearch = async (
   const searchPagePrefetch = executionContext.getPagePrefetchCache<ScraperRuntimeSearchPageResult>(
     "author-correspondence-search",
   );
-  const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
+  const correspondenceSafety = normalizeMangaCorrespondenceSafetySettings(input.correspondenceSafety);
+  const maxPages = input.maxPages === null
+    ? (correspondenceSafety.enabled && correspondenceSafety.unboundedPageLimitEnabled
+      ? correspondenceSafety.unboundedPageLimit
+      : Number.MAX_SAFE_INTEGER)
+    : Math.max(1, input.maxPages);
   const checkpointInput = {
     referenceName: input.referenceName,
     names: input.names,
@@ -155,6 +161,7 @@ export const runAuthorCorrespondenceSearch = async (
     authorPageCount: input.authorPageCount,
     paceMode: input.paceMode,
     scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+    correspondenceSafety,
   };
   const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
   const resumeCheckpoint = previousResult?.checkpoint?.version === 1

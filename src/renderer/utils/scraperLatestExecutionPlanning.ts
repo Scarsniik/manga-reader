@@ -49,7 +49,7 @@ export type ScraperListingPagePrefetchEvent = {
 export type ScraperListingPagePrefetchCache<Value> = {
   preload: (sourceKey: string, requestKey: string, loader: () => Promise<Value>) => void;
   load: (sourceKey: string, requestKey: string, loader: () => Promise<Value>) => Promise<Value>;
-  clear: () => void;
+  clear: (sourceKey?: string) => void;
 };
 
 const normalizeCount = (value: unknown): number => Math.max(0, Math.floor(Number(value) || 0));
@@ -261,7 +261,13 @@ export const createScraperListingPagePrefetchCache = <Value>(
       }
       return resolveEntry(createEntry(requestKey, loader));
     },
-    clear: () => {
+    clear: (sourceKey) => {
+      if (sourceKey !== undefined) {
+        if (entries.delete(sourceKey)) {
+          onEvent?.({ type: "cleared", sourceKey, entryCount: 1 });
+        }
+        return;
+      }
       if (entries.size > 0) {
         onEvent?.({ type: "cleared", entryCount: entries.size });
       }

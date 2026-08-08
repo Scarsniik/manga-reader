@@ -12,6 +12,7 @@ import type {
   MultiSearchPaceMode,
 } from "@/renderer/components/MultiSearch/types";
 import useParams from "@/renderer/hooks/useParams";
+import { buildMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import "@/renderer/components/MangaCorrespondence/style.scss";
 
 type Props = {
@@ -78,6 +79,7 @@ export default function AuthorCorrespondenceDialog({
         scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
         mangaSeed,
+        correspondenceSafety: buildMangaCorrespondenceSafetySettings(params),
       };
       const primaryTerm = name.trim() || mangaSeed?.reference.title || "Auteur inconnu";
       await enqueueBackgroundSearch({

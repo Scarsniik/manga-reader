@@ -76,6 +76,249 @@ const scraper = {
   }],
 };
 
+const buildCorrespondenceInput = (overrides = {}) => ({
+  request: "otherChapters",
+  strategy: "titleFirst",
+  reference: {
+    scraperId: scraper.id,
+    sourceUrl: "https://example.test/details/reference",
+    rawTitle: "Series One",
+    title: "Series One",
+    alternativeTitles: [],
+    authors: [],
+    authorUrls: [],
+  },
+  scraperFilterValues: [],
+  scrapers: [scraper],
+  maxPages: 6,
+  paceMode: "fast",
+  scrapingConcurrency: 2,
+  scrapeDetailsWithCards: false,
+  enableRomajiPhoneticMerge: false,
+  ...overrides,
+});
+
+test("correspondence stops a paginated source after the configured unproductive streak", async () => {
+  let searchRequestCount = 0;
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        searchRequestCount += 1;
+        const targetUrl = String(request.targetUrl);
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: `<article class="card"><a class="title" href="/details/garbage-${searchRequestCount}">Unrelated Garbage Work ${searchRequestCount}</a></article>`,
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    safety: {
+      enabled: true,
+      emptyPageGuardEnabled: true,
+      consecutiveUnproductivePageLimit: 2,
+      unboundedPageLimitEnabled: true,
+      unboundedPageLimit: 50,
+      authorExpansionGuardEnabled: true,
+      abnormalAuthorLimit: 12,
+      autoInvalidateUnproductiveTitles: true,
+      autoInvalidateMinCandidateCount: 2,
+      taskExpansionGuardEnabled: true,
+      maxDiscoveryTaskCount: 40,
+      retainedPotentialGuardEnabled: true,
+      retainedPotentialCount: 20,
+    },
+  }), new AbortController().signal, async () => {});
+
+  const warning = result.warnings.find((entry) => entry.code === "unproductivePages");
+  assert.ok(warning);
+  assert.equal(warning.evidence.scannedCandidateCount, 2);
+  assert.ok(searchRequestCount <= 3, `expected two pages plus at most one preload, got ${searchRequestCount}`);
+});
+
+test("disabling correspondence safeguards preserves the requested page depth", async () => {
+  let searchRequestCount = 0;
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        searchRequestCount += 1;
+        const targetUrl = String(request.targetUrl);
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: `<article class="card"><a class="title" href="/details/disabled-${searchRequestCount}">Unrelated Disabled Work ${searchRequestCount}</a></article>`,
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    maxPages: 4,
+    safety: { enabled: false },
+  }), new AbortController().signal, async () => {});
+
+  assert.equal(searchRequestCount, 4);
+  assert.ok(!(result.warnings ?? []).some((entry) => entry.code === "unproductivePages"));
+});
+
+test("an unproductive discovered title is invalidated but remains available for review", async () => {
+  let garbageRequestCount = 0;
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        const queryValue = targetUrl.match(/[?&]q=([^&]+)/)?.[1] ?? "";
+        if (/^Series(?:%20|\+)One$/i.test(queryValue)) {
+          return { ok: true, requestedUrl: targetUrl, finalUrl: targetUrl, html: "<main></main>" };
+        }
+        garbageRequestCount += 1;
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: `<article class="card"><a class="title" href="/details/noise-${garbageRequestCount}">Completely Different Noise ${garbageRequestCount}</a></article>`,
+        };
+      },
+    },
+  };
+  const now = "2026-08-08T00:00:00.000Z";
+  const referenceDiscovery = {
+    key: `title:${scraper.id}:series one`,
+    kind: "title",
+    value: "Series One",
+    normalizedValue: "series one",
+    scraperId: scraper.id,
+    scraperName: scraper.name,
+    origin: "reference",
+    sourceUrl: "https://example.test/details/reference",
+    parentStepIds: [],
+    evidenceCount: 1,
+    status: "active",
+    propagationConfidence: "reference",
+    foundAt: now,
+  };
+  const noisyDiscovery = {
+    ...referenceDiscovery,
+    key: `title:${scraper.id}:garbage seed`,
+    value: "Garbage Seed",
+    normalizedValue: "garbage seed",
+    origin: "card",
+    sourceUrl: "https://example.test/details/noisy-parent",
+    propagationConfidence: "directTitle",
+  };
+  const previousResult = {
+    request: "otherChapters",
+    matches: [],
+    rejectedCandidates: [],
+    rejectedCandidateCount: 0,
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: [],
+    discoveries: [referenceDiscovery, noisyDiscovery],
+  };
+  const safety = {
+    enabled: true,
+    emptyPageGuardEnabled: true,
+    consecutiveUnproductivePageLimit: 2,
+    unboundedPageLimitEnabled: true,
+    unboundedPageLimit: 50,
+    authorExpansionGuardEnabled: true,
+    abnormalAuthorLimit: 12,
+    autoInvalidateUnproductiveTitles: true,
+    autoInvalidateMinCandidateCount: 2,
+    taskExpansionGuardEnabled: true,
+    maxDiscoveryTaskCount: 40,
+    retainedPotentialGuardEnabled: true,
+    retainedPotentialCount: 20,
+  };
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    safety,
+    replay: {
+      revision: 1,
+      discoveryDecisions: [referenceDiscovery, noisyDiscovery].map(({ key, status }) => ({ key, status })),
+    },
+  }), new AbortController().signal, async () => {}, previousResult);
+
+  const invalidated = result.discoveries.find((entry) => entry.key === noisyDiscovery.key);
+  assert.equal(invalidated.status, "invalidated");
+  assert.equal(invalidated.automaticInvalidation.code, "unproductiveTitle");
+  assert.ok(result.warnings.some((entry) => entry.code === "automaticTitleInvalidation"));
+});
+
+test("abnormal author expansion is reported and queued automatic author branches are removed", async () => {
+  const authorDetailsScraper = {
+    ...scraper,
+    features: scraper.features.map((feature) => feature.kind === "details"
+      ? {
+        ...feature,
+        config: {
+          ...feature.config,
+          authorsSelector: { kind: "css", value: ".author" },
+        },
+      }
+      : feature),
+  };
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        if (targetUrl.includes("/search?")) {
+          return {
+            ok: true,
+            requestedUrl: targetUrl,
+            finalUrl: targetUrl,
+            html: [1, 2, 3].map((index) => (
+              `<article class="card"><a class="title" href="/details/author-${index}">Series One ${index}</a></article>`
+            )).join(""),
+          };
+        }
+        const index = targetUrl.match(/author-(\d+)/)?.[1] ?? "0";
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: `<h1 class="details-title">Series One ${index}</h1><span class="author">Author ${index}</span>`,
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    scrapers: [authorDetailsScraper],
+    maxPages: 1,
+    scrapeDetailsWithCards: true,
+    safety: {
+      enabled: true,
+      emptyPageGuardEnabled: true,
+      consecutiveUnproductivePageLimit: 3,
+      unboundedPageLimitEnabled: true,
+      unboundedPageLimit: 50,
+      authorExpansionGuardEnabled: true,
+      abnormalAuthorLimit: 3,
+      autoInvalidateUnproductiveTitles: true,
+      autoInvalidateMinCandidateCount: 40,
+      taskExpansionGuardEnabled: true,
+      maxDiscoveryTaskCount: 40,
+      retainedPotentialGuardEnabled: true,
+      retainedPotentialCount: 20,
+    },
+  }), new AbortController().signal, async () => {});
+
+  const warning = result.warnings.find((entry) => entry.code === "authorExpansion");
+  assert.ok(warning);
+  assert.equal(warning.evidence.distinctAuthorCount, 3);
+  assert.deepEqual(result.searchedAuthors, []);
+});
+
 test("manga correspondence only fetches details for matches and possible candidates", async () => {
   const detailRequests = [];
   global.window = {

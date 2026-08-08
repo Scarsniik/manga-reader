@@ -95,6 +95,7 @@ export const runAuthorCorrespondenceWorkflow = async (
       scrapeDetailsWithCards: input.scrapeDetailsWithCards,
       enableRomajiPhoneticMerge: input.mangaSeed.enableRomajiPhoneticMerge,
       purpose: "authorDiscovery",
+      safety: input.correspondenceSafety,
     };
     const mangaResult = await runMangaCorrespondenceSearch(
       mangaInput,

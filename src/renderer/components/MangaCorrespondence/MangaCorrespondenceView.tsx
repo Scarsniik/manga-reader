@@ -88,6 +88,7 @@ import {
   updateMangaCorrespondenceResultStatuses,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
 import { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
+import { buildMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -702,7 +703,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     if (replay) {
       const replayed = await window.api?.replayBackgroundSearch?.({
         jobId: backgroundSearchJobId,
-        input: buildMangaCorrespondenceReplayInput(input, nextResult),
+        input: {
+          ...buildMangaCorrespondenceReplayInput(input, nextResult),
+          safety: buildMangaCorrespondenceSafetySettings(params),
+        },
       });
       if (!replayed) throw new Error("Le rejeu de la recherche n’a pas pu être lancé.");
     }
@@ -1037,6 +1041,15 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
       </header> : null}
+      {result?.warnings?.length ? (
+        <div className="manga-correspondence-view__warnings" role="alert">
+          <strong>Protections de la recherche</strong>
+          <ul>
+            {result.warnings.slice(-8).map((warning) => <li key={warning.key}>{warning.message}</li>)}
+          </ul>
+          {result.warnings.length > 8 ? <small>{result.warnings.length - 8} autre(s) alerte(s) dans cette recherche.</small> : null}
+        </div>
+      ) : null}
       <details className="manga-correspondence-view__trace">
         <summary>
           Déroulé de la recherche ({result?.trace.length ?? 0} événements · {traceSearchCount} recherches · {traceDiscoveryCount} découvertes)
@@ -1049,7 +1062,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <button type="button" className={displayMode === "groupedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("groupedChapters")}>Chapitres détaillés</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
           <button type="button" onClick={openDiscoveries}>
-            Réviser et rejouer ({editableResultDecisions.length + editableDiscoveries.length})
+            Réviser et rejouer · {eligibleMatches.length} résultat(s) · {rejectedCounts.all} potentiel(s) · {editableDiscoveries.length} piste(s)
           </button>
           <button
             type="button"

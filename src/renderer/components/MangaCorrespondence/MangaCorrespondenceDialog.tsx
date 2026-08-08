@@ -9,6 +9,7 @@ import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundS
 import { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
 import type { MultiSearchAdvancedPages, MultiSearchDepthMode, MultiSearchPaceMode } from "@/renderer/components/MultiSearch/types";
 import useParams from "@/renderer/hooks/useParams";
+import { buildMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import {
   buildMangaCorrespondenceTitleInput,
   parseMangaCorrespondenceTitleInput,
@@ -111,6 +112,7 @@ export default function MangaCorrespondenceDialog({
         scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
         enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+        safety: buildMangaCorrespondenceSafetySettings(params),
       };
       await enqueueBackgroundSearch({
         input,

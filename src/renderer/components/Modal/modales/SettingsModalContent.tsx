@@ -17,11 +17,13 @@ import {
   DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
   normalizeScraperViewHistorySettings,
 } from '@/shared/scraper'
+import { normalizeMangaCorrespondenceSafetyParams } from '@/shared/mangaCorrespondenceSafetySettings'
 
 import '@/renderer/components/Modal/style.scss'
 import '@/renderer/components/Modal/modales/settings-style.scss'
 
 const OPTIONS_SUBMIT_BUTTON_ID = 'settings-options-submit'
+const SCRAPING_SUBMIT_BUTTON_ID = 'settings-scraping-submit'
 const READER_SUBMIT_BUTTON_ID = 'settings-reader-submit'
 const DEVELOPER_SUBMIT_BUTTON_ID = 'settings-developer-submit'
 
@@ -35,18 +37,20 @@ export default function SettingsModalContent() {
   const { params, loading, setParams } = useParams()
   const { setModalActions } = useModal()
   const [activeTab, setActiveTab] = React.useState<
-    'options' | 'reader' | 'shortcuts' | 'statistics' | 'developer' | 'version-installation'
+    'options' | 'scraping' | 'reader' | 'shortcuts' | 'statistics' | 'developer' | 'version-installation'
   >('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
   const [mergedTitleLanguagePriority, setMergedTitleLanguagePriority] = React.useState<string[]>([])
   const activeSubmitButtonId = activeTab === 'options'
     ? OPTIONS_SUBMIT_BUTTON_ID
-    : activeTab === 'reader'
-      ? READER_SUBMIT_BUTTON_ID
-      : activeTab === 'developer'
-        ? DEVELOPER_SUBMIT_BUTTON_ID
-      : null
+    : activeTab === 'scraping'
+      ? SCRAPING_SUBMIT_BUTTON_ID
+      : activeTab === 'reader'
+        ? READER_SUBMIT_BUTTON_ID
+        : activeTab === 'developer'
+          ? DEVELOPER_SUBMIT_BUTTON_ID
+          : null
 
   React.useEffect(() => {
     setMergedTitleLanguagePriority(normalizeMultiSearchTitleLanguagePriority(
@@ -405,6 +409,177 @@ export default function SettingsModalContent() {
     },
   ]
 
+  const sourceSections = new Map(fields.flatMap((item) => (
+    item.type === 'section' && item.id ? [[item.id, item] as const] : []
+  )))
+  const sourceScrapingFields = sourceSections.get('scraping')?.fields ?? []
+  const selectScrapingFields = (names: string[]) => {
+    const requestedNames = new Set(names)
+    return sourceScrapingFields.filter((field) => requestedNames.has(field.name))
+  }
+  const scrapingFields: FormItem[] = [
+    {
+      type: 'section',
+      id: 'scraping-runtime',
+      title: 'Exécution et réseau',
+      description: 'Ces limites sont communes aux recherches normales et en arrière-plan.',
+      fields: selectScrapingFields([
+        'scraperLatestConcurrency',
+        'scraperScrapeDetailsWithCards',
+      ]),
+    },
+    {
+      type: 'section',
+      id: 'scraping-navigation-cache',
+      title: 'Navigation, affichage et caches',
+      fields: selectScrapingFields([
+        'showSavedScraperSearches',
+        'scraperAuthorFavoriteCacheResults',
+        'scraperHideBlacklistedTagCards',
+        'scraperAuthorCombinedView',
+        'scraperTagCombinedView',
+        'scraperTagFavoriteShowUnseenFirst',
+        'scraperAuthorFavoritePageCount',
+        'scraperLatestAuthorsUseCache',
+        'scraperLatestAuthorCacheMaxAgeHours',
+        'scraperViewHistoryMaxRecords',
+        'scraperViewHistorySeenRetentionDays',
+        'scraperViewHistoryReadRetentionDays',
+      ]),
+    },
+    {
+      type: 'section',
+      id: 'scraping-latest',
+      title: 'Nouveautés',
+      fields: selectScrapingFields([
+        'scraperLatestResultLimitMode',
+        'scraperLatestScraperResultLimit',
+        'scraperLatestTagResultLimit',
+        'scraperLatestDeepPageLimit',
+        'scraperLatestContinuousPageSafetyLimit',
+        'scraperLatestQuickConsecutiveSeenStopThreshold',
+        'scraperLatestLanguageRejectLimit',
+      ]),
+    },
+    ...(sourceSections.get('background-searches') ? [sourceSections.get('background-searches')!] : []),
+    ...(sourceSections.get('multi-search') ? [sourceSections.get('multi-search')!] : []),
+    {
+      type: 'section',
+      id: 'correspondence-safety',
+      title: 'Protections anti-emballement des correspondances',
+      description: 'Les protections sont actives par défaut. L’interrupteur global permet de toutes les désactiver.',
+      fields: [
+        {
+          name: 'mangaCorrespondenceSafetyEnabled',
+          label: 'Activer les protections anti-emballement',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceEmptyPageGuardEnabled',
+          label: 'Arrêter une source qui enchaîne les pages sans piste plausible',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceConsecutiveUnproductivePageLimit',
+          label: 'Pages consécutives sans piste avant arrêt',
+          type: 'number',
+          min: 1,
+          max: 20,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceEmptyPageGuardEnabled', equals: false },
+        },
+        {
+          name: 'mangaCorrespondenceUnboundedPageLimitEnabled',
+          label: 'Limiter la profondeur du mode « maximum »',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceUnboundedPageLimit',
+          label: 'Pages maximum en profondeur « maximum »',
+          type: 'number',
+          min: 1,
+          max: 250,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceUnboundedPageLimitEnabled', equals: false },
+        },
+        {
+          name: 'mangaCorrespondenceAuthorExpansionGuardEnabled',
+          label: 'Suspendre l’expansion si trop d’auteurs différents apparaissent',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceAbnormalAuthorLimit',
+          label: 'Nombre d’auteurs différents considéré comme anormal',
+          type: 'number',
+          min: 2,
+          max: 100,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceAuthorExpansionGuardEnabled', equals: false },
+        },
+        {
+          name: 'mangaCorrespondenceAutoInvalidateUnproductiveTitles',
+          label: 'Invalider automatiquement un titre découvert qui ne produit que des rejets',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceAutoInvalidateMinCandidateCount',
+          label: 'Candidats inutiles minimum avant auto-invalidation',
+          type: 'number',
+          min: 1,
+          max: 10000,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceAutoInvalidateUnproductiveTitles', equals: false },
+        },
+        {
+          name: 'mangaCorrespondenceTaskExpansionGuardEnabled',
+          label: 'Limiter le nombre total de tâches de découverte',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceMaxDiscoveryTaskCount',
+          label: 'Tâches de découverte maximum',
+          type: 'number',
+          min: 5,
+          max: 500,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceTaskExpansionGuardEnabled', equals: false },
+        },
+        {
+          name: 'mangaCorrespondenceRetainedPotentialGuardEnabled',
+          label: 'Limiter les propositions conservées dans les checkpoints',
+          type: 'checkbox',
+        },
+        {
+          name: 'mangaCorrespondenceRetainedPotentialCount',
+          label: 'Propositions les mieux classées à conserver',
+          type: 'number',
+          min: 10,
+          max: 1000,
+          step: 1,
+          disabledWhen: { field: 'mangaCorrespondenceRetainedPotentialGuardEnabled', equals: false },
+        },
+        {
+          name: 'backgroundSearchStallWarningEnabled',
+          label: 'Alerter lorsqu’une recherche ne publie plus de progression',
+          type: 'checkbox',
+        },
+        {
+          name: 'backgroundSearchStallWarningMinutes',
+          label: 'Minutes sans progression avant alerte',
+          type: 'number',
+          min: 1,
+          max: 60,
+          step: 1,
+          disabledWhen: { field: 'backgroundSearchStallWarningEnabled', equals: false },
+        },
+      ],
+    },
+  ]
+  const scrapingSectionIds = new Set(['scraping', 'background-searches', 'multi-search'])
+  const optionFields = fields.filter((item) => (
+    item.type !== 'section' || !item.id || !scrapingSectionIds.has(item.id)
+  ))
+
   const developerFields: FormItem[] = [
     {
       type: 'section',
@@ -421,11 +596,32 @@ export default function SettingsModalContent() {
     },
   ]
 
-  const onSubmit = async (values: Record<string, any>) => {
+  const onOptionsSubmit = async (values: Record<string, any>) => {
     const persistMangaFilters = values.persistMangaFilters !== false
     const showSavedLibrarySearches = values.showSavedLibrarySearches !== false
-    const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const stackMangaInSeries = values.stackMangaInSeries !== false
+    const toSave: Record<string, any> = {
+      libraryPath: values.libraryPath || '',
+      showPageNumbers: !!values.showPageNumbers,
+      showHiddens: !!values.showHiddens,
+      titleLineCount: Number(values.titleLineCount) || 1,
+      jpdbApiKey: values.jpdbApiKey || '',
+      ocrPythonPath: values.ocrPythonPath || '',
+      ocrRepoPath: values.ocrRepoPath || '',
+      ocrForceCpu: !!values.ocrForceCpu,
+      ocrAutoRunOnImport: !!values.ocrAutoRunOnImport,
+      ocrAutoAssignJapaneseLanguage: values.ocrAutoAssignJapaneseLanguage !== false,
+      persistMangaFilters,
+      showSavedLibrarySearches,
+      readingListKeepSourceTabs: !!values.readingListKeepSourceTabs,
+      stackMangaInSeries,
+      ...(persistMangaFilters ? {} : { mangaListFilters: null }),
+    }
+    await setParams(toSave, { remount: false })
+  }
+
+  const onScrapingSubmit = async (values: Record<string, any>) => {
+    const showSavedScraperSearches = values.showSavedScraperSearches !== false
     const scraperLatestScraperResultLimit = Number(
       values.scraperLatestScraperResultLimit ?? values.scraperLatestResultLimit,
     )
@@ -441,23 +637,10 @@ export default function SettingsModalContent() {
     const scraperLatestLanguageRejectLimit = Number(values.scraperLatestLanguageRejectLimit)
     const scraperLatestAuthorCacheMaxAgeHours = Number(values.scraperLatestAuthorCacheMaxAgeHours)
     const scraperViewHistorySettings = normalizeScraperViewHistorySettings(values)
+    const safetySettings = normalizeMangaCorrespondenceSafetyParams(values)
 
-    // convert types
     const toSave: Record<string, any> = {
-      libraryPath: values.libraryPath || '',
-      showPageNumbers: !!values.showPageNumbers,
-      showHiddens: !!values.showHiddens,
-      titleLineCount: Number(values.titleLineCount) || 1,
-      jpdbApiKey: values.jpdbApiKey || '',
-      ocrPythonPath: values.ocrPythonPath || '',
-      ocrRepoPath: values.ocrRepoPath || '',
-      ocrForceCpu: !!values.ocrForceCpu,
-      ocrAutoRunOnImport: !!values.ocrAutoRunOnImport,
-      ocrAutoAssignJapaneseLanguage: values.ocrAutoAssignJapaneseLanguage !== false,
-      persistMangaFilters,
-      showSavedLibrarySearches,
       showSavedScraperSearches,
-      readingListKeepSourceTabs: !!values.readingListKeepSourceTabs,
       backgroundSearchStorageMode: values.backgroundSearchStorageMode === 'temporaryFile'
         ? 'temporaryFile'
         : 'memory',
@@ -511,8 +694,7 @@ export default function SettingsModalContent() {
         ? Math.min(8760, Math.max(1, Math.floor(scraperLatestAuthorCacheMaxAgeHours)))
         : 24,
       ...scraperViewHistorySettings,
-      stackMangaInSeries,
-      ...(persistMangaFilters ? {} : { mangaListFilters: null }),
+      ...safetySettings,
     }
     await setParams(toSave, { remount: false })
   }
@@ -560,6 +742,13 @@ export default function SettingsModalContent() {
         </button>
         <button
           type="button"
+          className={`settings-modal-tab ${activeTab === 'scraping' ? 'active' : ''}`}
+          onClick={() => setActiveTab('scraping')}
+        >
+          Scraping
+        </button>
+        <button
+          type="button"
           className={`settings-modal-tab ${activeTab === 'developer' ? 'active' : ''}`}
           onClick={() => setActiveTab('developer')}
         >
@@ -599,16 +788,12 @@ export default function SettingsModalContent() {
         {activeTab === 'options' ? (
           <div className="settings-modal-panel">
             <Form
-              fields={fields}
-              onSubmit={onSubmit}
+              fields={optionFields}
+              onSubmit={onOptionsSubmit}
               initialValues={params || {}}
               submitLabel="Enregistrer"
               formId="settings-form"
               submitButtonId={OPTIONS_SUBMIT_BUTTON_ID}
-            />
-            <MergedTitleLanguagePrioritySettings
-              value={mergedTitleLanguagePriority}
-              onChange={setMergedTitleLanguagePriority}
             />
             <section className="settings-modal-shortcut">
               <div className="settings-modal-shortcut__content">
@@ -630,6 +815,23 @@ export default function SettingsModalContent() {
                 <div className="settings-modal-shortcut__error">{userDataDirectoryError}</div>
               ) : null}
             </section>
+          </div>
+        ) : null}
+
+        {activeTab === 'scraping' ? (
+          <div className="settings-modal-panel">
+            <Form
+              fields={scrapingFields}
+              onSubmit={onScrapingSubmit}
+              initialValues={params || {}}
+              submitLabel="Enregistrer"
+              formId="settings-scraping-form"
+              submitButtonId={SCRAPING_SUBMIT_BUTTON_ID}
+            />
+            <MergedTitleLanguagePrioritySettings
+              value={mergedTitleLanguagePriority}
+              onChange={setMergedTitleLanguagePriority}
+            />
           </div>
         ) : null}
 

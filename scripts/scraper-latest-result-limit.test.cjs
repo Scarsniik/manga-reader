@@ -184,3 +184,23 @@ test("listing page preloading keeps at most the matching page for each source", 
   const page = await cache.load("source-a", buildScraperListingPageRequestKey(2), async () => ({ page: -1 }));
   assert.deepEqual(page, { page: 2 });
 });
+
+test("listing page preloading can forget one source without clearing the others", async () => {
+  const cache = createScraperListingPagePrefetchCache();
+  const firstKey = buildScraperListingPageRequestKey(1, "first");
+  const secondKey = buildScraperListingPageRequestKey(1, "second");
+  cache.preload("source-a", firstKey, async () => ({ source: "a" }));
+  cache.preload("source-b", secondKey, async () => ({ source: "b" }));
+  cache.clear("source-a");
+
+  let firstFallbackCount = 0;
+  const first = await cache.load("source-a", firstKey, async () => {
+    firstFallbackCount += 1;
+    return { source: "fallback" };
+  });
+  const second = await cache.load("source-b", secondKey, async () => ({ source: "fallback" }));
+
+  assert.deepEqual(first, { source: "fallback" });
+  assert.equal(firstFallbackCount, 1);
+  assert.deepEqual(second, { source: "b" });
+});

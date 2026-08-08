@@ -36,6 +36,21 @@
   color: #a9a9a9;
 }
 
+.manga-correspondence-view__warnings {
+  display: grid;
+  gap: 7px;
+  padding: 13px 16px;
+  border: 1px solid rgba(221, 166, 65, .42);
+  border-radius: 12px;
+  background: rgba(221, 166, 65, .09);
+  color: #ddc99c;
+  font-size: 13px;
+}
+
+.manga-correspondence-view__warnings strong { color: #ffe2a5; }
+.manga-correspondence-view__warnings ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; }
+.manga-correspondence-view__warnings small { color: #ad9a72; }
+
 .manga-correspondence-view__eyebrow {
   color: #82b1ff;
   font-size: 11px;

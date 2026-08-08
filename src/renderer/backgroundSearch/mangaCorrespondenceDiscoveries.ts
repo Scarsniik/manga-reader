@@ -99,9 +99,14 @@ export const updateMangaCorrespondenceDiscoveryStatus = (
   status: MangaCorrespondenceDiscovery["status"],
 ): MangaCorrespondenceBackgroundResult => ({
   ...result,
-  discoveries: (result.discoveries ?? []).map((discovery) => (
-    discovery.key === key ? { ...discovery, status } : discovery
-  )),
+  discoveries: (result.discoveries ?? []).map((discovery) => {
+    if (discovery.key !== key) return discovery;
+    if (status === "active") {
+      const { automaticInvalidation: _automaticInvalidation, ...reactivated } = discovery;
+      return { ...reactivated, status };
+    }
+    return { ...discovery, status };
+  }),
 });
 
 export const hasActiveMangaCorrespondenceTitle = (

@@ -50,6 +50,17 @@ const source = `
     buildMangaCorrespondenceResultDecisions,
     updateMangaCorrespondenceResultStatuses,
   } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
+  export {
+    advanceSearchProductivity,
+    EMPTY_SEARCH_PRODUCTIVITY_STATE,
+    hasAbnormalDistinctValueCount,
+    shouldAutoInvalidateUnproductiveSeed,
+    shouldStopUnproductiveSearch,
+  } from "@/renderer/searchEngines/searchExpansionGuard";
+  export {
+    buildMangaCorrespondenceSafetySettings,
+    normalizeMangaCorrespondenceSafetyParams,
+  } from "@/shared/mangaCorrespondenceSafetySettings";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -109,7 +120,62 @@ const {
   upsertMangaCorrespondenceDiscovery,
   buildMangaCorrespondenceResultDecisions,
   updateMangaCorrespondenceResultStatuses,
+  advanceSearchProductivity,
+  EMPTY_SEARCH_PRODUCTIVITY_STATE,
+  hasAbnormalDistinctValueCount,
+  shouldAutoInvalidateUnproductiveSeed,
+  shouldStopUnproductiveSearch,
+  buildMangaCorrespondenceSafetySettings,
+  normalizeMangaCorrespondenceSafetyParams,
 } = bundledModule.exports;
+
+test("correspondence expansion guards count empty and rejected pages", () => {
+  let state = EMPTY_SEARCH_PRODUCTIVITY_STATE;
+  state = advanceSearchProductivity(state, { scannedCandidateCount: 20, productiveCandidateCount: 0 });
+  state = advanceSearchProductivity(state, { scannedCandidateCount: 0, productiveCandidateCount: 0 });
+  assert.equal(shouldStopUnproductiveSearch(state, 3), false);
+  state = advanceSearchProductivity(state, { scannedCandidateCount: 20, productiveCandidateCount: 0 });
+  assert.equal(shouldStopUnproductiveSearch(state, 3), true);
+  assert.equal(state.scannedCandidateCount, 40);
+  state = advanceSearchProductivity(state, { scannedCandidateCount: 10, productiveCandidateCount: 1 });
+  assert.equal(state.consecutiveUnproductiveUnits, 0);
+});
+
+test("automatic title invalidation never applies to a protected seed", () => {
+  const common = {
+    scannedCandidateCount: 60,
+    acceptedCandidateCount: 0,
+    stoppedUnproductiveSourceCount: 1,
+    minimumCandidateCount: 40,
+  };
+  assert.equal(shouldAutoInvalidateUnproductiveSeed({ ...common, protectedSeed: false }), true);
+  assert.equal(shouldAutoInvalidateUnproductiveSeed({ ...common, protectedSeed: true }), false);
+  assert.equal(hasAbnormalDistinctValueCount(12, 12), true);
+});
+
+test("scraping guard settings are normalized and can all be disabled", () => {
+  const flat = normalizeMangaCorrespondenceSafetyParams({
+    mangaCorrespondenceSafetyEnabled: false,
+    mangaCorrespondenceEmptyPageGuardEnabled: false,
+    mangaCorrespondenceConsecutiveUnproductivePageLimit: 999,
+    mangaCorrespondenceUnboundedPageLimitEnabled: false,
+    mangaCorrespondenceAuthorExpansionGuardEnabled: false,
+    mangaCorrespondenceAutoInvalidateUnproductiveTitles: false,
+    mangaCorrespondenceTaskExpansionGuardEnabled: false,
+    mangaCorrespondenceRetainedPotentialGuardEnabled: false,
+    backgroundSearchStallWarningEnabled: false,
+  });
+  const nested = buildMangaCorrespondenceSafetySettings(flat);
+  assert.equal(nested.enabled, false);
+  assert.equal(nested.emptyPageGuardEnabled, false);
+  assert.equal(nested.authorExpansionGuardEnabled, false);
+  assert.equal(nested.unboundedPageLimitEnabled, false);
+  assert.equal(nested.autoInvalidateUnproductiveTitles, false);
+  assert.equal(nested.taskExpansionGuardEnabled, false);
+  assert.equal(nested.retainedPotentialGuardEnabled, false);
+  assert.equal(flat.backgroundSearchStallWarningEnabled, false);
+  assert.equal(nested.consecutiveUnproductivePageLimit, 20);
+});
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
   const knownTitle = "Having Tons of Bareback Sex with Gyarus";

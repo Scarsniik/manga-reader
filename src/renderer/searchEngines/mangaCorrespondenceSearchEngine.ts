@@ -50,6 +50,7 @@ import type {
   MangaCorrespondenceMatch,
   MangaCorrespondenceRejectedCandidate,
   MangaCorrespondenceRejectionReason,
+  MangaCorrespondenceWarning,
 } from "@/renderer/backgroundSearch/types";
 import {
   buildMangaCorrespondenceDiscoveryKey,
@@ -77,6 +78,14 @@ import {
 } from "@/renderer/searchEngines/searchExecutionContext";
 import { buildScraperListingPageRequestKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
 import { appendScraperLatestDiagnosticEvent } from "@/renderer/utils/scraperLatestDiagnostics";
+import { normalizeMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
+import {
+  advanceSearchProductivity,
+  EMPTY_SEARCH_PRODUCTIVITY_STATE,
+  hasAbnormalDistinctValueCount,
+  shouldAutoInvalidateUnproductiveSeed,
+  shouldStopUnproductiveSearch,
+} from "@/renderer/searchEngines/searchExpansionGuard";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -88,6 +97,7 @@ type DiscoveryTask = {
   term: string;
   parentId?: string;
   initialGeneratedVariant?: boolean;
+  protectedSeed?: boolean;
   directOnly?: boolean;
   directTargets?: Array<{
     scraper: ScraperRecord;
@@ -96,10 +106,6 @@ type DiscoveryTask = {
   }>;
 };
 
-const MAX_DISCOVERY_TASKS = 80;
-const MAX_DISCOVERED_TITLES = 18;
-const MAX_DISCOVERED_AUTHORS = 18;
-const MAX_STORED_REJECTED_CANDIDATES = 500;
 const CORRESPONDENCE_DETAIL_REQUIREMENTS = SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.correspondenceCandidate;
 
 const normalizeKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
@@ -150,6 +156,7 @@ const buildResult = (
   searchedAuthors: string[],
   discoveries: Map<string, MangaCorrespondenceDiscovery>,
   resultDecisions: Map<string, MangaCorrespondenceResultDecision>,
+  warnings: Map<string, MangaCorrespondenceWarning>,
   checkpoint?: MangaCorrespondenceEngineCheckpoint,
 ): MangaCorrespondenceBackgroundResult => ({
   request: input.request,
@@ -169,6 +176,7 @@ const buildResult = (
     || left.value.localeCompare(right.value)
   )),
   resultDecisions: Array.from(resultDecisions.values()),
+  warnings: Array.from(warnings.values()),
   ...(checkpoint ? { checkpoint } : {}),
 });
 
@@ -304,7 +312,19 @@ export const runMangaCorrespondenceSearch = async (
   const authorPagePrefetch = executionContext.getPagePrefetchCache<import("@/renderer/utils/scraperRuntime").ScraperRuntimeSearchPageResult>(
     "manga-correspondence-author",
   );
-  const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
+  const safety = normalizeMangaCorrespondenceSafetySettings(input.safety);
+  const safeguardsEnabled = safety.enabled;
+  const maxPages = input.maxPages === null
+    ? (safeguardsEnabled && safety.unboundedPageLimitEnabled
+      ? safety.unboundedPageLimit
+      : Number.MAX_SAFE_INTEGER)
+    : Math.max(1, input.maxPages);
+  const maxDiscoveryTasks = safeguardsEnabled && safety.taskExpansionGuardEnabled
+    ? safety.maxDiscoveryTaskCount
+    : Number.MAX_SAFE_INTEGER;
+  const maxStoredRejectedCandidates = safeguardsEnabled && safety.retainedPotentialGuardEnabled
+    ? safety.retainedPotentialCount
+    : Number.MAX_SAFE_INTEGER;
   const authorDiscoveryOnly = input.purpose === "authorDiscovery";
   const referenceScraper = scrapers.find((scraper) => scraper.id === input.reference.scraperId) ?? scrapers[0];
   const referenceAnalysis = analyzeMangaCorrespondenceTitle(
@@ -323,6 +343,7 @@ export const runMangaCorrespondenceSearch = async (
     scrapeDetailsWithCards: input.scrapeDetailsWithCards,
     enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge,
     purpose: input.purpose ?? "correspondence",
+    safety,
   };
   const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
   const isContinuation = Boolean(input.continuation && previousResult);
@@ -335,6 +356,9 @@ export const runMangaCorrespondenceSearch = async (
       previousResult.checkpoint.inputFingerprint,
       checkpointInput,
     ),
+  );
+  const warnings = new Map<string, MangaCorrespondenceWarning>(
+    (isContinuation || isResume ? previousResult?.warnings ?? [] : []).map((warning) => [warning.key, warning]),
   );
   const previousRejectedCandidates = previousResult?.rejectedCandidates ?? [];
   const resultDecisions = new Map(
@@ -475,8 +499,7 @@ export const runMangaCorrespondenceSearch = async (
       )
     ))
     .sort((left, right) => discoveryPriority(left) - discoveryPriority(right))
-    .map((discovery) => discovery.value))
-    .slice(0, MAX_DISCOVERED_TITLES);
+    .map((discovery) => discovery.value));
   if (!knownTitles.length) {
     throw new Error("Au moins un titre actif est requis pour rejouer la correspondance.");
   }
@@ -528,10 +551,10 @@ export const runMangaCorrespondenceSearch = async (
       discovery.kind === "author"
       && discovery.status === "active"
       && !comesFromInvalidatedResult(discovery)
+      && discovery.propagationConfidence !== "fuzzyTitle"
     ))
     .sort((left, right) => discoveryPriority(left) - discoveryPriority(right))
-    .map((discovery) => discovery.value))
-    .slice(0, MAX_DISCOVERED_AUTHORS);
+    .map((discovery) => discovery.value));
   const romanizedTitleVariantsByKey = new Map<string, string[]>();
   const searchedTitles: string[] = isContinuation || isResume ? [...(previousResult?.searchedTitles ?? [])] : [];
   const searchedAuthors: string[] = isContinuation || isResume ? [...(previousResult?.searchedAuthors ?? [])] : [];
@@ -552,6 +575,50 @@ export const runMangaCorrespondenceSearch = async (
   let activeTask: DiscoveryTask | null = null;
   let processedTasks = 0;
   let balancedKind: DiscoveryTask["kind"] = "title";
+  let authorExpansionPaused = safeguardsEnabled
+    && safety.authorExpansionGuardEnabled
+    && hasAbnormalDistinctValueCount(knownAuthors.length, safety.abnormalAuthorLimit);
+
+  const addWarning = (
+    warning: Omit<MangaCorrespondenceWarning, "createdAt"> & { createdAt?: string },
+  ): void => {
+    if (warnings.has(warning.key)) return;
+    warnings.set(warning.key, {
+      ...warning,
+      createdAt: warning.createdAt ?? new Date().toISOString(),
+    });
+    recordDiagnostic(`guard.${warning.code}`, warning.evidence, warning.scraperId);
+  };
+
+  const countDistinctActiveAuthors = (): number => new Set(
+    Array.from(discoveries.values())
+      .filter((discovery) => discovery.kind === "author" && discovery.status === "active")
+      .map((discovery) => normalizeKey(discovery.value))
+      .filter(Boolean),
+  ).size;
+
+  const pauseAutomaticAuthorExpansion = (term?: string): boolean => {
+    if (!safeguardsEnabled || !safety.authorExpansionGuardEnabled) return false;
+    const distinctAuthorCount = countDistinctActiveAuthors();
+    if (!hasAbnormalDistinctValueCount(distinctAuthorCount, safety.abnormalAuthorLimit)) return false;
+    authorExpansionPaused = true;
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const queuedTask = queue[index];
+      if (queuedTask.kind !== "author" || queuedTask.protectedSeed) continue;
+      queue.splice(index, 1);
+      queuedTasksByKey.delete(queuedTask.directOnly
+        ? `${buildTaskKey(queuedTask)}:direct`
+        : buildTaskKey(queuedTask));
+    }
+    addWarning({
+      key: "author-expansion",
+      code: "authorExpansion",
+      message: `L’expansion automatique des auteurs a été suspendue après ${distinctAuthorCount} noms différents. Les références et ajouts manuels restent traités.`,
+      term,
+      evidence: { distinctAuthorCount, limit: safety.abnormalAuthorLimit },
+    });
+    return true;
+  };
 
   const queueDirectTargetDelta = (
     task: DiscoveryTask,
@@ -568,6 +635,7 @@ export const runMangaCorrespondenceSearch = async (
       ]));
       targetsToAdd.forEach((target) => targets.set(buildDirectTargetKey(target), target));
       existingDelta.directTargets = Array.from(targets.values());
+      existingDelta.protectedSeed ||= task.protectedSeed;
       return;
     }
     const deltaTask: DiscoveryTask = {
@@ -586,14 +654,30 @@ export const runMangaCorrespondenceSearch = async (
 
   const addTask = (task: DiscoveryTask): void => {
     const key = buildTaskKey(task);
-    if (!normalizeKey(task.term) || queue.length + processedTasks >= MAX_DISCOVERY_TASKS) return;
+    if (!normalizeKey(task.term)) return;
     const existing = queuedTasksByKey.get(key);
     if (existing) {
       const targets = new Map((existing.directTargets ?? []).map((target) => [buildDirectTargetKey(target), target]));
       (task.directTargets ?? []).forEach((target) => targets.set(buildDirectTargetKey(target), target));
       existing.directTargets = Array.from(targets.values());
       existing.parentId ??= task.parentId;
+      existing.protectedSeed ||= task.protectedSeed;
       recordDiagnostic("task.merged", { kind: task.kind, term: task.term, directTargetCount: targets.size });
+      return;
+    }
+    if (authorExpansionPaused && task.kind === "author" && !task.protectedSeed) return;
+    if (queue.length + processedTaskKeys.size >= maxDiscoveryTasks && !task.protectedSeed) {
+      addWarning({
+        key: "task-expansion",
+        code: "taskExpansion",
+        message: `La recherche a atteint la limite de ${maxDiscoveryTasks} tâches de découverte. Les références et ajouts manuels restent prioritaires.`,
+        term: task.term,
+        evidence: {
+          limit: maxDiscoveryTasks,
+          queuedTaskCount: queue.length,
+          processedTaskCount: processedTaskKeys.size,
+        },
+      });
       return;
     }
     if (activeTask && buildTaskKey(activeTask) === key) {
@@ -624,6 +708,8 @@ export const runMangaCorrespondenceSearch = async (
     queuedTasksByKey.set(key, task);
     queue.push(task);
   };
+
+  if (authorExpansionPaused) pauseAutomaticAuthorExpansion();
 
   const addTrace = (
     kind: MangaCorrespondenceTraceStep["kind"],
@@ -660,6 +746,18 @@ export const runMangaCorrespondenceSearch = async (
       romanizedTitleVariantsByKey.set(normalizeKey(title), variants);
     }
   });
+  const isProtectedSeedTerm = (kind: DiscoveryTask["kind"], term: string): boolean => (
+    Array.from(discoveries.values()).some((discovery) => (
+      discovery.kind === kind
+      && discovery.status === "active"
+      && normalizeKey(discovery.value) === normalizeKey(term)
+      && (
+        discovery.origin === "reference"
+        || discovery.origin === "manual"
+        || discovery.propagationConfidence === "manual"
+      )
+    ))
+  );
 
   const initialTitleTasks = isResume
     ? []
@@ -673,6 +771,7 @@ export const runMangaCorrespondenceSearch = async (
     kind: "title",
     term,
     parentId: continuationStep?.id,
+    protectedSeed: isContinuation || isProtectedSeedTerm("title", term),
   }));
   if (!isContinuation && !isResume) {
     Array.from(discoveries.values()).forEach((discovery) => {
@@ -687,6 +786,7 @@ export const runMangaCorrespondenceSearch = async (
       addTask({
         kind: "title",
         term: discovery.value,
+        protectedSeed: true,
         directTargets: [{ scraper, url: discovery.sourceUrl }],
       });
     });
@@ -705,6 +805,7 @@ export const runMangaCorrespondenceSearch = async (
         term,
         parentId: romanizedStep.id,
         initialGeneratedVariant: true,
+        protectedSeed: isProtectedSeedTerm("title", title),
       });
     });
   });
@@ -719,6 +820,7 @@ export const runMangaCorrespondenceSearch = async (
     kind: "author",
     term,
     parentId: continuationStep?.id,
+    protectedSeed: isContinuation || isProtectedSeedTerm("author", term),
   }));
   if (!isContinuation && !isResume) {
     Array.from(discoveries.values()).forEach((discovery) => {
@@ -732,6 +834,7 @@ export const runMangaCorrespondenceSearch = async (
       addTask({
         kind: "author",
         term: discovery.value,
+        protectedSeed: discovery.origin === "reference" || discovery.origin === "manual",
         directTargets: [{
           scraper,
           url: discovery.authorPageUrl,
@@ -750,12 +853,18 @@ export const runMangaCorrespondenceSearch = async (
       kind: "author",
       term: candidate.authors[0] || url,
       parentId: continuationStep?.id,
+      protectedSeed: true,
       directTargets: [{ scraper, url }],
     }));
   });
   if (!isContinuation && !isResume && knownAuthors.length) input.reference.authorUrls.forEach((url) => {
     const scraper = scrapers.find((entry) => entry.id === input.reference.scraperId);
-    if (scraper) addTask({ kind: "author", term: knownAuthors[0] || url, directTargets: [{ scraper, url }] });
+    if (scraper) addTask({
+      kind: "author",
+      term: knownAuthors[0] || url,
+      protectedSeed: true,
+      directTargets: [{ scraper, url }],
+    });
   });
 
   if (isResume) {
@@ -777,6 +886,7 @@ export const runMangaCorrespondenceSearch = async (
         term: pendingTask.term,
         parentId: pendingTask.parentId,
         initialGeneratedVariant: pendingTask.initialGeneratedVariant,
+        protectedSeed: pendingTask.protectedSeed,
         directOnly: pendingTask.directOnly,
         directTargets,
       });
@@ -794,6 +904,7 @@ export const runMangaCorrespondenceSearch = async (
       term: task.term,
       parentId: task.parentId,
       initialGeneratedVariant: task.initialGeneratedVariant,
+      protectedSeed: task.protectedSeed,
       directOnly: task.directOnly,
       directTargets: task.directTargets?.map((target) => ({
         scraperId: target.scraper.id,
@@ -816,6 +927,7 @@ export const runMangaCorrespondenceSearch = async (
       searchedAuthors,
       discoveries,
       resultDecisions,
+      warnings,
       buildCheckpoint(),
     ),
     {
@@ -868,11 +980,11 @@ export const runMangaCorrespondenceSearch = async (
     }
   };
   const pruneRejectedCandidates = (): void => {
-    if (rejectedCandidates.size <= MAX_STORED_REJECTED_CANDIDATES) return;
+    if (rejectedCandidates.size <= maxStoredRejectedCandidates) return;
     const reviewed = Array.from(rejectedCandidates.values()).filter((candidate) => (
       candidate.decision !== "pending"
     ));
-    const availablePendingSlots = Math.max(0, MAX_STORED_REJECTED_CANDIDATES - reviewed.length);
+    const availablePendingSlots = Math.max(0, maxStoredRejectedCandidates - reviewed.length);
     const pending = Array.from(rejectedCandidates.values())
       .filter((candidate) => candidate.decision === "pending")
       .sort((left, right) => (
@@ -989,8 +1101,9 @@ export const runMangaCorrespondenceSearch = async (
   const discoverFromSources = async (
     sources: MultiSearchSourceResult[],
     step: MangaCorrespondenceTraceStep,
-  ): Promise<void> => {
+  ): Promise<{ newMatchCount: number; matchedSourceCount: number }> => {
     let accepted = 0;
+    let matchedSourceCount = 0;
     let checkedDetailCount = 0;
     const acceptedSources: MultiSearchSourceResult[] = [];
     const enrichedSources = new Map<MultiSearchSourceResult, MultiSearchSourceResult>();
@@ -1062,6 +1175,7 @@ export const runMangaCorrespondenceSearch = async (
       rejectedCandidates.delete(key);
       const acceptedManually = existing?.acceptedManually === true
         || previousReview?.decision === "accepted";
+      const canPropagateFromSource = analyzed.matchedByContainment || acceptedManually;
       matches.set(key, {
         key,
         source,
@@ -1074,12 +1188,12 @@ export const runMangaCorrespondenceSearch = async (
         discoveredByStepIds: uniqueText([...(existing?.discoveredByStepIds ?? []), step.id]),
         ...(acceptedManually ? { acceptedManually: true } : {}),
       });
+      matchedSourceCount += 1;
       accepted += existing ? 0 : 1;
-      acceptedSources.push(source);
+      if (canPropagateFromSource) acceptedSources.push(source);
       const directAuthorUrls = uniqueText([source.result.authorUrl, ...(source.result.authorUrls ?? [])]);
       analyzed.authors.forEach((author, index) => {
         const isNewAuthor = !knownAuthors.some((value) => normalizeKey(value) === normalizeKey(author));
-        if (knownAuthors.length >= MAX_DISCOVERED_AUTHORS && isNewAuthor) return;
         const discoveryKey = buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, author);
         const wasAlreadyDiscovered = discoveries.has(discoveryKey);
         const authorPageUrl = directAuthorUrls[index]
@@ -1093,8 +1207,10 @@ export const runMangaCorrespondenceSearch = async (
           sourceUrl: source.result.detailUrl,
           ...(authorPageUrl ? { authorPageUrl } : {}),
           parentStepIds: [step.id],
+          propagationConfidence: canPropagateFromSource ? "directTitle" : "fuzzyTitle",
         });
         if (!discovery || discovery.status !== "active") return;
+        if (!canPropagateFromSource || pauseAutomaticAuthorExpansion(author)) return;
         if (isNewAuthor) knownAuthors.push(author);
         const authorParentId = wasAlreadyDiscovered
           ? step.id
@@ -1106,7 +1222,7 @@ export const runMangaCorrespondenceSearch = async (
       const hasActiveDiscoveredAuthor = analyzed.authors.some((author) => (
         discoveries.get(buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, author))?.status === "active"
       ));
-      if (!authorDiscoveryOnly && directAuthorUrls.length && hasActiveDiscoveredAuthor) {
+      if (canPropagateFromSource && !authorDiscoveryOnly && directAuthorUrls.length && hasActiveDiscoveredAuthor) {
         addTask({
           kind: "author",
           term: analyzed.authors[0] || directAuthorUrls[0],
@@ -1116,7 +1232,8 @@ export const runMangaCorrespondenceSearch = async (
       }
       analyzed.discoverableTitles.forEach((title) => {
         const isNewTitle = !knownTitles.some((value) => normalizeKey(value) === normalizeKey(title));
-        if (knownTitles.length >= MAX_DISCOVERED_TITLES && isNewTitle) return;
+        const discoveryKey = buildMangaCorrespondenceDiscoveryKey("title", source.scraper.id, title);
+        const wasAlreadyDiscovered = discoveries.has(discoveryKey);
         const discovery = addDiscovery({
           kind: "title",
           value: title,
@@ -1128,9 +1245,16 @@ export const runMangaCorrespondenceSearch = async (
           propagationConfidence: analyzed.matchedByContainment ? "directTitle" : "fuzzyTitle",
         });
         if (!discovery || discovery.status !== "active") return;
+        if (!canPropagateFromSource) return;
+        if (isNewTitle && queue.length + processedTaskKeys.size >= maxDiscoveryTasks) {
+          addTask({ kind: "title", term: title, parentId: step.id });
+          return;
+        }
         if (isNewTitle) knownTitles.push(title);
-        const titleStep = addTrace("titleDiscovered", "Titre correspondant trouvé", title, step.id);
-        addTask({ kind: "title", term: title, parentId: titleStep.id });
+        const titleParentId = wasAlreadyDiscovered
+          ? step.id
+          : addTrace("titleDiscovered", "Titre correspondant trouvé", title, step.id).id;
+        addTask({ kind: "title", term: title, parentId: titleParentId });
       });
     }
     pruneRejectedCandidates();
@@ -1156,7 +1280,6 @@ export const runMangaCorrespondenceSearch = async (
         const scraper = scrapers.find((entry) => entry.id === author.scraperId);
         if (!scraper) return;
         const isNewAuthor = !knownAuthors.some((value) => normalizeKey(value) === normalizeKey(author.name));
-        if (knownAuthors.length >= MAX_DISCOVERED_AUTHORS && isNewAuthor) return;
         const discovery = addDiscovery({
           kind: "author",
           value: author.name,
@@ -1166,8 +1289,10 @@ export const runMangaCorrespondenceSearch = async (
           sourceUrl: author.url,
           authorPageUrl: author.url,
           parentStepIds: [step.id],
+          propagationConfidence: "directTitle",
         });
         if (!discovery || discovery.status !== "active") return;
+        if (pauseAutomaticAuthorExpansion(author.name)) return;
         const authorStep = addTrace("authorDiscovered", "Page auteur correspondante trouvée", author.name, step.id);
         if (isNewAuthor) knownAuthors.push(author.name);
         if (scraper && !authorDiscoveryOnly) {
@@ -1182,18 +1307,29 @@ export const runMangaCorrespondenceSearch = async (
     }
     step.resultCount = accepted;
     step.detail = `${sources.length} résultat(s) analysé(s), ${accepted} nouvelle(s) correspondance(s), ${checkedDetailCount} fiche(s) vérifiée(s) après préfiltrage.`;
+    return { newMatchCount: accepted, matchedSourceCount };
   };
 
   const loadSearch = async (
     scraper: ScraperRecord,
     term: string,
     pageLimit = maxPages,
-  ): Promise<MultiSearchSourceResult[]> => {
-    if (!isSearchableScraper(scraper)) return [];
+  ): Promise<{
+    sources: MultiSearchSourceResult[];
+    scannedCandidateCount: number;
+    stoppedForUnproductivePages: boolean;
+  }> => {
+    if (!isSearchableScraper(scraper)) return {
+      sources: [],
+      scannedCandidateCount: 0,
+      stoppedForUnproductivePages: false,
+    };
     const results: MultiSearchSourceResult[] = [];
     const resultKeys = new Set<string>();
     const prefetchSourceKey = `${scraper.id}:${normalizeKey(term)}`;
     let nextPageUrl: string | undefined;
+    let productivity = { ...EMPTY_SEARCH_PRODUCTIVITY_STATE };
+    let stoppedForUnproductivePages = false;
     for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
@@ -1243,7 +1379,52 @@ export const runMangaCorrespondenceSearch = async (
           return true;
         });
         results.push(...newSources);
+        const productiveCandidateCount = pageSources.filter((source) => {
+          const analyzed = sourceMatchesReference(
+            input,
+            source,
+            knownTitles,
+            knownAuthors,
+            romanizedTitleVariantsByKey,
+          );
+          if (analyzed.derivative) return false;
+          const rejectionReason = resolveSourceRejectionReason(input.request, referenceChapter, analyzed);
+          return !rejectionReason || shouldFetchMangaCorrespondenceCandidateDetails({
+            titleFields: [analyzed.analyzedTitle, ...analyzed.alternativeTitles],
+            candidateAuthors: analyzed.authors,
+            knownTitles,
+            knownAuthors,
+            rejectionReason,
+            matchedTerm: analyzed.matchedTerm,
+          });
+        }).length;
+        productivity = advanceSearchProductivity(productivity, {
+          scannedCandidateCount: pageSources.length,
+          productiveCandidateCount,
+        });
         nextPageUrl = page.nextPageUrl;
+        if (
+          safeguardsEnabled
+          && safety.emptyPageGuardEnabled
+          && pageHasNext
+          && shouldStopUnproductiveSearch(productivity, safety.consecutiveUnproductivePageLimit)
+        ) {
+          stoppedForUnproductivePages = true;
+          searchPagePrefetch.clear(prefetchSourceKey);
+          addWarning({
+            key: `unproductive-pages:${scraper.id}:${normalizeKey(term)}`,
+            code: "unproductivePages",
+            message: `La source ${scraper.name} a été arrêtée pour « ${term} » après ${productivity.consecutiveUnproductiveUnits} pages consécutives sans piste plausible.`,
+            term,
+            scraperId: scraper.id,
+            scraperName: scraper.name,
+            evidence: {
+              consecutivePageCount: productivity.consecutiveUnproductiveUnits,
+              scannedCandidateCount: productivity.scannedCandidateCount,
+            },
+          });
+          break;
+        }
         if (
           (pageSources.length > 0 && newSources.length === 0)
           || isBackgroundListingPaginationStalled(requestedPageUrl, nextPageUrl)
@@ -1254,7 +1435,11 @@ export const runMangaCorrespondenceSearch = async (
         break;
       }
     }
-    return results;
+    return {
+      sources: results,
+      scannedCandidateCount: productivity.scannedCandidateCount,
+      stoppedForUnproductivePages,
+    };
   };
   const loadAuthor = async (
     scraper: ScraperRecord,
@@ -1361,7 +1546,7 @@ export const runMangaCorrespondenceSearch = async (
   };
 
   await emit();
-  while (queue.length && processedTasks < MAX_DISCOVERY_TASKS) {
+  while (queue.length) {
     if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
     let index = 0;
     if (input.strategy === "titleFirst") index = Math.max(0, queue.findIndex((task) => task.kind === "title"));
@@ -1392,6 +1577,8 @@ export const runMangaCorrespondenceSearch = async (
     );
     await emit(task.term);
     const collected: MultiSearchSourceResult[] = [];
+    let scannedCandidateCount = 0;
+    let stoppedUnproductiveSourceCount = 0;
     if (isTitle) {
       const directTasks = (task.directTargets ?? []).map((target) => async () => {
         try {
@@ -1402,7 +1589,10 @@ export const runMangaCorrespondenceSearch = async (
       });
       await runWithConcurrency([...directTasks, ...scrapers.map((scraper) => async () => {
         try {
-          collected.push(...await loadSearch(scraper, task.term));
+          const loaded = await loadSearch(scraper, task.term);
+          collected.push(...loaded.sources);
+          scannedCandidateCount += loaded.scannedCandidateCount;
+          stoppedUnproductiveSourceCount += Number(loaded.stoppedForUnproductivePages);
         } catch (error) {
           console.warn(`Correspondence search failed for ${scraper.name}`, error);
         }
@@ -1431,6 +1621,7 @@ export const runMangaCorrespondenceSearch = async (
         paceMode: input.paceMode,
         scrapingConcurrency: concurrency,
         scrapeDetailsWithCards: false,
+        correspondenceSafety: safety,
       };
       try {
         const authorResult = await runAuthorCorrespondenceSearch(
@@ -1447,8 +1638,6 @@ export const runMangaCorrespondenceSearch = async (
           const isNewAuthor = !knownAuthors.some((value) => (
             normalizeKey(value) === normalizeKey(authorMatch.authorName)
           ));
-          if (knownAuthors.length >= MAX_DISCOVERED_AUTHORS && isNewAuthor) return;
-
           const discovery = addDiscovery({
             kind: "author",
             value: authorMatch.authorName,
@@ -1461,8 +1650,10 @@ export const runMangaCorrespondenceSearch = async (
               ? { authorTemplateContext: authorMatch.templateContext }
               : {}),
             parentStepIds: [step.id],
+            propagationConfidence: task.protectedSeed ? "manual" : "directTitle",
           });
           if (!discovery || discovery.status !== "active") return;
+          if (!task.protectedSeed && pauseAutomaticAuthorExpansion(authorMatch.authorName)) return;
 
           if (isNewAuthor) knownAuthors.push(authorMatch.authorName);
           const authorPageStep = addTrace(
@@ -1504,7 +1695,62 @@ export const runMangaCorrespondenceSearch = async (
         }), concurrency);
       }
     }
-    await discoverFromSources(collected, step);
+    const discoveryResult = await discoverFromSources(collected, step);
+    if (
+      isTitle
+      && safeguardsEnabled
+      && safety.autoInvalidateUnproductiveTitles
+      && shouldAutoInvalidateUnproductiveSeed({
+        protectedSeed: task.protectedSeed === true,
+        scannedCandidateCount,
+        acceptedCandidateCount: discoveryResult.matchedSourceCount,
+        stoppedUnproductiveSourceCount,
+        minimumCandidateCount: safety.autoInvalidateMinCandidateCount,
+      })
+    ) {
+      const invalidatedAt = new Date().toISOString();
+      const message = `Titre invalidé automatiquement après ${scannedCandidateCount} candidats sans correspondance plausible.`;
+      let invalidatedDiscoveryCount = 0;
+      discoveries.forEach((discovery, key) => {
+        if (
+          discovery.kind !== "title"
+          || discovery.status !== "active"
+          || normalizeKey(discovery.value) !== normalizeKey(task.term)
+          || discovery.origin === "reference"
+          || discovery.origin === "manual"
+        ) return;
+        discoveries.set(key, {
+          ...discovery,
+          status: "invalidated",
+          automaticInvalidation: {
+            code: "unproductiveTitle",
+            message,
+            invalidatedAt,
+          },
+        });
+        discoveryDecisions.set(key, "invalidated");
+        invalidatedDiscoveryCount += 1;
+      });
+      if (invalidatedDiscoveryCount > 0) {
+        const stillActive = Array.from(discoveries.values()).some((discovery) => (
+          discovery.kind === "title"
+          && discovery.status === "active"
+          && normalizeKey(discovery.value) === normalizeKey(task.term)
+        ));
+        if (!stillActive) {
+          for (let index = knownTitles.length - 1; index >= 0; index -= 1) {
+            if (normalizeKey(knownTitles[index]) === normalizeKey(task.term)) knownTitles.splice(index, 1);
+          }
+        }
+        addWarning({
+          key: `automatic-title-invalidation:${normalizeKey(task.term)}`,
+          code: "automaticTitleInvalidation",
+          message,
+          term: task.term,
+          evidence: { scannedCandidateCount, invalidatedDiscoveryCount },
+        });
+      }
+    }
     processedTaskKeys.add(buildTaskKey(task));
     (task.directTargets ?? []).forEach((target) => processedDirectTargetKeys.add(buildDirectTargetKey(target)));
     processedTasks += 1;
@@ -1524,6 +1770,7 @@ export const runMangaCorrespondenceSearch = async (
     searchedAuthors,
     discoveries,
     resultDecisions,
+    warnings,
     buildCheckpoint(),
   );
 };

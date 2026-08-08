@@ -7,6 +7,8 @@ import type {
 import type { ScraperRecord } from "@/shared/scraper";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
+import useParams from "@/renderer/hooks/useParams";
+import { normalizeMangaCorrespondenceSafetyParams } from "@/shared/mangaCorrespondenceSafetySettings";
 import MultiSearchBrowser from "@/renderer/components/MultiSearch/MultiSearchBrowser";
 import MangaCorrespondenceView from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceView";
 import AuthorCorrespondenceView from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceView";
@@ -62,7 +64,15 @@ export default function BackgroundSearchResultView({
   onOpenAuthorTarget,
   scrapers,
 }: Props) {
-  const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
+  const {
+    job,
+    loading,
+    error,
+    cancel,
+    stalledForMs,
+    resultStalledForMs,
+  } = useBackgroundSearchJob(backgroundSearchJobId);
+  const { params } = useParams();
 
   if (loading) return <div className="app-route-loading" aria-label="Chargement de la recherche" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche en arrière-plan introuvable."}</div>;
@@ -73,6 +83,13 @@ export default function BackgroundSearchResultView({
   const sourceScraper = listingInput.sources?.[0]?.scraper;
   const scraper = scrapers.find((candidate) => candidate.id === sourceScraper?.id) ?? sourceScraper;
   const storageLabel = metadata.storageMode === "temporaryFile" ? "Fichier temporaire" : "Cache mémoire";
+  const alertSettings = normalizeMangaCorrespondenceSafetyParams(params);
+  const stallWarningThresholdMs = alertSettings.backgroundSearchStallWarningMinutes * 60_000;
+  const stateStalled = stalledForMs >= stallWarningThresholdMs;
+  const resultStalled = resultStalledForMs >= stallWarningThresholdMs;
+  const stalledWarningVisible = metadata.status === "running"
+    && alertSettings.backgroundSearchStallWarningEnabled
+    && (stateStalled || resultStalled);
 
   const renderResult = () => {
     if (metadata.kind === "multiSearch") {
@@ -135,6 +152,17 @@ export default function BackgroundSearchResultView({
       </div>
 
       {metadata.error ? <div className="multi-search__message is-error">{metadata.error}</div> : null}
+      {stalledWarningVisible ? (
+        <div className="background-search-result-view__warning" role="alert">
+          <strong>Recherche possiblement bloquée</strong>
+          <span>
+            {stateStalled
+              ? `Aucun nouvel état n’a été publié depuis au moins ${alertSettings.backgroundSearchStallWarningMinutes} minute(s).`
+              : `Aucun nouveau résultat n’a été conservé depuis au moins ${alertSettings.backgroundSearchStallWarningMinutes} minute(s).`}
+            Tu peux l’arrêter sans perdre le dernier résultat enregistré.
+          </span>
+        </div>
+      ) : null}
       <div className="background-search-result-view__content">{renderResult()}</div>
     </section>
   );
