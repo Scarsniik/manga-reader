@@ -15,10 +15,12 @@ import { canOpenScraperDetails } from "@/renderer/components/MultiSearch/multiSe
 import {
   getScraperDetailsFeatureConfig,
   getScraperFeature,
+  getScraperTitleAnalysisFeatureConfig,
   isScraperFeatureConfigured,
   resolveScraperCardDetails,
   type ScraperDocumentFetcher,
 } from "@/renderer/utils/scraperRuntime";
+import { analyzeMangaCorrespondenceSourceIdentity } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 
 export type MangaCorrespondenceManualDiscoveryKind = MangaCorrespondenceDiscovery["kind"];
 
@@ -124,14 +126,14 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
   rawValue: string;
   input: MangaCorrespondenceBackgroundInput;
   fetchDocument?: ScraperDocumentFetcher;
-}): Promise<MangaCorrespondenceDiscovery> => {
+}): Promise<MangaCorrespondenceDiscovery[]> => {
   const rawValue = options.rawValue.trim();
   if (!rawValue) throw new Error("Saisis un titre, un auteur ou une URL.");
   const parsedUrl = parseHttpUrl(rawValue);
   const looksLikeUrl = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue);
   if (!parsedUrl) {
     if (looksLikeUrl) throw new Error("L’URL saisie n’est pas une URL HTTP ou HTTPS valide.");
-    return buildManualDiscovery({ kind: options.kind, value: rawValue });
+    return [buildManualDiscovery({ kind: options.kind, value: rawValue })];
   }
   if (!options.fetchDocument) {
     throw new Error("Le chargement des scrapers n’est pas disponible.");
@@ -153,13 +155,46 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
       }
       throw new Error(`Le scraper ${scraper.name} n’a pas réussi à extraire le titre de cette fiche.`);
     }
-    return buildManualDiscovery({
-      kind: "title",
-      value: details.title,
-      scraperId: scraper.id,
-      scraperName: scraper.name,
-      sourceUrl: normalizedUrl,
+    const sourceUrl = details.finalUrl || normalizedUrl;
+    const identity = analyzeMangaCorrespondenceSourceIdentity({
+      rawTitle: details.title,
+      titleAnalysisConfig: getScraperTitleAnalysisFeatureConfig(
+        getScraperFeature(scraper, "titleAnalysis"),
+      ),
+      knownAuthors: [...options.input.reference.authors, ...details.authors],
+      supplementalAuthors: details.authors,
     });
+    const discoveries = [
+      ...identity.titles.map((title, index) => buildManualDiscovery({
+        kind: "title",
+        value: title,
+        scraperId: scraper.id,
+        scraperName: scraper.name,
+        ...(index === 0 ? { sourceUrl } : {}),
+      })),
+      ...identity.authors.map((author) => {
+        const authorIndex = details.authors.findIndex((value) => (
+          normalizeMangaCorrespondenceDiscoveryValue(value)
+          === normalizeMangaCorrespondenceDiscoveryValue(author)
+        ));
+        const authorPageUrl = authorIndex >= 0
+          ? details.authorUrls[authorIndex]
+            ?? (details.authorUrls.length === 1 ? details.authorUrls[0] : undefined)
+          : undefined;
+        return buildManualDiscovery({
+          kind: "author",
+          value: author,
+          scraperId: scraper.id,
+          scraperName: scraper.name,
+          sourceUrl,
+          ...(authorPageUrl ? { authorPageUrl } : {}),
+        });
+      }),
+    ];
+    return Array.from(new Map(discoveries.map((discovery) => [
+      discovery.key,
+      discovery,
+    ])).values());
   }
 
   const authorPage = await fetchAuthorPageWithRetry(
@@ -176,12 +211,12 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
   if (!authorName) {
     throw new Error(`Le scraper ${scraper.name} reconnaît cette URL, mais n’a pas pu en extraire le nom d’auteur.`);
   }
-  return buildManualDiscovery({
+  return [buildManualDiscovery({
     kind: "author",
     value: authorName,
     scraperId: scraper.id,
     scraperName: scraper.name,
     sourceUrl: normalizedUrl,
     authorPageUrl: normalizedUrl,
-  });
+  })];
 };

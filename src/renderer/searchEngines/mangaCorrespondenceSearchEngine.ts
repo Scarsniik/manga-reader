@@ -58,15 +58,14 @@ import {
 import {
   doesCorrespondenceAnalyzedTitleMatchKnownTitle,
   isUsableCorrespondenceDiscoveredTitle,
-  partitionCorrespondenceAlternativeTitles,
   selectCorrespondenceDiscoverableTitles,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
 import { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
 import {
+  analyzeMangaCorrespondenceSourceIdentity,
   isClearlyDerivativeMangaCorrespondenceTitle,
-  stripMangaCorrespondenceTrailingKnownAuthor,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 import {
   scoreMangaCorrespondenceRejectedCandidate,
@@ -193,18 +192,13 @@ const sourceMatchesReference = (
   discoverableTitles: string[];
 } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
-  const analysis = analyzeMangaCorrespondenceTitle(
-    stripMangaCorrespondenceTrailingKnownAuthor(source.result.title, knownAuthors),
-    config,
-  );
-  const {
-    titleAlternatives,
-    authorAlternatives,
-  } = partitionCorrespondenceAlternativeTitles(analysis.alternativeTitles, knownAuthors);
-  const parsedAuthorKeys = analysis.authors.map(normalizeKey);
-  const supplementalAuthors = [...(source.result.authorNames ?? []), ...source.tentativeAuthorNames]
-    .filter((author) => !parsedAuthorKeys.some((parsedAuthor) => normalizeKey(author).includes(parsedAuthor)));
-  const authors = uniqueText([...analysis.authors, ...supplementalAuthors, ...authorAlternatives]);
+  const identity = analyzeMangaCorrespondenceSourceIdentity({
+    rawTitle: source.result.title,
+    titleAnalysisConfig: config,
+    knownAuthors,
+    supplementalAuthors: [...(source.result.authorNames ?? []), ...source.tentativeAuthorNames],
+  });
+  const { analysis, titleAlternatives, authors } = identity;
   const candidate = {
     title: [analysis.title, ...titleAlternatives].join(", "),
     sourceUrl: source.result.detailUrl,
@@ -557,6 +551,37 @@ export const runMangaCorrespondenceSearch = async (
   let processedTasks = 0;
   let balancedKind: DiscoveryTask["kind"] = "title";
 
+  const queueDirectTargetDelta = (
+    task: DiscoveryTask,
+    key: string,
+    targetsToAdd: NonNullable<DiscoveryTask["directTargets"]>,
+  ): void => {
+    if (!targetsToAdd.length) return;
+    const deltaKey = `${key}:direct`;
+    const existingDelta = queuedTasksByKey.get(deltaKey);
+    if (existingDelta) {
+      const targets = new Map((existingDelta.directTargets ?? []).map((target) => [
+        buildDirectTargetKey(target),
+        target,
+      ]));
+      targetsToAdd.forEach((target) => targets.set(buildDirectTargetKey(target), target));
+      existingDelta.directTargets = Array.from(targets.values());
+      return;
+    }
+    const deltaTask: DiscoveryTask = {
+      ...task,
+      directTargets: targetsToAdd,
+      directOnly: true,
+    };
+    queuedTasksByKey.set(deltaKey, deltaTask);
+    queue.push(deltaTask);
+    recordDiagnostic("task.delta-queued", {
+      kind: task.kind,
+      term: task.term,
+      directTargetCount: targetsToAdd.length,
+    });
+  };
+
   const addTask = (task: DiscoveryTask): void => {
     const key = buildTaskKey(task);
     if (!normalizeKey(task.term) || queue.length + processedTasks >= MAX_DISCOVERY_TASKS) return;
@@ -569,23 +594,29 @@ export const runMangaCorrespondenceSearch = async (
       recordDiagnostic("task.merged", { kind: task.kind, term: task.term, directTargetCount: targets.size });
       return;
     }
+    if (activeTask && buildTaskKey(activeTask) === key) {
+      const alreadyTargeted = new Set([
+        ...(activeTask.directTargets ?? []).map(buildDirectTargetKey),
+        ...Array.from(processedDirectTargetKeys),
+      ]);
+      const newTargets = (task.directTargets ?? []).filter((target) => (
+        !alreadyTargeted.has(buildDirectTargetKey(target))
+      ));
+      if (newTargets.length) queueDirectTargetDelta(task, key, newTargets);
+      recordDiagnostic("task.merged", {
+        kind: task.kind,
+        term: task.term,
+        active: true,
+        directTargetCount: newTargets.length,
+      });
+      return;
+    }
     if (processedTaskKeys.has(key)) {
       const newTargets = (task.directTargets ?? []).filter((target) => (
         !processedDirectTargetKeys.has(buildDirectTargetKey(target))
       ));
       if (!newTargets.length) return;
-      const deltaTask = { ...task, directTargets: newTargets, directOnly: true };
-      const deltaKey = `${key}:direct`;
-      const existingDelta = queuedTasksByKey.get(deltaKey);
-      if (existingDelta) {
-        const targets = new Map((existingDelta.directTargets ?? []).map((target) => [buildDirectTargetKey(target), target]));
-        newTargets.forEach((target) => targets.set(buildDirectTargetKey(target), target));
-        existingDelta.directTargets = Array.from(targets.values());
-        return;
-      }
-      queuedTasksByKey.set(deltaKey, deltaTask);
-      queue.push(deltaTask);
-      recordDiagnostic("task.delta-queued", { kind: task.kind, term: task.term, directTargetCount: newTargets.length });
+      queueDirectTargetDelta(task, key, newTargets);
       return;
     }
     queuedTasksByKey.set(key, task);

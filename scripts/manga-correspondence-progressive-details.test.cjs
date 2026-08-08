@@ -230,7 +230,7 @@ test("manual titles accept text and resolve compatible detail URLs before replay
     scrapeDetailsWithCards: false,
     enableRomajiPhoneticMerge: false,
   };
-  const textDiscovery = await resolveMangaCorrespondenceManualDiscovery({
+  const [textDiscovery] = await resolveMangaCorrespondenceManualDiscovery({
     kind: "title",
     rawValue: "Series Two",
     input,
@@ -239,20 +239,40 @@ test("manual titles accept text and resolve compatible detail URLs before replay
   assert.equal(textDiscovery.scraperId, "manual");
   assert.equal(textDiscovery.origin, "manual");
 
-  const urlDiscovery = await resolveMangaCorrespondenceManualDiscovery({
+  const detailsScraper = {
+    ...scraper,
+    features: scraper.features.map((feature) => feature.kind === "details"
+      ? {
+        ...feature,
+        config: {
+          ...feature.config,
+          authorsSelector: { kind: "css", value: ".details-author" },
+          authorUrlSelector: { kind: "css", value: ".details-author@href" },
+        },
+      }
+      : feature),
+  };
+  const urlDiscoveries = await resolveMangaCorrespondenceManualDiscovery({
     kind: "title",
     rawValue: "https://example.test/details/two",
-    input,
+    input: { ...input, scrapers: [detailsScraper] },
     fetchDocument: async (request) => ({
       ok: true,
       requestedUrl: request.targetUrl,
       finalUrl: request.targetUrl,
-      html: '<h1 class="details-title">Series Two</h1>',
+      html: `
+        <h1 class="details-title">Series Two 2</h1>
+        <a class="details-author" href="/authors/yd">YD</a>
+      `,
     }),
   });
+  const urlDiscovery = urlDiscoveries.find((discovery) => discovery.kind === "title");
+  const urlAuthorDiscovery = urlDiscoveries.find((discovery) => discovery.kind === "author");
   assert.equal(urlDiscovery.value, "Series Two");
   assert.equal(urlDiscovery.scraperId, scraper.id);
   assert.equal(urlDiscovery.sourceUrl, "https://example.test/details/two");
+  assert.equal(urlAuthorDiscovery.value, "YD");
+  assert.equal(urlAuthorDiscovery.authorPageUrl, "https://example.test/authors/yd");
   await assert.rejects(() => resolveMangaCorrespondenceManualDiscovery({
     kind: "title",
     rawValue: "https://unknown.test/details/two",
@@ -300,7 +320,7 @@ test("manual author URLs are validated and keep their direct page target", async
     scrapeDetailsWithCards: false,
     enableRomajiPhoneticMerge: false,
   };
-  const discovery = await resolveMangaCorrespondenceManualDiscovery({
+  const [discovery] = await resolveMangaCorrespondenceManualDiscovery({
     kind: "author",
     rawValue: "https://example.test/authors/yd",
     input,
@@ -354,7 +374,7 @@ test("a replay processes manually added manga and author pages as direct targets
             ? '<h1 class="details-title">Series Manual 2</h1>'
             : targetUrl === directAuthorUrl
               ? `
-                <h1 class="author-name">YD</h1>
+                <h1 class="author-name">yd</h1>
                 <article class="card"><a class="title" href="/details/manual-two">Series Manual 2</a></article>
               `
             : "<main></main>",
@@ -439,6 +459,13 @@ test("a replay processes manually added manga and author pages as direct targets
 
   assert.ok(replayed.matches.some((match) => match.source.result.detailUrl === directUrl));
   assert.ok(requestedUrls.includes(directAuthorUrl));
+  assert.deepEqual(
+    replayed.trace
+      .filter((step) => step.kind === "authorSearch")
+      .map((step) => step.term),
+    ["YD"],
+  );
+  assert.deepEqual(replayed.searchedAuthors, ["YD"]);
 });
 
 test("a replay removes invalidated title branches and reapplies surviving manual overrides", async () => {

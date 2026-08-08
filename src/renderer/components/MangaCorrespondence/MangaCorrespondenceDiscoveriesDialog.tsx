@@ -11,7 +11,7 @@ type Props = {
   onResolveManualDiscovery: (
     kind: MangaCorrespondenceDiscovery["kind"],
     value: string,
-  ) => Promise<MangaCorrespondenceDiscovery>;
+  ) => Promise<MangaCorrespondenceDiscovery[]>;
   onSave: (
     discoveries: MangaCorrespondenceDiscovery[],
     resultDecisions: MangaCorrespondenceResultDecision[],
@@ -83,11 +83,11 @@ export default function MangaCorrespondenceDiscoveriesDialog({
     setAdding(true);
     setError(null);
     try {
-      const discovery = await onResolveManualDiscovery(tab, manualValue);
-      setDraftDiscoveries((current) => {
-        const existingIndex = current.findIndex((entry) => entry.key === discovery.key);
-        if (existingIndex < 0) return [...current, discovery];
-        return current.map((entry, index) => index === existingIndex
+      const resolvedDiscoveries = await onResolveManualDiscovery(tab, manualValue);
+      setDraftDiscoveries((current) => resolvedDiscoveries.reduce((next, discovery) => {
+        const existingIndex = next.findIndex((entry) => entry.key === discovery.key);
+        if (existingIndex < 0) return [...next, discovery];
+        return next.map((entry, index) => index === existingIndex
           ? {
             ...entry,
             ...discovery,
@@ -103,7 +103,7 @@ export default function MangaCorrespondenceDiscoveriesDialog({
             status: "active",
           }
           : entry);
-      });
+      }, current));
       setManualValue("");
     } catch (addError) {
       setError(addError instanceof Error ? addError.message : "Cet ajout n’a pas pu être validé.");
