@@ -1260,6 +1260,16 @@
   color: #edf4ff;
 }
 
+.manga-correspondence-discoveries-dialog__filter {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  background: #111;
+  color: #eee;
+  font: inherit;
+}
+
 .manga-correspondence-discoveries-dialog__list {
   display: grid;
   max-height: min(58vh, 560px);

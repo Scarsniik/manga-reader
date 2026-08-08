@@ -52,10 +52,29 @@ export const appendUniqueTitleAnalysisValue = (
 };
 
 export const splitTitleAnalysisAlternatives = (value: string): string[] => {
-  const alternatives = value
-    .split(/(?:[|｜/]+|\s+[ー–—]\s+)/g)
-    .map(normalizeTitleAnalysisText)
-    .filter(Boolean);
+  const alternatives: string[] = [];
+  let current = "";
+  let depth = 0;
+  const characters = Array.from(value);
+  const flush = (): void => {
+    const normalized = normalizeTitleAnalysisText(current);
+    if (normalized) alternatives.push(normalized);
+    current = "";
+  };
+
+  characters.forEach((character, index) => {
+    if ("([{（［｛".includes(character)) depth += 1;
+    if (")]}）］｝".includes(character)) depth = Math.max(0, depth - 1);
+    const previous = characters[index - 1] ?? "";
+    const next = characters[index + 1] ?? "";
+    const isWrappedDash = "ー–—".includes(character) && /\s/u.test(previous) && /\s/u.test(next);
+    if (depth === 0 && ("|｜/".includes(character) || isWrappedDash)) {
+      flush();
+      return;
+    }
+    current += character;
+  });
+  flush();
 
   return alternatives.length ? Array.from(new Set(alternatives)) : [normalizeTitleAnalysisText(value)].filter(Boolean);
 };

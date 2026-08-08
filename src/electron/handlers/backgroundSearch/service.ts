@@ -16,8 +16,10 @@ import type {
 import { BACKGROUND_SEARCH_SCHEMA_VERSION } from "../../../shared/backgroundSearch";
 import {
   buildBackgroundSearchQueueSummary,
+  canReplayBackgroundSearch,
   hasBackgroundSearchExpired,
   isBackgroundSearchActive,
+  isBackgroundSearchResultEditable,
 } from "./metadata";
 import {
   readBackgroundSearchMetadata,
@@ -300,7 +302,11 @@ export const updateBackgroundSearch = async (
 ): Promise<boolean> => serializeMutation(async () => {
   await initialize();
   const current = findMetadata(request.jobId);
-  if (!current || current.status !== "running") return false;
+  if (!current || (current.status !== "running" && current.status !== "cancelled")) return false;
+  if (
+    current.status === "cancelled"
+    && current.completedAt !== current.updatedAt
+  ) return false;
   const job = request.result !== undefined ? await loadJob(request.jobId) : null;
   if (request.result !== undefined && !job) return false;
   const next = {
@@ -355,7 +361,7 @@ export const saveBackgroundSearchResult = async (
 ): Promise<boolean> => serializeMutation(async () => {
   await initialize();
   const current = findMetadata(request.jobId);
-  if (!current || current.status !== "completed") return false;
+  if (!current || !isBackgroundSearchResultEditable(current.status)) return false;
   const job = await loadJob(request.jobId);
   if (!job) return false;
   const next = {
@@ -426,11 +432,7 @@ export const replayBackgroundSearch = async (
 ): Promise<BackgroundSearchJobMetadata | null> => serializeMutation(async () => {
   await initialize();
   const current = findMetadata(request.jobId);
-  if (
-    !current
-    || current.kind !== "mangaCorrespondence"
-    || current.status !== "completed"
-  ) return null;
+  if (!current || !canReplayBackgroundSearch(current)) return null;
   const job = await loadJob(request.jobId);
   if (!job?.result) return null;
   const timestamp = nowIso();
@@ -509,13 +511,14 @@ const finishWithStatus = async (
   await initialize();
   const current = findMetadata(jobId);
   if (!current || !isBackgroundSearchActive(current.status)) return false;
+  const timestamp = nowIso();
   const next = {
     ...current,
     status,
     error,
-    completedAt: nowIso(),
+    completedAt: timestamp,
     expiresAt: current.storageMode === "temporaryFile" ? getExpiresAt(current.retentionHours) : undefined,
-    updatedAt: nowIso(),
+    updatedAt: timestamp,
     revision: current.revision + 1,
   };
   replaceMetadata(next);

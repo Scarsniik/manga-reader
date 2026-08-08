@@ -45,6 +45,10 @@ Ses tâches sont identifiées par `type + terme normalisé`. Des URLs directes o
 
 Les résultats manga contiennent aussi des découvertes `title` ou `author`, dédupliquées uniquement au sein d'un même scraper. Une occurrence peut être invalidée indépendamment puis la recherche entièrement rejouée. Le rejeu repart des découvertes actives, recalcule résultats et trace, et réapplique par clé les décisions manuelles uniquement aux candidates retrouvées. Les variantes générées automatiquement ne deviennent pas des décisions séparées.
 
+Un job de correspondance annulé reste éditable et rejouable. L’arrêt force l’écriture du dernier snapshot émis avant de libérer le runner. Les résultats possèdent leurs propres décisions persistantes : une entrée invalidée est retirée des correspondances et devient une référence négative. Si une nouvelle card obtient un meilleur score contre cette référence négative que contre les titres/auteurs actifs, elle est conservée dans les propositions manuelles avec la raison `invalidatedResult`, sans propager ses métadonnées ni créer de tâche.
+
+La propagation depuis les pages auteur exige une correspondance de titre par containment après l’enrichissement éventuel ; un simple rapprochement flou reste une proposition. Les titres découverts portent aussi leur niveau de confiance. Au rejeu d’un ancien job, une découverte sans niveau de confiance issue d’une recherche auteur n’alimente pas le moteur. La découpe des traductions respecte enfin la profondeur des parenthèses et crochets, et les fragments aux délimiteurs déséquilibrés ne deviennent jamais des termes de recherche.
+
 Les modules `authorListingSearchInput.ts` et `latestSourceSearchInput.ts` construisent aussi les mêmes sources et paramètres dans les deux modes. Les hooks React ne conservent que l'état de présentation, l'annulation, la navigation dans les pages déjà chargées et la conversion des snapshots.
 
 Les tags favoris n'ont actuellement pas de variante d'arrière-plan. Leur hook utilise néanmoins les mêmes chargeurs et traitements de cards que le registre, sans maintenir une seconde implémentation de ces outils.

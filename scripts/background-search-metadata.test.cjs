@@ -2,8 +2,10 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   buildBackgroundSearchQueueSummary,
+  canReplayBackgroundSearch,
   hasBackgroundSearchExpired,
   isBackgroundSearchActive,
+  isBackgroundSearchResultEditable,
   isBackgroundSearchUnopened,
 } = require("../dist/electron/handlers/backgroundSearch/metadata.js");
 
@@ -29,6 +31,25 @@ test("background search activity only includes queued and running jobs", () => {
   assert.equal(isBackgroundSearchActive("queued"), true);
   assert.equal(isBackgroundSearchActive("running"), true);
   assert.equal(isBackgroundSearchActive("completed"), false);
+});
+
+test("completed and cancelled results can be edited before a replay", () => {
+  assert.equal(isBackgroundSearchResultEditable("completed"), true);
+  assert.equal(isBackgroundSearchResultEditable("cancelled"), true);
+  assert.equal(isBackgroundSearchResultEditable("running"), false);
+  assert.equal(isBackgroundSearchResultEditable("error"), false);
+  assert.equal(canReplayBackgroundSearch({
+    ...makeJob("stopped", "cancelled", "2026-01-01T00:00:00.000Z"),
+    kind: "mangaCorrespondence",
+  }), true);
+  assert.equal(canReplayBackgroundSearch({
+    ...makeJob("running", "running", "2026-01-01T00:00:00.000Z"),
+    kind: "mangaCorrespondence",
+  }), false);
+  assert.equal(canReplayBackgroundSearch({
+    ...makeJob("other", "cancelled", "2026-01-01T00:00:00.000Z"),
+    kind: "multiSearch",
+  }), false);
 });
 
 test("only new jobs explicitly marked as unopened show the visual state", () => {

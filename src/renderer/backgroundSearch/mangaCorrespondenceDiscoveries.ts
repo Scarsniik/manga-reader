@@ -3,6 +3,7 @@ import type {
   MangaCorrespondenceBackgroundResult,
   MangaCorrespondenceDiscovery,
 } from "@/renderer/backgroundSearch/types";
+import { buildMangaCorrespondenceResultDecisions } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
 
 export const normalizeMangaCorrespondenceDiscoveryValue = (value: unknown): string => (
   String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase()
@@ -41,6 +42,7 @@ export const buildInitialMangaCorrespondenceDiscoveries = (
       parentStepIds: [],
       evidenceCount: 1,
       status: "active",
+      propagationConfidence: "reference",
       foundAt: new Date().toISOString(),
     });
   });
@@ -110,5 +112,6 @@ export const buildMangaCorrespondenceReplayInput = (
       ? result.discoveries
       : buildInitialMangaCorrespondenceDiscoveries(input)
     ).map(({ key, status }) => ({ key, status })),
+    resultDecisions: buildMangaCorrespondenceResultDecisions(result),
   },
 });

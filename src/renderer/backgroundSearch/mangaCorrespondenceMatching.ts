@@ -19,6 +19,22 @@ export const normalizeCorrespondenceTitle = (value: string): string => (
     .replace(/\s+/g, " ")
 );
 
+export const isUsableCorrespondenceDiscoveredTitle = (title: string): boolean => {
+  const key = normalizeCorrespondenceTitle(title);
+  if (!key) return false;
+  return [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+    ["（", "）"],
+    ["［", "］"],
+    ["｛", "｝"],
+  ].every(([opening, closing]) => (
+    Array.from(title).filter((character) => character === opening).length
+    === Array.from(title).filter((character) => character === closing).length
+  ));
+};
+
 export const doesCorrespondenceTitleContainKnownTitle = (
   candidateTitle: string,
   knownTitle: string,
@@ -78,7 +94,7 @@ export const selectCorrespondenceDiscoverableTitles = (
   const seen = new Set<string>();
   const candidates = candidateTitles.filter((title) => {
     const key = normalizeCorrespondenceTitle(title);
-    if (!key || seen.has(key)) return false;
+    if (!key || !isUsableCorrespondenceDiscoveredTitle(title) || seen.has(key)) return false;
     seen.add(key);
     return true;
   });

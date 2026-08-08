@@ -11,6 +11,7 @@ const source = `
   export { selectCorrespondenceDiscoverableTitles } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
   export { extractTitleSequenceMarkers } from "@/renderer/utils/scraperTitleAnalysis/sequence";
   export { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
+  export { splitTitleAnalysisAlternatives } from "@/renderer/utils/scraperTitleAnalysis/text";
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { resolveMangaCorrespondenceMatchChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { compareMangaCorrespondenceChapters } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -45,6 +46,10 @@ const source = `
     updateMangaCorrespondenceDiscoveryStatus,
     upsertMangaCorrespondenceDiscovery,
   } from "@/renderer/backgroundSearch/mangaCorrespondenceDiscoveries";
+  export {
+    buildMangaCorrespondenceResultDecisions,
+    updateMangaCorrespondenceResultStatuses,
+  } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -69,6 +74,7 @@ const {
   selectCorrespondenceDiscoverableTitles,
   extractTitleSequenceMarkers,
   analyzeMangaCorrespondenceTitle,
+  splitTitleAnalysisAlternatives,
   inferMangaCorrespondenceFirstChapter,
   resolveMangaCorrespondenceMatchChapter,
   compareMangaCorrespondenceChapters,
@@ -101,6 +107,8 @@ const {
   hasActiveMangaCorrespondenceTitle,
   updateMangaCorrespondenceDiscoveryStatus,
   upsertMangaCorrespondenceDiscovery,
+  buildMangaCorrespondenceResultDecisions,
+  updateMangaCorrespondenceResultStatuses,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -122,6 +130,18 @@ test("correspondence containment does not accept unrelated or incidental short t
     false,
   );
   assert.equal(doesCorrespondenceTitleContainKnownTitle("The Gal Story", "Gal"), false);
+});
+
+test("title alternatives never split a franchise slash inside parentheses", () => {
+  assert.deepEqual(
+    splitTitleAnalysisAlternatives("Hidden Quest 08 (Fate/Grand Order) | Прихований квест"),
+    ["Hidden Quest 08 (Fate/Grand Order)", "Прихований квест"],
+  );
+  const analyzed = analyzeMangaCorrespondenceTitle(
+    "(COMIC1☆15) [OrangeMaru (YD)] Hidden Quest + OrangeMaru Special 08 (Fate/Grand Order)",
+    null,
+  );
+  assert.ok(!analyzed.alternativeTitles.includes("Grand Order)"));
 });
 
 test("correspondence only expands explicit or merge-backed alternative titles", () => {
@@ -1182,6 +1202,39 @@ test("discovery invalidation is persisted into a clean replay input", () => {
   assert.equal(replay.replay.revision, 1);
   assert.equal(replay.replay.discoveryDecisions.find((decision) => decision.key === titleKey).status, "invalidated");
   assert.equal(hasActiveMangaCorrespondenceTitle(updated), true);
+});
+
+test("result invalidations keep their evidence and enter the replay input", () => {
+  const input = buildDiscoveryInput();
+  const source = buildMergeSource(
+    "A misleading sibling title",
+    "en",
+    "https://example.test/misleading",
+  );
+  const result = {
+    discoveries: buildInitialMangaCorrespondenceDiscoveries(input),
+    rejectedCandidates: [],
+    matches: [{
+      key: "test:https://example.test/misleading",
+      source,
+      analyzedTitle: "A misleading sibling title",
+      alternativeTitles: ["Sibling title"],
+      authors: ["Author A"],
+      matchedTerm: input.reference.title,
+      discoveredByStepIds: [],
+    }],
+    passNumber: 1,
+  };
+  const decisions = buildMangaCorrespondenceResultDecisions(result);
+  const invalidated = updateMangaCorrespondenceResultStatuses(
+    result,
+    new Map([[decisions[0].key, "invalidated"]]),
+  );
+  const replay = buildMangaCorrespondenceReplayInput(input, invalidated);
+
+  assert.equal(replay.replay.resultDecisions[0].status, "invalidated");
+  assert.equal(replay.replay.resultDecisions[0].title, "A misleading sibling title");
+  assert.deepEqual(replay.replay.resultDecisions[0].authors, ["Author A"]);
 });
 
 test("replay is blocked without an active title and reactivation restores it", () => {

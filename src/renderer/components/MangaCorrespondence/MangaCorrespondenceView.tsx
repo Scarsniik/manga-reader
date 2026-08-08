@@ -7,7 +7,10 @@ import type {
   MangaCorrespondenceMatch,
   MangaCorrespondenceRejectedCandidate,
 } from "@/renderer/backgroundSearch/types";
-import type { MangaCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
+import type {
+  MangaCorrespondenceBackgroundInput,
+  MangaCorrespondenceResultDecision,
+} from "@/shared/backgroundSearch";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import {
@@ -79,6 +82,10 @@ import {
   buildInitialMangaCorrespondenceDiscoveries,
   buildMangaCorrespondenceReplayInput,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceDiscoveries";
+import {
+  buildMangaCorrespondenceResultDecisions,
+  updateMangaCorrespondenceResultStatuses,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -174,6 +181,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         ? buildInitialMangaCorrespondenceDiscoveries(input)
         : []
   ), [input, result?.discoveries]);
+  const editableResultDecisions = useMemo(
+    () => buildMangaCorrespondenceResultDecisions(result),
+    [result],
+  );
   const mergeOptions = useMemo<MultiSearchMergeOptions>(() => ({
     enableRomajiPhoneticMerge: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
@@ -402,6 +413,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   }, [backgroundSearchJobId]);
 
   useEffect(() => {
+    setExcludedSourceKeys(new Set(editableResultDecisions
+      .filter((decision) => decision.status === "invalidated")
+      .map((decision) => decision.key)));
+  }, [editableResultDecisions]);
+
+  useEffect(() => {
     setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
   }, [rejectedFilter]);
 
@@ -411,10 +428,40 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     ));
   };
 
-  const toggleSourceExclusion = (sourceKey: string) => {
-    setExcludedSourceKeys((current) => (
-      toggleMangaCorrespondenceSourceExclusion(current, sourceKey)
-    ));
+  const persistResultStatuses = async (
+    updates: ReadonlyMap<string, MangaCorrespondenceResultDecision["status"]>,
+  ): Promise<void> => {
+    if (!result || !backgroundSearchJobId) {
+      throw new Error("Le résultat de cette recherche n’est plus disponible.");
+    }
+    const nextResult = updateMangaCorrespondenceResultStatuses(result, updates);
+    const invalidatedKeys = new Set((nextResult.resultDecisions ?? [])
+      .filter((decision) => decision.status === "invalidated")
+      .map((decision) => decision.key));
+    const saved = await window.api?.saveBackgroundSearchResult?.({
+      jobId: backgroundSearchJobId,
+      result: nextResult,
+      resultCount: correspondenceMatches.filter((match) => !invalidatedKeys.has(match.key)).length,
+    });
+    if (!saved) throw new Error("Les invalidations n’ont pas pu être enregistrées.");
+    await reload();
+  };
+
+  const toggleSourceExclusion = async (sourceKey: string) => {
+    const nextExcluded = toggleMangaCorrespondenceSourceExclusion(excludedSourceKeys, sourceKey);
+    setExcludedSourceKeys(nextExcluded);
+    setRejectedActionError(null);
+    try {
+      await persistResultStatuses(new Map([[
+        sourceKey,
+        nextExcluded.has(sourceKey) ? "invalidated" : "active",
+      ]]));
+    } catch (toggleError) {
+      setExcludedSourceKeys(excludedSourceKeys);
+      setRejectedActionError(
+        toggleError instanceof Error ? toggleError.message : "Impossible d’enregistrer l’invalidation.",
+      );
+    }
   };
 
   const toggleLanguageFilter = (
@@ -605,16 +652,24 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   };
   const saveDiscoveries = async (
     discoveries: MangaCorrespondenceDiscovery[],
+    resultDecisions: MangaCorrespondenceResultDecision[],
     replay: boolean,
   ): Promise<void> => {
     if (!backgroundSearchJobId || !input || !result) {
       throw new Error("Le résultat de cette recherche n’est plus disponible.");
     }
-    const nextResult: MangaCorrespondenceBackgroundResult = { ...result, discoveries };
+    const nextResult: MangaCorrespondenceBackgroundResult = {
+      ...result,
+      discoveries,
+      resultDecisions,
+    };
+    const invalidatedKeys = new Set(resultDecisions
+      .filter((decision) => decision.status === "invalidated")
+      .map((decision) => decision.key));
     const saved = await window.api?.saveBackgroundSearchResult?.({
       jobId: backgroundSearchJobId,
       result: nextResult,
-      resultCount: correspondenceMatches.length,
+      resultCount: correspondenceMatches.filter((match) => !invalidatedKeys.has(match.key)).length,
     });
     if (!saved) throw new Error("Les découvertes n’ont pas pu être enregistrées.");
     if (replay) {
@@ -629,11 +684,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   };
   const openDiscoveries = () => {
     openModal({
-      title: "Titres et auteurs découverts",
+      title: "Résultats, titres et auteurs",
       className: "manga-correspondence-discoveries-modal",
       content: (
         <MangaCorrespondenceDiscoveriesDialog
           discoveries={editableDiscoveries}
+          resultDecisions={editableResultDecisions}
           disabled={active}
           onCancel={closeModal}
           onSave={saveDiscoveries}
@@ -733,9 +789,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                     type="button"
                     className={isSourceExcluded ? "is-excluded" : ""}
                     aria-pressed={isSourceExcluded}
-                    onClick={() => toggleSourceExclusion(sourceKey)}
+                    disabled={job?.metadata.status === "queued" || job?.metadata.status === "running"}
+                    onClick={() => void toggleSourceExclusion(sourceKey)}
                   >
-                    {isSourceExcluded ? "Réintégrer" : "Retirer"}
+                    {isSourceExcluded ? "Réactiver" : "Invalider"}
                   </button>
                 </div>
               </div>
@@ -924,7 +981,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <p>
             {displayedCardCount} card(s) · {eligibleMatches.length} source(s)
             {excludedSourceCount ? ` · ${excludedSourceCount} retirée(s)` : ""}
-            {` · Passe ${result?.passNumber ?? 1} · ${active ? "Recherche en cours" : "Recherche terminée"}`}
+            {` · Passe ${result?.passNumber ?? 1} · ${active
+              ? "Recherche en cours"
+              : job.metadata.status === "cancelled"
+                ? "Recherche arrêtée"
+                : "Recherche terminée"}`}
           </p>
         </div>
         {active ? <button type="button" className="manga-correspondence-view__stop" onClick={() => void cancel()}>Arrêter</button> : null}
@@ -941,7 +1002,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <button type="button" className={displayMode === "groupedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("groupedChapters")}>Chapitres détaillés</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
           <button type="button" onClick={openDiscoveries}>
-            Titres et auteurs ({editableDiscoveries.length})
+            Réviser et rejouer ({editableResultDecisions.length + editableDiscoveries.length})
           </button>
           <button
             type="button"
@@ -964,10 +1025,14 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
             <button
               type="button"
               className="manga-correspondence-view__restore-list"
-              onClick={() => {
-                setExcludedSourceKeys(new Set());
-                setShowExcludedSources(false);
-              }}
+              disabled={active}
+              onClick={() => void persistResultStatuses(new Map(
+                Array.from(excludedSourceKeys).map((key) => [key, "active" as const]),
+              )).then(() => setShowExcludedSources(false)).catch((restoreError) => {
+                setRejectedActionError(
+                  restoreError instanceof Error ? restoreError.message : "Impossible de réactiver les sources.",
+                );
+              })}
             >
               Réintégrer {excludedSourceCount} source(s)
             </button>

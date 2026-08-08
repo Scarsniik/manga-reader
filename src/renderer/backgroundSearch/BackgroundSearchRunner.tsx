@@ -89,11 +89,12 @@ export default function BackgroundSearchRunner() {
   const controllersRef = React.useRef(new Map<string, AbortController>());
   const runningRef = React.useRef(new Set<string>());
   const pendingSnapshotsRef = React.useRef(new Map<string, PendingSnapshot>());
+  const latestResultsRef = React.useRef(new Map<string, BackgroundSearchExecutionResult>());
   const updateTimersRef = React.useRef(new Map<string, number>());
   const lastResultCheckpointAtRef = React.useRef(new Map<string, number>());
   const maxConcurrentRef = React.useRef(3);
 
-  const flushSnapshot = React.useCallback(async (jobId: string) => {
+  const flushSnapshot = React.useCallback(async (jobId: string, forceLatestResult = false) => {
     const snapshot = pendingSnapshotsRef.current.get(jobId);
     pendingSnapshotsRef.current.delete(jobId);
     const timer = updateTimersRef.current.get(jobId);
@@ -102,7 +103,11 @@ export default function BackgroundSearchRunner() {
       updateTimersRef.current.delete(jobId);
     }
     if (!snapshot || typeof window.api?.updateBackgroundSearch !== "function") return;
-    await window.api.updateBackgroundSearch({ jobId, ...snapshot });
+    await window.api.updateBackgroundSearch({
+      jobId,
+      ...snapshot,
+      ...(forceLatestResult ? { result: latestResultsRef.current.get(jobId) ?? snapshot.result } : {}),
+    });
   }, []);
 
   const queueSnapshot = React.useCallback((
@@ -110,6 +115,7 @@ export default function BackgroundSearchRunner() {
     result: BackgroundSearchExecutionResult,
     progress: BackgroundSearchProgress,
   ): Promise<void> => {
+    latestResultsRef.current.set(jobId, result);
     const now = Date.now();
     const lastCheckpointAt = lastResultCheckpointAtRef.current.get(jobId) ?? 0;
     const shouldCheckpointResult = now - lastCheckpointAt >= RESULT_CHECKPOINT_THROTTLE_MS;
@@ -139,7 +145,7 @@ export default function BackgroundSearchRunner() {
         controller.signal,
         (snapshot, progress) => queueSnapshot(jobId, snapshot, progress),
       );
-      await flushSnapshot(jobId);
+      await flushSnapshot(jobId, controller.signal.aborted);
       if ("runs" in result && result.runs.length > 0 && result.runs.every((run) => run.status === "error")) {
         throw new Error(result.runs.find((run) => run.error)?.error || "Toutes les sources ont échoué.");
       }
@@ -147,7 +153,7 @@ export default function BackgroundSearchRunner() {
       await persistAuthorFavoriteCache(job, result);
       await window.api.completeBackgroundSearch({ jobId, result, progress });
     } catch (error) {
-      await flushSnapshot(jobId);
+      await flushSnapshot(jobId, controller.signal.aborted);
       if (!controller.signal.aborted) {
         await window.api.failBackgroundSearch(
           jobId,
@@ -157,6 +163,7 @@ export default function BackgroundSearchRunner() {
     } finally {
       controllersRef.current.delete(jobId);
       runningRef.current.delete(jobId);
+      latestResultsRef.current.delete(jobId);
       lastResultCheckpointAtRef.current.delete(jobId);
       window.dispatchEvent(new CustomEvent("background-search-runner-slot-available"));
     }

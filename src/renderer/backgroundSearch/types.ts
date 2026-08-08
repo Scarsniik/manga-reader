@@ -5,6 +5,7 @@ import type {
   MangaCorrespondenceDiscoveryOrigin,
   MangaCorrespondenceDiscoveryStatus,
   MangaCorrespondenceRequest,
+  MangaCorrespondenceResultDecision,
   MangaCorrespondenceTraceStep,
 } from "@/shared/backgroundSearch";
 
@@ -20,6 +21,7 @@ export type MangaCorrespondenceDiscovery = {
   parentStepIds: string[];
   evidenceCount: number;
   status: MangaCorrespondenceDiscoveryStatus;
+  propagationConfidence?: "reference" | "directTitle" | "fuzzyTitle" | "manual";
   foundAt: string;
 };
 
@@ -104,7 +106,8 @@ export type MangaCorrespondenceChapterOverride = {
 export type MangaCorrespondenceRejectionReason =
   | "titleMismatch"
   | "chapterMismatch"
-  | "derivative";
+  | "derivative"
+  | "invalidatedResult";
 
 export type MangaCorrespondenceRejectedDecision = "pending" | "accepted" | "dismissed";
 
@@ -138,6 +141,7 @@ export type MangaCorrespondenceBackgroundResult = {
   searchedTitles: string[];
   searchedAuthors: string[];
   discoveries?: MangaCorrespondenceDiscovery[];
+  resultDecisions?: MangaCorrespondenceResultDecision[];
   checkpoint?: MangaCorrespondenceEngineCheckpoint;
 };
 

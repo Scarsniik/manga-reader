@@ -133,6 +133,19 @@ export type MangaCorrespondenceDiscoveryDecision = {
   status: MangaCorrespondenceDiscoveryStatus;
 };
 
+export type MangaCorrespondenceResultDecision = {
+  key: string;
+  status: MangaCorrespondenceDiscoveryStatus;
+  title: string;
+  analyzedTitle: string;
+  alternativeTitles: string[];
+  authors: string[];
+  scraperId: string;
+  scraperName: string;
+  sourceUrl?: string;
+  origin: "match" | "potential";
+};
+
 export type MangaCorrespondenceReference = {
   scraperId: string;
   sourceUrl: string;
@@ -162,6 +175,7 @@ export type MangaCorrespondenceBackgroundInput = {
   replay?: {
     revision: number;
     discoveryDecisions: MangaCorrespondenceDiscoveryDecision[];
+    resultDecisions?: MangaCorrespondenceResultDecision[];
   };
 };
 

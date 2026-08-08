@@ -201,6 +201,192 @@ test("a replay removes invalidated title branches and reapplies surviving manual
   assert.ok(searchedUrls.every((url) => !decodeURIComponent(url).includes("Series Two")));
 });
 
+test("an invalidated result demotes closer sibling cards to manual potentials", async () => {
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => ({
+        ok: true,
+        requestedUrl: String(request.targetUrl),
+        finalUrl: String(request.targetUrl),
+        html: '<article class="card"><a class="title" href="/details/beta-2">Beta World 2</a></article>',
+      }),
+    },
+  };
+  const input = {
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: scraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Alpha Main Story",
+      title: "Alpha Main Story",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    enableRomajiPhoneticMerge: false,
+  };
+  const discovery = {
+    key: `title:${scraper.id}:alpha main story`,
+    kind: "title",
+    value: "Alpha Main Story",
+    normalizedValue: "alpha main story",
+    scraperId: scraper.id,
+    scraperName: scraper.name,
+    origin: "reference",
+    sourceUrl: input.reference.sourceUrl,
+    parentStepIds: [],
+    evidenceCount: 1,
+    status: "active",
+    foundAt: "2026-08-08T00:00:00.000Z",
+  };
+  const negativeDecision = {
+    key: `${scraper.id}:https://example.test/details/beta`,
+    status: "invalidated",
+    title: "Beta World",
+    analyzedTitle: "Beta World",
+    alternativeTitles: [],
+    authors: [],
+    scraperId: scraper.id,
+    scraperName: scraper.name,
+    sourceUrl: "https://example.test/details/beta",
+    origin: "match",
+  };
+  const replayInput = {
+    ...input,
+    replay: {
+      revision: 1,
+      discoveryDecisions: [{ key: discovery.key, status: "active" }],
+      resultDecisions: [negativeDecision],
+    },
+  };
+  const previousResult = {
+    request: input.request,
+    matches: [],
+    rejectedCandidates: [],
+    rejectedCandidateCount: 0,
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: [],
+    discoveries: [discovery],
+    resultDecisions: [negativeDecision],
+  };
+
+  const replayed = await runMangaCorrespondenceSearch(
+    replayInput,
+    new AbortController().signal,
+    async () => {},
+    previousResult,
+  );
+
+  assert.equal(replayed.matches.length, 0);
+  assert.equal(replayed.rejectedCandidates.length, 1);
+  assert.equal(replayed.rejectedCandidates[0].rejectionReason, "invalidatedResult");
+  assert.ok(replayed.rejectedCandidates[0].score >= 50);
+  assert.ok(replayed.rejectedCandidates[0].scoreReasons.some((reason) => (
+    reason.includes("Correspond davantage au résultat invalidé")
+  )));
+});
+
+test("a replay does not propagate legacy titles learned through a fuzzy author branch", async () => {
+  const searchedUrls = [];
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        searchedUrls.push(decodeURIComponent(String(request.targetUrl)));
+        return {
+          ok: true,
+          requestedUrl: String(request.targetUrl),
+          finalUrl: String(request.targetUrl),
+          html: "<main></main>",
+        };
+      },
+    },
+  };
+  const input = {
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: scraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Skill Kyouka Kaikin + OrangeMaru Special",
+      title: "Skill Kyouka Kaikin + OrangeMaru Special",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    enableRomajiPhoneticMerge: false,
+  };
+  const referenceDiscovery = {
+    key: `title:${scraper.id}:skill kyouka kaikin + orangemaru special`,
+    kind: "title",
+    value: input.reference.title,
+    normalizedValue: input.reference.title.toLowerCase(),
+    scraperId: scraper.id,
+    scraperName: scraper.name,
+    origin: "reference",
+    sourceUrl: input.reference.sourceUrl,
+    parentStepIds: [],
+    evidenceCount: 1,
+    status: "active",
+    foundAt: "2026-08-08T00:00:00.000Z",
+  };
+  const authorStep = {
+    id: "author-step",
+    kind: "authorSearch",
+    label: "Recherche avec l'auteur",
+    term: "YD",
+    createdAt: "2026-08-08T00:00:01.000Z",
+  };
+  const pollutedDiscovery = {
+    ...referenceDiscovery,
+    key: `title:${scraper.id}:orangemaru special`,
+    value: "OrangeMaru Special",
+    normalizedValue: "orangemaru special",
+    origin: "card",
+    sourceUrl: "https://example.test/details/sibling",
+    parentStepIds: [authorStep.id],
+  };
+  const previousResult = {
+    request: input.request,
+    matches: [],
+    rejectedCandidates: [],
+    rejectedCandidateCount: 0,
+    passNumber: 1,
+    trace: [authorStep],
+    searchedTitles: [],
+    searchedAuthors: [],
+    discoveries: [referenceDiscovery, pollutedDiscovery],
+  };
+  const replayed = await runMangaCorrespondenceSearch({
+    ...input,
+    replay: {
+      revision: 1,
+      discoveryDecisions: [referenceDiscovery, pollutedDiscovery]
+        .map(({ key, status }) => ({ key, status })),
+    },
+  }, new AbortController().signal, async () => {}, previousResult);
+
+  assert.ok(replayed.searchedTitles.includes(input.reference.title));
+  assert.ok(!replayed.searchedTitles.includes("OrangeMaru Special"));
+  assert.ok(searchedUrls.every((url) => !url.includes("q=OrangeMaru Special")));
+});
+
 test("author correspondence uses a reliable direct page once and reuses it as its preview", async () => {
   const authorScraper = {
     ...scraper,

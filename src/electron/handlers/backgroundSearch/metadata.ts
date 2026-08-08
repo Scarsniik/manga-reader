@@ -8,6 +8,17 @@ export const isBackgroundSearchActive = (status: BackgroundSearchStatus | string
   status === "queued" || status === "running"
 );
 
+export const isBackgroundSearchResultEditable = (status: BackgroundSearchStatus | string): boolean => (
+  status === "completed" || status === "cancelled"
+);
+
+export const canReplayBackgroundSearch = (
+  job: Pick<BackgroundSearchJobMetadata, "kind" | "status">,
+): boolean => (
+  job.kind === "mangaCorrespondence"
+  && isBackgroundSearchResultEditable(job.status)
+);
+
 export const isBackgroundSearchUnopened = (
   job: Pick<BackgroundSearchJobMetadata, "openedAt">,
 ): boolean => job.openedAt === null;
