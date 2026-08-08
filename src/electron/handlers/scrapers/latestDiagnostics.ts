@@ -12,7 +12,7 @@ import type {
 } from "../../../shared/scraperLatestDiagnostics";
 
 const DIAGNOSTIC_SCHEMA_VERSION = 1;
-const DIAGNOSTIC_DIRECTORY_NAME = "scraper-latest-diagnostics";
+const DIAGNOSTIC_DIRECTORY_NAME = "scraper-search-diagnostics";
 
 type DiagnosticProfileState = {
   profileId: string;
@@ -94,7 +94,8 @@ export const startScraperLatestDiagnostics = async (
   const profileId = randomUUID();
   const timestamp = startedAt.toISOString().replace(/[:.]/g, "-");
   const mode = sanitizeText(request?.mode, "unknown");
-  const filePath = path.join(diagnosticDirectory, `${timestamp}-${mode}-${profileId}.jsonl`);
+  const searchKind = sanitizeText(request?.searchKind, "latestSources");
+  const filePath = path.join(diagnosticDirectory, `${timestamp}-${searchKind}-${mode}-${profileId}.jsonl`);
   const state: DiagnosticProfileState = {
     profileId,
     filePath,
@@ -107,6 +108,7 @@ export const startScraperLatestDiagnostics = async (
   profiles.set(profileId, state);
   await appendEntry(state, "session.started", undefined, {
     mode: request?.mode,
+    searchKind: request?.searchKind ?? "latestSources",
     searchMode: request?.searchMode,
     resultLimitMode: request?.resultLimitMode,
     resultLimit: request?.resultLimit,

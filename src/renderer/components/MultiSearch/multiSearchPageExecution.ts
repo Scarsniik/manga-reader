@@ -1,5 +1,8 @@
 import type { ScraperRecord } from "@/shared/scraper";
-import type { ScraperCardDetailsCache } from "@/renderer/utils/scraperRuntime";
+import type {
+  ScraperCardDetailsCache,
+  ScraperDocumentFetcher,
+} from "@/renderer/utils/scraperRuntime";
 import {
   fetchSearchPageWithRetry,
   getSearchConfig,
@@ -20,6 +23,7 @@ export type ExecuteMultiSearchTermPageOptions = {
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
   detailsCache?: ScraperCardDetailsCache;
+  fetchDocument?: ScraperDocumentFetcher;
 };
 
 export type ExecuteMultiSearchTermPageResult = {
@@ -41,6 +45,7 @@ export const executeMultiSearchTermPage = async ({
   includedLanguageCodes,
   scrapeDetailsWithCards,
   detailsCache,
+  fetchDocument,
 }: ExecuteMultiSearchTermPageOptions): Promise<ExecuteMultiSearchTermPageResult> => {
   const searchConfig = getSearchConfig(scraper);
   const page = await fetchSearchPageWithRetry(
@@ -50,7 +55,7 @@ export const executeMultiSearchTermPage = async ({
     pageIndex,
     nextPageUrl,
     paceConfig,
-    { scrapeDetailsWithCards, detailsCache },
+    { scrapeDetailsWithCards, detailsCache, fetchDocument },
   );
   const { includedSources: pageResults } = await processScraperListingPage({
     scraper,

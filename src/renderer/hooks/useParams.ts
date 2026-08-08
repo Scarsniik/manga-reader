@@ -97,6 +97,7 @@ export type AppParams = {
     scraperLatestQuickConsecutiveSeenStopThreshold?: number;
     scraperLatestLanguageRejectLimit?: number;
     scraperLatestPerformanceReportsEnabled?: boolean;
+    scraperPerformanceReportsEnabled?: boolean;
     scraperLatestAuthorsUseCache?: boolean;
     scraperLatestAuthorCacheMaxAgeHours?: number;
     scraperLatestIncludedLanguageCodes?: string[];

@@ -1,7 +1,6 @@
 import React from "react";
 import { isScraperViewHistoryUnlimited } from "@/shared/scraper";
 import type {
-  ScraperAuthorFavoriteCacheRecord,
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
   ScraperRecord,
@@ -56,8 +55,15 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
-import { loadUsableAuthorFavoriteCaches } from "@/renderer/utils/scraperAuthorFavoriteCache";
 import { resolveScraperLatestTotalGroupKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
+import {
+  buildAuthorListingSearchInput,
+  buildAuthorListingSources,
+} from "@/renderer/searchEngines/authorListingSearchInput";
+import {
+  buildLatestSourceListingSources,
+  buildLatestSourceSearchInput,
+} from "@/renderer/searchEngines/latestSourceSearchInput";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -286,9 +292,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     if (attachedSearch.job?.metadata.kind === "latestSources") setActiveTab("scrapers");
   }, [attachedSearch.job?.metadata.kind]);
   const [authorRefreshKey, setAuthorRefreshKey] = React.useState(0);
-  const [authorLatestCaches, setAuthorLatestCaches] = React.useState<
-    Map<string, ScraperAuthorFavoriteCacheRecord>
-  >(() => new Map());
   const [scraperRefreshKey, setScraperRefreshKey] = React.useState(0);
   const [scraperSearchMode, setScraperSearchMode] = React.useState<ScraperLatestSearchMode>("quick");
   const [scraperSessionSettings, setScraperSessionSettings] = React.useState<
@@ -455,8 +458,12 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     concurrency: scraperLatestConcurrency,
     scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
     includedLanguageCodes: authorIncludedLanguageCodes,
-    latestCacheFavorites: authorIncludedFavorites,
-    latestCaches: authorLatestCaches,
+    sourceFavorites: authorIncludedFavorites,
+    searchKind: "latestAuthors",
+    useAuthorFavoriteCache: params?.scraperLatestAuthorsUseCache !== false,
+    authorFavoriteCacheMaxAgeHours: params?.scraperLatestAuthorCacheMaxAgeHours,
+    searchMode: scraperSearchMode,
+    quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
   });
   const scraperRuns = useScraperLatestRuns();
   const authorSources = React.useMemo(
@@ -620,6 +627,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     blacklistEnrichedSourcesByKey,
     hasStoredBlacklistDecision,
     params?.scraperBlacklistedTagsByScraper,
+    params?.scraperPerformanceReportsEnabled,
     params?.scraperLatestPerformanceReportsEnabled,
     params?.scraperScrapeDetailsWithCards,
     scraperLatestConcurrency,
@@ -670,7 +678,8 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
         excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
         tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
-        performanceReportsEnabled: params?.scraperLatestPerformanceReportsEnabled === true,
+        performanceReportsEnabled: params?.scraperPerformanceReportsEnabled === true
+          || params?.scraperLatestPerformanceReportsEnabled === true,
       },
     );
   }, [
@@ -821,7 +830,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     });
     lastStartedAuthorRefreshKeyRef.current = 0;
     setAuthorRefreshKey(0);
-    setAuthorLatestCaches(new Map());
     authorRuns.reset();
   }, [authorFavoriteIds, authorRuns.reset, setParams]);
 
@@ -833,7 +841,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     });
     lastStartedAuthorRefreshKeyRef.current = 0;
     setAuthorRefreshKey(0);
-    setAuthorLatestCaches(new Map());
     authorRuns.reset();
   }, [authorRuns.reset, setParams]);
 
@@ -1064,82 +1071,47 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   ) => {
     const isAuthors = tab === "authors";
     const sources = isAuthors
-      ? authorIncludedFavorites.flatMap((favorite) => favorite.sources.flatMap((source) => {
-        const scraper = scrapersById.get(source.scraperId);
-        return scraper ? [{
-          id: `${favorite.id}::${source.scraperId}::${source.authorUrl}`,
-          name: `${favorite.name} · ${source.name}`,
-          scraper,
-          query: source.authorUrl,
-          favoriteId: favorite.id,
-          favoriteUpdatedAt: favorite.updatedAt,
-          favoriteSourceName: source.name,
-          mode: "author" as const,
-          templateContext: source.templateContext ?? null,
-        }] : [];
-      }))
-      : [
-        ...includedLatestScrapers.map((scraper) => ({
-          id: `scraper:${scraper.id}`,
-          name: scraper.name,
-          scraper,
-          query: scraper.globalConfig.latest.module === "search"
-            ? scraper.globalConfig.homeSearch.query ?? ""
-            : "",
-          mode: scraper.globalConfig.latest.module,
-          resultLimit: searchMode === "continuous" ? 0 : scraperResultLimit,
-        })),
-        ...scraperIncludedTagFavorites.flatMap((favorite) => favorite.sources.flatMap((source) => {
-          const scraper = scrapersById.get(source.scraperId);
-          return scraper ? [{
-            id: `tag:${favorite.id}:${source.scraperId}:${source.tagUrl}`,
-            name: `${favorite.name} · ${source.name} · ${scraper.name}`,
-            scraper,
-            query: source.tagUrl,
-            favoriteId: favorite.id,
-            mode: "tag" as const,
-            resultLimit: searchMode === "continuous" ? 0 : tagResultLimit,
-            resultTag: {
-              name: source.name || favorite.name,
-              url: source.tagUrl,
-            },
-          }] : [];
-        })),
-      ];
-    const input: ListingBackgroundInput = {
-      sources,
-      maxPages: isAuthors
-        ? authorPageCount
-        : searchMode === "deep"
+      ? buildAuthorListingSources(authorIncludedFavorites, scrapersById, "latestAuthors")
+      : buildLatestSourceListingSources(
+        includedLatestScrapers,
+        scraperIncludedTagFavorites,
+        scrapersById,
+        { searchMode, resultLimit: scraperResultLimit, tagResultLimit },
+      );
+    const input = isAuthors
+      ? buildAuthorListingSearchInput(authorIncludedFavorites, scrapersById, "latestAuthors", {
+        maxPages: authorPageCount,
+        concurrency: scraperLatestConcurrency,
+        includedLanguageCodes: authorIncludedLanguageCodes,
+        scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        useAuthorFavoriteCache: params?.scraperLatestAuthorsUseCache !== false,
+        authorFavoriteCacheMaxAgeHours: params?.scraperLatestAuthorCacheMaxAgeHours,
+        selectedFavoriteIds: authorIncludedFavorites.map((favorite) => favorite.id),
+        searchMode,
+        quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
+      })
+      : buildLatestSourceSearchInput(sources, {
+        maxPages: searchMode === "deep"
           ? scraperDeepPageLimit
           : searchMode === "continuous"
             ? scraperContinuousPageSafetyLimit
-          : 1,
-      resultLimit: isAuthors || searchMode === "continuous" ? 0 : scraperResultLimit,
-      tagResultLimit: isAuthors || searchMode === "continuous" ? 0 : tagResultLimit,
-      resultLimitMode: isAuthors ? undefined : scraperResultLimitMode,
-      paceMode: "careful",
-      concurrency: scraperLatestConcurrency,
-      includedLanguageCodes: isAuthors ? authorIncludedLanguageCodes : scraperIncludedLanguageCodes,
-      scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-      excludeBlacklistedTagCards: isAuthors ? false : shouldHideBlacklistedLatestCards,
-      tagBlacklistByScraper: isAuthors ? undefined : params?.scraperBlacklistedTagsByScraper,
-      selectedFavoriteIds: isAuthors ? authorIncludedFavorites.map((favorite) => favorite.id) : undefined,
-      selectedScraperIds: isAuthors ? undefined : scraperIncludedScraperIds,
-      selectedTagFavoriteIds: isAuthors ? undefined : scraperIncludedTagFavoriteIds,
-      searchMode,
-      quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
-      languageRejectLimit: isAuthors ? undefined : scraperLanguageRejectLimit,
-      performanceReportsEnabled: isAuthors
-        ? false
-        : params?.scraperLatestPerformanceReportsEnabled === true,
-      useAuthorFavoriteCache: isAuthors
-        ? params?.scraperLatestAuthorsUseCache !== false
-        : undefined,
-      authorFavoriteCacheMaxAgeHours: isAuthors
-        ? params?.scraperLatestAuthorCacheMaxAgeHours
-        : undefined,
-    };
+            : 1,
+        searchMode,
+        resultLimit: scraperResultLimit,
+        tagResultLimit,
+        resultLimitMode: scraperResultLimitMode,
+        concurrency: scraperLatestConcurrency,
+        includedLanguageCodes: scraperIncludedLanguageCodes,
+        scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
+        tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
+        selectedScraperIds: scraperIncludedScraperIds,
+        selectedTagFavoriteIds: scraperIncludedTagFavoriteIds,
+        quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
+        languageRejectLimit: scraperLanguageRejectLimit,
+        performanceReportsEnabled: params?.scraperPerformanceReportsEnabled === true
+          || params?.scraperLatestPerformanceReportsEnabled === true,
+      });
     await enqueueBackgroundSearch({
       kind: isAuthors ? "latestAuthors" : "latestSources",
       title: isAuthors ? "Nouveautés · auteurs favoris" : "Nouveautés · sources",
@@ -1169,27 +1141,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     tagResultLimit,
   ]);
 
-  const loadConfiguredAuthorCaches = React.useCallback(async (): Promise<
-    Map<string, ScraperAuthorFavoriteCacheRecord>
-  > => {
-    if (
-      params?.scraperLatestAuthorsUseCache === false
-      || typeof window.api?.getScraperAuthorFavoriteCache !== "function"
-    ) {
-      return new Map();
-    }
-
-    return loadUsableAuthorFavoriteCaches(
-      authorIncludedFavorites,
-      params?.scraperLatestAuthorCacheMaxAgeHours,
-      async (favoriteId) => window.api.getScraperAuthorFavoriteCache(favoriteId),
-    );
-  }, [
-    authorIncludedFavorites,
-    params?.scraperLatestAuthorCacheMaxAgeHours,
-    params?.scraperLatestAuthorsUseCache,
-  ]);
-
   const handleReload = React.useCallback(async () => {
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
@@ -1202,7 +1153,6 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       if (params?.scraperLatestAuthorsBackgroundEnabled === true) {
         await enqueueLatestBackgroundSearch("authors");
       } else {
-        setAuthorLatestCaches(await loadConfiguredAuthorCaches());
         setAuthorRefreshKey((currentKey) => currentKey + 1);
       }
       return;
@@ -1219,7 +1169,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       setScraperSearchMode("quick");
       setScraperRefreshKey((currentKey) => currentKey + 1);
     }
-  }, [activeTab, authorActionsDisabled, enqueueLatestBackgroundSearch, loadConfiguredAuthorCaches, params?.scraperLatestAuthorsBackgroundEnabled, params?.scraperLatestSourcesBackgroundEnabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
+  }, [activeTab, authorActionsDisabled, enqueueLatestBackgroundSearch, params?.scraperLatestAuthorsBackgroundEnabled, params?.scraperLatestSourcesBackgroundEnabled, refreshViewHistorySnapshot, scraperActionsDisabled, sourceResults]);
 
   React.useEffect(() => {
     const nextMode = shouldHideBlacklistedLatestCards ? "hide" : "show";

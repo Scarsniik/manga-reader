@@ -31,11 +31,20 @@ const source = `
   export { buildMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
   export { parseMangaCorrespondenceTitleInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
   export { scoreMangaCorrespondenceRejectedCandidate } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
+  export { shouldFetchMangaCorrespondenceCandidateDetails } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
   export { buildMangaCorrespondenceContinuationInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
   export { getEffectiveMangaCorrespondenceMatches } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
   export { updateMangaCorrespondenceRejectedReview } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
   export { updateMangaCorrespondenceChapterOverrides } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
   export { resetMangaCorrespondenceChapterOverrides } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
+  export {
+    buildInitialMangaCorrespondenceDiscoveries,
+    buildMangaCorrespondenceDiscoveryKey,
+    buildMangaCorrespondenceReplayInput,
+    hasActiveMangaCorrespondenceTitle,
+    updateMangaCorrespondenceDiscoveryStatus,
+    upsertMangaCorrespondenceDiscovery,
+  } from "@/renderer/backgroundSearch/mangaCorrespondenceDiscoveries";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-test.ts" },
@@ -80,11 +89,18 @@ const {
   buildMangaCorrespondenceTitleInput,
   parseMangaCorrespondenceTitleInput,
   scoreMangaCorrespondenceRejectedCandidate,
+  shouldFetchMangaCorrespondenceCandidateDetails,
   buildMangaCorrespondenceContinuationInput,
   getEffectiveMangaCorrespondenceMatches,
   updateMangaCorrespondenceRejectedReview,
   updateMangaCorrespondenceChapterOverrides,
   resetMangaCorrespondenceChapterOverrides,
+  buildInitialMangaCorrespondenceDiscoveries,
+  buildMangaCorrespondenceDiscoveryKey,
+  buildMangaCorrespondenceReplayInput,
+  hasActiveMangaCorrespondenceTitle,
+  updateMangaCorrespondenceDiscoveryStatus,
+  upsertMangaCorrespondenceDiscovery,
 } = bundledModule.exports;
 
 test("correspondence accepts a known title surrounded by chapter and release metadata", () => {
@@ -1013,6 +1029,38 @@ test("rejected correspondence scoring keeps another work by the same author belo
   assert.ok(scored.score < 75, `expected a non-likely score, received ${scored.score}`);
 });
 
+test("correspondence detail prefilter keeps direct and manually reviewable candidates", () => {
+  assert.equal(shouldFetchMangaCorrespondenceCandidateDetails({
+    titleFields: ["Exact known title 3"],
+    candidateAuthors: [],
+    knownTitles: ["Exact known title"],
+    knownAuthors: [],
+    rejectionReason: "titleMismatch",
+    matchedTerm: "Exact known title",
+  }), true);
+
+  const possibleInput = {
+    titleFields: ["Kinjo Yuuwaku white rose Oba-san"],
+    candidateAuthors: ["Hyji"],
+    knownTitles: ["Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta"],
+    knownAuthors: ["Hyji"],
+    rejectionReason: "titleMismatch",
+  };
+  const possibleScore = scoreMangaCorrespondenceRejectedCandidate(possibleInput).score;
+  assert.ok(possibleScore >= 50 && possibleScore < 75, `expected a possible score, received ${possibleScore}`);
+  assert.equal(shouldFetchMangaCorrespondenceCandidateDetails(possibleInput), true);
+});
+
+test("correspondence detail prefilter skips distant title rejections", () => {
+  assert.equal(shouldFetchMangaCorrespondenceCandidateDetails({
+    titleFields: ["A completely unrelated work"],
+    candidateAuthors: ["Someone else"],
+    knownTitles: ["Kinjo Yuuwaku Shiro Soubi Oba-san no Himeta"],
+    knownAuthors: ["Hyji"],
+    rejectionReason: "titleMismatch",
+  }), false);
+});
+
 test("accepted rejected candidates join the effective results with the reviewed chapter", () => {
   const source = buildMergeSource(
     "Kinjo Yuuwaku white rose Oba-san no Himeta, Ero Shitagi Hen",
@@ -1073,6 +1121,86 @@ test("a continuation increments the pass without mutating the original input", (
   assert.equal(continuation.continuation.passNumber, 3);
   assert.deepEqual(continuation.continuation.seedCandidateKeys, ["new"]);
   assert.equal(input.continuation, undefined);
+});
+
+const buildDiscoveryInput = () => ({
+  reference: {
+    scraperId: "source-a",
+    sourceUrl: "https://a.test/manga/1",
+    rawTitle: "Reference",
+    title: "Reference",
+    alternativeTitles: ["Référence"],
+    authors: ["Author"],
+    authorUrls: [],
+  },
+  request: "sameManga",
+  strategy: "balanced",
+  scraperFilterValues: [],
+  scrapers: [{ id: "source-a", name: "Source A" }],
+  maxPages: 1,
+  paceMode: "fast",
+  scrapingConcurrency: 2,
+  scrapeDetailsWithCards: false,
+  enableRomajiPhoneticMerge: false,
+});
+
+test("correspondence discoveries only deduplicate inside the same scraper", () => {
+  const discoveries = new Map();
+  const base = {
+    kind: "title",
+    value: "Same title",
+    scraperName: "Source",
+    origin: "card",
+    parentStepIds: ["step-1"],
+  };
+  upsertMangaCorrespondenceDiscovery(discoveries, { ...base, scraperId: "a" });
+  upsertMangaCorrespondenceDiscovery(discoveries, { ...base, scraperId: "a", parentStepIds: ["step-2"] });
+  upsertMangaCorrespondenceDiscovery(discoveries, { ...base, scraperId: "b" });
+
+  assert.equal(discoveries.size, 2);
+  assert.equal(discoveries.get(buildMangaCorrespondenceDiscoveryKey("title", "a", "same title")).evidenceCount, 2);
+  assert.deepEqual(
+    discoveries.get(buildMangaCorrespondenceDiscoveryKey("title", "a", "same title")).parentStepIds,
+    ["step-1", "step-2"],
+  );
+});
+
+test("discovery invalidation is persisted into a clean replay input", () => {
+  const input = buildDiscoveryInput();
+  const initialDiscoveries = buildInitialMangaCorrespondenceDiscoveries(input);
+  const result = {
+    discoveries: initialDiscoveries,
+    rejectedCandidates: [],
+    matches: [],
+    passNumber: 2,
+  };
+  const titleKey = initialDiscoveries.find((discovery) => discovery.kind === "title").key;
+  const updated = updateMangaCorrespondenceDiscoveryStatus(result, titleKey, "invalidated");
+  const replay = buildMangaCorrespondenceReplayInput({ ...input, continuation: { passNumber: 2 } }, updated);
+
+  assert.equal(replay.continuation, undefined);
+  assert.equal(replay.replay.revision, 1);
+  assert.equal(replay.replay.discoveryDecisions.find((decision) => decision.key === titleKey).status, "invalidated");
+  assert.equal(hasActiveMangaCorrespondenceTitle(updated), true);
+});
+
+test("replay is blocked without an active title and reactivation restores it", () => {
+  const input = buildDiscoveryInput();
+  const discoveries = buildInitialMangaCorrespondenceDiscoveries(input);
+  let result = { discoveries, rejectedCandidates: [], matches: [], passNumber: 1 };
+  discoveries.filter((discovery) => discovery.kind === "title").forEach((discovery) => {
+    result = updateMangaCorrespondenceDiscoveryStatus(result, discovery.key, "invalidated");
+  });
+  assert.equal(hasActiveMangaCorrespondenceTitle(result), false);
+
+  const title = result.discoveries.find((discovery) => discovery.kind === "title");
+  result = updateMangaCorrespondenceDiscoveryStatus(result, title.key, "active");
+  assert.equal(hasActiveMangaCorrespondenceTitle(result), true);
+  assert.equal(
+    buildMangaCorrespondenceReplayInput(input, result).replay.discoveryDecisions
+      .find((decision) => decision.key === title.key).status,
+    "active",
+  );
 });
 
 const buildMergeSource = (title, languageCode, detailUrl, thumbnailUrl) => ({

@@ -124,6 +124,9 @@ ipcMain.handle("background-search-save-result", async (_event: IpcMainInvokeEven
 ipcMain.handle("background-search-continue", async (_event: IpcMainInvokeEvent, request: any) => (
     backgroundSearch.continueBackgroundSearch(request)
 ));
+ipcMain.handle("background-search-replay", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.replayBackgroundSearch(request)
+));
 ipcMain.handle("background-search-fail", async (_event: IpcMainInvokeEvent, jobId: string, error: string) => (
     backgroundSearch.failBackgroundSearch(jobId, error)
 ));

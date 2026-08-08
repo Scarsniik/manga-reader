@@ -28,11 +28,16 @@ import {
   normalizeAuthorCorrespondenceTarget,
 } from "@/renderer/utils/authorCorrespondenceIdentity";
 import {
-  createScraperCardDetailsCache,
   getScraperFeature,
   isScraperFeatureConfigured,
   isScraperListingPaginationEndError,
 } from "@/renderer/utils/scraperRuntime";
+import {
+  getOrCreateSearchExecutionContext,
+  type SearchExecutionContext,
+} from "@/renderer/searchEngines/searchExecutionContext";
+import { buildScraperListingPageRequestKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
+import type { ScraperRuntimeSearchPageResult } from "@/renderer/utils/scraperRuntime";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -130,6 +135,8 @@ export const runAuthorCorrespondenceSearch = async (
   input: AuthorCorrespondenceBackgroundInput,
   signal: AbortSignal,
   onSnapshot: SnapshotCallback,
+  executionContextInput?: SearchExecutionContext,
+  previousResult?: AuthorCorrespondenceBackgroundResult,
 ): Promise<AuthorCorrespondenceBackgroundResult> => {
   const scrapers = selectScrapers(input);
   if (!scrapers.length) throw new Error("Aucun scrapper compatible n'est sélectionné.");
@@ -139,12 +146,45 @@ export const runAuthorCorrespondenceSearch = async (
 
   const concurrency = Math.max(1, Math.floor(input.scrapingConcurrency));
   const pace = { ...getPaceConfig(input.paceMode), concurrency };
-  const detailsCache = createScraperCardDetailsCache();
+  const executionContext = getOrCreateSearchExecutionContext(executionContextInput, {
+    kind: "authorCorrespondence",
+  });
+  const detailsCache = executionContext.detailsCache;
+  const searchPagePrefetch = executionContext.getPagePrefetchCache<ScraperRuntimeSearchPageResult>(
+    "author-correspondence-search",
+  );
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
-  const candidates = new Map<string, Candidate>();
-  const matches = new Map<string, AuthorCorrespondenceMatch>();
+  const checkpointInput = {
+    referenceName: input.referenceName,
+    names: input.names,
+    referenceSources: input.referenceSources,
+    scraperFilterValues: input.scraperFilterValues,
+    scrapers: input.scrapers.map((scraper) => ({ id: scraper.id, updatedAt: scraper.updatedAt })),
+    maxPages: input.maxPages,
+    authorPageCount: input.authorPageCount,
+    paceMode: input.paceMode,
+    scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+  };
+  const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
+  const resumeCheckpoint = previousResult?.checkpoint?.version === 1
+    && executionContext.checkpointAdapter.isCompatible(
+      previousResult.checkpoint.inputFingerprint,
+      checkpointInput,
+    )
+    ? previousResult.checkpoint
+    : null;
+  const candidates = new Map<string, Candidate>(
+    (resumeCheckpoint?.candidates ?? []).map((candidate) => [candidate.key, candidate]),
+  );
+  const matches = new Map<string, AuthorCorrespondenceMatch>(
+    (resumeCheckpoint ? previousResult?.matches ?? [] : []).map((match) => [match.key, match]),
+  );
   const resolvedTargetsByMatchKey = new Map<string, string>();
-  let completedUnits = 0;
+  matches.forEach((match) => {
+    resolvedTargetsByMatchKey.set(match.key, normalizeAuthorCorrespondenceTarget(match.authorUrl));
+  });
+  const completedUnitKeys = new Set(resumeCheckpoint?.completedUnitKeys ?? []);
+  let completedUnits = completedUnitKeys.size;
   const totalUnits = scrapers.length * names.length;
 
   const buildResult = (): AuthorCorrespondenceBackgroundResult => ({
@@ -153,6 +193,12 @@ export const runAuthorCorrespondenceSearch = async (
       left.authorName.localeCompare(right.authorName) || left.scraperName.localeCompare(right.scraperName)
     )),
     searchedNames: names,
+    checkpoint: {
+      version: 1,
+      inputFingerprint,
+      completedUnitKeys: Array.from(completedUnitKeys),
+      candidates: Array.from(candidates.values()),
+    },
   });
   const emit = async (label?: string): Promise<void> => onSnapshot(buildResult(), {
     completedUnits,
@@ -215,18 +261,19 @@ export const runAuthorCorrespondenceSearch = async (
   const loadSearchSources = async (scraper: ScraperRecord, name: string): Promise<MultiSearchSourceResult[]> => {
     if (!isSearchableScraper(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
+    const prefetchSourceKey = `${scraper.id}:${normalizeFuzzyText(name)}`;
     let nextPageUrl: string | undefined;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
-        const page = await fetchSearchPageWithRetry(
-          scraper,
-          getSearchConfig(scraper),
-          name,
-          pageIndex,
-          nextPageUrl,
-          pace,
-          { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
+        const loadPage = () => fetchSearchPageWithRetry(
+          scraper, getSearchConfig(scraper), name, pageIndex, nextPageUrl, pace,
+          { scrapeDetailsWithCards: false, fetchDocument: executionContext.fetchDocument },
+        );
+        const page = await searchPagePrefetch.load(
+          prefetchSourceKey,
+          buildScraperListingPageRequestKey(pageIndex, nextPageUrl),
+          loadPage,
         );
         const { sources } = await processScraperListingPage({
           scraper,
@@ -235,8 +282,44 @@ export const runAuthorCorrespondenceSearch = async (
           searchTerm: name,
         });
         results.push(...sources);
+        if (sources.length) {
+          const extracted = await extractMultiSearchAuthors(sources, input.paceMode, undefined, {
+            concurrency,
+            signal,
+            detailsCache,
+            fetchDocument: executionContext.fetchDocument,
+          });
+          extracted.authors.forEach((author) => {
+            const matchedName = findMatchedName(author.name, names);
+            if (!matchedName) return;
+            addCandidate(candidates, {
+              scraperId: author.scraperId,
+              scraperName: author.scraperName,
+              authorName: author.name,
+              authorUrl: author.url,
+              matchedName,
+              discoveryMethod: "search",
+            });
+          });
+          if (extracted.authors.some((author) => Boolean(findMatchedName(author.name, names)))) {
+            break;
+          }
+        }
         nextPageUrl = page.nextPageUrl;
-        if (!resolveHasNextPage(getSearchConfig(scraper), page)) break;
+        const pageHasNext = resolveHasNextPage(getSearchConfig(scraper), page);
+        if (!pageHasNext) break;
+        if (pageIndex + 1 < maxPages) {
+          const followingPageIndex = pageIndex + 1;
+          const followingPageUrl = page.nextPageUrl;
+          searchPagePrefetch.preload(
+            prefetchSourceKey,
+            buildScraperListingPageRequestKey(followingPageIndex, followingPageUrl),
+            () => fetchSearchPageWithRetry(
+              scraper, getSearchConfig(scraper), name, followingPageIndex, followingPageUrl, pace,
+              { scrapeDetailsWithCards: false, fetchDocument: executionContext.fetchDocument },
+            ),
+          );
+        }
       } catch (error) {
         if (!isScraperListingPaginationEndError(error) && results.length === 0) throw error;
         break;
@@ -247,26 +330,21 @@ export const runAuthorCorrespondenceSearch = async (
 
   await emit();
   await runWithConcurrency(scrapers.flatMap((scraper) => names.map((name) => async () => {
+    const unitKey = `${scraper.id}:${normalizeFuzzyText(name)}`;
+    if (completedUnitKeys.has(unitKey)) return;
     if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
     try {
-      const searchSources = await loadSearchSources(scraper, name);
-      if (searchSources.length) {
-        const extracted = await extractMultiSearchAuthors(searchSources, input.paceMode, undefined, { concurrency, signal });
-        extracted.authors.forEach((author) => {
-          const matchedName = findMatchedName(author.name, names);
-          if (!matchedName) return;
-          addCandidate(candidates, {
-            scraperId: author.scraperId,
-            scraperName: author.scraperName,
-            authorName: author.name,
-            authorUrl: author.url,
-            matchedName,
-            discoveryMethod: "search",
-          });
-        });
-      }
+      const hasDirectCandidate = Array.from(candidates.values()).some((candidate) => (
+        candidate.scraperId === scraper.id
+        && candidate.discoveryMethods.includes("reference")
+        && Boolean(findMatchedName(candidate.matchedName, [name]))
+      ));
+      if (!hasDirectCandidate) await loadSearchSources(scraper, name);
 
-      if (canUseAuthorModule(scraper) && getAuthorConfig(scraper).urlStrategy === "template") {
+      const hasResolvedCandidate = Array.from(candidates.values()).some((candidate) => (
+        candidate.scraperId === scraper.id && Boolean(findMatchedName(candidate.matchedName, [name]))
+      ));
+      if (!hasResolvedCandidate && canUseAuthorModule(scraper) && getAuthorConfig(scraper).urlStrategy === "template") {
         for (const authorValue of buildAuthorSearchValues(scraper, name)) {
           try {
             const page = await fetchAuthorPageWithRetry(
@@ -277,7 +355,11 @@ export const runAuthorCorrespondenceSearch = async (
               undefined,
               pace,
               null,
-              { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
+              {
+                scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+                detailsCache,
+                fetchDocument: executionContext.fetchDocument,
+              },
             );
             if (!page.items.length) continue;
             addCandidate(candidates, {
@@ -297,6 +379,7 @@ export const runAuthorCorrespondenceSearch = async (
     } catch (error) {
       console.warn(`Author correspondence search failed for ${scraper.name}`, error);
     } finally {
+      completedUnitKeys.add(unitKey);
       completedUnits += 1;
       await emit(`${scraper.name} · ${name}`);
     }
@@ -314,7 +397,11 @@ export const runAuthorCorrespondenceSearch = async (
         undefined,
         pace,
         candidate.templateContext ?? null,
-        { scrapeDetailsWithCards: input.scrapeDetailsWithCards, detailsCache },
+        {
+          scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+          detailsCache,
+          fetchDocument: executionContext.fetchDocument,
+        },
       );
       const { sources } = await processScraperListingPage({
         scraper,

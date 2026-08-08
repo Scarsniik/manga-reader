@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import type {
   MangaCorrespondenceBackgroundResult,
+  MangaCorrespondenceDiscovery,
   MangaCorrespondenceMatch,
   MangaCorrespondenceRejectedCandidate,
 } from "@/renderer/backgroundSearch/types";
@@ -73,6 +74,11 @@ import {
   resetMangaCorrespondenceChapterOverrides,
   updateMangaCorrespondenceChapterOverrides,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterOverrides";
+import MangaCorrespondenceDiscoveriesDialog from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceDiscoveriesDialog";
+import {
+  buildInitialMangaCorrespondenceDiscoveries,
+  buildMangaCorrespondenceReplayInput,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceDiscoveries";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -161,6 +167,13 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
   const input = job?.input as MangaCorrespondenceBackgroundInput | undefined;
+  const editableDiscoveries = useMemo(() => (
+    result?.discoveries?.length
+      ? result.discoveries
+      : input
+        ? buildInitialMangaCorrespondenceDiscoveries(input)
+        : []
+  ), [input, result?.discoveries]);
   const mergeOptions = useMemo<MultiSearchMergeOptions>(() => ({
     enableRomajiPhoneticMerge: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
@@ -590,6 +603,44 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       setContinuing(false);
     }
   };
+  const saveDiscoveries = async (
+    discoveries: MangaCorrespondenceDiscovery[],
+    replay: boolean,
+  ): Promise<void> => {
+    if (!backgroundSearchJobId || !input || !result) {
+      throw new Error("Le résultat de cette recherche n’est plus disponible.");
+    }
+    const nextResult: MangaCorrespondenceBackgroundResult = { ...result, discoveries };
+    const saved = await window.api?.saveBackgroundSearchResult?.({
+      jobId: backgroundSearchJobId,
+      result: nextResult,
+      resultCount: correspondenceMatches.length,
+    });
+    if (!saved) throw new Error("Les découvertes n’ont pas pu être enregistrées.");
+    if (replay) {
+      const replayed = await window.api?.replayBackgroundSearch?.({
+        jobId: backgroundSearchJobId,
+        input: buildMangaCorrespondenceReplayInput(input, nextResult),
+      });
+      if (!replayed) throw new Error("Le rejeu de la recherche n’a pas pu être lancé.");
+    }
+    closeModal();
+    await reload();
+  };
+  const openDiscoveries = () => {
+    openModal({
+      title: "Titres et auteurs découverts",
+      className: "manga-correspondence-discoveries-modal",
+      content: (
+        <MangaCorrespondenceDiscoveriesDialog
+          discoveries={editableDiscoveries}
+          disabled={active}
+          onCancel={closeModal}
+          onSave={saveDiscoveries}
+        />
+      ),
+    });
+  };
   const createReadingList = async (
     items: ReadingListItem[],
     languageCode: string,
@@ -889,6 +940,9 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <button type="button" className={displayMode === "mergedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("mergedChapters")}>Chapitres fusionnés</button>
           <button type="button" className={displayMode === "groupedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("groupedChapters")}>Chapitres détaillés</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
+          <button type="button" onClick={openDiscoveries}>
+            Titres et auteurs ({editableDiscoveries.length})
+          </button>
           <button
             type="button"
             className="manga-correspondence-view__reading-list"

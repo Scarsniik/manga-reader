@@ -15,20 +15,6 @@ const buildInitialTermRun = (term: string): MultiSearchTermRun => ({
   hasNextPage: true,
 });
 
-export const summarizeTermRuns = (
-  searchTerms: MultiSearchTermRun[],
-): Pick<MultiSearchScraperRun, "loadedPages" | "hasNextPage" | "currentPageUrl" | "nextPageUrl"> => {
-  const activeNextTerm = searchTerms.find((termRun) => termRun.hasNextPage);
-  const lastLoadedTerm = [...searchTerms].reverse().find((termRun) => termRun.currentPageUrl);
-
-  return {
-    loadedPages: searchTerms.reduce((total, termRun) => total + termRun.loadedPages, 0),
-    hasNextPage: Boolean(activeNextTerm),
-    currentPageUrl: lastLoadedTerm?.currentPageUrl,
-    nextPageUrl: activeNextTerm?.nextPageUrl,
-  };
-};
-
 export const buildInitialRun = (
   scraper: ScraperRecord,
   searchTerms: string[],
@@ -73,20 +59,6 @@ export const ensureRunSearchTerms = (
     currentPageUrl: index === 0 ? run.currentPageUrl : undefined,
     nextPageUrl: index === 0 ? run.nextPageUrl : undefined,
   }));
-};
-
-export const upsertTermRun = (
-  searchTerms: MultiSearchTermRun[],
-  nextTermRun: MultiSearchTermRun,
-): MultiSearchTermRun[] => {
-  const existingIndex = searchTerms.findIndex((termRun) => termRun.term === nextTermRun.term);
-  if (existingIndex === -1) {
-    return [...searchTerms, nextTermRun];
-  }
-
-  return searchTerms.map((termRun, index) => (
-    index === existingIndex ? nextTermRun : termRun
-  ));
 };
 
 export const keepNewSourceResults = (

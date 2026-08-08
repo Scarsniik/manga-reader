@@ -103,6 +103,11 @@ export type ContinueBackgroundSearchRequest<TInput = unknown> = {
   input: TInput;
 };
 
+export type ReplayBackgroundSearchRequest<TInput = unknown> = {
+  jobId: string;
+  input: TInput;
+};
+
 export type MultiSearchBackgroundInput = {
   query: string;
   scrapers: ScraperRecord[];
@@ -119,6 +124,14 @@ export type MultiSearchBackgroundInput = {
 
 export type MangaCorrespondenceRequest = "sameManga" | "otherChapters";
 export type MangaCorrespondenceStrategy = "balanced" | "titleFirst" | "authorFirst";
+export type MangaCorrespondenceDiscoveryKind = "title" | "author";
+export type MangaCorrespondenceDiscoveryStatus = "active" | "invalidated";
+export type MangaCorrespondenceDiscoveryOrigin = "reference" | "card" | "details" | "authorPage";
+
+export type MangaCorrespondenceDiscoveryDecision = {
+  key: string;
+  status: MangaCorrespondenceDiscoveryStatus;
+};
 
 export type MangaCorrespondenceReference = {
   scraperId: string;
@@ -145,6 +158,10 @@ export type MangaCorrespondenceBackgroundInput = {
   continuation?: {
     passNumber: number;
     seedCandidateKeys?: string[];
+  };
+  replay?: {
+    revision: number;
+    discoveryDecisions: MangaCorrespondenceDiscoveryDecision[];
   };
 };
 
@@ -197,6 +214,7 @@ export type ListingBackgroundSource = {
   favoriteSourceName?: string;
   mode?: "homepage" | "search" | "author" | "tag";
   templateContext?: Record<string, string | undefined> | null;
+  contextualAuthorNames?: string[];
   resultLimit?: number;
   resultTag?: {
     name: string;

@@ -9,6 +9,7 @@ export {
   getBackgroundSearchJob,
   getBackgroundSearchQueue,
   markBackgroundSearchOpened,
+  replayBackgroundSearch,
   retryBackgroundSearch,
   saveBackgroundSearchResult,
   updateBackgroundSearch,

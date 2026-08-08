@@ -51,6 +51,19 @@ const buildSummary = (entries, filePath = "") => {
     replaced: 0,
     clearedEntries: 0,
   };
+  const cache = {
+    memoryHits: 0,
+    memoryMisses: 0,
+    diskHits: 0,
+    networkRequests: 0,
+  };
+  const engine = {
+    detailsRequested: 0,
+    detailsSkipped: 0,
+    tasksMerged: 0,
+    deltaTasksQueued: 0,
+    checkpointResumes: 0,
+  };
   const scheduling = {
     roundCount: 0,
     totalRoundMs: 0,
@@ -102,6 +115,7 @@ const buildSummary = (entries, filePath = "") => {
         status: data.status,
         ok: data.ok,
         error: data.error,
+        cache: data.cache,
       });
     } else if (entry.event === "quota.round-completed") {
       scheduling.roundCount += 1;
@@ -146,10 +160,26 @@ const buildSummary = (entries, filePath = "") => {
       prefetch.replaced += 1;
     } else if (entry.event === "prefetch.cleared") {
       prefetch.clearedEntries += toNumber(data.entryCount);
+    } else if (entry.event === "cache.memory-hit") {
+      cache.memoryHits += 1;
+    } else if (entry.event === "cache.memory-miss") {
+      cache.memoryMisses += 1;
+    } else if (entry.event === "details.requested") {
+      engine.detailsRequested += Math.max(1, toNumber(data.count));
+    } else if (entry.event === "details.skipped-present") {
+      engine.detailsSkipped += Math.max(1, toNumber(data.count));
+    } else if (entry.event === "task.merged") {
+      engine.tasksMerged += 1;
+    } else if (entry.event === "task.delta-queued") {
+      engine.deltaTasksQueued += 1;
+    } else if (entry.event === "checkpoint.resumed") {
+      engine.checkpointResumes += 1;
     }
   }
 
   const completedRequests = [...requests.values()].filter((request) => request.executionMs !== undefined);
+  cache.diskHits = completedRequests.filter((request) => request.cache === "disk-hit").length;
+  cache.networkRequests = completedRequests.length - cache.diskHits;
   for (const request of completedRequests) {
     const sourceKey = request.sourceKey || "inconnue";
     const source = sourceStats.get(sourceKey) || {
@@ -318,6 +348,7 @@ const buildSummary = (entries, filePath = "") => {
     session: {
       profileId: sessionStarted?.profileId,
       mode: sessionStarted?.data?.mode,
+      searchKind: sessionStarted?.data?.searchKind || "latestSources",
       searchMode: sessionStarted?.data?.searchMode,
       resultLimitMode: sessionStarted?.data?.resultLimitMode,
       concurrency: sessionStarted?.data?.concurrency,
@@ -353,6 +384,8 @@ const buildSummary = (entries, filePath = "") => {
       unconsumedEstimate: Math.max(0, prefetch.started - prefetch.hits),
       hitRatePercent: round(prefetchHitRate * 100),
     },
+    cache,
+    engine,
     results: { addedResultCount },
     sources: [...sourceStats.values()]
       .map((source) => ({
@@ -369,7 +402,7 @@ const resolveDiagnosticDirectory = () => {
   const identity = resolveAppIdentity();
   const localAppData = process.env.LOCALAPPDATA;
   if (!localAppData) throw new Error("LOCALAPPDATA est indisponible.");
-  return path.join(localAppData, identity.userDataDirName, "data", "scraper-latest-diagnostics");
+  return path.join(localAppData, identity.userDataDirName, "data", "scraper-search-diagnostics");
 };
 
 const findLatestDiagnosticFile = (directoryPath) => {
@@ -387,13 +420,15 @@ const formatMs = (value) => `${round(value)} ms`;
 
 const printSummary = (summary) => {
   console.log(`Profil: ${summary.filePath}`);
-  console.log(`Session: ${summary.session.mode || "?"}, ${summary.session.elapsedMs} ms, ${summary.requests.count} requêtes`);
+  console.log(`Session: ${summary.session.searchKind || "?"} / ${summary.session.mode || "?"}, ${summary.session.elapsedMs} ms, ${summary.requests.count} requêtes`);
   console.log(`File HTTP: total ${formatMs(summary.requests.queue.totalMs)}, p95 ${formatMs(summary.requests.queue.p95Ms)}, max ${formatMs(summary.requests.queue.maxMs)}`);
   console.log(`HTTP réel: total ${formatMs(summary.requests.execution.totalMs)}, p95 ${formatMs(summary.requests.execution.p95Ms)}, max ${formatMs(summary.requests.execution.maxMs)}`);
   console.log(`Planificateur: attente ${formatMs(summary.scheduling.schedulerWaitMs)}, barrière ${formatMs(summary.scheduling.barrierIdleMs)}, ${summary.scheduling.roundCount} tour(s)`);
   console.log(`Temporisation volontaire: ${formatMs(summary.scheduling.paceWaitMs)} (pages ${formatMs(summary.scheduling.pagePacingWaitMs)}, relances ${formatMs(summary.scheduling.retryWaitMs)})`);
   console.log(`Pages: chargement p95 ${formatMs(summary.pageProcessing.listingLoad.p95Ms)}, traitement après liste p95 ${formatMs(summary.pageProcessing.postListing.p95Ms)}`);
   console.log(`Préchargement: ${summary.prefetch.hits} utilisé(s), ${summary.prefetch.misses} raté(s), ${summary.prefetch.replaced} remplacé(s), taux ${summary.prefetch.hitRatePercent}%`);
+  console.log(`Cache: ${summary.cache.memoryHits} hit(s) mémoire, ${summary.cache.diskHits} hit(s) disque, ${summary.cache.networkRequests} requête(s) réseau`);
+  console.log(`Moteur: ${summary.engine.detailsRequested} fiche(s) chargée(s), ${summary.engine.detailsSkipped} évitée(s), ${summary.engine.tasksMerged} tâche(s) fusionnée(s), ${summary.engine.checkpointResumes} reprise(s)`);
   console.log("Diagnostic:");
   summary.findings.forEach((finding) => console.log(`- [${finding.severity}] ${finding.message}`));
   if (summary.requests.slowest.length) {
@@ -411,7 +446,7 @@ const main = () => {
     ? path.resolve(requestedFile)
     : findLatestDiagnosticFile(resolveDiagnosticDirectory());
   if (!filePath) {
-    throw new Error("Aucun profil de recherche Nouveautés n'a encore été trouvé.");
+    throw new Error("Aucun profil de recherche scraper n'a encore été trouvé.");
   }
   const summary = buildSummary(readDiagnosticEntries(filePath), filePath);
   const summaryPath = filePath.replace(/\.jsonl$/i, ".summary.json");

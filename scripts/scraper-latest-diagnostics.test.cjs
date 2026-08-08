@@ -105,3 +105,41 @@ test("the latest-search diagnostic exposes duplicate retry pacing", () => {
   assert.equal(summary.scheduling.duplicateRetryWaitCount, 1);
   assert.ok(summary.findings.some((finding) => finding.code === "double-retry-wait"));
 });
+
+test("the common diagnostic separates cache, details, task merging and resume events", () => {
+  const summary = buildSummary([
+    entry("session.started", 0, { mode: "background", searchKind: "mangaCorrespondence" }),
+    entry("cache.memory-hit", 1),
+    entry("cache.memory-miss", 2),
+    entry("request.queued", 3, { requestId: "disk", purpose: "search-page" }),
+    entry("request.completed", 4, {
+      requestId: "disk",
+      purpose: "search-page",
+      executionMs: 0,
+      totalRequestMs: 1,
+      ok: true,
+      cache: "disk-hit",
+    }),
+    entry("details.requested", 5),
+    entry("details.skipped-present", 6),
+    entry("task.merged", 7),
+    entry("task.delta-queued", 8),
+    entry("checkpoint.resumed", 9),
+    entry("session.finish-requested", 10, { status: "completed" }),
+  ]);
+
+  assert.equal(summary.session.searchKind, "mangaCorrespondence");
+  assert.deepEqual(summary.cache, {
+    memoryHits: 1,
+    memoryMisses: 1,
+    diskHits: 1,
+    networkRequests: 0,
+  });
+  assert.deepEqual(summary.engine, {
+    detailsRequested: 1,
+    detailsSkipped: 1,
+    tasksMerged: 1,
+    deltaTasksQueued: 1,
+    checkpointResumes: 1,
+  });
+});

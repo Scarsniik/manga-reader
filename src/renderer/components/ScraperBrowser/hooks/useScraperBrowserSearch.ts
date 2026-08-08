@@ -2,6 +2,8 @@ import React, {
   Dispatch,
   SetStateAction,
   useCallback,
+  useEffect,
+  useRef,
   useState,
 } from 'react';
 import { NavigateFunction } from 'react-router-dom';
@@ -26,6 +28,7 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   buildScraperListingPaginationEndPage,
+  createScraperCardDetailsCache,
   fetchResolvedScraperListingPage,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
@@ -46,6 +49,9 @@ import {
   writeScraperRouteState,
 } from '@/renderer/utils/scraperBrowserNavigation';
 import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
+import type { BackgroundListingRun } from '@/renderer/backgroundSearch/types';
+import { runScraperAuthorSearchEngine } from '@/renderer/searchEngines/listingSearchEngine';
+import { buildScraperAuthorListingSearchInput } from '@/renderer/searchEngines/authorListingSearchInput';
 
 export type ListingLookupOptions = {
   pageIndex?: number;
@@ -67,6 +73,7 @@ type FetchListingPageOptions = {
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
   scrapeDetailsWithCards: boolean;
+  scrapingConcurrency: number;
   routeSyncEnabled: boolean;
   locationPathname: string;
   locationSearch: string;
@@ -262,6 +269,7 @@ const getRouteStateForNavigation = (options: {
 export function useScraperBrowserSearch({
   scraper,
   scrapeDetailsWithCards,
+  scrapingConcurrency,
   routeSyncEnabled,
   locationPathname,
   locationSearch,
@@ -312,6 +320,12 @@ export function useScraperBrowserSearch({
   setLoading,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserSearchOptions) {
+  const authorEngineRunRef = useRef<BackgroundListingRun | null>(null);
+  const authorEnginePageUrlsRef = useRef(new Map<number, string>());
+  const authorEngineAbortControllerRef = useRef<AbortController | null>(null);
+  const authorDetailsCacheRef = useRef(createScraperCardDetailsCache());
+
+  useEffect(() => () => authorEngineAbortControllerRef.current?.abort(), []);
   const fetchListingPage = useCallback(async (
     listingMode: ScraperListingMode,
     targetUrl: string,
@@ -464,6 +478,118 @@ export function useScraperBrowserSearch({
     tagConfig,
   ]);
 
+  const loadAuthorResultsWithCommonEngine = useCallback(async (
+    nextQuery: string,
+    targetPageIndex: number,
+    templateContext: ScraperTemplateContext | null,
+    canCommit: () => boolean,
+    forceReset = false,
+  ): Promise<{
+    page: ScraperRuntimeSearchPageResult;
+    visitedPageUrls: string[];
+    pageIndex: number;
+    items: ScraperSearchResultItem[];
+  }> => {
+    const normalizedTargetPageIndex = Math.max(0, Math.floor(targetPageIndex));
+    const sourceKey = `${scraper.id}::${nextQuery}`;
+    const currentRun = !forceReset && authorEngineRunRef.current?.key === sourceKey
+      ? authorEngineRunRef.current
+      : null;
+
+    if (currentRun && normalizedTargetPageIndex < currentRun.loadedPages) {
+      const items = currentRun.results
+        .filter((source) => source.pageIndex === normalizedTargetPageIndex)
+        .map((source) => source.result);
+      const currentPageUrl = authorEnginePageUrlsRef.current.get(normalizedTargetPageIndex)
+        ?? currentRun.currentPageUrl
+        ?? nextQuery;
+      return {
+        page: {
+          currentPageUrl,
+          nextPageUrl: authorEnginePageUrlsRef.current.get(normalizedTargetPageIndex + 1)
+            ?? (normalizedTargetPageIndex === currentRun.loadedPages - 1
+              ? currentRun.nextPageUrl
+              : undefined),
+          authorNames: [nextQuery],
+          items,
+        },
+        visitedPageUrls: Array.from(
+          { length: currentRun.loadedPages },
+          (_value, index) => authorEnginePageUrlsRef.current.get(index) ?? currentPageUrl,
+        ),
+        pageIndex: normalizedTargetPageIndex,
+        items,
+      };
+    }
+
+    authorEngineAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    authorEngineAbortControllerRef.current = controller;
+    if (!currentRun) {
+      authorEnginePageUrlsRef.current = new Map();
+      authorDetailsCacheRef.current = createScraperCardDetailsCache();
+    }
+    const pageCount = currentRun
+      ? Math.max(1, normalizedTargetPageIndex + 1 - currentRun.loadedPages)
+      : normalizedTargetPageIndex + 1;
+    const input = buildScraperAuthorListingSearchInput(scraper, nextQuery, {
+      maxPages: pageCount,
+      concurrency: scrapingConcurrency,
+      scrapeDetailsWithCards,
+      templateContext,
+    });
+    const result = await runScraperAuthorSearchEngine(
+      input,
+      controller.signal,
+      async (snapshot) => {
+        if (!canCommit()) {
+          controller.abort();
+          return;
+        }
+        const snapshotRun = snapshot.runs[0];
+        if (!snapshotRun) return;
+        authorEngineRunRef.current = snapshotRun;
+        if (snapshotRun.currentPageUrl && snapshotRun.loadedPages > 0) {
+          authorEnginePageUrlsRef.current.set(snapshotRun.loadedPages - 1, snapshotRun.currentPageUrl);
+        }
+      },
+      {
+        initialRuns: currentRun ? [currentRun] : undefined,
+        detailsCache: authorDetailsCacheRef.current,
+      },
+    );
+    const run = result.runs[0];
+    if (!run) throw new Error('La recherche auteur ne contient aucune source exploitable.');
+    authorEngineRunRef.current = run;
+    if (run.status === 'error') throw new Error(run.error || 'Echec temporaire du chargement auteur.');
+    const resolvedPageIndex = Math.min(
+      normalizedTargetPageIndex,
+      Math.max(0, run.loadedPages - 1),
+    );
+    const items = run.results
+      .filter((source) => source.pageIndex === resolvedPageIndex)
+      .map((source) => source.result);
+    const currentPageUrl = authorEnginePageUrlsRef.current.get(resolvedPageIndex)
+      ?? run.currentPageUrl
+      ?? nextQuery;
+    const page: ScraperRuntimeSearchPageResult = {
+      currentPageUrl,
+      nextPageUrl: authorEnginePageUrlsRef.current.get(resolvedPageIndex + 1)
+        ?? (resolvedPageIndex === run.loadedPages - 1 ? run.nextPageUrl : undefined),
+      authorNames: [nextQuery],
+      items,
+    };
+    return {
+      page,
+      visitedPageUrls: Array.from(
+        { length: run.loadedPages },
+        (_value, index) => authorEnginePageUrlsRef.current.get(index) ?? currentPageUrl,
+      ),
+      pageIndex: resolvedPageIndex,
+      items,
+    };
+  }, [scrapeDetailsWithCards, scraper, scrapingConcurrency]);
+
   const runListingLookup = useCallback(async (
     listingMode: ScraperListingMode,
     nextQuery: string,
@@ -523,12 +649,21 @@ export function useScraperBrowserSearch({
     setLoading(true);
 
     try {
-      const extractedListingState = await loadListingResultsPage(
-        listingMode,
-        nextQuery,
-        options?.pageIndex ?? 0,
-        effectiveAuthorTemplateContext,
-      );
+      const targetPageIndex = options?.pageIndex ?? 0;
+      const extractedListingState = listingMode === 'author'
+        ? await loadAuthorResultsWithCommonEngine(
+          nextQuery,
+          targetPageIndex,
+          effectiveAuthorTemplateContext ?? null,
+          canCommit,
+          targetPageIndex === 0,
+        )
+        : await loadListingResultsPage(
+          listingMode,
+          nextQuery,
+          targetPageIndex,
+          effectiveAuthorTemplateContext,
+        );
       if (!canCommit()) {
         return;
       }
@@ -573,6 +708,7 @@ export function useScraperBrowserSearch({
     getUsesTemplatePaging,
     homepageConfig,
     loadListingResultsPage,
+    loadAuthorResultsWithCommonEngine,
     resetDetailsState,
     resetListingState,
     searchConfig,
@@ -654,10 +790,18 @@ export function useScraperBrowserSearch({
         pageIndex: nextPageIndex,
         usesTemplatePaging,
       };
-      const nextPage = await fetchListingPage(mode, nextPageTargetUrl, {
-        ...nextPageOptions,
-        query,
-      });
+      const authorListingState = mode === 'author'
+        ? await loadAuthorResultsWithCommonEngine(
+          query,
+          nextPageIndex,
+          authorTemplateContext,
+          () => true,
+        )
+        : null;
+      const nextPage = authorListingState?.page ?? await fetchListingPage(mode, nextPageTargetUrl, {
+          ...nextPageOptions,
+          query,
+        });
       if (!nextPage.items.length) {
         setRuntimeMessage(
           mode === 'author'
@@ -674,11 +818,16 @@ export function useScraperBrowserSearch({
       setListingPage(nextPage);
       setListingResults(nextPage.items);
       setHasExecutedListing(true);
-      setListingVisitedPageUrls((previous) => {
-        const trimmedHistory = previous.slice(0, listingPageIndex + 1);
-        return [...trimmedHistory, nextPage.currentPageUrl];
-      });
-      setListingPageIndex((previous) => previous + 1);
+      if (authorListingState) {
+        setListingVisitedPageUrls(authorListingState.visitedPageUrls);
+        setListingPageIndex(authorListingState.pageIndex);
+      } else {
+        setListingVisitedPageUrls((previous) => {
+          const trimmedHistory = previous.slice(0, listingPageIndex + 1);
+          return [...trimmedHistory, nextPage.currentPageUrl];
+        });
+        setListingPageIndex((previous) => previous + 1);
+      }
       setRuntimeMessage([
         buildSearchPageLoadedMessage(
           nextPageIndex,
@@ -706,6 +855,7 @@ export function useScraperBrowserSearch({
     getUsesTemplatePaging,
     listingPage,
     listingPageIndex,
+    loadAuthorResultsWithCommonEngine,
     mode,
     query,
     scraper.baseUrl,
@@ -738,19 +888,32 @@ export function useScraperBrowserSearch({
     setRuntimeError(null);
 
     try {
-      const previousPage = await fetchListingPage(mode, previousPageUrl, {
-        query,
-        pageIndex: Math.max(0, listingPageIndex - 1),
-      });
+      const previousPageIndex = Math.max(0, listingPageIndex - 1);
+      const authorListingState = mode === 'author'
+        ? await loadAuthorResultsWithCommonEngine(
+          query,
+          previousPageIndex,
+          authorTemplateContext,
+          () => true,
+        )
+        : null;
+      const previousPage = authorListingState?.page ?? await fetchListingPage(mode, previousPageUrl, {
+          query,
+          pageIndex: previousPageIndex,
+        });
       setListingPage(previousPage);
       setListingResults(previousPage.items);
       setHasExecutedListing(true);
-      setListingPageIndex((current) => Math.max(0, current - 1));
-      setListingVisitedPageUrls((currentHistory) => {
-        const nextHistory = [...currentHistory];
-        nextHistory[listingPageIndex - 1] = previousPage.currentPageUrl;
-        return nextHistory;
-      });
+      setListingPageIndex(authorListingState?.pageIndex ?? previousPageIndex);
+      if (authorListingState) {
+        setListingVisitedPageUrls(authorListingState.visitedPageUrls);
+      } else {
+        setListingVisitedPageUrls((currentHistory) => {
+          const nextHistory = [...currentHistory];
+          nextHistory[listingPageIndex - 1] = previousPage.currentPageUrl;
+          return nextHistory;
+        });
+      }
       setRuntimeMessage([
         `Retour a la page ${listingPageIndex}.`,
         buildCardDetailsScrapeMessage(previousPage),
@@ -763,6 +926,8 @@ export function useScraperBrowserSearch({
     }
   }, [
     fetchListingPage,
+    authorTemplateContext,
+    loadAuthorResultsWithCommonEngine,
     listingPageIndex,
     listingVisitedPageUrls,
     mode,

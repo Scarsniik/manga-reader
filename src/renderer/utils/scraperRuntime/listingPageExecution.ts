@@ -37,9 +37,10 @@ export type FetchResolvedScraperListingPageOptions = ScraperListingDetailsOption
   requestConfig?: ScraperRequestConfig;
   responseLabel: string;
   failureMessage: string;
+  fetchDocument?: ScraperDocumentFetcher;
 };
 
-export const attachScraperRequestDiagnostics = <Request extends Record<string, unknown>>(
+export const attachScraperRequestDiagnostics = <Request extends object>(
   request: Request,
   diagnostics?: ScraperRequestDiagnosticContext,
   purpose?: string,
@@ -76,9 +77,11 @@ export const fetchResolvedScraperListingPage = async ({
   detailConcurrency,
   diagnostics,
   detailsCache,
+  fetchDocument,
 }: FetchResolvedScraperListingPageOptions): Promise<ScraperRuntimeSearchPageResult> => {
-  const fetchScraperDocument = getFetchScraperDocument();
+  const fetchScraperDocument = fetchDocument ?? getFetchScraperDocument();
   const documentResult = await fetchScraperDocument(attachScraperRequestDiagnostics({
+    scraperId: scraper.id,
     baseUrl: scraper.baseUrl,
     targetUrl,
     requestConfig,
@@ -104,7 +107,7 @@ export const fetchResolvedScraperListingPage = async ({
     requestedUrl: documentResult.requestedUrl,
     finalUrl: documentResult.finalUrl,
   }, async (request) => fetchScraperDocument(attachScraperRequestDiagnostics(
-    request,
+    { ...request, scraperId: request.scraperId ?? scraper.id },
     diagnostics,
     `${diagnostics?.purpose ?? "listing"}.asset`,
   )));
@@ -114,7 +117,7 @@ export const fetchResolvedScraperListingPage = async ({
     scraper,
     detailsConfig: getScraperDetailsFeatureConfig(getScraperFeature(scraper, "details")),
     fetchDocument: async (request) => fetchScraperDocument(
-      attachScraperRequestDiagnostics(request, diagnostics),
+      attachScraperRequestDiagnostics({ ...request, scraperId: request.scraperId ?? scraper.id }, diagnostics),
     ),
     concurrency: detailConcurrency,
     detailsCache,

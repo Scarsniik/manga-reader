@@ -5,7 +5,7 @@ import type {
   BackgroundSearchProgress,
   BackgroundSearchQueueSummary,
 } from "@/shared/backgroundSearch";
-import { executeBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchEngine";
+import { executeBackgroundSearch } from "@/renderer/searchEngines/searchEngineRegistry";
 import type { BackgroundSearchExecutionResult, ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ScraperAuthorFavoriteCacheRecord } from "@/shared/scraper";

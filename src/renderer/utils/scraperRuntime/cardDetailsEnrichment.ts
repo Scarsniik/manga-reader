@@ -115,6 +115,7 @@ export const resolveScraperCardDetails = async (options: {
 
   const request = (async (): Promise<ScraperRuntimeDetailsResult | null> => {
     const documentResult = await fetchDocument({
+      scraperId: scraper.id,
       baseUrl: scraper.baseUrl,
       targetUrl,
     });

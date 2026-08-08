@@ -3,12 +3,15 @@ import {
 } from "@/shared/scraper";
 import {
   createScraperCardDetailsCache,
+  doesScraperCardNeedMetadata,
   formatScraperValueForDisplay,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   isScraperFeatureConfigured,
   resolveScraperCardDetails,
+  SCRAPER_METADATA_REQUIREMENTS_BY_PHASE,
   type ScraperCardDetailsCache,
+  type ScraperDocumentFetcher,
 } from "@/renderer/utils/scraperRuntime";
 import {
   getPaceConfig,
@@ -47,6 +50,8 @@ export type MultiSearchAuthorExtractionResult = {
 export type MultiSearchAuthorExtractionRuntimeOptions = {
   concurrency?: number;
   signal?: AbortSignal;
+  detailsCache?: ScraperCardDetailsCache;
+  fetchDocument?: ScraperDocumentFetcher;
 };
 
 const throwIfAuthorExtractionAborted = (signal?: AbortSignal): void => {
@@ -181,7 +186,13 @@ const addCardAuthors = (
 };
 
 const canExtractDetailsAuthors = (source: MultiSearchSourceResult): boolean => {
-  if (!source.result.detailUrl || source.result.detailsMetadataFetched === true) {
+  if (
+    !source.result.detailUrl
+    || !doesScraperCardNeedMetadata(
+      source.result,
+      SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.authorDiscovery,
+    )
+  ) {
     return false;
   }
 
@@ -242,9 +253,11 @@ const fetchDetailsAuthors = async (
   authorsByKey: Map<string, MultiSearchAuthorResult>,
   source: MultiSearchSourceResult,
   detailsCache: ScraperCardDetailsCache,
+  fetchDocument?: ScraperDocumentFetcher,
 ): Promise<boolean> => {
   const api = (window as any).api;
-  if (!api || typeof api.fetchScraperDocument !== "function" || !source.result.detailUrl) {
+  const fetcher = fetchDocument ?? api?.fetchScraperDocument;
+  if (typeof fetcher !== "function" || !source.result.detailUrl) {
     return false;
   }
 
@@ -258,7 +271,7 @@ const fetchDetailsAuthors = async (
     scraper: source.scraper,
     detailsConfig,
     detailUrl: source.result.detailUrl,
-    fetchDocument: async (request) => api.fetchScraperDocument(request),
+    fetchDocument: fetcher,
     detailsCache,
   });
   if (!details) return false;
@@ -280,6 +293,7 @@ const fetchDetailsAuthorsWithRetry = async (
   paceConfig: PaceConfig,
   detailsCache: ScraperCardDetailsCache,
   signal?: AbortSignal,
+  fetchDocument?: ScraperDocumentFetcher,
 ): Promise<boolean> => {
   let lastError: unknown = null;
 
@@ -290,7 +304,7 @@ const fetchDetailsAuthorsWithRetry = async (
         await wait(paceConfig.pageDelayMs);
       }
 
-      return await fetchDetailsAuthors(authorsByKey, source, detailsCache);
+      return await fetchDetailsAuthors(authorsByKey, source, detailsCache, fetchDocument);
     } catch (error) {
       lastError = error;
       if (attempt < paceConfig.retryCount) {
@@ -321,7 +335,7 @@ export const extractMultiSearchAuthors = async (
   };
   const totalSourceCount = sources.length;
   let failedDetailsSourceCount = 0;
-  const detailsCache = createScraperCardDetailsCache();
+  const detailsCache = runtimeOptions?.detailsCache ?? createScraperCardDetailsCache();
   onProgress?.({
     processedSourceCount,
     totalSourceCount,
@@ -341,6 +355,7 @@ export const extractMultiSearchAuthors = async (
         paceConfig,
         detailsCache,
         runtimeOptions?.signal,
+        runtimeOptions?.fetchDocument,
       );
       if (!foundDetailsAuthor) {
         failedDetailsSourceCount += 1;

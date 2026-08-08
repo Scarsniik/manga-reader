@@ -55,6 +55,7 @@ import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import { buildAuthorListingSearchInput } from "@/renderer/searchEngines/authorListingSearchInput";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -373,28 +374,17 @@ export default function ScraperAuthorFavoritesView({
 
   const buildFavoriteRefreshInput = useCallback((
     favorite: ScraperAuthorFavoriteRecord,
-  ): ListingBackgroundInput => ({
-      favoriteId: favorite.id,
-      favoriteUpdatedAt: favorite.updatedAt,
-      sources: favorite.sources.flatMap((source) => {
-        const scraper = scrapersById.get(source.scraperId);
-        return scraper ? [{
-          id: `${favorite.id}::${source.scraperId}::${source.authorUrl}`,
-          name: source.name,
-          scraper,
-          query: source.authorUrl,
-          favoriteId: favorite.id,
-          favoriteUpdatedAt: favorite.updatedAt,
-          favoriteSourceName: source.name,
-          templateContext: source.templateContext ?? null,
-        }] : [];
-      }),
+  ): ListingBackgroundInput => buildAuthorListingSearchInput(
+    [favorite],
+    scrapersById,
+    "authorFavoriteRefresh",
+    {
       maxPages: null,
-      paceMode: "careful",
       concurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
       includedLanguageCodes: [],
       scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-  }), [params?.scraperLatestConcurrency, params?.scraperScrapeDetailsWithCards, scrapersById]);
+    },
+  ), [params?.scraperLatestConcurrency, params?.scraperScrapeDetailsWithCards, scrapersById]);
 
   const enqueueSelectedFavoriteRefresh = useCallback(async () => {
     if (!selectedFavorite) return;

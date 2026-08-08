@@ -1,7 +1,11 @@
 import type { ScraperRecord } from "@/shared/scraper";
 import type { ScraperRuntimeSearchPageResult } from "@/renderer/utils/scraperRuntime";
 import { appendScraperSearchResultTagToItems } from "@/renderer/utils/scraperSearchResultTags";
-import { buildSourceResults } from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import {
+  buildSourceResults,
+  enrichSourceResultsWithCardDetails,
+  type ScraperCardDetailsFetchOptions,
+} from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
@@ -21,6 +25,14 @@ export type ProcessScraperListingPageResult = {
   sources: MultiSearchSourceResult[];
   includedSources: MultiSearchSourceResult[];
 };
+
+export const enrichScraperListingSourcesWithCardDetails = async (
+  scraper: ScraperRecord,
+  sources: MultiSearchSourceResult[],
+  options: ScraperCardDetailsFetchOptions,
+): Promise<MultiSearchSourceResult[]> => enrichSourceResultsWithJapaneseRomanization(
+  await enrichSourceResultsWithCardDetails(scraper, sources, options),
+);
 
 export const processScraperListingPage = async ({
   scraper,

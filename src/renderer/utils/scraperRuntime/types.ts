@@ -1,4 +1,5 @@
 import type {
+  FetchScraperDocumentRequest,
   FetchScraperDocumentResult,
   ScraperChapterItem,
   ScraperFeatureValidationCheckKey,
@@ -87,11 +88,9 @@ export type ScraperRuntimeTagListPageResult = {
   items: ScraperTagListItem[];
 };
 
-export type ScraperDocumentFetcher = (request: {
-  baseUrl: string;
-  targetUrl: string;
-  validateImage?: boolean;
-}) => Promise<FetchScraperDocumentResult>;
+export type ScraperDocumentFetcher = (
+  request: FetchScraperDocumentRequest,
+) => Promise<FetchScraperDocumentResult>;
 
 export type ScraperResolvedChaptersResult = {
   sourceResult: FetchScraperDocumentResult;

@@ -20,6 +20,9 @@ const readOption = (name, fallback) => {
 
 const phase = readOption("--phase", "baseline");
 const transportMode = readOption("--transport", "live");
+const selectedCaseId = readOption("--case", "");
+const forceMangaDetails = readOption("--manga-details", "") === "true";
+const skipComparison = args.includes("--skip-compare");
 const corpusDir = path.resolve(readOption("--dir", defaultCorpusDir));
 const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
 const sourceDataDir = path.join(localAppData, "scaramanga-userdata", "data");
@@ -35,9 +38,12 @@ const VOLATILE_RESULT_KEYS = new Set([
   "discoveredByStepIds",
   "durationMs",
   "elapsedMs",
+  "foundAt",
   "generatedAt",
   "lastProgress",
   "snapshotCount",
+  "parentStepIds",
+  "quotaUnavailableUntil",
   "transport",
   "trace",
   "updatedAt",
@@ -269,6 +275,21 @@ const prepareSnapshots = () => {
   copyIfExists(path.join(snapshotDataDir, "scrapers.json"), path.join(runtimeDataDir, "scrapers.json"));
 };
 
+const buildRuntimePlan = () => {
+  const plan = readJson(planPath, { cases: [], probes: [] });
+  return {
+    ...plan,
+    cases: (plan.cases || [])
+      .filter((testCase) => !selectedCaseId || testCase.id === selectedCaseId)
+      .map((testCase) => (
+        forceMangaDetails && testCase.id === "mangaCorrespondence"
+          ? { ...testCase, input: { ...testCase.input, scrapeDetailsWithCards: true } }
+          : testCase
+      )),
+    probes: selectedCaseId ? [] : (plan.probes || []),
+  };
+};
+
 const buildRunner = () => {
   fs.mkdirSync(runtimeDir, { recursive: true });
   esbuild.buildSync({
@@ -316,10 +337,12 @@ const main = async () => {
   buildRunner();
   fs.mkdirSync(responseCacheDir, { recursive: true });
 
+  const runtimePlanPath = path.join(runtimeDir, `plan-${phase}-${transportMode}.json`);
+  writeJson(runtimePlanPath, buildRuntimePlan());
   const configPath = path.join(runtimeDir, `config-${phase}-${transportMode}.json`);
   writeJson(configPath, {
     repoRoot,
-    planPath,
+    planPath: runtimePlanPath,
     snapshotDataDir,
     userDataDir: path.join(runtimeDir, "user-data"),
     responseCacheDir: transportMode === "replay"
@@ -342,7 +365,7 @@ const main = async () => {
   ].filter((item) => item.ok).length;
   const total = (output.cases || []).length + (output.probes || []).length;
   process.stdout.write(`Corpus ${phase}/${transportMode}: ${succeeded}/${total} scénarios réussis.\n${outputPath}\n`);
-  const comparison = compareWithBaseline(output);
+  const comparison = skipComparison ? null : compareWithBaseline(output);
   if (comparison) {
     const comparisonPath = path.join(corpusDir, "results", `${phase}-${transportMode}-comparison.json`);
     writeJson(comparisonPath, comparison);

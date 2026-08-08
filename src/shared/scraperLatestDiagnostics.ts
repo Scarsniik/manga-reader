@@ -2,10 +2,11 @@ export type ScraperLatestDiagnosticMode = "foreground" | "background";
 
 export type ScraperLatestDiagnosticStartRequest = {
   mode: ScraperLatestDiagnosticMode;
-  searchMode: string;
-  resultLimitMode: string;
-  resultLimit: number;
-  tagResultLimit: number;
+  searchKind?: string;
+  searchMode?: string;
+  resultLimitMode?: string;
+  resultLimit?: number;
+  tagResultLimit?: number;
   concurrency: number;
   sourceCount: number;
   backgroundJobId?: string;

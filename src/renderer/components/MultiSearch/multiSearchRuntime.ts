@@ -60,6 +60,7 @@ export type ScraperCardDetailsFetchOptions = {
   detailConcurrency?: number;
   diagnostics?: ScraperRequestDiagnosticContext;
   detailsCache?: ScraperCardDetailsCache;
+  fetchDocument?: ScraperDocumentFetcher;
 };
 
 export const getPaceConfig = (paceMode: MultiSearchPaceMode): PaceConfig => (
@@ -230,6 +231,7 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
     detailConcurrency?: number;
     diagnostics?: ScraperRequestDiagnosticContext;
     detailsCache?: ScraperCardDetailsCache;
+    fetchDocument?: ScraperDocumentFetcher;
   },
 ): Promise<ScraperRuntimeSearchPageResult> => {
   const usesTemplatePaging = options.hasPagePlaceholder(config);
@@ -255,6 +257,7 @@ const fetchListingPage = async <TConfig extends ScraperCardListConfig>(
     detailConcurrency: options.detailConcurrency,
     diagnostics: options.diagnostics,
     detailsCache: options.detailsCache,
+    fetchDocument: options.fetchDocument,
   });
 };
 
@@ -287,6 +290,8 @@ const fetchAuthorPage = async (
     scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
     detailConcurrency: options?.detailConcurrency,
     diagnostics: options?.diagnostics,
+    detailsCache: options?.detailsCache,
+    fetchDocument: options?.fetchDocument,
   },
 );
 
@@ -334,6 +339,8 @@ const fetchHomepagePage = async (
     scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
     detailConcurrency: options?.detailConcurrency,
     diagnostics: options?.diagnostics,
+    detailsCache: options?.detailsCache,
+    fetchDocument: options?.fetchDocument,
   },
 );
 
@@ -377,6 +384,8 @@ const fetchTagPage = async (
     scrapeDetailsWithCards: options?.scrapeDetailsWithCards,
     detailConcurrency: options?.detailConcurrency,
     diagnostics: options?.diagnostics,
+    detailsCache: options?.detailsCache,
+    fetchDocument: options?.fetchDocument,
   },
 );
 
@@ -469,7 +478,7 @@ export const enrichSourceResultsWithCardDetails = async (
     return sources;
   }
 
-  const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
+  const fetchScraperDocument = options?.fetchDocument ?? (window as any).api?.fetchScraperDocument;
   if (typeof fetchScraperDocument !== "function") {
     throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
   }

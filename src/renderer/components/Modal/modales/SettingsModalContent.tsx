@@ -408,13 +408,13 @@ export default function SettingsModalContent() {
   const developerFields: FormItem[] = [
     {
       type: 'section',
-      id: 'latest-performance-reports',
-      title: 'Diagnostic des nouveautés',
-      description: 'Désactivé par défaut. Le réglage s’applique aux recherches normales et en arrière-plan.',
+      id: 'search-performance-reports',
+      title: 'Diagnostic des recherches scraper',
+      description: 'Désactivé par défaut. Le réglage s’applique à tous les moteurs, au premier plan et en arrière-plan.',
       fields: [
         {
-          name: 'scraperLatestPerformanceReportsEnabled',
-          label: 'Générer un rapport de performance pour les recherches de nouveautés',
+          name: 'scraperPerformanceReportsEnabled',
+          label: 'Générer un rapport de performance pour toutes les recherches scraper',
           type: 'checkbox',
         },
       ],
@@ -539,8 +539,10 @@ export default function SettingsModalContent() {
   }, [])
 
   const onDeveloperSubmit = React.useCallback(async (values: Record<string, any>) => {
+    const performanceReportsEnabled = values.scraperPerformanceReportsEnabled === true
     await setParams({
-      scraperLatestPerformanceReportsEnabled: values.scraperLatestPerformanceReportsEnabled === true,
+      scraperPerformanceReportsEnabled: performanceReportsEnabled,
+      scraperLatestPerformanceReportsEnabled: performanceReportsEnabled,
     }, { remount: false })
   }, [setParams])
 

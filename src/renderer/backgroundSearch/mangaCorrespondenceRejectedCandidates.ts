@@ -1,7 +1,7 @@
 import { normalizeCorrespondenceTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
 import type { MangaCorrespondenceRejectionReason } from "@/renderer/backgroundSearch/types";
 
-type RejectedCandidateScoreInput = {
+export type MangaCorrespondenceRejectedCandidateScoreInput = {
   titleFields: string[];
   candidateAuthors: string[];
   knownTitles: string[];
@@ -95,7 +95,7 @@ export const scoreMangaCorrespondenceRejectedCandidate = ({
   knownAuthors,
   rejectionReason,
   matchedTerm,
-}: RejectedCandidateScoreInput): MangaCorrespondenceRejectedCandidateScore => {
+}: MangaCorrespondenceRejectedCandidateScoreInput): MangaCorrespondenceRejectedCandidateScore => {
   let best: { title: string; similarity: TitleSimilarity } | undefined;
   titleFields.forEach((candidateTitle) => {
     knownTitles.forEach((knownTitle) => {
@@ -161,3 +161,12 @@ export const getMangaCorrespondenceScoreBand = (
   if (score >= 50) return "possible";
   return "distant";
 };
+
+export const shouldFetchMangaCorrespondenceCandidateDetails = (
+  input: MangaCorrespondenceRejectedCandidateScoreInput,
+): boolean => (
+  Boolean(input.matchedTerm)
+  || getMangaCorrespondenceScoreBand(
+    scoreMangaCorrespondenceRejectedCandidate(input).score,
+  ) !== "distant"
+);

@@ -11,14 +11,17 @@ import type {
 import {
   DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
 } from "@/shared/scraperLatestSettings";
-import type { ListingBackgroundInput, ListingBackgroundSource } from "@/shared/backgroundSearch";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
-import { runScraperLatestSearch } from "@/renderer/backgroundSearch/backgroundSearchEngine";
+import { runScraperLatestSearch } from "@/renderer/searchEngines/listingSearchEngine";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import {
   splitIncludeFilterValues,
 } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
+import {
+  buildLatestSourceListingSources,
+  buildLatestSourceSearchInput,
+} from "@/renderer/searchEngines/latestSourceSearchInput";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
@@ -101,36 +104,6 @@ const getIncludedLatestScrapers = (
     && (!includedIds.size || includedIds.has(scraper.id))
   ));
 };
-
-const buildScraperSource = (scraper: ScraperRecord): ListingBackgroundSource => {
-  const module: "homepage" | "search" = scraper.globalConfig.latest?.module === "search"
-    ? "search"
-    : "homepage";
-  return {
-    id: `scraper:${scraper.id}`,
-    name: scraper.name,
-    scraper,
-    query: module === "search" ? String(scraper.globalConfig.homeSearch?.query ?? "") : "",
-    mode: module,
-  };
-};
-
-const buildTagSource = (
-  favorite: ScraperTagFavoriteRecord,
-  favoriteSource: ScraperTagFavoriteSource,
-  scraper: ScraperRecord,
-): ListingBackgroundSource => ({
-  id: `tag:${favorite.id}:${favoriteSource.scraperId}:${favoriteSource.tagUrl}`,
-  name: `${favorite.name} · ${favoriteSource.name} · ${scraper.name}`,
-  scraper,
-  query: favoriteSource.tagUrl,
-  favoriteId: favorite.id,
-  mode: "tag",
-  resultTag: {
-    name: favoriteSource.name || favorite.name,
-    url: favoriteSource.tagUrl,
-  },
-});
 
 type RunMetadata = {
   sourceKind: ScraperLatestRunSourceKind;
@@ -249,12 +222,12 @@ export default function useScraperLatestRuns() {
         return scraper ? [{ favorite, favoriteSource, scraper }] : [];
       })
     ));
-    const sources: ListingBackgroundSource[] = [
-      ...includedScrapers.map(buildScraperSource),
-      ...tagSources.map(({ favorite, favoriteSource, scraper }) => (
-        buildTagSource(favorite, favoriteSource, scraper)
-      )),
-    ];
+    const sources = buildLatestSourceListingSources(
+      includedScrapers,
+      options.tagFavorites ?? [],
+      scrapersById,
+      { searchMode, resultLimit, tagResultLimit },
+    );
     const metadataByKey = new Map<string, RunMetadata>([
       ...includedScrapers.map((scraper): [string, RunMetadata] => [
         `scraper:${scraper.id}`,
@@ -296,29 +269,20 @@ export default function useScraperLatestRuns() {
       DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     );
     const concurrency = normalizePositiveInteger(options.concurrency, 2);
-    const input: ListingBackgroundInput = {
-      sources: sources.map((source) => ({
-        ...source,
-        resultLimit: searchMode === "continuous"
-          ? 0
-          : source.mode === "tag"
-            ? tagResultLimit
-            : resultLimit,
-      })),
+    const input = buildLatestSourceSearchInput(sources, {
       maxPages: searchMode === "quick"
         ? 1
         : searchMode === "continuous"
           ? continuousPageSafetyLimit
           : deepPageLimit,
-      resultLimit: searchMode === "continuous" ? 0 : resultLimit,
-      tagResultLimit: searchMode === "continuous" ? 0 : tagResultLimit,
+      resultLimit,
+      tagResultLimit,
       resultLimitMode,
-      paceMode: "careful",
       concurrency,
-      excludeBlacklistedTagCards: options.excludeBlacklistedTagCards === true,
-      tagBlacklistByScraper: options.tagBlacklistByScraper,
       includedLanguageCodes: includedLanguageCodeValues,
       scrapeDetailsWithCards: options.scrapeDetailsWithCards === true,
+      excludeBlacklistedTagCards: options.excludeBlacklistedTagCards === true,
+      tagBlacklistByScraper: options.tagBlacklistByScraper,
       searchMode,
       quickConsecutiveSeenStopThreshold: normalizeNonNegativeInteger(
         options.quickConsecutiveSeenStopThreshold,
@@ -326,7 +290,9 @@ export default function useScraperLatestRuns() {
       ),
       languageRejectLimit: normalizeNonNegativeInteger(options.languageRejectLimit, 60),
       performanceReportsEnabled: options.performanceReportsEnabled === true,
-    };
+      selectedScraperIds: options.includedScraperIds,
+      selectedTagFavoriteIds: options.tagFavorites?.map((favorite) => favorite.id),
+    });
 
     if (!preserveCurrentResults) setRuns([]);
     setLoading(true);

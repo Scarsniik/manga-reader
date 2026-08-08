@@ -1,11 +1,7 @@
 import type {
-  AuthorCorrespondenceBackgroundInput,
-  BackgroundSearchJob,
   BackgroundSearchKind,
   BackgroundSearchProgress,
   ListingBackgroundInput,
-  MangaCorrespondenceBackgroundInput,
-  MultiSearchBackgroundInput,
 } from "@/shared/backgroundSearch";
 import {
   buildScraperViewHistoryCardId,
@@ -16,9 +12,7 @@ import {
   type ScraperViewHistoryRecord,
 } from "@/shared/scraper";
 import {
-  buildSourceResults,
   buildSourceResultsFromItems,
-  enrichSourceResultsWithCardDetails,
   fetchAuthorPageWithRetry,
   fetchHomepagePageWithRetry,
   fetchSearchPageWithRetry,
@@ -36,27 +30,19 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
-import { parseMultiSearchTerms } from "@/renderer/components/MultiSearch/multiSearchUtils";
-import type {
-  MultiSearchScraperRun,
-  MultiSearchSourceResult,
-  MultiSearchTermRun,
-} from "@/renderer/components/MultiSearch/types";
+import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import {
   createScraperCardDetailsCache,
+  doesScraperCardNeedMetadata,
   isScraperListingPaginationEndError,
+  SCRAPER_METADATA_REQUIREMENTS_BY_PHASE,
   type ScraperRuntimeSearchPageResult,
 } from "@/renderer/utils/scraperRuntime";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import type {
   BackgroundListingRun,
-  BackgroundSearchExecutionResult,
   ListingBackgroundResult,
-  MangaCorrespondenceBackgroundResult,
-  MultiSearchBackgroundResult,
 } from "@/renderer/backgroundSearch/types";
-import { runMangaCorrespondenceSearch } from "@/renderer/backgroundSearch/mangaCorrespondenceEngine";
-import { runAuthorCorrespondenceSearch } from "@/renderer/backgroundSearch/authorCorrespondenceEngine";
 import {
   isBackgroundListingSourceUnavailableForQuota,
   resolveBackgroundLanguageProgress,
@@ -79,8 +65,12 @@ import {
 import { enrichCandidatesForTarget } from "@/renderer/utils/progressiveCandidateEnrichment";
 import {
   buildScraperListingPageRequestKey,
-  createScraperListingPagePrefetchCache,
 } from "@/renderer/utils/scraperLatestExecutionPlanning";
+import {
+  createSearchExecutionContext,
+  getOrCreateSearchExecutionContext,
+  type SearchExecutionContext,
+} from "@/renderer/searchEngines/searchExecutionContext";
 import {
   findAuthorFavoriteCachedSource,
   loadUsableAuthorFavoriteCaches,
@@ -103,23 +93,15 @@ import type {
   ScraperLatestDiagnosticSession,
   ScraperRequestDiagnosticContext,
 } from "@/shared/scraperLatestDiagnostics";
-import { executeMultiSearchTermPage } from "@/renderer/components/MultiSearch/multiSearchPageExecution";
-import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import {
+  enrichScraperListingSourcesWithCardDetails,
+  processScraperListingPage,
+} from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import {
   appendUniqueItemsByIdentity,
   buildScraperSearchResultIdentity,
 } from "@/renderer/utils/scraperSearchResultIdentity";
-
-type SnapshotCallback = (
-  result: BackgroundSearchExecutionResult,
-  progress: BackgroundSearchProgress,
-) => Promise<void>;
-
-const throwIfAborted = (signal: AbortSignal): void => {
-  if (signal.aborted) {
-    throw new DOMException("Recherche annulee", "AbortError");
-  }
-};
+import { throwIfSearchAborted } from "@/renderer/searchEngines/searchEngineCancellation";
 
 const normalizeResultUrl = (source: MultiSearchSourceResult): string => (
   buildScraperSearchResultIdentity(source.scraper.id, source.result, "title")
@@ -130,117 +112,9 @@ const appendUniqueResults = (
   incoming: MultiSearchSourceResult[],
 ): MultiSearchSourceResult[] => appendUniqueItemsByIdentity(existing, incoming, normalizeResultUrl);
 
-const countMultiSearchResults = (runs: MultiSearchScraperRun[]): number => (
-  runs.reduce((count, run) => count + run.results.length, 0)
-);
-
 const countListingResults = (runs: BackgroundListingRun[]): number => (
   runs.reduce((count, run) => count + run.results.length, 0)
 );
-
-const runMultiSearch = async (
-  input: MultiSearchBackgroundInput,
-  signal: AbortSignal,
-  onSnapshot: SnapshotCallback,
-): Promise<MultiSearchBackgroundResult> => {
-  const terms = parseMultiSearchTerms(input.query);
-  if (!terms.length) throw new Error("La recherche est vide.");
-  if (!input.scrapers.length) throw new Error("Aucun scrapper compatible n'est selectionne.");
-
-  const pace = getPaceConfig(input.paceMode);
-  const detailsCache = createScraperCardDetailsCache();
-  const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
-  const runs: MultiSearchScraperRun[] = input.scrapers.map((scraper) => ({
-    scraper,
-    status: "waiting",
-    results: [],
-    searchTerms: terms.map((term): MultiSearchTermRun => ({ term, loadedPages: 0, hasNextPage: true })),
-    loadedPages: 0,
-    hasNextPage: true,
-  }));
-
-  const emit = async (label?: string): Promise<void> => onSnapshot({ runs: [...runs] }, {
-    completedUnits: runs.filter((run) => run.status === "done" || run.status === "error").length,
-    totalUnits: runs.length,
-    resultCount: countMultiSearchResults(runs),
-    currentLabel: label,
-  });
-  await emit();
-
-  await runWithConcurrency(runs.map((initialRun, runIndex) => async () => {
-    let run: MultiSearchScraperRun = { ...initialRun, status: "loading" };
-    runs[runIndex] = run;
-    await emit(run.scraper.name);
-    try {
-      for (let pageOffset = 0; pageOffset < maxPages; pageOffset += 1) {
-        throwIfAborted(signal);
-        let loadedAnyPage = false;
-        const nextTerms: MultiSearchTermRun[] = [];
-        for (const termRun of run.searchTerms) {
-          if (!termRun.hasNextPage) {
-            nextTerms.push(termRun);
-            continue;
-          }
-          throwIfAborted(signal);
-          try {
-            const pageExecution = await executeMultiSearchTermPage({
-              scraper: run.scraper,
-              term: termRun.term,
-              pageIndex: termRun.loadedPages,
-              nextPageUrl: termRun.nextPageUrl,
-              existingResults: run.results,
-              paceConfig: pace,
-              includedLanguageCodes: input.includedLanguageCodes,
-              scrapeDetailsWithCards: input.scrapeDetailsWithCards,
-              detailsCache,
-            });
-            run = { ...run, results: [...run.results, ...pageExecution.newPageResults] };
-            nextTerms.push({
-              ...termRun,
-              loadedPages: pageExecution.loadedPages,
-              hasNextPage: pageExecution.hasNextPage,
-              currentPageUrl: pageExecution.currentPageUrl,
-              nextPageUrl: pageExecution.nextPageUrl,
-            });
-            loadedAnyPage = true;
-          } catch (error) {
-            if (!isScraperListingPaginationEndError(error) && run.results.length === 0) throw error;
-            nextTerms.push({ ...termRun, hasNextPage: false });
-          }
-        }
-        run = {
-          ...run,
-          searchTerms: nextTerms,
-          loadedPages: Math.max(0, ...nextTerms.map((term) => term.loadedPages)),
-          hasNextPage: nextTerms.some((term) => term.hasNextPage),
-        };
-        runs[runIndex] = run;
-        await emit(run.scraper.name);
-        if (!loadedAnyPage || !run.hasNextPage) break;
-      }
-      if (input.maxPages === null && run.hasNextPage) {
-        throw new Error("Limite de sécurité atteinte pendant le chargement complet.");
-      }
-      run = { ...run, status: "done" };
-    } catch (error) {
-      if (signal.aborted) {
-        run = { ...run, status: "cancelled" };
-      } else {
-        run = {
-          ...run,
-          status: "error",
-          hasNextPage: false,
-          error: error instanceof Error ? error.message : "Echec de la recherche.",
-        };
-      }
-    }
-    runs[runIndex] = run;
-    await emit(run.scraper.name);
-  }), pace.concurrency);
-
-  throwIfAborted(signal);
-  return { runs };
-};
 
 const getKnownHistoryIds = async (): Promise<Set<string>> => {
   const api = window.api ?? {};
@@ -349,10 +223,22 @@ type ListingSourceExecutionState = {
   sourceExhausted: boolean;
 };
 
-type LatestListingExecutionOptions = {
+export type ListingSearchExecutionOptions = {
   initialRuns?: BackgroundListingRun[];
   appendToExistingResults?: boolean;
+  detailsCache?: ReturnType<typeof createScraperCardDetailsCache>;
+  executionContext?: SearchExecutionContext;
 };
+
+export type ListingSearchEngineKind = Extract<
+  BackgroundSearchKind,
+  "scraperAuthor" | "latestSources" | "latestAuthors" | "authorFavoriteRefresh"
+>;
+
+export type ListingSearchSnapshotCallback = (
+  result: ListingBackgroundResult,
+  progress: BackgroundSearchProgress,
+) => Promise<void>;
 
 const createBackgroundConcurrencyRunner = (concurrency: number) => {
   const queuedTasks: Array<() => void> = [];
@@ -380,13 +266,13 @@ const createBackgroundConcurrencyRunner = (concurrency: number) => {
   });
 };
 
-const runListings = async (
-  kind: BackgroundSearchKind,
+export const runListingSearchEngine = async (
+  kind: ListingSearchEngineKind,
   input: ListingBackgroundInput,
   signal: AbortSignal,
-  onSnapshot: SnapshotCallback,
+  onSnapshot: ListingSearchSnapshotCallback,
   diagnosticSession?: ScraperLatestDiagnosticSession | null,
-  executionOptions: LatestListingExecutionOptions = {},
+  executionOptions: ListingSearchExecutionOptions = {},
 ): Promise<ListingBackgroundResult> => {
   if (!input.sources.length) throw new Error("Aucune source n'est disponible.");
   const filterHistory = kind === "latestSources" || kind === "latestAuthors";
@@ -395,7 +281,11 @@ const runListings = async (
     ? await loadLatestAuthorCacheAssignments(input)
     : new Map<string, ScraperAuthorFavoriteCacheSource | null>();
   const pace = getPaceConfig(input.paceMode);
-  const detailsCache = createScraperCardDetailsCache();
+  const executionContext = getOrCreateSearchExecutionContext(executionOptions.executionContext, {
+    kind,
+  });
+  const detailsCache = executionOptions.detailsCache ?? executionContext.detailsCache;
+  const executionFingerprint = executionContext.checkpointAdapter.fingerprint(input);
   const concurrency = resolveBackgroundListingConcurrency(input.concurrency, pace.concurrency);
   const configuredMaxPages = kind === "latestSources"
     ? resolveScraperLatestSourcePageLimit(input.maxPages)
@@ -476,18 +366,9 @@ const runListings = async (
       sourceExhausted: initialRun.sourceExhausted === true,
     };
   });
-  const listingPagePrefetchCache = createScraperListingPagePrefetchCache<ScraperRuntimeSearchPageResult>((event) => {
-    appendScraperLatestDiagnosticEvent(
-      diagnosticSession,
-      `prefetch.${event.type}`,
-      {
-        requestKey: event.requestKey,
-        replacedRequestKey: event.replacedRequestKey,
-        entryCount: event.entryCount,
-      },
-      event.sourceKey,
-    );
-  });
+  const listingPagePrefetchCache = executionContext.getPagePrefetchCache<ScraperRuntimeSearchPageResult>(
+    `listing:${kind}`,
+  );
   const fetchSourceListingPage = (
     sourceIndex: number,
     pageIndex: number,
@@ -510,7 +391,7 @@ const runListings = async (
         pageIndex,
         nextPageUrl,
         pace,
-        { scrapeDetailsWithCards: false, diagnostics },
+        { scrapeDetailsWithCards: false, diagnostics, fetchDocument: executionContext.fetchDocument },
       );
     }
     if (sourceMode === "search") {
@@ -521,7 +402,7 @@ const runListings = async (
         pageIndex,
         nextPageUrl,
         pace,
-        { scrapeDetailsWithCards: false, diagnostics },
+        { scrapeDetailsWithCards: false, diagnostics, fetchDocument: executionContext.fetchDocument },
       );
     }
     if (sourceMode === "tag") {
@@ -532,7 +413,7 @@ const runListings = async (
         pageIndex,
         nextPageUrl,
         pace,
-        { scrapeDetailsWithCards: false, diagnostics },
+        { scrapeDetailsWithCards: false, diagnostics, fetchDocument: executionContext.fetchDocument },
       );
     }
     return fetchAuthorPageWithRetry(
@@ -543,7 +424,7 @@ const runListings = async (
       nextPageUrl,
       pace,
       source.templateContext ?? null,
-      { scrapeDetailsWithCards: false, diagnostics },
+      { scrapeDetailsWithCards: false, diagnostics, fetchDocument: executionContext.fetchDocument },
     );
   };
   const preloadSourceListingPage = (
@@ -563,7 +444,10 @@ const runListings = async (
       () => fetchSourceListingPage(sourceIndex, pageIndex, nextPageUrl, "listing-prefetch"),
     );
   };
-  const emit = async (label?: string): Promise<void> => onSnapshot({ runs: [...runs] }, {
+  const emit = async (label?: string): Promise<void> => onSnapshot({
+    runs: [...runs],
+    executionFingerprint,
+  }, {
     completedUnits: runs.filter((run) => run.status === "done" || run.status === "error").length,
     totalUnits: runs.length,
     resultCount: countListingResults(runs),
@@ -602,6 +486,56 @@ const runListings = async (
     return { ...run, results: availableResults.slice(0, resultLimit) };
   };
 
+  const enrichRequiredCandidateMetadata = async (
+    run: BackgroundListingRun,
+    candidateBatch: MultiSearchSourceResult[],
+    purpose: string,
+    pageIndex: number,
+  ): Promise<MultiSearchSourceResult[]> => {
+    const requiredIndexes = candidateBatch.flatMap((candidate, index) => (
+      doesScraperCardNeedMetadata(
+        candidate.result,
+        SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.displayedDetails,
+      ) ? [index] : []
+    ));
+    const skippedCount = candidateBatch.length - requiredIndexes.length;
+    if (skippedCount > 0) {
+      appendScraperLatestDiagnosticEvent(
+        diagnosticSession,
+        "details.skipped-present",
+        { count: skippedCount, purpose },
+        run.key,
+      );
+    }
+    if (!requiredIndexes.length) return candidateBatch;
+    appendScraperLatestDiagnosticEvent(
+      diagnosticSession,
+      "details.requested",
+      { count: requiredIndexes.length, purpose },
+      run.key,
+    );
+    const enrichedRequired = await enrichScraperListingSourcesWithCardDetails(
+      run.scraper,
+      requiredIndexes.map((index) => candidateBatch[index]),
+      {
+        scrapeDetailsWithCards: true,
+        detailConcurrency: concurrency,
+        diagnostics: diagnosticSession ? {
+          profileId: diagnosticSession.profileId,
+          purpose,
+          sourceKey: run.key,
+          pageIndex,
+        } : undefined,
+        detailsCache,
+        fetchDocument: executionContext.fetchDocument,
+      },
+    );
+    const enrichedByIndex = new Map(requiredIndexes.map((candidateIndex, resultIndex) => (
+      [candidateIndex, enrichedRequired[resultIndex] ?? candidateBatch[candidateIndex]]
+    )));
+    return candidateBatch.map((candidate, index) => enrichedByIndex.get(index) ?? candidate);
+  };
+
   const consumeBufferedResults = async (
     currentRun: BackgroundListingRun,
     state: ListingSourceExecutionState,
@@ -625,18 +559,11 @@ const runListings = async (
     const enrichment = await enrichCandidatesForTarget({
       candidates: state.pendingCandidates,
       targetCount: remainingResultSlots,
-      enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
-        await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
-          scrapeDetailsWithCards: true,
-          detailConcurrency: concurrency,
-          diagnostics: diagnosticSession ? {
-            profileId: diagnosticSession.profileId,
-            purpose: "card-details-buffered",
-            sourceKey: run.key,
-            pageIndex: run.loadedPages,
-          } : undefined,
-          detailsCache,
-        }),
+      enrichBatch: (candidateBatch) => enrichRequiredCandidateMetadata(
+        run,
+        candidateBatch,
+        "card-details-buffered",
+        run.loadedPages,
       ),
       isAccepted: (item) => {
         if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
@@ -782,7 +709,7 @@ const runListings = async (
       let shouldLoadAnotherPage = !run.languageRejectLimitReached
         && (resultLimit === 0 || run.results.length < resultLimit);
       while (run.loadedPages < executionPageLimits[runIndex] && shouldLoadAnotherPage) {
-        throwIfAborted(signal);
+        throwIfSearchAborted(signal);
         const pageIndex = run.loadedPages;
         const sourceMode = source.mode ?? (kind === "latestSources" ? "homepage" : "author");
         const requestedPageUrl = run.nextPageUrl;
@@ -798,7 +725,9 @@ const runListings = async (
           page,
           pageIndex,
           searchTerm: run.name,
-          contextualAuthorNames: sourceMode === "author" ? [run.name] : [],
+          contextualAuthorNames: sourceMode === "author"
+            ? source.contextualAuthorNames ?? [run.name]
+            : [],
           includedLanguageCodes: input.includedLanguageCodes,
           resultTag: source.resultTag,
         });
@@ -864,18 +793,11 @@ const runListings = async (
           const enrichment = await enrichCandidatesForTarget({
             candidates: rawUnseenSources,
             targetCount: remainingResultSlots,
-            enrichBatch: async (candidateBatch) => enrichSourceResultsWithJapaneseRomanization(
-              await enrichSourceResultsWithCardDetails(run.scraper, candidateBatch, {
-                scrapeDetailsWithCards: true,
-                detailConcurrency: concurrency,
-                diagnostics: diagnosticSession ? {
-                  profileId: diagnosticSession.profileId,
-                  purpose: "card-details",
-                  sourceKey: source.id,
-                  pageIndex,
-                } : undefined,
-                detailsCache,
-              }),
+            enrichBatch: (candidateBatch) => enrichRequiredCandidateMetadata(
+              run,
+              candidateBatch,
+              "card-details",
+              pageIndex,
             ),
             isAccepted: (item) => {
               if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
@@ -1220,19 +1142,16 @@ const runListings = async (
     }));
   }
 
-  throwIfAborted(signal);
-  return { runs };
+  throwIfSearchAborted(signal);
+  return { runs, executionFingerprint };
 };
 
-export type ScraperLatestSearchExecutionOptions = LatestListingExecutionOptions & {
+export type ScraperLatestSearchExecutionOptions = ListingSearchExecutionOptions & {
   mode: "foreground" | "background";
   backgroundJobId?: string;
 };
 
-type ScraperLatestSnapshotCallback = (
-  result: ListingBackgroundResult,
-  progress: BackgroundSearchProgress,
-) => Promise<void>;
+type ScraperLatestSnapshotCallback = ListingSearchSnapshotCallback;
 
 export const runScraperLatestSearch = async (
   input: ListingBackgroundInput,
@@ -1245,6 +1164,7 @@ export const runScraperLatestSearch = async (
   const diagnosticSession = shouldGenerateScraperLatestPerformanceReport(input.performanceReportsEnabled)
     ? await startScraperLatestDiagnosticSession({
       mode: options.mode,
+      searchKind: "latestSources",
       searchMode: input.searchMode ?? "quick",
       resultLimitMode: input.resultLimitMode ?? "total",
       resultLimit: Math.max(0, Math.floor(Number(input.resultLimit) || 0)),
@@ -1258,7 +1178,7 @@ export const runScraperLatestSearch = async (
   let diagnosticError: string | undefined;
   let finalResultCount = 0;
   try {
-    const result = await runListings(
+    const result = await runListingSearchEngine(
       "latestSources",
       input,
       signal,
@@ -1280,43 +1200,76 @@ export const runScraperLatestSearch = async (
   }
 };
 
-export const executeBackgroundSearch = async (
-  job: BackgroundSearchJob,
+const runListingEngineWithOptionalDiagnostics = async (
+  kind: Exclude<ListingSearchEngineKind, "latestSources">,
+  input: ListingBackgroundInput,
   signal: AbortSignal,
-  onSnapshot: SnapshotCallback,
-): Promise<BackgroundSearchExecutionResult> => {
-  const runLatestSources = async (): Promise<ListingBackgroundResult> => {
-    const input = job.input as ListingBackgroundInput;
-    return runScraperLatestSearch(input, signal, onSnapshot, {
-      mode: "background",
-      backgroundJobId: job.metadata.id,
-    });
-  };
-  const adapters: Record<BackgroundSearchKind, () => Promise<BackgroundSearchExecutionResult>> = {
-    multiSearch: () => runMultiSearch(job.input as MultiSearchBackgroundInput, signal, onSnapshot),
-    mangaCorrespondence: () => runMangaCorrespondenceSearch(
-      job.input as MangaCorrespondenceBackgroundInput,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ListingSearchExecutionOptions,
+): Promise<ListingBackgroundResult> => {
+  const inheritedProfileId = options.executionContext?.diagnostics?.profileId;
+  const settings = inheritedProfileId ? null : await window.api?.getSettings?.().catch(() => null);
+  const enabled = settings?.scraperPerformanceReportsEnabled === true
+    || settings?.scraperLatestPerformanceReportsEnabled === true;
+  const ownedSession = !inheritedProfileId && enabled
+    ? await startScraperLatestDiagnosticSession({
+      mode: "foreground",
+      searchKind: kind,
+      concurrency: resolveBackgroundListingConcurrency(input.concurrency, getPaceConfig(input.paceMode).concurrency),
+      sourceCount: input.sources.length,
+    })
+    : null;
+  const session = ownedSession ?? (inheritedProfileId ? {
+    profileId: inheritedProfileId,
+    filePath: "",
+    startedAt: "",
+  } : null);
+  const executionContext = options.executionContext ?? createSearchExecutionContext({
+    kind,
+    mode: "foreground",
+    diagnostics: session ? { profileId: session.profileId, purpose: `engine.${kind}` } : undefined,
+  });
+  let status: "completed" | "cancelled" | "error" = "completed";
+  try {
+    return await runListingSearchEngine(
+      kind,
+      input,
       signal,
       onSnapshot,
-      job.result && "matches" in (job.result as BackgroundSearchExecutionResult)
-        ? job.result as MangaCorrespondenceBackgroundResult
-        : undefined,
-    ),
-    authorCorrespondence: () => runAuthorCorrespondenceSearch(
-      job.input as AuthorCorrespondenceBackgroundInput,
-      signal,
-      onSnapshot,
-    ),
-    scraperAuthor: () => runListings("scraperAuthor", job.input as ListingBackgroundInput, signal, onSnapshot),
-    latestSources: runLatestSources,
-    latestAuthors: () => runListings("latestAuthors", job.input as ListingBackgroundInput, signal, onSnapshot),
-    authorFavoriteRefresh: () => runListings(
-      "authorFavoriteRefresh",
-      job.input as ListingBackgroundInput,
-      signal,
-      onSnapshot,
-    ),
-  };
-
-  return adapters[job.metadata.kind]();
+      session,
+      { ...options, executionContext },
+    );
+  } catch (error) {
+    status = signal.aborted ? "cancelled" : "error";
+    throw error;
+  } finally {
+    await finishScraperLatestDiagnosticSession(ownedSession, status, { searchKind: kind });
+  }
 };
+
+export const runScraperAuthorSearchEngine = (
+  input: ListingBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ListingSearchExecutionOptions = {},
+): Promise<ListingBackgroundResult> => runListingEngineWithOptionalDiagnostics(
+  "scraperAuthor", input, signal, onSnapshot, options,
+);
+
+export const runLatestAuthorsSearchEngine = (
+  input: ListingBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ListingSearchExecutionOptions = {},
+): Promise<ListingBackgroundResult> => runListingEngineWithOptionalDiagnostics(
+  "latestAuthors", input, signal, onSnapshot, options,
+);
+
+export const runAuthorFavoriteRefreshSearchEngine = (
+  input: ListingBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ListingSearchExecutionOptions = {},
+): Promise<ListingBackgroundResult> => runListingEngineWithOptionalDiagnostics(
+  "authorFavoriteRefresh", input, signal, onSnapshot, options,
+);

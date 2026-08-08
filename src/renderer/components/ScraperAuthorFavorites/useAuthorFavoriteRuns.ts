@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ScraperAuthorFavoriteCacheRecord,
   ScraperAuthorFavoriteCacheSource,
@@ -7,25 +7,22 @@ import type {
   ScraperAuthorFavoriteSource,
   ScraperRecord,
 } from "@/shared/scraper";
-import {
-  buildSourceResultsFromItems,
-  fetchAuthorPageWithRetry,
-  getAuthorConfig,
-  getPaceConfig,
-  resolveHasNextAuthorPage,
-  runWithConcurrency,
-  type PaceConfig,
-} from "@/renderer/components/MultiSearch/multiSearchRuntime";
+import { buildSourceResultsFromItems } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import {
-  createScraperCardDetailsCache,
-  isScraperListingPaginationEndError,
-} from "@/renderer/utils/scraperRuntime";
+import { createScraperCardDetailsCache } from "@/renderer/utils/scraperRuntime";
 import { findAuthorFavoriteCachedSource } from "@/renderer/utils/scraperAuthorFavoriteCache";
-import { keepNewSourceResults } from "@/renderer/components/MultiSearch/multiSearchRunState";
-import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
+import {
+  runAuthorFavoriteRefreshSearchEngine,
+  runLatestAuthorsSearchEngine,
+} from "@/renderer/searchEngines/listingSearchEngine";
+import {
+  buildAuthorListingSearchInput,
+  buildAuthorListingSources,
+  type AuthorListingSearchKind,
+} from "@/renderer/searchEngines/authorListingSearchInput";
 
 export type AuthorFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -35,8 +32,12 @@ type AuthorFavoriteRunsOptions = {
   concurrency?: number;
   scrapeDetailsWithCards?: boolean;
   includedLanguageCodes?: string[];
-  latestCacheFavorites?: ScraperAuthorFavoriteRecord[];
-  latestCaches?: Map<string, ScraperAuthorFavoriteCacheRecord>;
+  sourceFavorites?: ScraperAuthorFavoriteRecord[];
+  searchKind?: Extract<AuthorListingSearchKind, "latestAuthors" | "authorFavoriteRefresh">;
+  useAuthorFavoriteCache?: boolean;
+  authorFavoriteCacheMaxAgeHours?: number;
+  searchMode?: "quick" | "continuous" | "deep";
+  quickConsecutiveSeenStopThreshold?: number;
 };
 
 export type AuthorFavoriteSourceRun = {
@@ -52,11 +53,9 @@ export type AuthorFavoriteSourceRun = {
   error?: string;
 };
 
-const MAX_AUTHOR_FAVORITE_AUTO_PAGES = 250;
 const ALL_AUTHOR_FAVORITE_LANGUAGES: string[] = [];
-const NO_LATEST_CACHE_FAVORITES: ScraperAuthorFavoriteRecord[] = [];
 
-const normalizeConcurrency = (value: number | undefined, fallback: number): number => {
+const normalizeConcurrency = (value: number | undefined, fallback = 2): number => {
   if (!Number.isFinite(value)) {
     return fallback;
   }
@@ -71,8 +70,9 @@ const buildSourceKey = (source: ScraperAuthorFavoriteSource): string => (
 const buildInitialRun = (
   source: ScraperAuthorFavoriteSource,
   scraper: ScraperRecord,
+  key = buildSourceKey(source),
 ): AuthorFavoriteSourceRun => ({
-  key: buildSourceKey(source),
+  key,
   favoriteSource: source,
   scraper,
   status: "waiting",
@@ -80,6 +80,58 @@ const buildInitialRun = (
   loadedPages: 0,
   hasNextPage: true,
 });
+
+const toBackgroundListingRun = (run: AuthorFavoriteSourceRun): BackgroundListingRun => ({
+  key: run.key,
+  name: run.favoriteSource.name,
+  scraper: run.scraper,
+  query: run.favoriteSource.authorUrl,
+  status: run.status,
+  results: run.results,
+  loadedPages: run.loadedPages,
+  hasNextPage: run.hasNextPage,
+  currentPageUrl: run.currentPageUrl,
+  nextPageUrl: run.nextPageUrl,
+  error: run.error,
+});
+
+const fromBackgroundListingRun = (
+  run: BackgroundListingRun,
+  previousRunsByKey: Map<string, AuthorFavoriteSourceRun>,
+): AuthorFavoriteSourceRun => {
+  const previousRun = previousRunsByKey.get(run.key);
+  return {
+    key: run.key,
+    favoriteSource: previousRun?.favoriteSource ?? {
+      scraperId: run.scraper.id,
+      authorUrl: run.query,
+      name: run.name,
+      createdAt: "",
+      updatedAt: "",
+    },
+    scraper: run.scraper,
+    status: run.status === "cancelled" ? "done" : run.status,
+    results: run.results,
+    loadedPages: run.loadedPages,
+    hasNextPage: run.hasNextPage,
+    currentPageUrl: run.currentPageUrl,
+    nextPageUrl: run.nextPageUrl,
+    error: run.error,
+  };
+};
+
+const mergeAuthorFavoriteRuns = (
+  currentRuns: AuthorFavoriteSourceRun[],
+  incomingRuns: AuthorFavoriteSourceRun[],
+): AuthorFavoriteSourceRun[] => {
+  const incomingByKey = new Map(incomingRuns.map((run) => [run.key, run]));
+  const mergedRuns = currentRuns.map((run) => incomingByKey.get(run.key) ?? run);
+  const currentKeys = new Set(currentRuns.map((run) => run.key));
+  incomingRuns.forEach((run) => {
+    if (!currentKeys.has(run.key)) mergedRuns.push(run);
+  });
+  return mergedRuns;
+};
 
 const canPersistRunsCache = (sourceRuns: AuthorFavoriteSourceRun[]): boolean => (
   sourceRuns.length > 0
@@ -159,16 +211,19 @@ export default function useAuthorFavoriteRuns(
   const { initialPageCount, cacheResults } = options;
   const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
   const includedLanguageCodes = options.includedLanguageCodes ?? ALL_AUTHOR_FAVORITE_LANGUAGES;
-  const latestCacheFavorites = options.latestCacheFavorites ?? NO_LATEST_CACHE_FAVORITES;
-  const latestCaches = options.latestCaches;
+  const sourceFavorites = useMemo(
+    () => options.sourceFavorites ?? (favorite ? [favorite] : []),
+    [favorite, options.sourceFavorites],
+  );
+  const searchKind = options.searchKind ?? "authorFavoriteRefresh";
   const [runs, setRuns] = useState<AuthorFavoriteSourceRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const detailsCacheRef = useRef(createScraperCardDetailsCache());
-  const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
-  const concurrency = normalizeConcurrency(options.concurrency, paceConfigRef.current.concurrency);
+  const concurrency = normalizeConcurrency(options.concurrency);
   const contextualAuthorNames = useMemo(() => Array.from(new Set(
     favorite?.sources.map((source) => source.name.trim()).filter(Boolean) ?? [],
   )), [favorite]);
@@ -177,145 +232,7 @@ export default function useAuthorFavoriteRuns(
     [runs],
   );
 
-  const patchRun = useCallback((
-    token: number,
-    key: string,
-    updater: (run: AuthorFavoriteSourceRun) => AuthorFavoriteSourceRun,
-  ) => {
-    if (token !== tokenRef.current) {
-      return;
-    }
-
-    setRuns((currentRuns) => currentRuns.map((run) => (
-      run.key === key ? updater(run) : run
-    )));
-  }, []);
-
-  const loadNextPageForRun = useCallback(async (
-    run: AuthorFavoriteSourceRun,
-    token: number,
-    updateState = true,
-  ): Promise<AuthorFavoriteSourceRun | null> => {
-    if (!run.hasNextPage || token !== tokenRef.current) {
-      return run;
-    }
-
-    if (updateState) {
-      patchRun(token, run.key, (currentRun) => ({
-        ...currentRun,
-        status: "loading",
-        error: undefined,
-      }));
-    }
-
-    try {
-      const authorConfig = getAuthorConfig(run.scraper);
-      const pageIndex = run.loadedPages;
-      const page = await fetchAuthorPageWithRetry(
-        run.scraper,
-        authorConfig,
-        run.favoriteSource.authorUrl,
-        pageIndex,
-        run.nextPageUrl,
-        paceConfigRef.current,
-        run.favoriteSource.templateContext ?? null,
-        {
-          scrapeDetailsWithCards,
-          detailsCache: detailsCacheRef.current,
-        },
-      );
-      const { includedSources: pageResults } = await processScraperListingPage({
-        scraper: run.scraper,
-        page,
-        pageIndex,
-        searchTerm: run.favoriteSource.name,
-        contextualAuthorNames,
-        includedLanguageCodes,
-      });
-      const newPageResults = keepNewSourceResults(run.results, pageResults);
-      const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
-      const nextRun: AuthorFavoriteSourceRun = {
-        ...run,
-        status: "done",
-        results: [...run.results, ...newPageResults],
-        loadedPages: pageIndex + 1,
-        hasNextPage: !hasOnlyDuplicateUrls && resolveHasNextAuthorPage(authorConfig, page),
-        currentPageUrl: page.currentPageUrl,
-        nextPageUrl: page.nextPageUrl,
-        error: undefined,
-      };
-
-      if (updateState) {
-        patchRun(token, run.key, () => nextRun);
-      }
-      return nextRun;
-    } catch (loadError) {
-      const isPaginationEnd = isScraperListingPaginationEndError(loadError);
-      const failedRun: AuthorFavoriteSourceRun = {
-        ...run,
-        status: run.results.length || isPaginationEnd ? "done" : "error",
-        hasNextPage: false,
-        error: isPaginationEnd
-          ? undefined
-          : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
-      };
-
-      if (updateState) {
-        patchRun(token, run.key, () => failedRun);
-      }
-      return failedRun;
-    }
-  }, [contextualAuthorNames, includedLanguageCodes, patchRun, scrapeDetailsWithCards]);
-
-  const loadPagesForRun = useCallback(async (
-    run: AuthorFavoriteSourceRun,
-    pageCount: number,
-    token: number,
-    updateState = true,
-  ): Promise<AuthorFavoriteSourceRun | null> => {
-    let currentRun: AuthorFavoriteSourceRun | null = run;
-
-    for (let pageOffset = 0; pageOffset < pageCount; pageOffset += 1) {
-      if (!currentRun || !currentRun.hasNextPage || token !== tokenRef.current) {
-        return currentRun;
-      }
-
-      currentRun = await loadNextPageForRun(currentRun, token, updateState);
-    }
-
-    return currentRun;
-  }, [loadNextPageForRun]);
-
-  const loadAllPagesForRun = useCallback(async (
-    run: AuthorFavoriteSourceRun,
-    token: number,
-    updateState = true,
-  ): Promise<AuthorFavoriteSourceRun | null> => {
-    let currentRun: AuthorFavoriteSourceRun | null = run;
-
-    for (let pageOffset = 0; pageOffset < MAX_AUTHOR_FAVORITE_AUTO_PAGES; pageOffset += 1) {
-      if (!currentRun || !currentRun.hasNextPage || token !== tokenRef.current) {
-        return currentRun;
-      }
-
-      currentRun = await loadNextPageForRun(currentRun, token, updateState);
-    }
-
-    if (currentRun?.hasNextPage && token === tokenRef.current) {
-      const limitedRun = {
-        ...currentRun,
-        status: "error" as const,
-        hasNextPage: false,
-        error: "Limite de securite atteinte pendant le chargement complet.",
-      };
-      if (updateState) {
-        patchRun(token, currentRun.key, () => limitedRun);
-      }
-      return limitedRun;
-    }
-
-    return currentRun;
-  }, [loadNextPageForRun, patchRun]);
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
 
   const loadPagesForRuns = useCallback(async (
     sourceRuns: AuthorFavoriteSourceRun[],
@@ -323,19 +240,81 @@ export default function useAuthorFavoriteRuns(
     pageCount: number | null,
     updateState = true,
   ): Promise<AuthorFavoriteSourceRun[]> => {
-    const loadedRuns: Array<AuthorFavoriteSourceRun | null> = Array.from({ length: sourceRuns.length }, () => null);
-
-    await runWithConcurrency(
-      sourceRuns.map((run, index) => async () => {
-        loadedRuns[index] = pageCount === null
-          ? await loadAllPagesForRun(run, token, updateState)
-          : await loadPagesForRun(run, pageCount, token, updateState);
-      }),
+    if (!sourceRuns.length || token !== tokenRef.current) return sourceRuns;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const previousRunsByKey = new Map(sourceRuns.map((run) => [run.key, run]));
+    const favoriteRecords = sourceFavorites.length
+      ? sourceFavorites
+      : favorite ? [favorite] : [];
+    const allSources = buildAuthorListingSources(favoriteRecords, scrapersById, searchKind);
+    const selectedSourceKeys = new Set(sourceRuns.map((run) => run.key));
+    const sources = allSources.filter((source) => selectedSourceKeys.has(source.id));
+    const sourceByFallbackIdentity = new Map(allSources.map((source) => [
+      `${source.scraper.id}::${source.query}`,
+      source,
+    ]));
+    sourceRuns.forEach((run) => {
+      if (!sources.some((source) => source.id === run.key)) {
+        const configuredSource = sourceByFallbackIdentity.get(
+          `${run.favoriteSource.scraperId}::${run.favoriteSource.authorUrl}`,
+        );
+        sources.push(configuredSource ?? {
+          id: run.key,
+          name: run.favoriteSource.name,
+          scraper: run.scraper,
+          query: run.favoriteSource.authorUrl,
+          mode: "author",
+          templateContext: run.favoriteSource.templateContext ?? null,
+          contextualAuthorNames,
+        });
+      }
+    });
+    const input = buildAuthorListingSearchInput(favoriteRecords, scrapersById, searchKind, {
+      maxPages: pageCount,
       concurrency,
-    );
-
-    return loadedRuns.filter((run): run is AuthorFavoriteSourceRun => Boolean(run));
-  }, [concurrency, loadAllPagesForRun, loadPagesForRun]);
+      includedLanguageCodes,
+      scrapeDetailsWithCards,
+      useAuthorFavoriteCache: searchKind === "latestAuthors" && options.useAuthorFavoriteCache === true,
+      authorFavoriteCacheMaxAgeHours: options.authorFavoriteCacheMaxAgeHours,
+      selectedFavoriteIds: favoriteRecords.map((favoriteRecord) => favoriteRecord.id),
+      searchMode: options.searchMode,
+      quickConsecutiveSeenStopThreshold: options.quickConsecutiveSeenStopThreshold,
+    });
+    input.sources = sources;
+    let loadedRuns = sourceRuns;
+    const onSnapshot = async (result: { runs: BackgroundListingRun[] }) => {
+      if (token !== tokenRef.current) return;
+      loadedRuns = result.runs.map((run) => fromBackgroundListingRun(run, previousRunsByKey));
+      if (updateState) {
+        setRuns((currentRuns) => mergeAuthorFavoriteRuns(currentRuns, loadedRuns));
+      }
+    };
+    const initialRuns = sourceRuns.map(toBackgroundListingRun);
+    const engine = searchKind === "latestAuthors"
+      ? runLatestAuthorsSearchEngine
+      : runAuthorFavoriteRefreshSearchEngine;
+    const result = await engine(input, controller.signal, onSnapshot, {
+      initialRuns,
+      detailsCache: detailsCacheRef.current,
+    });
+    loadedRuns = result.runs.map((run) => fromBackgroundListingRun(run, previousRunsByKey));
+    return loadedRuns;
+  }, [
+    concurrency,
+    contextualAuthorNames,
+    favorite,
+    includedLanguageCodes,
+    options.authorFavoriteCacheMaxAgeHours,
+    options.quickConsecutiveSeenStopThreshold,
+    options.searchMode,
+    options.useAuthorFavoriteCache,
+    scrapeDetailsWithCards,
+    scrapersById,
+    searchKind,
+    sourceFavorites,
+  ]);
 
   const readCachedRuns = useCallback(async (
     initialRuns: AuthorFavoriteSourceRun[],
@@ -362,73 +341,6 @@ export default function useAuthorFavoriteRuns(
     }));
   }, [cacheResults, contextualAuthorNames, favorite, includedLanguageCodes]);
 
-  const buildLatestCachedRuns = useCallback(async (): Promise<{
-    cachedRuns: AuthorFavoriteSourceRun[];
-    coveredSourceKeys: Set<string>;
-    cachedFavoriteCount: number;
-  }> => {
-    if (!latestCaches?.size || !latestCacheFavorites.length) {
-      return {
-        cachedRuns: [],
-        coveredSourceKeys: new Set<string>(),
-        cachedFavoriteCount: 0,
-      };
-    }
-
-    const coveredSourceKeys = new Set<string>();
-    const cachedRunsByKey = new Map<string, AuthorFavoriteSourceRun>();
-
-    await Promise.all(latestCacheFavorites.map(async (cachedFavorite) => {
-      const cache = latestCaches.get(cachedFavorite.id);
-      if (!cache) {
-        return;
-      }
-
-      cachedFavorite.sources.forEach((source) => coveredSourceKeys.add(buildSourceKey(source)));
-      await Promise.all(cache.sources.map(async (cachedSource) => {
-        const scraper = scrapersById.get(cachedSource.scraperId);
-        if (!scraper) {
-          return;
-        }
-
-        const favoriteSource = cachedFavorite.sources.find((source) => (
-          findAuthorFavoriteCachedSource(source, {
-            ...cache,
-            sources: [cachedSource],
-          }) !== null
-        )) ?? {
-          scraperId: cachedSource.scraperId,
-          authorUrl: cachedSource.authorUrl,
-          name: cachedSource.sourceName,
-          createdAt: cachedSource.updatedAt,
-          updatedAt: cachedSource.updatedAt,
-        };
-        const initialRun = buildInitialRun(favoriteSource, scraper);
-        const cachedRun = await buildRunFromCacheSource(
-          initialRun,
-          cachedSource,
-          contextualAuthorNames,
-          includedLanguageCodes,
-        );
-        if (!cachedRunsByKey.has(cachedRun.key)) {
-          cachedRunsByKey.set(cachedRun.key, cachedRun);
-        }
-      }));
-    }));
-
-    return {
-      cachedRuns: Array.from(cachedRunsByKey.values()),
-      coveredSourceKeys,
-      cachedFavoriteCount: latestCaches.size,
-    };
-  }, [
-    contextualAuthorNames,
-    includedLanguageCodes,
-    latestCacheFavorites,
-    latestCaches,
-    scrapersById,
-  ]);
-
   const saveRunsCache = useCallback(async (
     nextRuns: AuthorFavoriteSourceRun[],
   ): Promise<void> => {
@@ -448,6 +360,7 @@ export default function useAuthorFavoriteRuns(
   }, [cacheResults, favorite]);
 
   const start = useCallback(async () => {
+    abortControllerRef.current?.abort();
     detailsCacheRef.current = createScraperCardDetailsCache();
     if (!favorite) {
       setRuns([]);
@@ -456,13 +369,16 @@ export default function useAuthorFavoriteRuns(
       return;
     }
 
-    const initialRuns = favorite.sources.reduce<AuthorFavoriteSourceRun[]>((nextRuns, source) => {
-      const scraper = scrapersById.get(source.scraperId);
-      if (scraper) {
-        nextRuns.push(buildInitialRun(source, scraper));
-      }
-      return nextRuns;
-    }, []);
+    const favoriteRecords = sourceFavorites.length ? sourceFavorites : [favorite];
+    const initialRuns = buildAuthorListingSources(favoriteRecords, scrapersById, searchKind)
+      .map((source) => buildInitialRun({
+        scraperId: source.scraper.id,
+        authorUrl: source.query,
+        name: source.favoriteSourceName || source.name,
+        templateContext: source.templateContext ?? undefined,
+        createdAt: source.favoriteUpdatedAt ?? favorite.createdAt,
+        updatedAt: source.favoriteUpdatedAt ?? favorite.updatedAt,
+      }, source.scraper, source.id));
 
     const token = tokenRef.current + 1;
     tokenRef.current = token;
@@ -474,33 +390,6 @@ export default function useAuthorFavoriteRuns(
     setError(initialRuns.length ? null : "Aucun scrapper disponible pour cet auteur favori.");
 
     try {
-      if (!cacheResults && latestCaches?.size) {
-        const latestCacheSelection = await buildLatestCachedRuns();
-        if (token !== tokenRef.current) {
-          return;
-        }
-
-        const cachedRunKeys = new Set(latestCacheSelection.cachedRuns.map((run) => run.key));
-        const runsToLoad = initialRuns.filter((run) => (
-          !latestCacheSelection.coveredSourceKeys.has(run.key)
-          && !cachedRunKeys.has(run.key)
-        ));
-        const preparedRuns = [...latestCacheSelection.cachedRuns, ...runsToLoad];
-        setRuns(preparedRuns);
-        const loadedRuns = await loadPagesForRuns(runsToLoad, token, pageLimit);
-        if (token !== tokenRef.current) {
-          return;
-        }
-
-        const loadedRunsByKey = new Map(loadedRuns.map((run) => [run.key, run]));
-        setRuns(preparedRuns.map((run) => loadedRunsByKey.get(run.key) ?? run));
-        setMessage(runsToLoad.length
-          ? `${latestCacheSelection.cachedFavoriteCount} auteur(s) chargé(s) depuis le cache ; `
-            + `${runsToLoad.length} source(s) rescrapée(s).`
-          : `${latestCacheSelection.cachedFavoriteCount} auteur(s) chargé(s) depuis le cache.`);
-        return;
-      }
-
       let cachedRuns: AuthorFavoriteSourceRun[] | null = null;
       if (cacheResults) {
         cachedRuns = await readCachedRuns(initialRuns);
@@ -555,8 +444,8 @@ export default function useAuthorFavoriteRuns(
     readCachedRuns,
     saveRunsCache,
     cacheResults,
-    buildLatestCachedRuns,
-    latestCaches,
+    searchKind,
+    sourceFavorites,
     scrapersById,
   ]);
 
@@ -572,12 +461,7 @@ export default function useAuthorFavoriteRuns(
     setError(null);
 
     try {
-      await runWithConcurrency(
-        loadableRuns.map((run) => async () => {
-          await loadNextPageForRun(run, token);
-        }),
-        concurrency,
-      );
+      await loadPagesForRuns(loadableRuns, token, 1);
 
       if (token === tokenRef.current) {
         setMessage("Pages supplementaires chargees.");
@@ -587,7 +471,7 @@ export default function useAuthorFavoriteRuns(
         setLoading(false);
       }
     }
-  }, [concurrency, loadNextPageForRun, runs]);
+  }, [loadPagesForRuns, runs]);
 
   const loadAllForAll = useCallback(async () => {
     const loadableRuns = runs.filter((run) => run.hasNextPage && run.status !== "loading");
@@ -640,10 +524,11 @@ export default function useAuthorFavoriteRuns(
     const token = tokenRef.current;
     setMessage(null);
     setError(null);
-    await loadNextPageForRun(run, token);
-  }, [loadNextPageForRun, runs]);
+    await loadPagesForRuns([run], token, 1);
+  }, [loadPagesForRuns, runs]);
 
   const reset = useCallback(() => {
+    abortControllerRef.current?.abort();
     tokenRef.current += 1;
     setRuns([]);
     setLoading(false);

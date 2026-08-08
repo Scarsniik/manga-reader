@@ -10,6 +10,7 @@ import type {
   ContinueBackgroundSearchRequest,
   CreateBackgroundSearchRequest,
   SaveBackgroundSearchResultRequest,
+  ReplayBackgroundSearchRequest,
   UpdateBackgroundSearchRequest,
 } from "../../../shared/backgroundSearch";
 import { BACKGROUND_SEARCH_SCHEMA_VERSION } from "../../../shared/backgroundSearch";
@@ -28,6 +29,10 @@ import {
   writeBackgroundSearchInput,
   writeBackgroundSearchResult,
 } from "./storage";
+import {
+  pruneExpiredSearchDocumentCaches,
+  removeSearchDocumentCacheScope,
+} from "../scrapers/searchDocumentCache";
 
 const memoryJobs = new Map<string, BackgroundSearchJob>();
 let metadata: BackgroundSearchJobMetadata[] = [];
@@ -93,10 +98,14 @@ const initialize = async (): Promise<void> => {
   }
 
   initializePromise = (async () => {
+    await pruneExpiredSearchDocumentCaches().catch((error) => {
+      console.warn("Failed to prune expired search document caches", error);
+    });
     metadata = await readBackgroundSearchMetadata();
     const currentTime = Date.now();
     metadata = await Promise.all(metadata.map(async (job) => {
       if (job.storageMode === "memory") {
+        await removeSearchDocumentCacheScope(job.id).catch(() => undefined);
         return {
           ...job,
           status: "expired" as const,
@@ -109,14 +118,22 @@ const initialize = async (): Promise<void> => {
       if (isBackgroundSearchActive(job.status)) {
         return {
           ...job,
-          status: "interrupted" as const,
+          status: "queued" as const,
+          startedAt: undefined,
           updatedAt: nowIso(),
           revision: job.revision + 1,
+          progress: {
+            ...job.progress,
+            currentLabel: "Reprise depuis le dernier checkpoint",
+          },
           resultAvailable: job.storageMode === "temporaryFile" && job.resultAvailable,
         };
       }
       if (job.expiresAt && Date.parse(job.expiresAt) <= currentTime) {
-        await removeBackgroundSearchResult(job.id);
+        await Promise.all([
+          removeBackgroundSearchResult(job.id),
+          removeSearchDocumentCacheScope(job.id),
+        ]);
         return {
           ...job,
           status: "expired" as const,
@@ -227,7 +244,10 @@ export const getBackgroundSearchQueue = async (): Promise<BackgroundSearchQueueS
       hasBackgroundSearchExpired(job)
     ));
     if (expiredJobs.length) {
-      await Promise.all(expiredJobs.map((job) => removeBackgroundSearchResult(job.id)));
+      await Promise.all(expiredJobs.flatMap((job) => [
+        removeBackgroundSearchResult(job.id),
+        removeSearchDocumentCacheScope(job.id),
+      ]));
       const expiredIds = new Set(expiredJobs.map((job) => job.id));
       expiredIds.forEach((jobId) => memoryJobs.delete(jobId));
       metadata = metadata.map((job) => expiredIds.has(job.id) ? {
@@ -401,6 +421,45 @@ export const continueBackgroundSearch = async (
   return next;
 });
 
+export const replayBackgroundSearch = async (
+  request: ReplayBackgroundSearchRequest,
+): Promise<BackgroundSearchJobMetadata | null> => serializeMutation(async () => {
+  await initialize();
+  const current = findMetadata(request.jobId);
+  if (
+    !current
+    || current.kind !== "mangaCorrespondence"
+    || current.status !== "completed"
+  ) return null;
+  const job = await loadJob(request.jobId);
+  if (!job?.result) return null;
+  const timestamp = nowIso();
+  const next: BackgroundSearchJobMetadata = {
+    ...current,
+    status: "queued",
+    startedAt: undefined,
+    completedAt: undefined,
+    expiresAt: undefined,
+    updatedAt: timestamp,
+    revision: current.revision + 1,
+    progress: {
+      completedUnits: 0,
+      totalUnits: 0,
+      resultCount: current.progress.resultCount,
+      currentLabel: "Préparation du recalcul",
+    },
+    error: undefined,
+    inputAvailable: true,
+    resultAvailable: true,
+  };
+  replaceMetadata(next);
+  await persistJobPayload({ metadata: next, input: request.input, result: job.result });
+  await writeBackgroundSearchInput(next.id, request.input);
+  await persistMetadata();
+  broadcastChange(next, true);
+  return next;
+});
+
 export const failBackgroundSearch = async (jobId: string, error: string): Promise<boolean> => (
   finishWithStatus(jobId, "error", error)
 );
@@ -503,6 +562,7 @@ export const deleteBackgroundSearch = async (jobId: string): Promise<boolean> =>
   memoryJobs.delete(jobId);
   await removeBackgroundSearchResult(jobId);
   await removeBackgroundSearchInput(jobId);
+  await removeSearchDocumentCacheScope(jobId);
   await persistMetadata();
   broadcastChange({ ...current, status: "expired", revision: current.revision + 1 }, true);
   return true;

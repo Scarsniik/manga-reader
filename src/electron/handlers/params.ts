@@ -691,6 +691,7 @@ const defaultSettings = {
     scraperLatestQuickConsecutiveSeenStopThreshold: DEFAULT_SCRAPER_LATEST_QUICK_CONSECUTIVE_SEEN_STOP_THRESHOLD,
     scraperLatestLanguageRejectLimit: DEFAULT_SCRAPER_LATEST_LANGUAGE_REJECT_LIMIT,
     scraperLatestPerformanceReportsEnabled: false,
+    scraperPerformanceReportsEnabled: false,
     scraperLatestAuthorsUseCache: true,
     scraperLatestAuthorCacheMaxAgeHours: DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
     scraperLatestIncludedLanguageCodes: [] as string[],
@@ -823,6 +824,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperLatestPerformanceReportsEnabled = typeof merged.scraperLatestPerformanceReportsEnabled === "boolean"
         ? merged.scraperLatestPerformanceReportsEnabled
         : defaultSettings.scraperLatestPerformanceReportsEnabled;
+    merged.scraperPerformanceReportsEnabled = typeof merged.scraperPerformanceReportsEnabled === "boolean"
+        ? merged.scraperPerformanceReportsEnabled
+        : merged.scraperLatestPerformanceReportsEnabled;
     merged.scraperLatestContinuousPageSafetyLimit = normalizeScraperLatestContinuousPageSafetyLimit(
         merged.scraperLatestContinuousPageSafetyLimit,
     );
@@ -1217,6 +1221,10 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperLatestPerformanceReportsEnabled = typeof nextSettings.scraperLatestPerformanceReportsEnabled === "boolean"
             ? nextSettings.scraperLatestPerformanceReportsEnabled
             : defaultSettings.scraperLatestPerformanceReportsEnabled;
+        nextSettings.scraperPerformanceReportsEnabled = typeof nextSettings.scraperPerformanceReportsEnabled === "boolean"
+            ? nextSettings.scraperPerformanceReportsEnabled
+            : nextSettings.scraperLatestPerformanceReportsEnabled;
+        nextSettings.scraperLatestPerformanceReportsEnabled = nextSettings.scraperPerformanceReportsEnabled;
         nextSettings.scraperLatestAuthorsUseCache = typeof nextSettings.scraperLatestAuthorsUseCache === "boolean"
             ? nextSettings.scraperLatestAuthorsUseCache
             : defaultSettings.scraperLatestAuthorsUseCache;

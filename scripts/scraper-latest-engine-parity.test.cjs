@@ -42,14 +42,74 @@ test("foreground and background latest searches call the same engine", () => {
     path.resolve("src/renderer/components/ScraperLatest/useScraperLatestRuns.ts"),
     "utf8",
   );
-  const backgroundSource = fs.readFileSync(
-    path.resolve("src/renderer/backgroundSearch/backgroundSearchEngine.ts"),
+  const listingEngine = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/listingSearchEngine.ts"),
+    "utf8",
+  );
+  const engineRegistry = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"),
     "utf8",
   );
 
   assert.match(foregroundSource, /runScraperLatestSearch\s*\(/);
-  assert.match(backgroundSource, /return runScraperLatestSearch\(input, signal, onSnapshot/);
+  assert.match(engineRegistry, /return runScraperLatestSearch\(input, signal, onSnapshot/);
+  assert.match(listingEngine, /export const runScraperLatestSearch/);
   assert.equal((foregroundSource.match(/fetchHomepagePageWithRetry/g) ?? []).length, 0);
+});
+
+test("every search with foreground and background execution calls one canonical engine", () => {
+  const sources = {
+    registry: fs.readFileSync(path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"), "utf8"),
+    multi: fs.readFileSync(path.resolve("src/renderer/components/MultiSearch/useMultiSearch.ts"), "utf8"),
+    browser: fs.readFileSync(path.resolve("src/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch.ts"), "utf8"),
+    authors: fs.readFileSync(path.resolve("src/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns.ts"), "utf8"),
+  };
+
+  assert.match(sources.multi, /runMultiSearchEngine\s*\(/);
+  assert.match(sources.registry, /multiSearch:\s*\(\) => runMultiSearchEngine\s*\(/);
+  assert.match(sources.browser, /runScraperAuthorSearchEngine\s*\(/);
+  assert.match(sources.registry, /scraperAuthor:\s*\(\) => runScraperAuthorSearchEngine\s*\(/);
+  assert.match(sources.authors, /runLatestAuthorsSearchEngine/);
+  assert.match(sources.registry, /latestAuthors:\s*\(\) => runLatestAuthorsSearchEngine\s*\(/);
+  assert.match(sources.authors, /runAuthorFavoriteRefreshSearchEngine/);
+  assert.match(sources.registry, /authorFavoriteRefresh:\s*\(\) => runAuthorFavoriteRefreshSearchEngine\s*\(/);
+});
+
+test("foreground and background launches build the same canonical inputs", () => {
+  const latestView = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperLatest/ScraperLatestView.tsx"),
+    "utf8",
+  );
+  const latestHook = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperLatest/useScraperLatestRuns.ts"),
+    "utf8",
+  );
+  const authorHook = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns.ts"),
+    "utf8",
+  );
+  const authorFavoritesView = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView.tsx"),
+    "utf8",
+  );
+  const browser = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperBrowser/ScraperBrowser.tsx"),
+    "utf8",
+  );
+  const browserHook = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch.ts"),
+    "utf8",
+  );
+
+  for (const source of [latestView, latestHook]) {
+    assert.match(source, /buildLatestSourceListingSources\s*\(/);
+    assert.match(source, /buildLatestSourceSearchInput\s*\(/);
+  }
+  assert.match(latestView, /buildAuthorListingSearchInput\s*\(/);
+  assert.match(authorHook, /buildAuthorListingSearchInput\s*\(/);
+  assert.match(authorFavoritesView, /buildAuthorListingSearchInput\s*\(/);
+  assert.match(browser, /buildScraperAuthorListingSearchInput\s*\(/);
+  assert.match(browserHook, /buildScraperAuthorListingSearchInput\s*\(/);
 });
 
 test("foreground and background searches keep the shared runtime boundaries", () => {
@@ -61,8 +121,16 @@ test("foreground and background searches keep the shared runtime boundaries", ()
     path.resolve("src/renderer/components/MultiSearch/useMultiSearch.ts"),
     "utf8",
   );
-  const backgroundSource = fs.readFileSync(
-    path.resolve("src/renderer/backgroundSearch/backgroundSearchEngine.ts"),
+  const engineRegistry = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"),
+    "utf8",
+  );
+  const multiEngine = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/multiSearchEngine.ts"),
+    "utf8",
+  );
+  const listingEngine = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/listingSearchEngine.ts"),
     "utf8",
   );
   const authorFavorites = fs.readFileSync(
@@ -87,15 +155,51 @@ test("foreground and background searches keep the shared runtime boundaries", ()
   );
 
   assert.match(browserSource, /fetchResolvedScraperListingPage\s*\(/);
-  assert.match(foregroundMultiSearch, /executeMultiSearchTermPage\s*\(/);
-  assert.match(backgroundSource, /executeMultiSearchTermPage\s*\(/);
-  assert.match(backgroundSource, /processScraperListingPage\s*\(/);
-  assert.match(authorFavorites, /processScraperListingPage\s*\(/);
+  assert.match(foregroundMultiSearch, /runMultiSearchEngine\s*\(/);
+  assert.doesNotMatch(foregroundMultiSearch, /executeMultiSearchTermPage\s*\(/);
+  assert.match(multiEngine, /executeMultiSearchTermPage\s*\(/);
+  assert.match(listingEngine, /processScraperListingPage\s*\(/);
+  assert.doesNotMatch(authorFavorites, /processScraperListingPage\s*\(/);
   assert.match(tagFavorites, /processScraperListingPage\s*\(/);
   assert.match(authorExtraction, /resolveScraperCardDetails\s*\(/);
   assert.doesNotMatch(authorExtraction, /extractScraperDetailsFromDocumentWithImageFallbacks/);
   assert.match(workspaceAuthor, /fetchResolvedScraperListingPage\s*\(/);
   assert.match(workspaceTag, /fetchResolvedScraperListingPage\s*\(/);
+});
+
+test("all paginated engines share execution context preloading, diagnostics and checkpoint fingerprints", () => {
+  const registry = fs.readFileSync(path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"), "utf8");
+  const listing = fs.readFileSync(path.resolve("src/renderer/searchEngines/listingSearchEngine.ts"), "utf8");
+  const multi = fs.readFileSync(path.resolve("src/renderer/searchEngines/multiSearchEngine.ts"), "utf8");
+  const manga = fs.readFileSync(path.resolve("src/renderer/searchEngines/mangaCorrespondenceSearchEngine.ts"), "utf8");
+  const author = fs.readFileSync(path.resolve("src/renderer/searchEngines/authorCorrespondenceSearchEngine.ts"), "utf8");
+  const settings = fs.readFileSync(path.resolve("src/renderer/components/Modal/modales/SettingsModalContent.tsx"), "utf8");
+
+  assert.match(registry, /createSearchExecutionContext\s*\(/);
+  assert.match(registry, /expectedExecutionFingerprint/);
+  assert.match(registry, /scraperPerformanceReportsEnabled/);
+  for (const engine of [listing, multi, manga, author]) {
+    assert.match(engine, /getPagePrefetchCache/);
+    assert.match(engine, /executionContext\.fetchDocument/);
+  }
+  assert.match(manga, /runAuthorCorrespondenceSearch\([\s\S]*executionContext/);
+  assert.match(settings, /scraperPerformanceReportsEnabled/);
+});
+
+test("manga correspondence prefilters cards before shared detail enrichment", () => {
+  const engine = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/mangaCorrespondenceSearchEngine.ts"),
+    "utf8",
+  );
+  const listingLoaders = engine.slice(
+    engine.indexOf("const loadSearch = async"),
+    engine.indexOf("await emit();", engine.indexOf("const loadSearch = async")),
+  );
+
+  assert.match(engine, /shouldFetchMangaCorrespondenceCandidateDetails\s*\(/);
+  assert.match(engine, /enrichScraperListingSourcesWithCardDetails\s*\(/);
+  assert.ok((engine.match(/scrapeDetailsWithCards:\s*false/g) ?? []).length >= 3);
+  assert.doesNotMatch(listingLoaders, /scrapeDetailsWithCards:\s*input\.scrapeDetailsWithCards/);
 });
 
 test("latest listing thumbnails keep fallbacks without validating images during scraping", async () => {

@@ -1230,6 +1230,64 @@
   cursor: wait;
 }
 
+.manga-correspondence-discoveries-dialog {
+  display: grid;
+  gap: 14px;
+  min-width: min(720px, 78vw);
+}
+
+.manga-correspondence-discoveries-dialog > p { margin: 0; color: #aaa; }
+
+.manga-correspondence-discoveries-dialog__tabs,
+.manga-correspondence-discoveries-dialog__actions { display: flex; gap: 8px; }
+
+.manga-correspondence-discoveries-dialog__tabs button,
+.manga-correspondence-discoveries-dialog__actions button {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid #383838;
+  border-radius: 8px;
+  background: #191919;
+  color: #ddd;
+  font: inherit;
+  cursor: pointer;
+}
+
+.manga-correspondence-discoveries-dialog__tabs button.is-active,
+.manga-correspondence-discoveries-dialog__actions button:last-child {
+  border-color: rgba(93, 156, 255, .55);
+  background: rgba(93, 156, 255, .15);
+  color: #edf4ff;
+}
+
+.manga-correspondence-discoveries-dialog__list {
+  display: grid;
+  max-height: min(58vh, 560px);
+  gap: 7px;
+  overflow: auto;
+}
+
+.manga-correspondence-discoveries-dialog__list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  background: #141414;
+}
+
+.manga-correspondence-discoveries-dialog__list label.is-invalidated { opacity: .58; }
+.manga-correspondence-discoveries-dialog__list span { display: grid; min-width: 0; gap: 3px; }
+.manga-correspondence-discoveries-dialog__list strong { overflow-wrap: anywhere; }
+.manga-correspondence-discoveries-dialog__list small { color: #999; }
+.manga-correspondence-discoveries-dialog__list em { color: #aaa; font-size: 12px; font-style: normal; }
+.manga-correspondence-discoveries-dialog__actions { justify-content: flex-end; }
+.manga-correspondence-discoveries-dialog__actions button:disabled { opacity: .45; cursor: not-allowed; }
+.manga-correspondence-discoveries-dialog__error { color: #ef9b9b !important; }
+.manga-correspondence-discoveries-dialog__hint { color: #d5b778 !important; }
+
 @media (max-width: 680px) {
   .manga-correspondence-view { padding: 10px; }
   .manga-correspondence-view__summary { align-items: flex-start; padding: 15px; }

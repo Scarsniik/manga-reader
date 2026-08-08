@@ -14,7 +14,13 @@ const source = `
     createScraperCardDetailsCache,
     fetchResolvedScraperListingPage,
     resolveScraperCardDetails,
+    createScraperCardMetadataRequirements,
+    doesScraperCardNeedMetadata,
   } from "@/renderer/utils/scraperRuntime";
+  export {
+    buildSearchCheckpointFingerprint,
+    createSearchExecutionContext,
+  } from "@/renderer/searchEngines/searchExecutionContext";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "shared-search-runtime-test.ts" },
@@ -38,6 +44,10 @@ const {
   fetchResolvedScraperListingPage,
   filterNewItemsByIdentity,
   resolveScraperCardDetails,
+  createScraperCardMetadataRequirements,
+  doesScraperCardNeedMetadata,
+  createSearchExecutionContext,
+  buildSearchCheckpointFingerprint,
 } = bundledModule.exports;
 
 global.DOMParser = class DOMParser {
@@ -69,6 +79,48 @@ test("shared identities normalize URLs and preserve URL-less cards when requeste
     buildScraperSearchResultIdentity("source-a", withoutUrl, "title"),
     "title:source-a:no url",
   );
+});
+
+test("one search execution merges identical document requests", async () => {
+  let requestCount = 0;
+  window.api.fetchScraperDocument = async (request) => {
+    requestCount += 1;
+    return { ok: true, requestedUrl: request.targetUrl, html: "<main />" };
+  };
+  const context = createSearchExecutionContext({ kind: "test" });
+  const request = { scraperId: "source-a", baseUrl: "https://example.test", targetUrl: "/same" };
+  const [first, second] = await Promise.all([
+    context.fetchDocument(request),
+    context.fetchDocument(request),
+  ]);
+
+  assert.equal(requestCount, 1);
+  assert.equal(first, second);
+});
+
+test("metadata requirements only request fields missing from the card", () => {
+  const requirements = createScraperCardMetadataRequirements(["authors", "authorUrls"]);
+  assert.equal(doesScraperCardNeedMetadata({ title: "One", authorNames: ["A"], authorUrls: ["/a"] }, requirements), false);
+  assert.equal(doesScraperCardNeedMetadata({ title: "One", authorNames: ["A"] }, requirements), true);
+  assert.equal(doesScraperCardNeedMetadata({ title: "One", detailsMetadataFetched: true }, requirements), false);
+});
+
+test("checkpoint fingerprints are stable by value and change with scraper revisions", () => {
+  const first = buildSearchCheckpointFingerprint("multiSearch", {
+    query: "manga",
+    scrapers: [{ id: "a", updatedAt: "one" }],
+  });
+  const reordered = buildSearchCheckpointFingerprint("multiSearch", {
+    scrapers: [{ updatedAt: "one", id: "a" }],
+    query: "manga",
+  });
+  const changed = buildSearchCheckpointFingerprint("multiSearch", {
+    query: "manga",
+    scrapers: [{ id: "a", updatedAt: "two" }],
+  });
+
+  assert.equal(first, reordered);
+  assert.notEqual(first, changed);
 });
 
 test("the common listing loader fetches, parses and returns cards", async () => {

@@ -1,5 +1,5 @@
 import type { BackgroundSearchJob, BackgroundSearchKind } from "@/shared/backgroundSearch";
-import { executeBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchEngine";
+import { executeBackgroundSearch } from "@/renderer/searchEngines/searchEngineRegistry";
 import {
   fetchAuthorPageWithRetry,
   fetchHomepagePageWithRetry,

@@ -1,9 +1,48 @@
 import type { MultiSearchScraperRun, MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { ScraperLatestCheckpointRecord, ScraperRecord } from "@/shared/scraper";
 import type {
+  MangaCorrespondenceDiscoveryKind,
+  MangaCorrespondenceDiscoveryOrigin,
+  MangaCorrespondenceDiscoveryStatus,
   MangaCorrespondenceRequest,
   MangaCorrespondenceTraceStep,
 } from "@/shared/backgroundSearch";
+
+export type MangaCorrespondenceDiscovery = {
+  key: string;
+  kind: MangaCorrespondenceDiscoveryKind;
+  value: string;
+  normalizedValue: string;
+  scraperId: string;
+  scraperName: string;
+  origin: MangaCorrespondenceDiscoveryOrigin;
+  sourceUrl?: string;
+  parentStepIds: string[];
+  evidenceCount: number;
+  status: MangaCorrespondenceDiscoveryStatus;
+  foundAt: string;
+};
+
+export type MangaCorrespondenceEngineCheckpointTask = {
+  kind: MangaCorrespondenceDiscoveryKind;
+  term: string;
+  parentId?: string;
+  initialGeneratedVariant?: boolean;
+  directOnly?: boolean;
+  directTargets?: Array<{
+    scraperId: string;
+    url: string;
+    templateContext?: Record<string, string | undefined> | null;
+  }>;
+};
+
+export type MangaCorrespondenceEngineCheckpoint = {
+  version: 1;
+  inputFingerprint: string;
+  pendingTasks: MangaCorrespondenceEngineCheckpointTask[];
+  processedTaskKeys: string[];
+  processedDirectTargetKeys?: string[];
+};
 
 export type BackgroundListingRun = {
   key: string;
@@ -35,10 +74,12 @@ export type BackgroundListingRun = {
 
 export type MultiSearchBackgroundResult = {
   runs: MultiSearchScraperRun[];
+  executionFingerprint?: string;
 };
 
 export type ListingBackgroundResult = {
   runs: BackgroundListingRun[];
+  executionFingerprint?: string;
 };
 
 export type MangaCorrespondenceMatch = {
@@ -96,6 +137,8 @@ export type MangaCorrespondenceBackgroundResult = {
   trace: MangaCorrespondenceTraceStep[];
   searchedTitles: string[];
   searchedAuthors: string[];
+  discoveries?: MangaCorrespondenceDiscovery[];
+  checkpoint?: MangaCorrespondenceEngineCheckpoint;
 };
 
 export type AuthorCorrespondenceMatch = {
@@ -114,6 +157,12 @@ export type AuthorCorrespondenceBackgroundResult = {
   referenceName: string;
   matches: AuthorCorrespondenceMatch[];
   searchedNames: string[];
+  checkpoint?: {
+    version: 1;
+    inputFingerprint: string;
+    completedUnitKeys: string[];
+    candidates: Array<Omit<AuthorCorrespondenceMatch, "previewSources">>;
+  };
 };
 
 export type BackgroundSearchExecutionResult =

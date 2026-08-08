@@ -7,6 +7,10 @@ export {
   setGlobalScraperRequestConcurrency,
 } from "./scrapers/requestLimiter";
 export {
+  pruneExpiredSearchDocumentCaches,
+  removeSearchDocumentCacheScope,
+} from "./scrapers/searchDocumentCache";
+export {
   appendScraperLatestDiagnosticEvent,
   finishScraperLatestDiagnostics,
   startScraperLatestDiagnostics,

@@ -579,6 +579,10 @@ export interface FetchScraperDocumentRequest {
   requestConfig?: ScraperRequestConfig;
   validateImage?: boolean;
   diagnostics?: import("@/shared/scraperLatestDiagnostics").ScraperRequestDiagnosticContext;
+  searchCache?: {
+    scopeId: string;
+    ttlMs?: number;
+  };
 }
 
 export interface FetchScraperDocumentResult {

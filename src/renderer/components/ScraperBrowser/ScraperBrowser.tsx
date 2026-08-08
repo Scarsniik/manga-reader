@@ -143,6 +143,7 @@ import useBackgroundSearchJob from '@/renderer/backgroundSearch/useBackgroundSea
 import { enqueueBackgroundSearch } from '@/renderer/backgroundSearch/backgroundSearchClient';
 import type { ListingBackgroundInput } from '@/shared/backgroundSearch';
 import type { ListingBackgroundResult } from '@/renderer/backgroundSearch/types';
+import { buildScraperAuthorListingSearchInput } from '@/renderer/searchEngines/authorListingSearchInput';
 
 type Props = {
   scraper: ScraperRecord;
@@ -658,6 +659,7 @@ export default function ScraperBrowser({
   } = useScraperBrowserSearch({
     scraper,
     scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+    scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
     routeSyncEnabled: effectiveRouteSyncEnabled,
     locationPathname: location.pathname,
     locationSearch: location.search,
@@ -821,20 +823,12 @@ export default function ScraperBrowser({
           setRuntimeError('Saisis un auteur avant de lancer la recherche.');
           return;
         }
-        const input: ListingBackgroundInput = {
-          sources: [{
-            id: `${scraper.id}::${trimmedQuery}`,
-            name: trimmedQuery,
-            scraper,
-            query: trimmedQuery,
-            templateContext: authorTemplateContext,
-          }],
+        const input = buildScraperAuthorListingSearchInput(scraper, trimmedQuery, {
           maxPages: Math.max(1, params?.scraperAuthorFavoritePageCount ?? 1),
-          paceMode: 'careful',
           concurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 2)),
-          includedLanguageCodes: [],
           scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
-        };
+          templateContext: authorTemplateContext,
+        });
         try {
           await enqueueBackgroundSearch({
             kind: 'scraperAuthor',

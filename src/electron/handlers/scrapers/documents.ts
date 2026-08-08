@@ -26,6 +26,10 @@ import {
   completeScraperRequestDiagnostic,
   recordScraperRequestAcquired,
 } from "./latestDiagnostics";
+import {
+  readSearchDocumentCache,
+  writeSearchDocumentCache,
+} from "./searchDocumentCache";
 
 const MAX_VALIDATED_IMAGE_BYTES = 16 * 1024 * 1024;
 
@@ -145,6 +149,16 @@ export async function fetchScraperDocument(
     requestedUrl,
     scraperId: request.scraperId,
   });
+  const cachedResult = await readSearchDocumentCache(request);
+  if (cachedResult) {
+    completeScraperRequestDiagnostic(diagnosticToken, request.diagnostics, {
+      executionMs: 0,
+      status: cachedResult.status,
+      ok: true,
+      cache: "disk-hit",
+    });
+    return cachedResult;
+  }
   let acquiredSlot: Awaited<ReturnType<typeof acquireScraperRequestSlot>>;
   try {
     acquiredSlot = await acquireScraperRequestSlot(event, request);
@@ -283,7 +297,7 @@ export async function fetchScraperDocument(
       };
     }
 
-    return {
+    const result: FetchScraperDocumentResult = {
       ok: response.ok,
       checkedAt,
       requestedUrl,
@@ -293,6 +307,10 @@ export async function fetchScraperDocument(
       html: response.ok ? html : undefined,
       error: response.ok ? undefined : `La page a repondu avec le code HTTP ${response.status}.`,
     };
+    await writeSearchDocumentCache(request, result).catch((error) => {
+      console.warn("Failed to persist search document cache", error);
+    });
+    return result;
   } catch (error) {
     diagnosticError = error instanceof Error ? error.message : "Echec de la requete.";
     return {
