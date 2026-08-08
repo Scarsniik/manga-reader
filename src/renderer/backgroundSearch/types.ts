@@ -18,6 +18,8 @@ export type MangaCorrespondenceDiscovery = {
   scraperName: string;
   origin: MangaCorrespondenceDiscoveryOrigin;
   sourceUrl?: string;
+  authorPageUrl?: string;
+  authorTemplateContext?: Record<string, string | undefined>;
   parentStepIds: string[];
   evidenceCount: number;
   status: MangaCorrespondenceDiscoveryStatus;

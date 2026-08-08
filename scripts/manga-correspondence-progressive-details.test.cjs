@@ -7,6 +7,7 @@ const { parseHTML } = require("linkedom");
 const source = `
   export { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
+  export { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-progressive-details-test.ts" },
@@ -23,7 +24,11 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
   require,
 );
 
-const { runAuthorCorrespondenceSearch, runMangaCorrespondenceSearch } = bundledModule.exports;
+const {
+  resolveMangaCorrespondenceManualDiscovery,
+  runAuthorCorrespondenceSearch,
+  runMangaCorrespondenceSearch,
+} = bundledModule.exports;
 
 global.DOMParser = class DOMParser {
   parseFromString(html) {
@@ -128,6 +133,312 @@ test("manga correspondence only fetches details for matches and possible candida
     && candidate.source.result.detailsMetadataFetched !== true
   )));
   assert.ok(result.trace.some((step) => step.detail?.includes("2 fiche(s) vérifiée(s)")));
+});
+
+test("a repeated author name only creates one discovery event per scraper", async () => {
+  const authorScraper = {
+    ...scraper,
+    features: scraper.features.map((feature) => feature.kind === "details"
+      ? {
+        ...feature,
+        config: {
+          ...feature.config,
+          authorsSelector: { kind: "css", value: ".author" },
+          authorUrlSelector: { kind: "css", value: ".author" },
+        },
+      }
+      : feature),
+  };
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        if (targetUrl.includes("/search?")) {
+          return {
+            ok: true,
+            requestedUrl: targetUrl,
+            finalUrl: targetUrl,
+            html: `
+              <article class="card"><a class="title" href="/details/two">Series One 2</a></article>
+              <article class="card"><a class="title" href="/details/three">Series One 3</a></article>
+            `,
+          };
+        }
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: '<h1 class="details-title">Series One</h1><a class="author" href="/authors/yd">YD</a>',
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch({
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: authorScraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Series One",
+      title: "Series One",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [authorScraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: true,
+    enableRomajiPhoneticMerge: false,
+  }, new AbortController().signal, async () => {});
+
+  const authorEvents = result.trace.filter((step) => (
+    step.label === "Auteur correspondant trouvé" && step.term === "YD"
+  ));
+  assert.equal(authorEvents.length, 1);
+  const authorDiscoveries = result.discoveries.filter((discovery) => (
+    discovery.kind === "author"
+    && discovery.scraperId === authorScraper.id
+    && discovery.normalizedValue === "yd"
+  ));
+  assert.equal(authorDiscoveries.length, 1);
+  assert.equal(authorDiscoveries[0].authorPageUrl, "https://example.test/authors/yd");
+});
+
+test("manual titles accept text and resolve compatible detail URLs before replay", async () => {
+  const input = {
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: scraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Series One",
+      title: "Series One",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    enableRomajiPhoneticMerge: false,
+  };
+  const textDiscovery = await resolveMangaCorrespondenceManualDiscovery({
+    kind: "title",
+    rawValue: "Series Two",
+    input,
+  });
+  assert.equal(textDiscovery.value, "Series Two");
+  assert.equal(textDiscovery.scraperId, "manual");
+  assert.equal(textDiscovery.origin, "manual");
+
+  const urlDiscovery = await resolveMangaCorrespondenceManualDiscovery({
+    kind: "title",
+    rawValue: "https://example.test/details/two",
+    input,
+    fetchDocument: async (request) => ({
+      ok: true,
+      requestedUrl: request.targetUrl,
+      finalUrl: request.targetUrl,
+      html: '<h1 class="details-title">Series Two</h1>',
+    }),
+  });
+  assert.equal(urlDiscovery.value, "Series Two");
+  assert.equal(urlDiscovery.scraperId, scraper.id);
+  assert.equal(urlDiscovery.sourceUrl, "https://example.test/details/two");
+  await assert.rejects(() => resolveMangaCorrespondenceManualDiscovery({
+    kind: "title",
+    rawValue: "https://unknown.test/details/two",
+    input,
+    fetchDocument: async () => {
+      throw new Error("Cette URL ne doit pas être chargée.");
+    },
+  }), /Aucun scraper actif ne sait ouvrir cette URL de fiche/);
+});
+
+test("manual author URLs are validated and keep their direct page target", async () => {
+  const authorScraper = {
+    ...scraper,
+    features: [...scraper.features, {
+      kind: "author",
+      label: "Author",
+      description: "",
+      status: "validated",
+      config: {
+        urlStrategy: "result_url",
+        resultItemSelector: ".card",
+        titleSelector: ".title",
+        detailUrlSelector: ".title@href",
+        authorNameSelector: ".author-name",
+      },
+    }],
+  };
+  const input = {
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: authorScraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Series One",
+      title: "Series One",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [authorScraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    enableRomajiPhoneticMerge: false,
+  };
+  const discovery = await resolveMangaCorrespondenceManualDiscovery({
+    kind: "author",
+    rawValue: "https://example.test/authors/yd",
+    input,
+    fetchDocument: async (request) => ({
+      ok: true,
+      requestedUrl: request.targetUrl,
+      finalUrl: request.targetUrl,
+      html: `
+        <h1 class="author-name">YD</h1>
+        <article class="card"><a class="title" href="/details/one">Series One</a></article>
+      `,
+    }),
+  });
+
+  assert.equal(discovery.value, "YD");
+  assert.equal(discovery.scraperId, authorScraper.id);
+  assert.equal(discovery.authorPageUrl, "https://example.test/authors/yd");
+});
+
+test("a replay processes manually added manga and author pages as direct targets", async () => {
+  const directUrl = "https://example.test/details/manual-two";
+  const directAuthorUrl = "https://example.test/authors/yd";
+  const authorScraper = {
+    ...scraper,
+    features: [...scraper.features, {
+      kind: "author",
+      label: "Author",
+      description: "",
+      status: "validated",
+      config: {
+        urlStrategy: "result_url",
+        resultItemSelector: ".card",
+        titleSelector: ".title",
+        detailUrlSelector: ".title@href",
+        authorNameSelector: ".author-name",
+      },
+    }],
+  };
+  const requestedUrls = [];
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        requestedUrls.push(targetUrl);
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: targetUrl === directUrl
+            ? '<h1 class="details-title">Series Manual 2</h1>'
+            : targetUrl === directAuthorUrl
+              ? `
+                <h1 class="author-name">YD</h1>
+                <article class="card"><a class="title" href="/details/manual-two">Series Manual 2</a></article>
+              `
+            : "<main></main>",
+        };
+      },
+    },
+  };
+  const input = {
+    request: "otherChapters",
+    strategy: "titleFirst",
+    reference: {
+      scraperId: authorScraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Series One",
+      title: "Series One",
+      alternativeTitles: [],
+      authors: [],
+      authorUrls: [],
+    },
+    scraperFilterValues: [],
+    scrapers: [authorScraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    enableRomajiPhoneticMerge: false,
+  };
+  const referenceDiscovery = {
+    key: `title:${authorScraper.id}:series one`,
+    kind: "title",
+    value: "Series One",
+    normalizedValue: "series one",
+    scraperId: authorScraper.id,
+    scraperName: authorScraper.name,
+    origin: "reference",
+    sourceUrl: input.reference.sourceUrl,
+    parentStepIds: [],
+    evidenceCount: 1,
+    status: "active",
+    propagationConfidence: "reference",
+    foundAt: "2026-08-08T00:00:00.000Z",
+  };
+  const manualDiscovery = {
+    ...referenceDiscovery,
+    key: `title:${authorScraper.id}:series manual`,
+    value: "Series Manual",
+    normalizedValue: "series manual",
+    origin: "manual",
+    sourceUrl: directUrl,
+    propagationConfidence: "manual",
+  };
+  const manualAuthorDiscovery = {
+    ...referenceDiscovery,
+    key: `author:${authorScraper.id}:yd`,
+    kind: "author",
+    value: "YD",
+    normalizedValue: "yd",
+    origin: "manual",
+    sourceUrl: directAuthorUrl,
+    authorPageUrl: directAuthorUrl,
+    propagationConfidence: "manual",
+  };
+  const previousResult = {
+    request: input.request,
+    matches: [],
+    rejectedCandidates: [],
+    rejectedCandidateCount: 0,
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: [],
+    discoveries: [referenceDiscovery, manualDiscovery, manualAuthorDiscovery],
+  };
+  const replayed = await runMangaCorrespondenceSearch({
+    ...input,
+    replay: {
+      revision: 1,
+      discoveryDecisions: [referenceDiscovery, manualDiscovery, manualAuthorDiscovery]
+        .map(({ key, status }) => ({ key, status })),
+    },
+  }, new AbortController().signal, async () => {}, previousResult);
+
+  assert.ok(replayed.matches.some((match) => match.source.result.detailUrl === directUrl));
+  assert.ok(requestedUrls.includes(directAuthorUrl));
 });
 
 test("a replay removes invalidated title branches and reapplies surviving manual overrides", async () => {

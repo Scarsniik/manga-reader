@@ -81,11 +81,13 @@ import MangaCorrespondenceDiscoveriesDialog from "@/renderer/components/MangaCor
 import {
   buildInitialMangaCorrespondenceDiscoveries,
   buildMangaCorrespondenceReplayInput,
+  normalizeMangaCorrespondenceDiscoveryValue,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceDiscoveries";
 import {
   buildMangaCorrespondenceResultDecisions,
   updateMangaCorrespondenceResultStatuses,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
+import { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -174,13 +176,38 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
   const input = job?.input as MangaCorrespondenceBackgroundInput | undefined;
-  const editableDiscoveries = useMemo(() => (
-    result?.discoveries?.length
+  const editableDiscoveries = useMemo(() => {
+    const baseDiscoveries = result?.discoveries?.length
       ? result.discoveries
       : input
         ? buildInitialMangaCorrespondenceDiscoveries(input)
-        : []
-  ), [input, result?.discoveries]);
+        : [];
+    const mangaDetailUrls = new Set([
+      input?.reference.sourceUrl,
+      ...(result?.matches ?? []).map((match) => match.source.result.detailUrl),
+      ...(result?.rejectedCandidates ?? []).map((candidate) => candidate.source.result.detailUrl),
+    ].filter((url): url is string => Boolean(url?.trim())));
+    const referenceAuthorUrls = input?.reference.authorUrls ?? [];
+    return baseDiscoveries.map((discovery) => {
+      if (discovery.kind !== "author" || discovery.authorPageUrl) return discovery;
+      const referenceAuthorIndex = input?.reference.authors.findIndex((author) => (
+        normalizeMangaCorrespondenceDiscoveryValue(author) === discovery.normalizedValue
+      )) ?? -1;
+      const referenceAuthorUrl = referenceAuthorIndex >= 0
+        ? referenceAuthorUrls[referenceAuthorIndex]
+          ?? (referenceAuthorUrls.length === 1 ? referenceAuthorUrls[0] : undefined)
+        : undefined;
+      const legacyAuthorPageUrl = discovery.sourceUrl
+        && (
+          discovery.origin === "authorPage"
+          || (discovery.origin !== "reference" && !mangaDetailUrls.has(discovery.sourceUrl))
+        )
+        ? discovery.sourceUrl
+        : undefined;
+      const authorPageUrl = referenceAuthorUrl ?? legacyAuthorPageUrl;
+      return authorPageUrl ? { ...discovery, authorPageUrl } : discovery;
+    });
+  }, [input, result]);
   const editableResultDecisions = useMemo(
     () => buildMangaCorrespondenceResultDecisions(result),
     [result],
@@ -692,6 +719,26 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           resultDecisions={editableResultDecisions}
           disabled={active}
           onCancel={closeModal}
+          onOpenAuthorPage={async (discovery) => {
+            if (!discovery.authorPageUrl) return;
+            const opened = await openWorkspaceTarget({
+              kind: "scraper.author",
+              scraperId: discovery.scraperId,
+              query: discovery.authorPageUrl,
+              title: discovery.value,
+              templateContext: discovery.authorTemplateContext,
+            });
+            if (!opened) throw new Error("La page auteur n’a pas pu être ouverte dans un nouvel onglet.");
+          }}
+          onResolveManualDiscovery={async (kind, value) => {
+            if (!input) throw new Error("Les paramètres de cette recherche ne sont plus disponibles.");
+            return resolveMangaCorrespondenceManualDiscovery({
+              kind,
+              rawValue: value,
+              input,
+              fetchDocument: window.api?.fetchScraperDocument,
+            });
+          }}
           onSave={saveDiscoveries}
         />
       ),

@@ -19,13 +19,22 @@ export const buildInitialMangaCorrespondenceDiscoveries = (
   input: MangaCorrespondenceBackgroundInput,
 ): MangaCorrespondenceDiscovery[] => {
   const scraper = input.scrapers.find((entry) => entry.id === input.reference.scraperId);
-  const entries: Array<{ kind: MangaCorrespondenceDiscovery["kind"]; value: string }> = [
+  const entries: Array<{
+    kind: MangaCorrespondenceDiscovery["kind"];
+    value: string;
+    authorPageUrl?: string;
+  }> = [
     { kind: "title", value: input.reference.title },
     ...input.reference.alternativeTitles.map((value) => ({ kind: "title" as const, value })),
-    ...input.reference.authors.map((value) => ({ kind: "author" as const, value })),
+    ...input.reference.authors.map((value, index) => ({
+      kind: "author" as const,
+      value,
+      authorPageUrl: input.reference.authorUrls[index]
+        ?? (input.reference.authorUrls.length === 1 ? input.reference.authorUrls[0] : undefined),
+    })),
   ];
   const byKey = new Map<string, MangaCorrespondenceDiscovery>();
-  entries.forEach(({ kind, value }) => {
+  entries.forEach(({ kind, value, authorPageUrl }) => {
     const normalizedValue = normalizeMangaCorrespondenceDiscoveryValue(value);
     if (!normalizedValue) return;
     const key = buildMangaCorrespondenceDiscoveryKey(kind, input.reference.scraperId, value);
@@ -39,6 +48,7 @@ export const buildInitialMangaCorrespondenceDiscoveries = (
       scraperName: scraper?.name ?? input.reference.scraperId,
       origin: "reference",
       sourceUrl: input.reference.sourceUrl,
+      ...(authorPageUrl ? { authorPageUrl } : {}),
       parentStepIds: [],
       evidenceCount: 1,
       status: "active",

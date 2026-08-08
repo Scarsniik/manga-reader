@@ -126,7 +126,7 @@ export type MangaCorrespondenceRequest = "sameManga" | "otherChapters";
 export type MangaCorrespondenceStrategy = "balanced" | "titleFirst" | "authorFirst";
 export type MangaCorrespondenceDiscoveryKind = "title" | "author";
 export type MangaCorrespondenceDiscoveryStatus = "active" | "invalidated";
-export type MangaCorrespondenceDiscoveryOrigin = "reference" | "card" | "details" | "authorPage";
+export type MangaCorrespondenceDiscoveryOrigin = "reference" | "card" | "details" | "authorPage" | "manual";
 
 export type MangaCorrespondenceDiscoveryDecision = {
   key: string;

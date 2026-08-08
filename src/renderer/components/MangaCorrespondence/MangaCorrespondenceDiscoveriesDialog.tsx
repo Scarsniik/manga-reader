@@ -7,6 +7,11 @@ type Props = {
   resultDecisions: MangaCorrespondenceResultDecision[];
   disabled?: boolean;
   onCancel: () => void;
+  onOpenAuthorPage: (discovery: MangaCorrespondenceDiscovery) => Promise<void>;
+  onResolveManualDiscovery: (
+    kind: MangaCorrespondenceDiscovery["kind"],
+    value: string,
+  ) => Promise<MangaCorrespondenceDiscovery>;
   onSave: (
     discoveries: MangaCorrespondenceDiscovery[],
     resultDecisions: MangaCorrespondenceResultDecision[],
@@ -21,6 +26,7 @@ const ORIGIN_LABELS: Record<MangaCorrespondenceDiscovery["origin"], string> = {
   card: "Card",
   details: "Fiche",
   authorPage: "Page auteur",
+  manual: "Ajout manuel",
 };
 
 export default function MangaCorrespondenceDiscoveriesDialog({
@@ -28,22 +34,21 @@ export default function MangaCorrespondenceDiscoveriesDialog({
   resultDecisions,
   disabled = false,
   onCancel,
+  onOpenAuthorPage,
+  onResolveManualDiscovery,
   onSave,
 }: Props) {
   const [tab, setTab] = useState<Tab>("result");
-  const [statuses, setStatuses] = useState(() => new Map(
-    discoveries.map((discovery) => [discovery.key, discovery.status]),
-  ));
+  const [draftDiscoveries, setDraftDiscoveries] = useState(discoveries);
   const [resultStatuses, setResultStatuses] = useState(() => new Map(
     resultDecisions.map((decision) => [decision.key, decision.status]),
   ));
   const [submitting, setSubmitting] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [manualValue, setManualValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const nextDiscoveries = useMemo(() => discoveries.map((discovery) => ({
-    ...discovery,
-    status: statuses.get(discovery.key) ?? discovery.status,
-  })), [discoveries, statuses]);
+  const nextDiscoveries = draftDiscoveries;
   const nextResultDecisions = useMemo(() => resultDecisions.map((decision) => ({
     ...decision,
     status: resultStatuses.get(decision.key) ?? decision.status,
@@ -65,10 +70,47 @@ export default function MangaCorrespondenceDiscoveriesDialog({
     discovery.kind === "title" && discovery.status === "active"
   )).length;
   const changed = nextDiscoveries.some((discovery, index) => (
-    discovery.status !== discoveries[index]?.status
+    discovery.key !== discoveries[index]?.key
+    || discovery.status !== discoveries[index]?.status
+    || discovery.sourceUrl !== discoveries[index]?.sourceUrl
+    || discovery.authorPageUrl !== discoveries[index]?.authorPageUrl
   )) || nextResultDecisions.some((decision, index) => (
     decision.status !== resultDecisions[index]?.status
-  ));
+  )) || nextDiscoveries.length !== discoveries.length;
+
+  const addManualDiscovery = async () => {
+    if (tab === "result" || !manualValue.trim()) return;
+    setAdding(true);
+    setError(null);
+    try {
+      const discovery = await onResolveManualDiscovery(tab, manualValue);
+      setDraftDiscoveries((current) => {
+        const existingIndex = current.findIndex((entry) => entry.key === discovery.key);
+        if (existingIndex < 0) return [...current, discovery];
+        return current.map((entry, index) => index === existingIndex
+          ? {
+            ...entry,
+            ...discovery,
+            origin: entry.origin === "reference" ? "reference" : discovery.origin,
+            propagationConfidence: entry.origin === "reference"
+              ? entry.propagationConfidence
+              : discovery.propagationConfidence,
+            parentStepIds: Array.from(new Set([
+              ...entry.parentStepIds,
+              ...discovery.parentStepIds,
+            ])),
+            evidenceCount: Math.max(entry.evidenceCount, discovery.evidenceCount),
+            status: "active",
+          }
+          : entry);
+      });
+      setManualValue("");
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : "Cet ajout n’a pas pu être validé.");
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const submit = async (replay: boolean) => {
     if (replay && activeTitleCount === 0) {
@@ -96,6 +138,30 @@ export default function MangaCorrespondenceDiscoveriesDialog({
         <button type="button" className={tab === "title" ? "is-active" : ""} onClick={() => setTab("title")}>Titres ({titleCount})</button>
         <button type="button" className={tab === "author" ? "is-active" : ""} onClick={() => setTab("author")}>Auteurs ({authorCount})</button>
       </div>
+      {tab !== "result" ? (
+        <div className="manga-correspondence-discoveries-dialog__manual-add">
+          <input
+            value={manualValue}
+            disabled={disabled || submitting || adding}
+            onChange={(event) => setManualValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void addManualDiscovery();
+            }}
+            placeholder={tab === "title"
+              ? "Titre ou URL d’une fiche manga…"
+              : "Nom d’auteur ou URL d’une page auteur…"}
+          />
+          <button
+            type="button"
+            disabled={disabled || submitting || adding || !manualValue.trim()}
+            onClick={() => void addManualDiscovery()}
+          >
+            {adding ? "Vérification…" : "Ajouter"}
+          </button>
+        </div>
+      ) : null}
       <input
         className="manga-correspondence-discoveries-dialog__filter"
         value={filter}
@@ -133,16 +199,35 @@ export default function MangaCorrespondenceDiscoveriesDialog({
               type="checkbox"
               checked={discovery.status === "active"}
               disabled={disabled || submitting}
-              onChange={(event) => setStatuses((current) => {
-                const next = new Map(current);
-                next.set(discovery.key, event.target.checked ? "active" : "invalidated");
-                return next;
-              })}
+              onChange={(event) => setDraftDiscoveries((current) => current.map((entry) => (
+                entry.key === discovery.key
+                  ? { ...entry, status: event.target.checked ? "active" : "invalidated" }
+                  : entry
+              )))}
             />
             <span>
               <strong>{discovery.value}</strong>
               <small>{discovery.scraperName} · {ORIGIN_LABELS[discovery.origin]}{discovery.evidenceCount > 1 ? ` · ${discovery.evidenceCount} preuves` : ""}</small>
             </span>
+            {discovery.kind === "author" && discovery.authorPageUrl ? (
+              <button
+                type="button"
+                className="manga-correspondence-discoveries-dialog__open-author"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setError(null);
+                  void onOpenAuthorPage(discovery).catch((openError) => {
+                    setError(openError instanceof Error
+                      ? openError.message
+                      : "La page auteur n’a pas pu être ouverte.");
+                  });
+                }}
+                title={`Ouvrir la page auteur ${discovery.value} dans un nouvel onglet`}
+              >
+                Ouvrir
+              </button>
+            ) : null}
             <em>{discovery.status === "active" ? "Active" : "Invalidée"}</em>
           </label>
         )) : <div className="empty">Aucune découverte ne correspond à ce filtre.</div>}
@@ -151,9 +236,9 @@ export default function MangaCorrespondenceDiscoveriesDialog({
       {activeTitleCount === 0 ? <p className="manga-correspondence-discoveries-dialog__error">Aucun titre actif : le rejeu est bloqué.</p> : null}
       {error ? <p className="manga-correspondence-discoveries-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-discoveries-dialog__actions">
-        <button type="button" className="secondary" disabled={submitting} onClick={onCancel}>Annuler</button>
-        <button type="button" disabled={disabled || submitting || !changed} onClick={() => void submit(false)}>Enregistrer</button>
-        <button type="button" disabled={disabled || submitting || activeTitleCount === 0} onClick={() => void submit(true)}>
+        <button type="button" className="secondary" disabled={submitting || adding} onClick={onCancel}>Annuler</button>
+        <button type="button" disabled={disabled || submitting || adding || !changed} onClick={() => void submit(false)}>Enregistrer</button>
+        <button type="button" disabled={disabled || submitting || adding || activeTitleCount === 0} onClick={() => void submit(true)}>
           {submitting ? "Préparation…" : "Enregistrer et rejouer"}
         </button>
       </div>
