@@ -7,6 +7,8 @@ const { parseHTML } = require("linkedom");
 const source = `
   export { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
+  export { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
+  export { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
   export { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
 `;
 const built = esbuild.buildSync({
@@ -25,8 +27,10 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  createSearchExecutionContext,
   resolveMangaCorrespondenceManualDiscovery,
   runAuthorCorrespondenceSearch,
+  runAuthorCorrespondenceWorkflow,
   runMangaCorrespondenceSearch,
 } = bundledModule.exports;
 
@@ -338,6 +342,97 @@ test("manual author URLs are validated and keep their direct page target", async
   assert.equal(discovery.value, "YD");
   assert.equal(discovery.scraperId, authorScraper.id);
   assert.equal(discovery.authorPageUrl, "https://example.test/authors/yd");
+});
+
+test("author correspondence discovers an unknown author from the same manga before searching author pages", async () => {
+  const authorScraper = {
+    ...scraper,
+    features: [
+      ...scraper.features.map((feature) => feature.kind === "details"
+        ? {
+          ...feature,
+          config: {
+            ...feature.config,
+            authorsSelector: { kind: "css", value: ".details-author" },
+            authorUrlSelector: { kind: "css", value: ".details-author@href" },
+          },
+        }
+        : feature),
+      {
+        kind: "author",
+        label: "Author",
+        description: "",
+        status: "validated",
+        config: {
+          urlStrategy: "result_url",
+          resultItemSelector: ".card",
+          titleSelector: ".title",
+          detailUrlSelector: ".title@href",
+          authorNameSelector: ".author-name",
+        },
+      },
+    ],
+  };
+  const snapshots = [];
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        const decodedUrl = decodeURIComponent(targetUrl);
+        const html = targetUrl.endsWith("/authors/yd")
+          ? `
+            <h1 class="author-name">yd</h1>
+            <article class="card"><a class="title" href="/details/two">Series One</a></article>
+          `
+          : targetUrl.endsWith("/details/two")
+            ? `
+              <h1 class="details-title">Series One</h1>
+              <a class="details-author" href="/authors/yd">YD</a>
+            `
+            : decodedUrl.includes("/search?")
+              ? '<article class="card"><a class="title" href="/details/two">Series One</a></article>'
+              : "<main></main>";
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html,
+        };
+      },
+    },
+  };
+  const result = await runAuthorCorrespondenceWorkflow({
+    referenceName: "",
+    names: [],
+    referenceSources: [],
+    scraperFilterValues: [],
+    scrapers: [authorScraper],
+    maxPages: 1,
+    authorPageCount: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    mangaSeed: {
+      reference: {
+        scraperId: authorScraper.id,
+        sourceUrl: "https://example.test/details/reference",
+        rawTitle: "Series One",
+        title: "Series One",
+        alternativeTitles: [],
+        authors: [],
+        authorUrls: [],
+      },
+      enableRomajiPhoneticMerge: false,
+    },
+  }, new AbortController().signal, async (_partialResult, progress) => {
+    snapshots.push(progress.currentLabel);
+  }, createSearchExecutionContext({ kind: "authorCorrespondence", mode: "background" }));
+
+  assert.deepEqual(result.searchedNames, ["YD"]);
+  assert.equal(result.referenceName, "YD");
+  assert.ok(result.matches.some((match) => match.authorUrl === "https://example.test/authors/yd"));
+  assert.ok(snapshots.some((label) => label?.startsWith("Recherche du manga")));
 });
 
 test("a replay processes manually added manga and author pages as direct targets", async () => {

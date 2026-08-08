@@ -23,6 +23,7 @@ import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSear
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
+import { buildUniqueAuthorSearchNames } from "@/renderer/utils/authorSearchNames";
 import {
   buildAuthorCorrespondenceMatchKey,
   normalizeAuthorCorrespondenceTarget,
@@ -47,16 +48,6 @@ type SnapshotCallback = (
 type Candidate = Omit<AuthorCorrespondenceMatch, "previewSources">;
 
 const PREVIEW_RESULT_LIMIT = 6;
-
-const uniqueText = (values: Array<string | undefined>): string[] => {
-  const seen = new Set<string>();
-  return values.map((value) => value?.trim().replace(/\s+/g, " ") ?? "").filter((value) => {
-    const key = normalizeFuzzyText(value);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
 
 const selectScrapers = (input: AuthorCorrespondenceBackgroundInput): ScraperRecord[] => {
   const filter = splitIncludeFilterValues(input.scraperFilterValues);
@@ -89,7 +80,7 @@ const buildAuthorSearchValues = (scraper: ScraperRecord, authorName: string): st
   const underscoreSlug = buildAuthorSlug(authorName, "_");
   const compactSlug = buildAuthorSlug(authorName, "");
   const testPrefix = config.testValue?.match(/^([\p{L}\p{N}_-]+):/u)?.[1];
-  return uniqueText(testPrefix
+  return buildUniqueAuthorSearchNames(testPrefix
     ? [`${testPrefix}:${underscoreSlug}`, `${testPrefix}:${hyphenSlug}`, authorName, underscoreSlug, hyphenSlug, compactSlug]
     : /\/artists?\//i.test(config.urlTemplate ?? "")
       ? [hyphenSlug, underscoreSlug, authorName, compactSlug]
@@ -141,7 +132,7 @@ export const runAuthorCorrespondenceSearch = async (
   const scrapers = selectScrapers(input);
   if (!scrapers.length) throw new Error("Aucun scrapper compatible n'est sélectionné.");
 
-  const names = uniqueText([input.referenceName, ...input.names]);
+  const names = buildUniqueAuthorSearchNames([input.referenceName, ...input.names]);
   if (!names.length) throw new Error("Aucun nom d'auteur exploitable n'est disponible.");
 
   const concurrency = Math.max(1, Math.floor(input.scrapingConcurrency));

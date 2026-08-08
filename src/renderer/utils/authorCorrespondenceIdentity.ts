@@ -21,3 +21,16 @@ export const buildAuthorCorrespondenceMatchKey = (
 ): string => (
   `${scraperId}::${normalizeAuthorCorrespondenceTarget(authorUrl)}`
 );
+
+export const dedupeAuthorCorrespondenceReferenceSources = (
+  sources: AuthorCorrespondenceReferenceSource[],
+): AuthorCorrespondenceReferenceSource[] => {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = buildAuthorCorrespondenceMatchKey(source.scraperId, source.authorUrl);
+    if (!source.authorUrl.trim() || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+import type { AuthorCorrespondenceReferenceSource } from "@/shared/backgroundSearch";

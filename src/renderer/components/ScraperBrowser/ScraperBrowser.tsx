@@ -141,7 +141,7 @@ import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import './style.scss';
 import useBackgroundSearchJob from '@/renderer/backgroundSearch/useBackgroundSearchJob';
 import { enqueueBackgroundSearch } from '@/renderer/backgroundSearch/backgroundSearchClient';
-import type { ListingBackgroundInput } from '@/shared/backgroundSearch';
+import type { ListingBackgroundInput, MangaCorrespondenceReference } from '@/shared/backgroundSearch';
 import type { ListingBackgroundResult } from '@/renderer/backgroundSearch/types';
 import { buildScraperAuthorListingSearchInput } from '@/renderer/searchEngines/authorListingSearchInput';
 
@@ -464,6 +464,25 @@ export default function ScraperBrowser({
     detailsResult?.title?.trim() ?? '',
     titleAnalysisConfig,
   ), [detailsResult?.title, titleAnalysisConfig]);
+  const detailsAuthorNameCandidates = useMemo(() => buildUniqueAuthorSearchNames([
+    ...correspondenceTitleAnalysis.authors,
+    ...(detailsResult?.authors ?? []),
+  ]), [correspondenceTitleAnalysis.authors, detailsResult?.authors]);
+  const detailsMangaCorrespondenceReference = useMemo<MangaCorrespondenceReference | null>(() => {
+    const currentDetails = detailsResult;
+    const rawTitle = currentDetails?.title?.trim();
+    if (!currentDetails || !rawTitle) return null;
+    return {
+      scraperId: scraper.id,
+      sourceUrl: currentDetails.finalUrl || currentDetails.requestedUrl || '',
+      rawTitle,
+      title: correspondenceTitleAnalysis.title || rawTitle,
+      alternativeTitles: correspondenceTitleAnalysis.alternativeTitles,
+      authors: detailsAuthorNameCandidates,
+      authorUrls: currentDetails.authorUrls,
+      chapter: correspondenceTitleAnalysis.chapter,
+    };
+  }, [correspondenceTitleAnalysis, detailsAuthorNameCandidates, detailsResult, scraper.id]);
   const potentialMatchMergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
@@ -1395,26 +1414,22 @@ export default function ScraperBrowser({
       });
   }, [buildTitleMultiSearchTarget, setRuntimeError]);
   const handleOpenCorrespondenceSearch = useCallback(() => {
-    if (!detailsResult?.title?.trim()) {
+    if (!detailsMangaCorrespondenceReference) {
       setRuntimeError('Aucun titre exploitable n\'est disponible.');
       return;
     }
-    const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl || '';
     openModal({
       title: 'Rechercher des correspondances',
       content: (
         <MangaCorrespondenceDialog
-          scraperId={scraper.id}
-          sourceUrl={sourceUrl}
-          rawTitle={detailsResult.title}
-          initialTitle={correspondenceTitleAnalysis.title || detailsResult.title}
-          initialAlternativeTitles={correspondenceTitleAnalysis.alternativeTitles}
-          initialAuthors={Array.from(new Set([
-            ...correspondenceTitleAnalysis.authors,
-            ...detailsResult.authors,
-          ]))}
-          initialAuthorUrls={detailsResult.authorUrls}
-          initialChapter={correspondenceTitleAnalysis.chapter}
+          scraperId={detailsMangaCorrespondenceReference.scraperId}
+          sourceUrl={detailsMangaCorrespondenceReference.sourceUrl}
+          rawTitle={detailsMangaCorrespondenceReference.rawTitle}
+          initialTitle={detailsMangaCorrespondenceReference.title}
+          initialAlternativeTitles={detailsMangaCorrespondenceReference.alternativeTitles}
+          initialAuthors={detailsMangaCorrespondenceReference.authors}
+          initialAuthorUrls={detailsMangaCorrespondenceReference.authorUrls}
+          initialChapter={detailsMangaCorrespondenceReference.chapter}
           onCancel={closeModal}
           onQueued={(message) => {
             closeModal();
@@ -1424,7 +1439,54 @@ export default function ScraperBrowser({
       ),
       className: 'manga-correspondence-modal-shell',
     });
-  }, [closeModal, correspondenceTitleAnalysis, detailsResult, openModal, scraper.id, setRuntimeError]);
+  }, [closeModal, detailsMangaCorrespondenceReference, openModal, setRuntimeError]);
+  const handleOpenAuthorCorrespondenceFromManga = useCallback(() => {
+    if (!detailsResult || !detailsMangaCorrespondenceReference) {
+      setRuntimeError('Aucun titre exploitable n\'est disponible.');
+      return;
+    }
+    const referenceSources = detailsResult.authorUrls.flatMap((authorUrl, index) => {
+      const normalizedUrl = authorUrl.trim();
+      if (!normalizedUrl) return [];
+      return [{
+        scraperId: scraper.id,
+        authorUrl: normalizedUrl,
+        name: detailsResult.authors[index]
+          ?? detailsResult.authors[0]
+          ?? detailsAuthorNameCandidates[0]
+          ?? '',
+      }];
+    });
+    openModal({
+      title: 'Rechercher l’auteur de ce manga',
+      content: (
+        <AuthorCorrespondenceDialog
+          initialName={detailsAuthorNameCandidates[0] ?? ''}
+          initialNames={detailsAuthorNameCandidates}
+          referenceSources={referenceSources}
+          mangaSeed={{
+            reference: detailsMangaCorrespondenceReference,
+            enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+          }}
+          onCancel={closeModal}
+          onQueued={(message) => {
+            closeModal();
+            setRuntimeMessage(message);
+          }}
+        />
+      ),
+      className: 'manga-correspondence-modal-shell',
+    });
+  }, [
+    closeModal,
+    detailsAuthorNameCandidates,
+    detailsResult,
+    detailsMangaCorrespondenceReference,
+    openModal,
+    params?.multiSearchEnableRomajiPhoneticMerge,
+    scraper.id,
+    setRuntimeError,
+  ]);
   const buildLibrarySearchTarget = useCallback((title: string): WorkspaceTarget => ({
     kind: 'manga-manager.view',
     viewId: 'library',
@@ -2563,6 +2625,7 @@ export default function ScraperBrowser({
         onOpenTitleMultiSearch={handleOpenTitleMultiSearch}
         onOpenTitleMultiSearchInWorkspace={handleOpenTitleMultiSearchInWorkspace}
         onOpenCorrespondenceSearch={handleOpenCorrespondenceSearch}
+        onOpenAuthorCorrespondenceSearch={handleOpenAuthorCorrespondenceFromManga}
         onDownload={(chapter) => {
           const linkedManga = getLinkedMangaForSource(chapter);
           void handleDownload(chapter, {

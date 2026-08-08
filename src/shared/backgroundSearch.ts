@@ -168,6 +168,7 @@ export type MangaCorrespondenceBackgroundInput = {
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
   enableRomajiPhoneticMerge: boolean;
+  purpose?: "correspondence" | "authorDiscovery";
   continuation?: {
     passNumber: number;
     seedCandidateKeys?: string[];
@@ -216,6 +217,10 @@ export type AuthorCorrespondenceBackgroundInput = {
   paceMode: "fast" | "careful";
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
+  mangaSeed?: {
+    reference: MangaCorrespondenceReference;
+    enableRomajiPhoneticMerge: boolean;
+  };
 };
 
 export type ListingBackgroundSource = {

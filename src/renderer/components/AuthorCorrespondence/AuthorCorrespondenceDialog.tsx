@@ -18,6 +18,7 @@ type Props = {
   initialName: string;
   initialNames: string[];
   referenceSources: AuthorCorrespondenceReferenceSource[];
+  mangaSeed?: AuthorCorrespondenceBackgroundInput["mangaSeed"];
   onCancel: () => void;
   onQueued: (message: string) => void;
 };
@@ -30,6 +31,7 @@ export default function AuthorCorrespondenceDialog({
   initialName,
   initialNames,
   referenceSources,
+  mangaSeed,
   onCancel,
   onQueued,
 }: Props) {
@@ -50,7 +52,9 @@ export default function AuthorCorrespondenceDialog({
     return () => { disposed = true; };
   }, []);
 
-  const canSubmit = useMemo(() => Boolean(name.trim() && scrapers.length && !submitting), [name, scrapers.length, submitting]);
+  const canSubmit = useMemo(() => Boolean(
+    (name.trim() || mangaSeed) && scrapers.length && !submitting
+  ), [mangaSeed, name, scrapers.length, submitting]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
@@ -73,15 +77,19 @@ export default function AuthorCorrespondenceDialog({
         paceMode,
         scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
+        mangaSeed,
       };
+      const primaryTerm = name.trim() || mangaSeed?.reference.title || "Auteur inconnu";
       await enqueueBackgroundSearch({
         input,
         kind: "authorCorrespondence",
         params,
-        primaryTerm: name.trim(),
-        title: `Correspondances auteur · ${name.trim()}`,
+        primaryTerm,
+        title: `Correspondances auteur · ${primaryTerm}`,
       });
-      onQueued(`Recherche de correspondances auteur lancée pour « ${name.trim()} ».`);
+      onQueued(name.trim()
+        ? `Recherche de correspondances auteur lancée pour « ${name.trim()} ».`
+        : `Recherche de l’auteur lancée à partir de « ${primaryTerm} ».`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Impossible de lancer la recherche.");
       setSubmitting(false);
@@ -94,7 +102,11 @@ export default function AuthorCorrespondenceDialog({
         <label><span>Nom de l’auteur</span><input value={name} onChange={(event) => setName(event.target.value)} autoFocus /></label>
         <label><span>Autres noms</span><input value={otherNames} onChange={(event) => setOtherNames(event.target.value)} placeholder="Séparés par une virgule" /></label>
       </div>
-      <p className="manga-correspondence-dialog__hint">La recherche parcourt les résultats multi-sources, en extrait les auteurs et teste directement les modules Auteur compatibles.</p>
+      <p className="manga-correspondence-dialog__hint">
+        {name.trim()
+          ? "La recherche parcourt les résultats multi-sources, en extrait les auteurs et teste directement les modules Auteur compatibles."
+          : "Aucun auteur n’a été détecté sur la fiche. La recherche retrouvera d’abord ce manga sur les autres sources, extraira un auteur fiable, puis cherchera ses pages correspondantes."}
+      </p>
       {error ? <p className="manga-correspondence-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-dialog__actions">
         <button type="button" className="secondary" onClick={onCancel}>Annuler</button>

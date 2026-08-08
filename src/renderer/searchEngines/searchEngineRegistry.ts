@@ -21,7 +21,7 @@ import {
   runScraperLatestSearch,
 } from "@/renderer/searchEngines/listingSearchEngine";
 import { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
-import { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
+import { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
 import { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
 import {
   finishScraperLatestDiagnosticSession,
@@ -99,7 +99,7 @@ export const executeBackgroundSearch = async (
         : undefined,
       executionContext,
     ),
-    authorCorrespondence: () => runAuthorCorrespondenceSearch(
+    authorCorrespondence: () => runAuthorCorrespondenceWorkflow(
       job.input as AuthorCorrespondenceBackgroundInput,
       signal,
       onSnapshot,

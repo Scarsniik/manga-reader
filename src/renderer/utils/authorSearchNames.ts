@@ -23,7 +23,7 @@ export const buildUniqueAuthorSearchNames = (
       return;
     }
 
-    const key = name.toLocaleLowerCase();
+    const key = normalizeFuzzyText(name);
     if (seenNames.has(key)) {
       return;
     }
@@ -47,3 +47,4 @@ export const formatAuthorDisplayName = (value: string | null | undefined): strin
     (_match, prefix: string, letter: string) => `${prefix}${letter.toLocaleUpperCase()}`,
   );
 };
+import { normalizeFuzzyText } from "@/renderer/utils/fuzzyText";

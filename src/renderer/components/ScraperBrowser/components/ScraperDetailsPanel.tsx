@@ -169,6 +169,7 @@ type Props = {
   onOpenTitleMultiSearch?: () => void;
   onOpenTitleMultiSearchInWorkspace?: () => void;
   onOpenCorrespondenceSearch?: () => void;
+  onOpenAuthorCorrespondenceSearch?: () => void;
 };
 
 export default function ScraperDetailsPanel({
@@ -213,6 +214,7 @@ export default function ScraperDetailsPanel({
   onOpenTitleMultiSearch,
   onOpenTitleMultiSearchInWorkspace,
   onOpenCorrespondenceSearch,
+  onOpenAuthorCorrespondenceSearch,
 }: Props) {
   const { openModal } = useModal();
   const potentialActionMatchCount = potentialReadingMatches.length
@@ -442,6 +444,17 @@ export default function ScraperDetailsPanel({
                     >
                       <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
                       <span>Rechercher des correspondances</span>
+                    </button>
+                  ) : null}
+                  {onOpenAuthorCorrespondenceSearch ? (
+                    <button
+                      type="button"
+                      className="scraper-browser__author-multi-search"
+                      onClick={onOpenAuthorCorrespondenceSearch}
+                      title="Retrouver l’auteur de ce manga et ses pages sur les autres sources"
+                    >
+                      <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
+                      <span>Rechercher l’auteur</span>
                     </button>
                   ) : null}
                   <button

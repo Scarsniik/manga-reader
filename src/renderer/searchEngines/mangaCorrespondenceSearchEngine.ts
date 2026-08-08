@@ -305,6 +305,7 @@ export const runMangaCorrespondenceSearch = async (
     "manga-correspondence-author",
   );
   const maxPages = input.maxPages === null ? 250 : Math.max(1, input.maxPages);
+  const authorDiscoveryOnly = input.purpose === "authorDiscovery";
   const referenceScraper = scrapers.find((scraper) => scraper.id === input.reference.scraperId) ?? scrapers[0];
   const referenceAnalysis = analyzeMangaCorrespondenceTitle(
     input.reference.rawTitle,
@@ -321,6 +322,7 @@ export const runMangaCorrespondenceSearch = async (
     scrapingConcurrency: input.scrapingConcurrency,
     scrapeDetailsWithCards: input.scrapeDetailsWithCards,
     enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge,
+    purpose: input.purpose ?? "correspondence",
   };
   const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
   const isContinuation = Boolean(input.continuation && previousResult);
@@ -706,7 +708,9 @@ export const runMangaCorrespondenceSearch = async (
       });
     });
   });
-  const initialAuthorTasks = isResume
+  const initialAuthorTasks = authorDiscoveryOnly
+    ? []
+    : isResume
     ? []
     : isContinuation
     ? uniqueText(acceptedSearchSeeds.flatMap((candidate) => candidate.authors))
@@ -1095,12 +1099,14 @@ export const runMangaCorrespondenceSearch = async (
         const authorParentId = wasAlreadyDiscovered
           ? step.id
           : addTrace("authorDiscovered", "Auteur correspondant trouvé", author, step.id).id;
-        addTask({ kind: "author", term: author, parentId: authorParentId });
+        if (!authorDiscoveryOnly) {
+          addTask({ kind: "author", term: author, parentId: authorParentId });
+        }
       });
       const hasActiveDiscoveredAuthor = analyzed.authors.some((author) => (
         discoveries.get(buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, author))?.status === "active"
       ));
-      if (directAuthorUrls.length && hasActiveDiscoveredAuthor) {
+      if (!authorDiscoveryOnly && directAuthorUrls.length && hasActiveDiscoveredAuthor) {
         addTask({
           kind: "author",
           term: analyzed.authors[0] || directAuthorUrls[0],
@@ -1164,7 +1170,7 @@ export const runMangaCorrespondenceSearch = async (
         if (!discovery || discovery.status !== "active") return;
         const authorStep = addTrace("authorDiscovered", "Page auteur correspondante trouvée", author.name, step.id);
         if (isNewAuthor) knownAuthors.push(author.name);
-        if (scraper) {
+        if (scraper && !authorDiscoveryOnly) {
           addTask({
             kind: "author",
             term: author.name,
@@ -1504,6 +1510,7 @@ export const runMangaCorrespondenceSearch = async (
     processedTasks += 1;
     activeTask = null;
     await emit(task.term);
+    if (authorDiscoveryOnly && knownAuthors.length > 0) break;
   }
 
   refreshRejectedCandidateScores();

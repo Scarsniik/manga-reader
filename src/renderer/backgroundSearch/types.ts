@@ -1,6 +1,7 @@
 import type { MultiSearchScraperRun, MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { ScraperLatestCheckpointRecord, ScraperRecord } from "@/shared/scraper";
 import type {
+  AuthorCorrespondenceReferenceSource,
   MangaCorrespondenceDiscoveryKind,
   MangaCorrespondenceDiscoveryOrigin,
   MangaCorrespondenceDiscoveryStatus,
@@ -163,6 +164,12 @@ export type AuthorCorrespondenceBackgroundResult = {
   referenceName: string;
   matches: AuthorCorrespondenceMatch[];
   searchedNames: string[];
+  mangaDiscovery?: {
+    referenceTitle: string;
+    names: string[];
+    referenceSources: AuthorCorrespondenceReferenceSource[];
+    result?: MangaCorrespondenceBackgroundResult;
+  };
   checkpoint?: {
     version: 1;
     inputFingerprint: string;
