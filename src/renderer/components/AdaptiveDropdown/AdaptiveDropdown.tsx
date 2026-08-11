@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import "@/renderer/components/AdaptiveDropdown/style.scss";
 
 export type AdaptiveDropdownPlacement = "down" | "up";
@@ -32,6 +33,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   open: boolean;
   preferredPlacement?: AdaptiveDropdownPlacement;
+  portal?: boolean;
+  portalZIndex?: number;
   renderTrigger: (controls: DropdownControls) => ReactNode;
   style?: CSSProperties;
   viewportPadding?: number;
@@ -42,6 +45,9 @@ type DropdownLayout = {
   availableWidth: number | null;
   horizontalShift: number;
   placement: AdaptiveDropdownPlacement;
+  portalBottom: number | null;
+  portalLeft: number | null;
+  portalTop: number | null;
 };
 
 const DEFAULT_VIEWPORT_PADDING = 8;
@@ -61,6 +67,8 @@ export default function AdaptiveDropdown({
   onOpenChange,
   open,
   preferredPlacement = "down",
+  portal = false,
+  portalZIndex = 9000,
   renderTrigger,
   style,
   viewportPadding = DEFAULT_VIEWPORT_PADDING,
@@ -75,6 +83,9 @@ export default function AdaptiveDropdown({
     availableWidth: null,
     horizontalShift: 0,
     placement: preferredPlacement,
+    portalBottom: null,
+    portalLeft: null,
+    portalTop: null,
   });
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
@@ -90,7 +101,7 @@ export default function AdaptiveDropdown({
       return;
     }
 
-    const rootRect = root.getBoundingClientRect();
+    const rootRect = (triggerRef.current ?? root).getBoundingClientRect();
     const contentRect = content.getBoundingClientRect();
     const horizontalBoundary = horizontalBoundarySelector
       ? root.closest(horizontalBoundarySelector)
@@ -120,7 +131,9 @@ export default function AdaptiveDropdown({
       : preferredPlacement === "down" ? "up" : "down";
     const availableHeight = Math.floor(placement === "down" ? availableDown : availableUp);
 
-    const unshiftedLeft = contentRect.left - layout.horizontalShift;
+    const unshiftedLeft = portal
+      ? rootRect.left
+      : contentRect.left - layout.horizontalShift;
     const unshiftedRight = unshiftedLeft + Math.min(contentRect.width, availableWidth);
     let horizontalShift = 0;
     if (unshiftedLeft < horizontalLeft) {
@@ -134,12 +147,22 @@ export default function AdaptiveDropdown({
       && current.availableHeight === availableHeight
       && current.availableWidth === availableWidth
       && current.horizontalShift === horizontalShift
+      && current.portalBottom === (
+        portal && placement === "up" ? window.innerHeight - rootRect.top + gap : null
+      )
+      && current.portalLeft === (portal ? rootRect.left + horizontalShift : null)
+      && current.portalTop === (portal && placement === "down" ? rootRect.bottom + gap : null)
         ? current
         : {
           availableHeight,
           availableWidth,
           horizontalShift,
           placement,
+          portalBottom: portal && placement === "up"
+            ? window.innerHeight - rootRect.top + gap
+            : null,
+          portalLeft: portal ? rootRect.left + horizontalShift : null,
+          portalTop: portal && placement === "down" ? rootRect.bottom + gap : null,
         }
     ));
   }, [
@@ -148,6 +171,7 @@ export default function AdaptiveDropdown({
     layout.horizontalShift,
     maxHeight,
     open,
+    portal,
     preferredPlacement,
     viewportPadding,
   ]);
@@ -170,6 +194,9 @@ export default function AdaptiveDropdown({
         availableWidth: null,
         horizontalShift: 0,
         placement: preferredPlacement,
+        portalBottom: null,
+        portalLeft: null,
+        portalTop: null,
       });
       return undefined;
     }
@@ -216,7 +243,11 @@ export default function AdaptiveDropdown({
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof Node
+        && !rootRef.current?.contains(event.target)
+        && !contentRef.current?.contains(event.target)
+      ) {
         close();
       }
     };
@@ -237,6 +268,10 @@ export default function AdaptiveDropdown({
     };
   }, [close, open]);
 
+  useLayoutEffect(() => {
+    rootRef.current?.dispatchEvent(new Event("toggle", { bubbles: true }));
+  }, [open]);
+
   const controls: DropdownControls = {
     close,
     contentId,
@@ -249,36 +284,50 @@ export default function AdaptiveDropdown({
     ? maxHeight
     : Math.min(maxHeight ?? Number.POSITIVE_INFINITY, layout.availableHeight);
   const contentStyle: CSSProperties = {
-    bottom: layout.placement === "up" ? `calc(100% + ${gap}px)` : "auto",
+    bottom: portal
+      ? layout.portalBottom === null ? "auto" : `${layout.portalBottom}px`
+      : layout.placement === "up" ? `calc(100% + ${gap}px)` : "auto",
+    left: portal
+      ? layout.portalLeft === null ? "0" : `${layout.portalLeft}px`
+      : undefined,
     maxWidth: layout.availableWidth === null
       ? `calc(100vw - ${viewportPadding * 2}px)`
       : `${layout.availableWidth}px`,
     maxHeight: availableMaxHeight === undefined ? undefined : `${availableMaxHeight}px`,
     overflowY: "auto",
-    top: layout.placement === "down" ? `calc(100% + ${gap}px)` : "auto",
-    translate: layout.horizontalShift ? `${layout.horizontalShift}px 0` : undefined,
+    position: portal ? "fixed" : undefined,
+    top: portal
+      ? layout.portalTop === null ? "auto" : `${layout.portalTop}px`
+      : layout.placement === "down" ? `calc(100% + ${gap}px)` : "auto",
+    translate: !portal && layout.horizontalShift ? `${layout.horizontalShift}px 0` : undefined,
+    visibility: portal && layout.portalLeft === null ? "hidden" : undefined,
+    zIndex: portal ? portalZIndex : undefined,
   };
+  const content = open ? (
+    <div
+      ref={contentRef}
+      id={contentId}
+      className={joinClassNames("adaptive-dropdown__content", contentClassName)}
+      data-placement={layout.placement}
+      role={contentRole}
+      style={contentStyle}
+    >
+      {typeof children === "function" ? children(controls) : children}
+    </div>
+  ) : null;
 
   return (
     <div
       ref={rootRef}
       className={joinClassNames("adaptive-dropdown", className)}
+      data-adaptive-dropdown-open={open ? "true" : undefined}
       data-placement={layout.placement}
       style={style}
     >
       {renderTrigger(controls)}
-      {open ? (
-        <div
-          ref={contentRef}
-          id={contentId}
-          className={joinClassNames("adaptive-dropdown__content", contentClassName)}
-          data-placement={layout.placement}
-          role={contentRole}
-          style={contentStyle}
-        >
-          {typeof children === "function" ? children(controls) : children}
-        </div>
-      ) : null}
+      {portal && content && typeof document !== "undefined"
+        ? createPortal(content, document.body)
+        : content}
     </div>
   );
 }

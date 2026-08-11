@@ -27,6 +27,10 @@ import MangaCorrespondenceDialog from '@/renderer/components/MangaCorrespondence
 import AuthorCorrespondenceDialog from '@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceDialog';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
 import useScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches';
+import usePotentialMangaMatchCandidates from '@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates';
+import useScraperCardPotentialMatches, {
+  getScraperCardPotentialMatchKey,
+} from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
@@ -486,16 +490,21 @@ export default function ScraperBrowser({
   const potentialMatchMergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+  const potentialMatchCandidates = usePotentialMangaMatchCandidates({
+    scraper,
+    libraryMangas,
+    enabled: expensiveDetailsChecksEnabled,
+  });
   const {
     readingMatches: potentialReadingMatches,
     bookmarkMatches: potentialBookmarkMatches,
     readingListMatches: potentialReadingListMatches,
     loading: loadingPotentialMatches,
   } = useScraperPotentialMangaMatches({
-    scraper,
+    scraperId: scraper.id,
     detailsResult,
-    libraryMangas,
     mergeOptions: potentialMatchMergeOptions,
+    candidates: potentialMatchCandidates,
     enabled: expensiveDetailsChecksEnabled,
   });
 
@@ -1110,6 +1119,19 @@ export default function ScraperBrowser({
     () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [listingResults],
   );
+  const cardPotentialMatchInputs = useMemo(() => visibleSearchResults.map((result) => ({
+    key: getScraperCardPotentialMatchKey(scraper.id, result.detailUrl, result.title),
+    scraperId: scraper.id,
+    title: result.title,
+    sourceUrl: result.detailUrl,
+    authorNames: result.authorNames,
+  })), [scraper.id, visibleSearchResults]);
+  const cardPotentialMatches = useScraperCardPotentialMatches({
+    inputs: cardPotentialMatchInputs,
+    candidates: potentialMatchCandidates,
+    mergeOptions: potentialMatchMergeOptions,
+    enabled: expensiveDetailsChecksEnabled && params?.scraperCardPotentialMatchesEnabled !== false,
+  });
   const visibleSearchResultHistoryIds = useMemo(
     () => visibleSearchResults
       .map((result) => buildScraperViewHistoryCardId(buildSearchResultViewHistoryIdentity(scraper.id, result))),
@@ -2566,6 +2588,9 @@ export default function ScraperBrowser({
           renderBookmarkAction={renderSearchResultBookmarkAction}
           renderAddToLibraryAction={renderSearchResultAddToLibraryAction}
           renderDownloadAction={renderSearchResultDownloadAction}
+          potentialMatchesByKey={cardPotentialMatches.matchesByKey}
+          potentialMatchesLoading={cardPotentialMatches.loading}
+          potentialMatchesLoadingKeys={cardPotentialMatches.loadingKeys}
           onPreviousPage={() => void handleListingPreviousPage()}
           onNextPage={() => void handleListingNextPage()}
           onBack={handleNavigateBack}
@@ -2576,6 +2601,8 @@ export default function ScraperBrowser({
           onOpenResultImage={handleOpenSearchResultImage}
           onOpenResultInWorkspace={handleOpenListingResultInWorkspace}
           onOpenAuthorInWorkspace={handleOpenAuthorResultInWorkspace}
+          onOpenPotentialMatch={handleOpenPotentialMatch}
+          onOpenPotentialMatchInWorkspace={handleOpenPotentialMatchInWorkspace}
         />
       ) : null}
 

@@ -13,6 +13,11 @@ import { appendScraperSearchResultTag } from '@/renderer/utils/scraperSearchResu
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from '@/renderer/components/BlacklistedCardsDisplayToggle';
+import {
+  getScraperCardPotentialMatchKey,
+  type ScraperCardPotentialMatchResult,
+} from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
+import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 
 type Props = {
   scraperId: string;
@@ -41,6 +46,9 @@ type Props = {
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderAddToLibraryAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderDownloadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
+  potentialMatchesByKey?: Map<string, ScraperCardPotentialMatchResult>;
+  potentialMatchesLoading?: boolean;
+  potentialMatchesLoadingKeys?: ReadonlySet<string>;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onBack?: () => void;
@@ -51,6 +59,8 @@ type Props = {
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
   onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
   onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
+  onOpenPotentialMatch?: (match: ScraperPotentialMangaMatch) => void;
+  onOpenPotentialMatchInWorkspace?: (match: ScraperPotentialMangaMatch) => void;
 };
 
 export default function ScraperSearchResultsSection({
@@ -80,6 +90,9 @@ export default function ScraperSearchResultsSection({
   renderBookmarkAction,
   renderAddToLibraryAction,
   renderDownloadAction,
+  potentialMatchesByKey,
+  potentialMatchesLoading = false,
+  potentialMatchesLoadingKeys,
   onPreviousPage,
   onNextPage,
   onBack,
@@ -90,6 +103,8 @@ export default function ScraperSearchResultsSection({
   onOpenResultImage,
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
+  onOpenPotentialMatch,
+  onOpenPotentialMatchInWorkspace,
 }: Props) {
   const {
     shouldHideBlacklistedCards,
@@ -228,6 +243,11 @@ export default function ScraperSearchResultsSection({
         {displayedSearchResults.map((result) => {
           const canOpenResult = Boolean(result.detailUrl && canOpenSearchResultsAsDetails);
           const canOpenAuthorResult = Boolean(result.authorUrl && canOpenSearchResultsAsAuthor);
+          const potentialMatchKey = getScraperCardPotentialMatchKey(
+            scraperId,
+            result.detailUrl,
+            result.title,
+          );
 
           return (
             <ScraperSearchResultCard
@@ -247,6 +267,10 @@ export default function ScraperSearchResultsSection({
               bookmarkAction={renderBookmarkAction ? renderBookmarkAction(result) : null}
               addToLibraryAction={renderAddToLibraryAction ? renderAddToLibraryAction(result) : null}
               downloadAction={renderDownloadAction ? renderDownloadAction(result) : null}
+              potentialMatches={potentialMatchesByKey?.get(potentialMatchKey)}
+              potentialMatchesLoading={potentialMatchesLoadingKeys
+                ? potentialMatchesLoadingKeys.has(potentialMatchKey)
+                : potentialMatchesLoading}
               onOpenResult={onOpenResult}
               onOpenAuthorResultAction={onOpenAuthorResultAction}
               onResultKeyDown={onResultKeyDown}
@@ -254,6 +278,8 @@ export default function ScraperSearchResultsSection({
               onOpenResultImage={onOpenResultImage}
               onOpenResultInWorkspace={onOpenResultInWorkspace}
               onOpenAuthorInWorkspace={onOpenAuthorInWorkspace}
+              onOpenPotentialMatch={onOpenPotentialMatch}
+              onOpenPotentialMatchInWorkspace={onOpenPotentialMatchInWorkspace}
             />
           );
         })}

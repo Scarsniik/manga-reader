@@ -110,7 +110,25 @@ const replaceRecords = (records: unknown): ScraperViewHistoryRecord[] => (
   Array.isArray(records) ? sortRecords(records as ScraperViewHistoryRecord[]) : []
 );
 
-const handleExternalViewHistoryUpdate = () => {
+const handleExternalViewHistoryUpdate = (event: Event) => {
+  if (!state.loaded) {
+    void loadScraperViewHistory(true);
+    return;
+  }
+
+  const change = (event as CustomEvent<unknown>).detail;
+  if (change && typeof change === 'object') {
+    const payload = change as { kind?: unknown; record?: ScraperViewHistoryRecord };
+    if (payload.kind === 'upsert' && payload.record) {
+      setState((previous) => ({
+        ...previous,
+        loaded: true,
+        records: upsertRecord(previous.records, payload.record as ScraperViewHistoryRecord),
+      }));
+      return;
+    }
+  }
+
   void loadScraperViewHistory(true);
 };
 

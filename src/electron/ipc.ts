@@ -38,9 +38,9 @@ const notifyScrapersUpdated = () => {
     }
 };
 
-const notifyScraperBookmarksUpdated = () => {
+const notifyScraperBookmarksUpdated = (change?: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("scraper-bookmarks-updated");
+        win.webContents.send("scraper-bookmarks-updated", change);
     }
 };
 
@@ -62,9 +62,9 @@ const notifyScraperTagListCacheUpdated = (scraperId: string) => {
     }
 };
 
-const notifyScraperViewHistoryUpdated = () => {
+const notifyScraperViewHistoryUpdated = (change?: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("scraper-view-history-updated");
+        win.webContents.send("scraper-view-history-updated", change);
     }
 };
 
@@ -80,9 +80,11 @@ const notifyMangasUpdated = () => {
     }
 };
 
-const notifyHistoryUpdated = () => {
+type HistoryUpdateKind = "reading" | "details" | "search";
+
+const notifyHistoryUpdated = (kind: HistoryUpdateKind) => {
     for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("history-updated");
+        win.webContents.send("history-updated", { kind });
     }
 };
 
@@ -200,32 +202,32 @@ ipcMain.on("selector-assistant-page-event", (event, value: unknown) => {
 ipcMain.handle("get-history-records", async () => history.getHistoryRecords());
 ipcMain.handle("record-reading-history", async (event: IpcMainInvokeEvent, request: unknown) => {
     const record = await history.recordReadingHistory(event, request as any);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("reading");
     return record;
 });
 ipcMain.handle("record-details-history", async (event: IpcMainInvokeEvent, request: unknown) => {
     const record = await history.recordDetailsHistory(event, request as any);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("details");
     return record;
 });
 ipcMain.handle("record-search-history", async (event: IpcMainInvokeEvent, request: unknown) => {
     const record = await history.recordSearchHistory(event, request as any);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("search");
     return record;
 });
 ipcMain.handle("remove-reading-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
     const records = await history.removeReadingHistoryRecord(event, historyId);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("reading");
     return records;
 });
 ipcMain.handle("remove-details-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
     const records = await history.removeDetailsHistoryRecord(event, historyId);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("details");
     return records;
 });
 ipcMain.handle("remove-search-history-record", async (event: IpcMainInvokeEvent, historyId: string) => {
     const records = await history.removeSearchHistoryRecord(event, historyId);
-    notifyHistoryUpdated();
+    notifyHistoryUpdated("search");
     return records;
 });
 
@@ -369,12 +371,14 @@ ipcMain.handle("get-scraper-bookmark-view", async (event: IpcMainInvokeEvent, re
 ));
 ipcMain.handle("save-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.saveScraperBookmark(event, request);
-    notifyScraperBookmarksUpdated();
+    notifyScraperBookmarksUpdated({ kind: "upsert", record: updated });
     return updated;
 });
 ipcMain.handle("remove-scraper-bookmark", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.removeScraperBookmark(event, request);
-    notifyScraperBookmarksUpdated();
+    if (updated) {
+        notifyScraperBookmarksUpdated({ kind: "remove", request });
+    }
     return updated;
 });
 ipcMain.handle("get-scraper-author-favorites", async (event: IpcMainInvokeEvent) => (
@@ -440,7 +444,7 @@ ipcMain.handle("get-scraper-view-history", async (event: IpcMainInvokeEvent, scr
 ));
 ipcMain.handle("record-scraper-cards-seen", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.recordScraperCardsSeen(event, request);
-    notifyScraperViewHistoryUpdated();
+    notifyScraperViewHistoryUpdated({ kind: "reload" });
     return updated;
 });
 ipcMain.handle("record-scraper-cards-seen-compact", async (event: IpcMainInvokeEvent, request: any) => (
@@ -448,7 +452,7 @@ ipcMain.handle("record-scraper-cards-seen-compact", async (event: IpcMainInvokeE
 ));
 ipcMain.handle("set-scraper-card-read", async (event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.setScraperCardRead(event, request);
-    notifyScraperViewHistoryUpdated();
+    notifyScraperViewHistoryUpdated({ kind: "upsert", record: updated });
     return updated;
 });
 ipcMain.handle("get-scraper-latest-checkpoints", async (event: IpcMainInvokeEvent, scraperId?: string | null) => (
@@ -460,7 +464,7 @@ ipcMain.handle("save-scraper-latest-checkpoint", async (event: IpcMainInvokeEven
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
     const updated = await scrapers.deleteScraper(event, scraperId);
     notifyScrapersUpdated();
-    notifyScraperBookmarksUpdated();
+    notifyScraperBookmarksUpdated({ kind: "reload" });
     return updated;
 });
 ipcMain.handle("save-scraper-draft", async (event: IpcMainInvokeEvent, request: any) => {

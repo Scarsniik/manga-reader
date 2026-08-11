@@ -67,6 +67,10 @@ export const LEGACY_PORTABLE_DATA_DIR_NAMES = ["Manga Helper Data"];
 
 const MANAGED_DATA_FILE_NAMES = [
     "authors.json",
+    "collections.sqlite",
+    "collections.sqlite-shm",
+    "collections.sqlite-wal",
+    "history.json",
     "mangas.json",
     "ocr-runtime.json",
     "params.json",

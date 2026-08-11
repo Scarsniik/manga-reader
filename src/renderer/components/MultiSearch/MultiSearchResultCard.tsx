@@ -36,6 +36,9 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchTagFavorites";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { normalizeScraperTagFavoriteValue } from "@/renderer/utils/scraperTagFavorites";
+import ScraperPotentialMangaMatches from "@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches";
+import type { ScraperCardPotentialMatchResult } from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
+import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import "./card.scss";
 
 type Props = {
@@ -48,6 +51,10 @@ type Props = {
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
   viewHistoryRecordingDisabled?: boolean;
+  potentialMatches?: ScraperCardPotentialMatchResult | null;
+  potentialMatchesLoading?: boolean;
+  onOpenPotentialMatch?: (match: ScraperPotentialMangaMatch) => void;
+  onOpenPotentialMatchInWorkspace?: (match: ScraperPotentialMangaMatch) => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -132,6 +139,10 @@ export default function MultiSearchResultCard({
   tagBlacklistByScraper,
   tagFavorites = [],
   viewHistoryRecordingDisabled = false,
+  potentialMatches,
+  potentialMatchesLoading = false,
+  onOpenPotentialMatch,
+  onOpenPotentialMatchInWorkspace,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -599,6 +610,21 @@ export default function MultiSearchResultCard({
           coverAlt={result.title}
           summary={result.summary}
           metadata={metadata}
+          notice={potentialMatches && onOpenPotentialMatch && onOpenPotentialMatchInWorkspace ? (
+            <ScraperPotentialMangaMatches
+              readingMatches={potentialMatches.readingMatches}
+              bookmarkMatches={potentialMatches.bookmarkMatches}
+              readingListMatches={potentialMatches.readingListMatches}
+              fallbackCover={activeCoverUrl}
+              fallbackCoverReferer={coverSource?.result.detailUrl || coverSource?.scraper.baseUrl}
+              loading={potentialMatchesLoading}
+              mode="combined"
+              showCategoryLabels
+              portalMenus
+              onOpenMatch={onOpenPotentialMatch}
+              onOpenMatchInWorkspace={onOpenPotentialMatchInWorkspace}
+            />
+          ) : undefined}
           actions={actions}
           className={[
             result.sources.length > 1 ? "is-merged" : "",

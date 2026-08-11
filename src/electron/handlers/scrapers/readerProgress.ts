@@ -6,31 +6,25 @@ import {
   type ScraperReaderProgressRecord,
 } from "../../scraper";
 import {
-  readScraperReaderProgressFile,
-  writeScraperReaderProgressFile,
-} from "./storage";
+  getStoredScraperReaderProgress,
+  listScraperReaderProgress,
+  removeStoredScraperReaderProgressBySource,
+  upsertScraperReaderProgress,
+} from "../../database/readerProgressRepository";
 import { sanitizeScraperReaderProgressRecord } from "./shared";
 
 export async function getScraperReaderProgress(
   _event: IpcMainInvokeEvent,
   scraperMangaId: string,
 ): Promise<ScraperReaderProgressRecord | null> {
-  const records = await readScraperReaderProgressFile();
-  return records.find((record) => record.id === String(scraperMangaId)) ?? null;
+  return getStoredScraperReaderProgress(String(scraperMangaId));
 }
 
 export async function getScraperReaderProgressRecords(
   _event?: IpcMainInvokeEvent,
   scraperId?: string | null,
 ): Promise<ScraperReaderProgressRecord[]> {
-  const records = await readScraperReaderProgressFile();
-  const normalizedScraperId = String(scraperId ?? "").trim();
-
-  if (!normalizedScraperId) {
-    return records;
-  }
-
-  return records.filter((record) => record.scraperId === normalizedScraperId);
+  return listScraperReaderProgress(scraperId);
 }
 
 export async function saveScraperReaderProgress(
@@ -46,16 +40,7 @@ export async function saveScraperReaderProgress(
     throw new Error("La progression du reader scraper est incomplete.");
   }
 
-  const records = await readScraperReaderProgressFile();
-  const existingIndex = records.findIndex((record) => record.id === normalized.id);
-
-  if (existingIndex >= 0) {
-    records[existingIndex] = normalized;
-  } else {
-    records.push(normalized);
-  }
-
-  await writeScraperReaderProgressFile(records);
+  upsertScraperReaderProgress(normalized);
   return normalized;
 }
 
@@ -70,16 +55,5 @@ export async function removeScraperReaderProgress(
     throw new Error("La source de la progression est incomplete.");
   }
 
-  const records = await readScraperReaderProgressFile();
-  const retainedRecords = records.filter((record) => (
-    record.scraperId !== scraperId
-    || normalizeScraperViewHistorySourceUrl(record.sourceUrl) !== sourceUrl
-  ));
-  const removedCount = records.length - retainedRecords.length;
-
-  if (removedCount > 0) {
-    await writeScraperReaderProgressFile(retainedRecords);
-  }
-
-  return removedCount;
+  return removeStoredScraperReaderProgressBySource(scraperId, sourceUrl);
 }

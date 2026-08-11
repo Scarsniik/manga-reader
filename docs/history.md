@@ -10,7 +10,11 @@ Elle regroupe pour le moment trois onglets :
 
 ## Donnees
 
-L'historique est stocke dans le fichier utilisateur `data/history.json`.
+L'historique est stocke dans la base locale utilisateur `data/collections.sqlite`.
+Au premier lancement avec cette base, l'ancien fichier `data/history.json` est
+importe dans une transaction avec les bookmarks, l'historique de vue et les
+progressions scraper. Les fichiers JSON existants sont conserves sans
+modification comme sauvegarde de migration.
 
 La suppression depuis cette vue retire seulement l'entree d'historique. Elle ne supprime pas le manga local, le bookmark scraper, ni la progression de lecture.
 
@@ -19,7 +23,7 @@ Les recherches multi-source conservent la chaine recherchee et les settings util
 La progression reste portee par les donnees existantes :
 
 - mangas locaux : `mangas.json`
-- lectures scrapper : `scraper-reader-progress.json`
+- lectures scrapper : table locale `scraper_reader_progress`
 
 ## UI
 

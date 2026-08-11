@@ -177,6 +177,11 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperCardPotentialMatchesEnabled',
+          label: 'Signaler les cards potentiellement déjà bookmarkées, lues ou présentes dans une liste',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperAuthorCombinedView',
           label: 'Afficher les pages auteur en vue combinée',
           type: 'checkbox',
@@ -436,6 +441,7 @@ export default function SettingsModalContent() {
         'showSavedScraperSearches',
         'scraperAuthorFavoriteCacheResults',
         'scraperHideBlacklistedTagCards',
+        'scraperCardPotentialMatchesEnabled',
         'scraperAuthorCombinedView',
         'scraperTagCombinedView',
         'scraperTagFavoriteShowUnseenFirst',
@@ -661,6 +667,7 @@ export default function SettingsModalContent() {
       scraperAuthorFavoriteCacheResults: !!values.scraperAuthorFavoriteCacheResults,
       scraperScrapeDetailsWithCards: !!values.scraperScrapeDetailsWithCards,
       scraperHideBlacklistedTagCards: !!values.scraperHideBlacklistedTagCards,
+      scraperCardPotentialMatchesEnabled: values.scraperCardPotentialMatchesEnabled !== false,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestScraperResultLimit)
         ? scraperLatestScraperResultLimit

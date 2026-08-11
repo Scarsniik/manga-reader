@@ -265,9 +265,9 @@ ipcRenderer.on('scrapers-updated', () => {
     }
 });
 
-ipcRenderer.on('scraper-bookmarks-updated', () => {
+ipcRenderer.on('scraper-bookmarks-updated', (_event: IpcRendererEvent, change: unknown) => {
     try {
-        window.dispatchEvent(new CustomEvent('scraper-bookmarks-updated'));
+        window.dispatchEvent(new CustomEvent('scraper-bookmarks-updated', { detail: change }));
     } catch (error) {
         console.warn('preload: failed to dispatch scraper-bookmarks-updated event', error);
     }
@@ -299,17 +299,17 @@ ipcRenderer.on('scraper-tag-list-cache-updated', (_event: IpcRendererEvent, scra
     }
 });
 
-ipcRenderer.on('scraper-view-history-updated', () => {
+ipcRenderer.on('scraper-view-history-updated', (_event: IpcRendererEvent, change: unknown) => {
     try {
-        window.dispatchEvent(new CustomEvent('scraper-view-history-updated'));
+        window.dispatchEvent(new CustomEvent('scraper-view-history-updated', { detail: change }));
     } catch (error) {
         console.warn('preload: failed to dispatch scraper-view-history-updated event', error);
     }
 });
 
-ipcRenderer.on('history-updated', () => {
+ipcRenderer.on('history-updated', (_event: IpcRendererEvent, change: unknown) => {
     try {
-        window.dispatchEvent(new CustomEvent('history-updated'));
+        window.dispatchEvent(new CustomEvent('history-updated', { detail: change }));
     } catch (error) {
         console.warn('preload: failed to dispatch history-updated event', error);
     }

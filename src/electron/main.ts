@@ -294,6 +294,8 @@ app.whenReady()
         remoteThumbnails.registerRemoteThumbnailProtocol();
         remoteThumbnails.registerRemoteReaderImageProtocol();
 
+        const collectionsDatabase = require("./database/connection") as typeof import("./database/connection");
+        collectionsDatabase.getCollectionsDatabase();
         require("./ipc");
         void appUpdate.initializeAppUpdate();
 
@@ -314,6 +316,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
     applicationIsQuitting = true;
+    const collectionsDatabase = require("./database/connection") as typeof import("./database/connection");
+    collectionsDatabase.closeCollectionsDatabase();
 });
 
 app.on("activate", () => {

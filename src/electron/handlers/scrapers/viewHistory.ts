@@ -1,15 +1,22 @@
 import { type IpcMainInvokeEvent } from "electron";
 import {
   buildScraperViewHistoryCardId,
+  normalizeScraperViewHistorySettings,
   type RecordScraperCardsSeenRequest,
   type ScraperViewHistoryCardIdentity,
   type ScraperViewHistoryRecord,
+  type ScraperViewHistorySettings,
   type SetScraperCardReadRequest,
 } from "../../scraper";
+import { getCollectionsDatabase } from "../../database/connection";
+import { runDatabaseTransaction } from "../../database/repositoryUtils";
 import {
-  readScraperViewHistoryFile,
-  writeScraperViewHistoryFile,
-} from "./storage";
+  getStoredScraperViewHistoryRecord,
+  listScraperViewHistory,
+  pruneStoredScraperViewHistory,
+  upsertStoredScraperViewHistoryRecord,
+} from "../../database/viewHistoryRepository";
+import { getSettings } from "../params";
 import {
   sanitizeScraperViewHistoryCardIdentity,
   sanitizeScraperViewHistoryRecord,
@@ -26,6 +33,17 @@ const runScraperViewHistoryMutation = async <T>(
     () => undefined,
   );
   return result;
+};
+
+const getViewHistorySettings = async (): Promise<ScraperViewHistorySettings> => (
+  normalizeScraperViewHistorySettings(await getSettings())
+);
+
+const readPrunedViewHistory = async (
+  scraperId?: string | null,
+): Promise<ScraperViewHistoryRecord[]> => {
+  pruneStoredScraperViewHistory(await getViewHistorySettings());
+  return listScraperViewHistory(scraperId);
 };
 
 const toSeenRecord = (
@@ -75,20 +93,35 @@ const normalizeSeenCardsRequest = (
     .filter((card): card is ScraperViewHistoryCardIdentity => Boolean(card));
 };
 
+const upsertSeenCards = (
+  cards: ScraperViewHistoryCardIdentity[],
+  now: string,
+): ScraperViewHistoryRecord[] => {
+  const updatedRecords: ScraperViewHistoryRecord[] = [];
+
+  cards.forEach((card) => {
+    const id = buildScraperViewHistoryCardId(card);
+    if (!id) {
+      return;
+    }
+
+    const existing = getStoredScraperViewHistoryRecord(id);
+    const record = toSeenRecord(card, existing, now);
+    if (record) {
+      upsertStoredScraperViewHistoryRecord(record);
+      updatedRecords.push(record);
+    }
+  });
+
+  return updatedRecords;
+};
+
 export async function getScraperViewHistory(
   _event?: IpcMainInvokeEvent,
   scraperId?: string | null,
 ): Promise<ScraperViewHistoryRecord[]> {
   await scraperViewHistoryMutationQueue;
-
-  const records = await readScraperViewHistoryFile();
-  const normalizedScraperId = String(scraperId ?? "").trim();
-
-  if (!normalizedScraperId) {
-    return records;
-  }
-
-  return records.filter((record) => record.scraperId === normalizedScraperId);
+  return readPrunedViewHistory(scraperId);
 }
 
 export async function recordScraperCardsSeen(
@@ -98,28 +131,15 @@ export async function recordScraperCardsSeen(
   return runScraperViewHistoryMutation(async () => {
     const cards = normalizeSeenCardsRequest(request);
     if (!cards.length) {
-      return readScraperViewHistoryFile();
+      return readPrunedViewHistory();
     }
 
-    const now = new Date().toISOString();
-    const records = await readScraperViewHistoryFile();
-    const recordsById = new Map(records.map((record) => [record.id, record]));
-
-    cards.forEach((card) => {
-      const id = buildScraperViewHistoryCardId(card);
-      if (!id) {
-        return;
-      }
-
-      const record = toSeenRecord(card, recordsById.get(id) ?? null, now);
-      if (record) {
-        recordsById.set(record.id, record);
-      }
+    const settings = await getViewHistorySettings();
+    runDatabaseTransaction(getCollectionsDatabase(), () => {
+      upsertSeenCards(cards, new Date().toISOString());
+      pruneStoredScraperViewHistory(settings);
     });
-
-    const nextRecords = Array.from(recordsById.values());
-    await writeScraperViewHistoryFile(nextRecords);
-    return readScraperViewHistoryFile();
+    return listScraperViewHistory();
   });
 }
 
@@ -133,26 +153,12 @@ export async function recordScraperCardsSeenCompact(
       return [];
     }
 
-    const now = new Date().toISOString();
-    const records = await readScraperViewHistoryFile();
-    const recordsById = new Map(records.map((record) => [record.id, record]));
-    const updatedRecords: ScraperViewHistoryRecord[] = [];
-
-    cards.forEach((card) => {
-      const id = buildScraperViewHistoryCardId(card);
-      if (!id) {
-        return;
-      }
-
-      const record = toSeenRecord(card, recordsById.get(id) ?? null, now);
-      if (record) {
-        recordsById.set(record.id, record);
-        updatedRecords.push(record);
-      }
+    const settings = await getViewHistorySettings();
+    return runDatabaseTransaction(getCollectionsDatabase(), () => {
+      const updatedRecords = upsertSeenCards(cards, new Date().toISOString());
+      pruneStoredScraperViewHistory(settings);
+      return updatedRecords;
     });
-
-    await writeScraperViewHistoryFile(Array.from(recordsById.values()));
-    return updatedRecords;
   });
 }
 
@@ -166,24 +172,18 @@ export async function setScraperCardRead(
       throw new Error("La carte scraper est incomplete.");
     }
 
-    const now = new Date().toISOString();
     const id = buildScraperViewHistoryCardId(identity);
-    const records = await readScraperViewHistoryFile();
-    const existingIndex = records.findIndex((record) => record.id === id);
-    const existing = existingIndex >= 0 ? records[existingIndex] : null;
-    const record = toReadRecord(identity, existing, now, Boolean(request.read));
-
+    const existing = getStoredScraperViewHistoryRecord(id);
+    const record = toReadRecord(identity, existing, new Date().toISOString(), Boolean(request.read));
     if (!record) {
       throw new Error("La carte scraper est incomplete.");
     }
 
-    if (existingIndex >= 0) {
-      records[existingIndex] = record;
-    } else {
-      records.push(record);
-    }
-
-    await writeScraperViewHistoryFile(records);
+    const settings = await getViewHistorySettings();
+    runDatabaseTransaction(getCollectionsDatabase(), () => {
+      upsertStoredScraperViewHistoryRecord(record);
+      pruneStoredScraperViewHistory(settings);
+    });
     return record;
   });
 }

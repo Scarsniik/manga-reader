@@ -4,5 +4,9 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/electron/**/*", "src/shared/scraper.ts"]
+  "include": [
+    "src/electron/**/*",
+    "src/shared/scraper.ts",
+    "src/types/node-sqlite.d.ts"
+  ]
 }

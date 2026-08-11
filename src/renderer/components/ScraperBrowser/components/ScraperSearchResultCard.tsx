@@ -1,5 +1,6 @@
 import React from 'react';
 import ScraperCard, { type ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
+import ScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches';
 import ScraperViewHistoryCard from '@/renderer/components/ScraperViewHistoryCard/ScraperViewHistoryCard';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared/scraper';
@@ -15,6 +16,8 @@ import {
   normalizeScraperTagFavoriteValue,
   type ScraperTagFavoriteSourceTarget,
 } from '@/renderer/utils/scraperTagFavorites';
+import type { ScraperCardPotentialMatchResult } from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
+import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 
 type Props = {
   scraperId: string;
@@ -32,6 +35,8 @@ type Props = {
   bookmarkAction?: ScraperCardAction | null;
   addToLibraryAction?: ScraperCardAction | null;
   downloadAction?: ScraperCardAction | null;
+  potentialMatches?: ScraperCardPotentialMatchResult | null;
+  potentialMatchesLoading?: boolean;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
@@ -39,6 +44,8 @@ type Props = {
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
   onOpenResultInWorkspace?: (result: ScraperSearchResultItem) => void;
   onOpenAuthorInWorkspace?: (result: ScraperSearchResultItem) => void;
+  onOpenPotentialMatch?: (match: ScraperPotentialMangaMatch) => void;
+  onOpenPotentialMatchInWorkspace?: (match: ScraperPotentialMangaMatch) => void;
 };
 
 export default function ScraperSearchResultCard({
@@ -57,6 +64,8 @@ export default function ScraperSearchResultCard({
   bookmarkAction,
   addToLibraryAction,
   downloadAction,
+  potentialMatches,
+  potentialMatchesLoading = false,
   onOpenResult,
   onOpenAuthorResultAction,
   onResultKeyDown,
@@ -64,6 +73,8 @@ export default function ScraperSearchResultCard({
   onOpenResultImage,
   onOpenResultInWorkspace,
   onOpenAuthorInWorkspace,
+  onOpenPotentialMatch,
+  onOpenPotentialMatchInWorkspace,
 }: Props) {
   const actions: ScraperCardAction[] = [];
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
@@ -190,6 +201,21 @@ export default function ScraperSearchResultCard({
                 </span>
               ))}
             </div>
+          ) : undefined}
+          notice={potentialMatches && onOpenPotentialMatch && onOpenPotentialMatchInWorkspace ? (
+            <ScraperPotentialMangaMatches
+              readingMatches={potentialMatches.readingMatches}
+              bookmarkMatches={potentialMatches.bookmarkMatches}
+              readingListMatches={potentialMatches.readingListMatches}
+              fallbackCover={result.thumbnailUrl}
+              fallbackCoverReferer={result.detailUrl}
+              loading={potentialMatchesLoading}
+              mode="combined"
+              showCategoryLabels
+              portalMenus
+              onOpenMatch={onOpenPotentialMatch}
+              onOpenMatchInWorkspace={onOpenPotentialMatchInWorkspace}
+            />
           ) : undefined}
           actions={actions}
           className={[

@@ -10,16 +10,16 @@ import type {
   ApplicationStatistics,
   UserDataEntryStatistics,
 } from "../../shared/statistics";
+import { listScraperBookmarks } from "../database/bookmarkRepository";
+import { readStoredAppHistory } from "../database/historyRepository";
+import { listScraperReaderProgress } from "../database/readerProgressRepository";
+import { listScraperViewHistory } from "../database/viewHistoryRepository";
 import { listImageFiles } from "./pages";
 import {
-  appHistoryFilePath,
   authorsFilePath,
   dataDir,
   mangasFilePath,
   savedReadingListsFilePath,
-  scraperBookmarksFilePath,
-  scraperReaderProgressFilePath,
-  scraperViewHistoryFilePath,
   seriesFilePath,
   tagsFilePath,
 } from "../utils";
@@ -36,12 +36,6 @@ type StoredManga = {
 type FileTreeStatistics = {
   sizeBytes: number;
   fileCount: number;
-};
-
-const EMPTY_HISTORY: AppHistoryRecords = {
-  reading: [],
-  details: [],
-  searches: [],
 };
 
 const readJsonFile = async <T>(filePath: string, fallback: T): Promise<T> => {
@@ -273,10 +267,10 @@ const getScraperStatistics = (
 export async function getApplicationStatistics(): Promise<ApplicationStatistics> {
   const [
     rawMangas,
-    rawBookmarks,
-    rawViewHistory,
-    rawReaderProgress,
-    rawHistory,
+    bookmarks,
+    viewHistory,
+    readerProgress,
+    history,
     rawAuthors,
     rawTags,
     rawSeries,
@@ -284,10 +278,10 @@ export async function getApplicationStatistics(): Promise<ApplicationStatistics>
     userData,
   ] = await Promise.all([
     readJsonFile<StoredManga[]>(mangasFilePath, []),
-    readJsonFile<ScraperBookmarkRecord[]>(scraperBookmarksFilePath, []),
-    readJsonFile<ScraperViewHistoryRecord[]>(scraperViewHistoryFilePath, []),
-    readJsonFile<ScraperReaderProgressRecord[]>(scraperReaderProgressFilePath, []),
-    readJsonFile<AppHistoryRecords>(appHistoryFilePath, EMPTY_HISTORY),
+    Promise.resolve(listScraperBookmarks()),
+    Promise.resolve(listScraperViewHistory()),
+    Promise.resolve(listScraperReaderProgress()),
+    Promise.resolve(readStoredAppHistory()),
     readJsonFile<unknown[]>(authorsFilePath, []),
     readJsonFile<unknown[]>(tagsFilePath, []),
     readJsonFile<unknown[]>(seriesFilePath, []),
@@ -296,17 +290,6 @@ export async function getApplicationStatistics(): Promise<ApplicationStatistics>
   ]);
 
   const mangas = Array.isArray(rawMangas) ? rawMangas : [];
-  const bookmarks = Array.isArray(rawBookmarks) ? rawBookmarks : [];
-  const viewHistory = Array.isArray(rawViewHistory) ? rawViewHistory : [];
-  const readerProgress = Array.isArray(rawReaderProgress) ? rawReaderProgress : [];
-  const history = rawHistory && typeof rawHistory === "object"
-    ? {
-      reading: Array.isArray(rawHistory.reading) ? rawHistory.reading : [],
-      details: Array.isArray(rawHistory.details) ? rawHistory.details : [],
-      searches: Array.isArray(rawHistory.searches) ? rawHistory.searches : [],
-    }
-    : EMPTY_HISTORY;
-
   return {
     generatedAt: new Date().toISOString(),
     library: await getLibraryStatistics(mangas),

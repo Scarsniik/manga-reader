@@ -8,12 +8,18 @@ import {
   OpenBookIcon,
 } from "@/renderer/components/icons";
 import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import {
+  buildPotentialMatchEntries,
+  type PotentialMatchCategory as MatchCategory,
+  type PotentialMatchEntry,
+} from "@/renderer/components/ScraperBrowser/utils/potentialMatchDisplay";
 import { toLocalImageUrl } from "@/renderer/utils/history";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 
 const MIDDLE_BUTTON = 1;
 
-type NoticeKind = "reading" | "bookmark" | "readingList";
+type NoticeKind = MatchCategory | "combined";
+type DisplayMode = "separate" | "combined";
 
 type Props = {
   readingMatches: ScraperPotentialMangaMatch[];
@@ -22,16 +28,23 @@ type Props = {
   fallbackCover?: string;
   fallbackCoverReferer?: string;
   loading?: boolean;
+  mode?: DisplayMode;
+  showCategoryLabels?: boolean;
+  portalMenus?: boolean;
+  horizontalBoundarySelector?: string;
   onOpenMatch: (match: ScraperPotentialMangaMatch) => void;
   onOpenMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
 };
 
 type NoticeProps = {
   kind: NoticeKind;
-  matches: ScraperPotentialMangaMatch[];
+  entries: PotentialMatchEntry[];
   fallbackCover?: string;
   fallbackCoverReferer?: string;
   loading?: boolean;
+  showCategoryLabels?: boolean;
+  portalMenu?: boolean;
+  horizontalBoundarySelector?: string;
   onOpenMatch: (match: ScraperPotentialMangaMatch) => void;
   onOpenMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
 };
@@ -57,6 +70,10 @@ const getTargetLabel = (match: ScraperPotentialMangaMatch): string => (
 );
 
 const getNoticeTitle = (kind: NoticeKind): string => {
+  if (kind === "combined") {
+    return "Correspondance probable";
+  }
+
   if (kind === "reading") {
     return "Potentiellement deja lu";
   }
@@ -67,11 +84,30 @@ const getNoticeTitle = (kind: NoticeKind): string => {
 };
 
 const getNoticeSummary = (kind: NoticeKind, matches: ScraperPotentialMangaMatch[]): string => {
+  if (kind === "combined") {
+    return formatCount(matches.length, "correspondance");
+  }
+
   if (kind === "reading") {
     return getReadingSummary(matches);
   }
 
   return formatCount(matches.length, kind === "readingList" ? "manga" : "correspondance");
+};
+
+const getCategoryLabel = (
+  category: MatchCategory,
+  match: ScraperPotentialMangaMatch,
+): string => {
+  if (category === "bookmark") {
+    return "Dans les bookmarks";
+  }
+
+  if (category === "readingList") {
+    return "Dans une liste";
+  }
+
+  return match.readingStatus === "inProgress" ? "Lecture en cours" : "Déjà lu";
 };
 
 const buildPotentialMatchCoverUrls = (
@@ -104,20 +140,23 @@ const buildPotentialMatchCoverUrls = (
 }, []);
 
 type PotentialMatchCardProps = {
-  match: ScraperPotentialMangaMatch;
+  entry: PotentialMatchEntry;
   fallbackCover?: string;
   fallbackCoverReferer?: string;
+  showCategoryLabels?: boolean;
   onOpen: () => void;
   onOpenInWorkspace: (event: React.MouseEvent<HTMLButtonElement>) => void;
 };
 
 function PotentialMatchCard({
-  match,
+  entry,
   fallbackCover,
   fallbackCoverReferer,
+  showCategoryLabels = false,
   onOpen,
   onOpenInWorkspace,
 }: PotentialMatchCardProps) {
+  const { match } = entry;
   const [failedCovers, setFailedCovers] = useState<string[]>([]);
   const coverUrls = buildPotentialMatchCoverUrls(
     match,
@@ -132,10 +171,15 @@ function PotentialMatchCard({
       type="button"
       className="scraper-browser__potential-match-card"
       role="menuitem"
-      onClick={onOpen}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen();
+      }}
       onMouseDown={(event) => {
         if (event.button === MIDDLE_BUTTON) {
           event.preventDefault();
+          event.stopPropagation();
         }
       }}
       onAuxClick={onOpenInWorkspace}
@@ -165,6 +209,15 @@ function PotentialMatchCard({
         {authorLabel ? (
           <span className="scraper-browser__potential-match-author">{authorLabel}</span>
         ) : null}
+        {showCategoryLabels ? (
+          <span className="scraper-browser__potential-match-categories">
+            {entry.categories.map((category) => (
+              <span key={category} className={`is-${category}`}>
+                {getCategoryLabel(category, match)}
+              </span>
+            ))}
+          </span>
+        ) : null}
         <small>{match.sourceLabel} - {match.detailLabel}</small>
       </span>
     </button>
@@ -173,10 +226,13 @@ function PotentialMatchCard({
 
 function PotentialMatchNotice({
   kind,
-  matches,
+  entries,
   fallbackCover,
   fallbackCoverReferer,
   loading = false,
+  showCategoryLabels = false,
+  portalMenu = false,
+  horizontalBoundarySelector = ".scraper-browser__details-body",
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: NoticeProps) {
@@ -184,10 +240,10 @@ function PotentialMatchNotice({
   const matchListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!matches.length && open) {
+    if (!entries.length && open) {
       setOpen(false);
     }
-  }, [matches.length, open]);
+  }, [entries.length, open]);
 
   useEffect(() => {
     const matchList = matchListRef.current;
@@ -214,19 +270,22 @@ function PotentialMatchNotice({
 
     matchList.addEventListener("wheel", handleWheel, { passive: false });
     return () => matchList.removeEventListener("wheel", handleWheel);
-  }, [matches.length, open]);
+  }, [entries.length, open]);
 
-  if (!matches.length) {
+  if (!entries.length) {
     return null;
   }
 
+  const matches = entries.map((entry) => entry.match);
   const noticeTitle = getNoticeTitle(kind);
   const noticeSummary = getNoticeSummary(kind, matches);
   const icon = kind === "reading"
     ? <OpenBookIcon aria-hidden="true" focusable="false" />
     : kind === "bookmark"
       ? <BookmarkRibbonIcon aria-hidden="true" focusable="false" />
-      : <FileSelectionIcon aria-hidden="true" focusable="false" />;
+      : kind === "readingList"
+        ? <FileSelectionIcon aria-hidden="true" focusable="false" />
+        : <DetailsCardIcon aria-hidden="true" focusable="false" />;
   const noticeClassName = kind === "readingList" ? "reading-list" : kind;
 
   const handleMatchAuxClick = (
@@ -250,14 +309,19 @@ function PotentialMatchNotice({
       contentClassName="scraper-browser__potential-match-menu"
       contentRole="menu"
       gap={6}
-      horizontalBoundarySelector=".scraper-browser__details-body"
-      maxHeight={280}
+      horizontalBoundarySelector={horizontalBoundarySelector}
+      maxHeight={kind === "combined" ? 320 : 280}
+      portal={portalMenu}
       renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
         <button
           ref={setTriggerRef}
           type="button"
           className="scraper-browser__potential-match-toggle"
-          onClick={toggle}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggle();
+          }}
           aria-controls={contentId}
           aria-expanded={isOpen}
           aria-haspopup="menu"
@@ -265,7 +329,15 @@ function PotentialMatchNotice({
           <span className="scraper-browser__potential-match-icon">{icon}</span>
           <span className="scraper-browser__potential-match-label">{noticeTitle}</span>
           <strong>{noticeSummary}</strong>
-          {loading ? <span className="scraper-browser__potential-match-loading">Analyse</span> : null}
+          <span
+            className={[
+              "scraper-browser__potential-match-loading",
+              loading ? "is-visible" : "",
+            ].filter(Boolean).join(" ")}
+            aria-hidden={!loading}
+          >
+            Analyse
+          </span>
           <ChevronDownIcon aria-hidden="true" focusable="false" />
         </button>
       )}
@@ -275,24 +347,28 @@ function PotentialMatchNotice({
         className="scraper-browser__potential-match-list"
         role="none"
       >
-        {matches.map((match) => (
-          <PotentialMatchCard
-            key={`${match.category}-${match.id}`}
-            match={match}
-            fallbackCover={fallbackCover}
-            fallbackCoverReferer={fallbackCoverReferer}
-            onOpen={() => {
-              setOpen(false);
-              onOpenMatch(match);
-            }}
-            onOpenInWorkspace={(event) => {
-              if (event.button === MIDDLE_BUTTON) {
+        {entries.map((entry) => {
+          const { match } = entry;
+          return (
+            <PotentialMatchCard
+              key={`${match.category}-${match.id}`}
+              entry={entry}
+              fallbackCover={fallbackCover}
+              fallbackCoverReferer={fallbackCoverReferer}
+              showCategoryLabels={showCategoryLabels}
+              onOpen={() => {
                 setOpen(false);
-              }
-              handleMatchAuxClick(event, match);
-            }}
-          />
-        ))}
+                onOpenMatch(match);
+              }}
+              onOpenInWorkspace={(event) => {
+                if (event.button === MIDDLE_BUTTON) {
+                  setOpen(false);
+                }
+                handleMatchAuxClick(event, match);
+              }}
+            />
+          );
+        })}
       </div>
     </AdaptiveDropdown>
   );
@@ -305,6 +381,10 @@ export default function ScraperPotentialMangaMatches({
   fallbackCover,
   fallbackCoverReferer,
   loading = false,
+  mode = "separate",
+  showCategoryLabels = false,
+  portalMenus = false,
+  horizontalBoundarySelector,
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: Props) {
@@ -312,11 +392,36 @@ export default function ScraperPotentialMangaMatches({
     return null;
   }
 
+  if (mode === "combined") {
+    const entries = buildPotentialMatchEntries([
+      { category: "reading", matches: readingMatches },
+      { category: "bookmark", matches: bookmarkMatches },
+      { category: "readingList", matches: readingListMatches },
+    ]);
+
+    return (
+      <div className="scraper-browser__potential-matches is-combined">
+        <PotentialMatchNotice
+          kind="combined"
+          entries={entries}
+          fallbackCover={fallbackCover}
+          fallbackCoverReferer={fallbackCoverReferer}
+          loading={loading}
+          showCategoryLabels={showCategoryLabels}
+          portalMenu={portalMenus}
+          horizontalBoundarySelector={horizontalBoundarySelector ?? ".scraper-browser"}
+          onOpenMatch={onOpenMatch}
+          onOpenMatchInWorkspace={onOpenMatchInWorkspace}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="scraper-browser__potential-matches">
       <PotentialMatchNotice
         kind="reading"
-        matches={readingMatches}
+        entries={buildPotentialMatchEntries([{ category: "reading", matches: readingMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
         loading={loading}
@@ -325,7 +430,7 @@ export default function ScraperPotentialMangaMatches({
       />
       <PotentialMatchNotice
         kind="bookmark"
-        matches={bookmarkMatches}
+        entries={buildPotentialMatchEntries([{ category: "bookmark", matches: bookmarkMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
         loading={loading}
@@ -334,7 +439,7 @@ export default function ScraperPotentialMangaMatches({
       />
       <PotentialMatchNotice
         kind="readingList"
-        matches={readingListMatches}
+        entries={buildPotentialMatchEntries([{ category: "readingList", matches: readingListMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
         loading={loading}

@@ -5,7 +5,12 @@ import {
   type ScraperBookmarkMetadataField,
   type ScraperBookmarkRecord,
 } from "../../scraper";
-import { readScraperBookmarksFile, updateScraperBookmarksFile } from "./storage";
+import {
+  getScraperBookmark,
+  listScraperBookmarks,
+  removeStoredScraperBookmark,
+  upsertScraperBookmark,
+} from "../../database/bookmarkRepository";
 import {
   normalizeScraperBookmarkUrl,
   sanitizeBookmarkMetadataFieldList,
@@ -74,45 +79,24 @@ export async function getScraperBookmarks(
   _event?: IpcMainInvokeEvent,
   scraperId?: string | null,
 ): Promise<ScraperBookmarkRecord[]> {
-  const records = await readScraperBookmarksFile();
-  const normalizedScraperId = String(scraperId ?? "").trim();
-
-  if (!normalizedScraperId) {
-    return records;
-  }
-
-  return records.filter((record) => record.scraperId === normalizedScraperId);
+  return listScraperBookmarks(scraperId);
 }
 
 export async function saveScraperBookmark(
   _event: IpcMainInvokeEvent,
   request: SaveScraperBookmarkRequest,
 ): Promise<ScraperBookmarkRecord> {
-  return updateScraperBookmarksFile((records) => {
-    const normalizedScraperId = String(request.scraperId ?? "").trim();
-    const normalizedSourceUrl = normalizeScraperBookmarkUrl(request.sourceUrl);
-    const existingIndex = records.findIndex((record) => (
-      record.scraperId === normalizedScraperId && record.sourceUrl === normalizedSourceUrl
-    ));
-    const existing = existingIndex >= 0 ? records[existingIndex] : null;
-    const merged = mergeScraperBookmarkRecord(existing, request);
+  const normalizedScraperId = String(request.scraperId ?? "").trim();
+  const normalizedSourceUrl = normalizeScraperBookmarkUrl(request.sourceUrl);
+  const existing = getScraperBookmark(normalizedScraperId, normalizedSourceUrl);
+  const merged = mergeScraperBookmarkRecord(existing, request);
 
-    if (!merged) {
-      throw new Error("Le bookmark scraper est incomplet.");
-    }
+  if (!merged) {
+    throw new Error("Le bookmark scraper est incomplet.");
+  }
 
-    const nextRecords = [...records];
-    if (existingIndex >= 0) {
-      nextRecords[existingIndex] = merged;
-    } else {
-      nextRecords.push(merged);
-    }
-
-    return {
-      records: nextRecords,
-      result: merged,
-    };
-  });
+  upsertScraperBookmark(merged);
+  return merged;
 }
 
 export async function removeScraperBookmark(
@@ -126,16 +110,5 @@ export async function removeScraperBookmark(
     return false;
   }
 
-  return updateScraperBookmarksFile((records) => {
-    const filtered = records.filter((record) => !(
-      record.scraperId === normalizedScraperId && record.sourceUrl === normalizedSourceUrl
-    ));
-    const removed = filtered.length !== records.length;
-
-    return {
-      records: removed ? filtered : records,
-      result: removed,
-      shouldWrite: removed,
-    };
-  });
+  return removeStoredScraperBookmark(normalizedScraperId, normalizedSourceUrl);
 }

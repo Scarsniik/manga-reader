@@ -33,7 +33,25 @@ const BASE_CARD_CHROME_HEIGHT = 250;
 
 export const MIN_OVERSCAN_PX = 900;
 export const OVERSCAN_VIEWPORT_MULTIPLIER = 2;
+export const POTENTIAL_MATCH_MIN_PREFETCH_PX = 3600;
+export const POTENTIAL_MATCH_PREFETCH_VIEWPORT_MULTIPLIER = 6;
 export const MEASUREMENT_PRECISION_PX = 1;
+
+export const getVirtualRowViewportDistance = (
+  row: VirtualRow,
+  viewportRange: ViewportRange,
+): number => {
+  const rowEnd = row.top + row.height;
+  if (rowEnd < viewportRange.start) {
+    return viewportRange.start - rowEnd;
+  }
+
+  if (row.top > viewportRange.end) {
+    return row.top - viewportRange.end;
+  }
+
+  return 0;
+};
 
 const isWindowScrollTarget = (target: ScrollTarget): target is Window => (
   target === window
@@ -176,4 +194,5 @@ export const findFirstVisibleItem = (
 export const hasStickyState = (element: HTMLElement): boolean => (
   element.contains(document.activeElement)
   || Boolean(element.querySelector("details[open]"))
+  || Boolean(element.querySelector('[data-adaptive-dropdown-open="true"]'))
 );

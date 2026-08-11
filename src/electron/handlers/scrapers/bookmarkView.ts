@@ -21,10 +21,13 @@ import {
   type ScraperViewHistoryRecord,
 } from "../../scraper";
 import {
-  readScraperBookmarksFile,
-  readScraperReaderProgressFile,
   readScrapersFile,
 } from "./storage";
+import {
+  countScraperBookmarks,
+  listScraperBookmarks,
+} from "../../database/bookmarkRepository";
+import { listScraperReaderProgress } from "../../database/readerProgressRepository";
 import { sanitizeStringList } from "./shared";
 import { getScraperViewHistory } from "./viewHistory";
 
@@ -707,25 +710,21 @@ export async function getScraperBookmarkView(
   const filters = normalizeBookmarkFilters(request?.filters);
 
   const [
-    allBookmarks,
+    scopeBookmarks,
+    allBookmarkCount,
     scrapers,
     viewHistoryRecords,
-    allProgressRecords,
+    progressRecords,
   ] = await Promise.all([
-    readScraperBookmarksFile(),
+    listScraperBookmarks(normalizedScraperId || null),
+    countScraperBookmarks(),
     readScrapersFile(),
     getScraperViewHistory(undefined, normalizedScraperId || null),
-    readScraperReaderProgressFile(),
+    listScraperReaderProgress(normalizedScraperId || null),
   ]);
 
   const scrapersById = new Map(scrapers.map((scraper) => [scraper.id, scraper]));
   const viewHistoryRecordsById = new Map(viewHistoryRecords.map((record) => [record.id, record]));
-  const scopeBookmarks = normalizedScraperId
-    ? allBookmarks.filter((bookmark) => bookmark.scraperId === normalizedScraperId)
-    : allBookmarks;
-  const progressRecords = normalizedScraperId
-    ? allProgressRecords.filter((record) => record.scraperId === normalizedScraperId)
-    : allProgressRecords;
   const progressIndex = buildProgressIndex(progressRecords);
 
   const candidates = scopeBookmarks.map((bookmark) => (
@@ -754,7 +753,7 @@ export async function getScraperBookmarkView(
 
   return {
     bookmarks: visibleCandidates.map(toResponseRecord),
-    allBookmarkCount: allBookmarks.length,
+    allBookmarkCount,
     scopeCount: scopeBookmarks.length,
     filteredCount: filteredCandidates.length,
     hiddenBlacklistedCount: candidatesWithBlacklistState.filter((entry) => entry.hasBlacklistedTags).length,

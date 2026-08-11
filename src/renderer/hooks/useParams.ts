@@ -85,6 +85,7 @@ export type AppParams = {
     scraperAuthorFavoriteCacheResults?: boolean;
     scraperScrapeDetailsWithCards?: boolean;
     scraperHideBlacklistedTagCards?: boolean;
+    scraperCardPotentialMatchesEnabled?: boolean;
     scraperBlacklistedTagsByScraper?: ScraperTagBlacklistByScraper;
     scraperTagListViewSettingsByScraper?: ScraperTagListViewSettingsByScraper;
     scraperLatestResultLimit?: number;

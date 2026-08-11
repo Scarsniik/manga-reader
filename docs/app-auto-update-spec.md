@@ -325,6 +325,7 @@ La mise a jour de l'application ne doit pas toucher :
 - `mangas.json` ;
 - auteurs, tags, series ;
 - favoris et historiques scrapers ;
+- base locale `collections.sqlite` et ses fichiers WAL eventuels ;
 - configuration OCR ;
 - runtime OCR installe.
 
@@ -332,7 +333,7 @@ Le changement de nom initial vers Scaramanga prevoit une migration automatique
 non destructive du dossier `userData` historique : au premier lancement, si le
 nouveau dossier Scaramanga ne contient pas encore `data/mangas.json`,
 l'application copie seulement les fichiers de donnees utilisateur geres
-(`mangas.json`, `params.json`, auteurs, tags, series, scrapers, historiques,
+(`mangas.json`, `params.json`, `collections.sqlite`, auteurs, tags, series, scrapers, historiques,
 configuration OCR) depuis l'ancien dossier trouve, par exemple
 `%APPDATA%\manga-helper` ou `%LOCALAPPDATA%\manga-helper-userdata`, vers
 `%LOCALAPPDATA%\scaramanga-userdata\data`. Les caches Electron, logs, fichiers

@@ -35,6 +35,7 @@ type Props = {
   summary?: string | null;
   emptySummary?: string | null;
   metadata?: React.ReactNode;
+  notice?: React.ReactNode;
   actions?: ScraperCardAction[];
   className?: string;
   isActionable?: boolean;
@@ -76,6 +77,7 @@ export default function ScraperCard({
   summary,
   emptySummary,
   metadata,
+  notice,
   actions,
   className = '',
   isActionable = false,
@@ -310,6 +312,7 @@ export default function ScraperCard({
           <p className="scraper-card__summary is-muted">{normalizedEmptySummary}</p>
         )}
         {metadata}
+        {notice}
       </div>
 
       {visibleActions.length ? (

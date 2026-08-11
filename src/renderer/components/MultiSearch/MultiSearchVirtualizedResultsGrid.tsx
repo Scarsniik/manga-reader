@@ -13,10 +13,15 @@ import type {
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
+import useMultiSearchCardPotentialMatches from "@/renderer/components/MultiSearch/useMultiSearchCardPotentialMatches";
+import type { ScraperCardPotentialMatchResult } from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
+import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import {
   MEASUREMENT_PRECISION_PX,
   MIN_OVERSCAN_PX,
   OVERSCAN_VIEWPORT_MULTIPLIER,
+  POTENTIAL_MATCH_MIN_PREFETCH_PX,
+  POTENTIAL_MATCH_PREFETCH_VIEWPORT_MULTIPLIER,
   buildVirtualRows,
   findFirstVisibleItem,
   getColumnCount,
@@ -24,6 +29,7 @@ import {
   getRowsTotalHeight,
   getScrollableParent,
   getScrollTargetTop,
+  getVirtualRowViewportDistance,
   getViewportRange,
   hasStickyState,
   scrollBy,
@@ -58,6 +64,10 @@ type Props = {
 
 type MeasuredItemProps = Omit<Props, "results"> & {
   result: MultiSearchMergedResult;
+  potentialMatches?: ScraperCardPotentialMatchResult | null;
+  potentialMatchesLoading?: boolean;
+  onOpenPotentialMatch: (match: ScraperPotentialMangaMatch) => void;
+  onOpenPotentialMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
   onHeightChange: (resultId: string, height: number) => void;
   onStickyChange: (resultId: string, isSticky: boolean) => void;
 };
@@ -72,6 +82,10 @@ function MeasuredMultiSearchResultCard({
   tagBlacklistByScraper,
   tagFavorites,
   viewHistoryRecordingDisabled,
+  potentialMatches,
+  potentialMatchesLoading,
+  onOpenPotentialMatch,
+  onOpenPotentialMatchInWorkspace,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -166,6 +180,10 @@ function MeasuredMultiSearchResultCard({
         tagBlacklistByScraper={tagBlacklistByScraper}
         tagFavorites={tagFavorites}
         viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
+        potentialMatches={potentialMatches}
+        potentialMatchesLoading={potentialMatchesLoading}
+        onOpenPotentialMatch={onOpenPotentialMatch}
+        onOpenPotentialMatchInWorkspace={onOpenPotentialMatchInWorkspace}
         onOpenSource={onOpenSource}
         onOpenSourceInWorkspace={onOpenSourceInWorkspace}
         onOpenProgressReader={onOpenProgressReader}
@@ -445,21 +463,67 @@ export default function MultiSearchVirtualizedResultsGrid({
     updateViewportRange();
   }, [columnCount, usedResults, rows, updateViewportRange]);
 
-  const overscan = Math.max(
-    MIN_OVERSCAN_PX,
-    viewportRange.height * OVERSCAN_VIEWPORT_MULTIPLIER,
-  );
-  const visibleStart = viewportRange.start - overscan;
-  const visibleEnd = viewportRange.end + overscan;
-  const visibleRows = rows.filter((row) => {
-    const isInRange = viewportRange.height === 0
-      ? row.index < 6
-      : row.top + row.height >= visibleStart && row.top <= visibleEnd;
-    const hasStickyItem = row.results.some((result) => stickyResultIds.has(result.id));
+  const renderedRows = React.useMemo(() => {
+    if (useStaticLayout) {
+      return rows;
+    }
 
-    return isInRange || hasStickyItem;
+    const overscan = Math.max(
+      MIN_OVERSCAN_PX,
+      viewportRange.height * OVERSCAN_VIEWPORT_MULTIPLIER,
+    );
+    const visibleStart = viewportRange.start - overscan;
+    const visibleEnd = viewportRange.end + overscan;
+    return rows.filter((row) => {
+      const isInRange = viewportRange.height === 0
+        ? row.index < 6
+        : row.top + row.height >= visibleStart && row.top <= visibleEnd;
+      const hasStickyItem = row.results.some((result) => stickyResultIds.has(result.id));
+
+      return isInRange || hasStickyItem;
+    });
+  }, [rows, stickyResultIds, useStaticLayout, viewportRange]);
+  const renderedResults = React.useMemo(
+    () => renderedRows.flatMap((row) => row.results),
+    [renderedRows],
+  );
+  const potentialMatchResults = React.useMemo(() => {
+    if (useStaticLayout) {
+      return renderedResults;
+    }
+
+    if (viewportRange.height === 0) {
+      return rows.slice(0, 18).flatMap((row) => row.results);
+    }
+
+    const prefetch = Math.max(
+      POTENTIAL_MATCH_MIN_PREFETCH_PX,
+      viewportRange.height * POTENTIAL_MATCH_PREFETCH_VIEWPORT_MULTIPLIER,
+    );
+    const prefetchStart = viewportRange.start - prefetch;
+    const prefetchEnd = viewportRange.end + prefetch;
+
+    return rows
+      .filter((row) => {
+        const isInRange = row.top + row.height >= prefetchStart && row.top <= prefetchEnd;
+        const hasStickyItem = row.results.some((result) => stickyResultIds.has(result.id));
+        return isInRange || hasStickyItem;
+      })
+      .sort((left, right) => (
+        getVirtualRowViewportDistance(left, viewportRange)
+        - getVirtualRowViewportDistance(right, viewportRange)
+      ))
+      .flatMap((row) => row.results);
+  }, [renderedResults, rows, stickyResultIds, useStaticLayout, viewportRange]);
+  const potentialMatchFallbackScraper = React.useMemo(
+    () => usedResults.find((result) => result.sources.length > 0)?.sources[0]?.scraper ?? null,
+    [usedResults],
+  );
+  const potentialMatches = useMultiSearchCardPotentialMatches({
+    results: potentialMatchResults,
+    libraryMangas,
+    fallbackScraper: potentialMatchFallbackScraper,
   });
-  const renderedRows = useStaticLayout ? rows : visibleRows;
 
   const buildRowKey = (row: (typeof rows)[number]): string => (
     row.results.map((result) => `${result.id.length}:${result.id}`).join("")
@@ -500,6 +564,10 @@ export default function MultiSearchVirtualizedResultsGrid({
               tagBlacklistByScraper={tagBlacklistByScraper}
               tagFavorites={tagFavorites}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
+              potentialMatches={potentialMatches.matchesByKey.get(result.id)}
+              potentialMatchesLoading={potentialMatches.loadingKeys.has(result.id)}
+              onOpenPotentialMatch={potentialMatches.openMatch}
+              onOpenPotentialMatchInWorkspace={potentialMatches.openMatchInWorkspace}
               onOpenSource={onOpenSource}
               onOpenSourceInWorkspace={onOpenSourceInWorkspace}
               onOpenProgressReader={onOpenProgressReader}

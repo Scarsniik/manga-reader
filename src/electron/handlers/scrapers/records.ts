@@ -10,12 +10,11 @@ import {
   type ScraperRecord,
 } from "../../scraper";
 import { sanitizeGlobalConfig } from "./shared";
+import { removeStoredScraperBookmarksByScraper } from "../../database/bookmarkRepository";
+import { removeStoredScraperReaderProgressByScraper } from "../../database/readerProgressRepository";
 import {
   hydrateScraperFeatures,
-  readScraperReaderProgressFile,
   readScrapersFile,
-  updateScraperBookmarksFile,
-  writeScraperReaderProgressFile,
   writeScrapersFile,
 } from "./storage";
 
@@ -36,22 +35,8 @@ export async function deleteScraper(
 
   await writeScrapersFile(filtered);
 
-  await updateScraperBookmarksFile((bookmarkRecords) => {
-    const filteredBookmarkRecords = bookmarkRecords.filter((record) => record.scraperId !== String(scraperId));
-    const removedBookmarks = filteredBookmarkRecords.length !== bookmarkRecords.length;
-
-    return {
-      records: removedBookmarks ? filteredBookmarkRecords : bookmarkRecords,
-      result: undefined,
-      shouldWrite: removedBookmarks,
-    };
-  });
-
-  const progressRecords = await readScraperReaderProgressFile();
-  const filteredProgressRecords = progressRecords.filter((record) => record.scraperId !== String(scraperId));
-  if (filteredProgressRecords.length !== progressRecords.length) {
-    await writeScraperReaderProgressFile(filteredProgressRecords);
-  }
+  removeStoredScraperBookmarksByScraper(String(scraperId));
+  removeStoredScraperReaderProgressByScraper(String(scraperId));
 
   return filtered;
 }

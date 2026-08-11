@@ -1,36 +1,21 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { AppHistoryRecords } from "@/shared/history";
-import type { SavedReadingList } from "@/shared/readingList";
-import type { ScraperReaderProgressRecord, ScraperRecord } from "@/shared/scraper";
-import type { ReaderLocationState } from "@/renderer/components/Reader/types";
-import type { Manga } from "@/renderer/types";
-import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
-import { useScraperBookmarks } from "@/renderer/stores/scraperBookmarks";
-import { useScraperViewHistory } from "@/renderer/stores/scraperViewHistory";
+import { useEffect, useMemo, useState } from "react";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
-import type {
-  MatchableManga,
-  MangaMergeOptions,
-} from "@/renderer/utils/mangaMatching/titleProfiles";
+import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
+import type { MangaMergeOptions, MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { enrichMatchableMangasWithJapaneseRomanization } from "@/renderer/utils/mangaMatching/advancedRomanization";
-import {
-  buildBookmarkCandidate,
-  buildCurrentMatchable,
-  buildReadingCandidates,
-  buildReadingListCandidates,
-  EMPTY_HISTORY_RECORDS,
-} from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchCandidates";
+import { buildCurrentMatchable } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchCandidates";
 import { matchPotentialMangaCandidates } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchMatching";
 import type {
   ScraperPotentialMangaMatch,
   ScraperPotentialMangaMatchState,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import type { PotentialMangaMatchCandidateCollections } from "@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates";
 
-type UseScraperPotentialMangaMatchesOptions = {
-  scraper: ScraperRecord;
+type Options = {
+  scraperId: string;
   detailsResult: ScraperRuntimeDetailsResult | null;
-  libraryMangas: Manga[];
   mergeOptions: MangaMergeOptions;
+  candidates: PotentialMangaMatchCandidateCollections;
   enabled?: boolean;
 };
 
@@ -41,148 +26,17 @@ const EMPTY_MATCH_STATE: ScraperPotentialMangaMatchState = {
   loading: false,
 };
 
-const getApi = (): any => (
-  typeof window === "undefined" ? null : (window as any).api
-);
-
-type SharedPotentialMatchRecordsSnapshot = {
-  historyRecords: AppHistoryRecords;
-  progressRecords: ScraperReaderProgressRecord[];
-  savedReadingLists: SavedReadingList<ReaderLocationState>[];
-  scrapers: ScraperRecord[];
-};
-
-const sharedRecordsListeners = new Set<() => void>();
-let sharedRecordsSnapshot: SharedPotentialMatchRecordsSnapshot = {
-  historyRecords: EMPTY_HISTORY_RECORDS,
-  progressRecords: [],
-  savedReadingLists: [],
-  scrapers: [],
-};
-const disabledSharedRecordsSnapshot: SharedPotentialMatchRecordsSnapshot = {
-  historyRecords: EMPTY_HISTORY_RECORDS,
-  progressRecords: [],
-  savedReadingLists: [],
-  scrapers: [],
-};
-let sharedRecordsLoadPromise: Promise<void> | null = null;
-let sharedRecordsReloadQueued = false;
-const subscribeDisabled = () => () => {};
-
-const getSharedPotentialMatchRecordsSnapshot = (): SharedPotentialMatchRecordsSnapshot => (
-  sharedRecordsSnapshot
-);
-const getDisabledSharedPotentialMatchRecordsSnapshot = (): SharedPotentialMatchRecordsSnapshot => (
-  disabledSharedRecordsSnapshot
-);
-
-const subscribeSharedPotentialMatchRecords = (listener: () => void): (() => void) => {
-  sharedRecordsListeners.add(listener);
-  return () => {
-    sharedRecordsListeners.delete(listener);
-  };
-};
-
-const emitSharedPotentialMatchRecords = (): void => {
-  sharedRecordsListeners.forEach((listener) => listener());
-};
-
-const normalizeHistoryRecords = (records: unknown): AppHistoryRecords => (
-  records && typeof records === "object"
-    ? records as AppHistoryRecords
-    : EMPTY_HISTORY_RECORDS
-);
-
-const normalizeScraperRecords = (
-  records: unknown,
-  fallbackScraper: ScraperRecord,
-): ScraperRecord[] => (
-  Array.isArray(records) && records.length
-    ? records as ScraperRecord[]
-    : [fallbackScraper]
-);
-
-const setSharedPotentialMatchRecordsSnapshot = (
-  snapshot: SharedPotentialMatchRecordsSnapshot,
-): void => {
-  sharedRecordsSnapshot = snapshot;
-  emitSharedPotentialMatchRecords();
-};
-
-const loadSharedPotentialMatchRecords = (
-  fallbackScraper: ScraperRecord,
-  queueReload = false,
-): Promise<void> => {
-  if (sharedRecordsLoadPromise) {
-    sharedRecordsReloadQueued = sharedRecordsReloadQueued || queueReload;
-    return sharedRecordsLoadPromise;
-  }
-
-  sharedRecordsLoadPromise = (async () => {
-    const api = getApi();
-    if (!api) {
-      setSharedPotentialMatchRecordsSnapshot({
-        historyRecords: EMPTY_HISTORY_RECORDS,
-        progressRecords: [],
-        savedReadingLists: [],
-        scrapers: [fallbackScraper],
-      });
-      return;
-    }
-
-    const [
-      nextHistoryRecords,
-      nextProgressRecords,
-      nextSavedReadingLists,
-      nextScrapers,
-    ] = await Promise.all([
-      typeof api.getHistoryRecords === "function"
-        ? api.getHistoryRecords().catch(() => EMPTY_HISTORY_RECORDS)
-        : Promise.resolve(EMPTY_HISTORY_RECORDS),
-      typeof api.getScraperReaderProgressRecords === "function"
-        ? api.getScraperReaderProgressRecords().catch(() => [])
-        : Promise.resolve([]),
-      typeof api.getSavedReadingLists === "function"
-        ? api.getSavedReadingLists().catch(() => [])
-        : Promise.resolve([]),
-      typeof api.getScrapers === "function"
-        ? api.getScrapers().catch(() => [fallbackScraper])
-        : Promise.resolve([fallbackScraper]),
-    ]);
-
-    setSharedPotentialMatchRecordsSnapshot({
-      historyRecords: normalizeHistoryRecords(nextHistoryRecords),
-      progressRecords: Array.isArray(nextProgressRecords) ? nextProgressRecords : [],
-      savedReadingLists: Array.isArray(nextSavedReadingLists) ? nextSavedReadingLists : [],
-      scrapers: normalizeScraperRecords(nextScrapers, fallbackScraper),
-    });
-  })()
-    .finally(() => {
-      sharedRecordsLoadPromise = null;
-      if (sharedRecordsReloadQueued) {
-        sharedRecordsReloadQueued = false;
-        void loadSharedPotentialMatchRecords(fallbackScraper);
-      }
-    });
-
-  return sharedRecordsLoadPromise;
-};
-
 const splitEnrichedCandidates = (
   enrichedCandidates: MatchableManga[],
   readingCandidateCount: number,
   bookmarkCandidateCount: number,
-): {
-  readingCandidates: ScraperPotentialMangaMatch[];
-  bookmarkCandidates: ScraperPotentialMangaMatch[];
-  readingListCandidates: ScraperPotentialMangaMatch[];
-} => ({
-  readingCandidates: enrichedCandidates.slice(0, readingCandidateCount) as ScraperPotentialMangaMatch[],
-  bookmarkCandidates: enrichedCandidates.slice(
+): Omit<ScraperPotentialMangaMatchState, "loading"> => ({
+  readingMatches: enrichedCandidates.slice(0, readingCandidateCount) as ScraperPotentialMangaMatch[],
+  bookmarkMatches: enrichedCandidates.slice(
     readingCandidateCount,
     readingCandidateCount + bookmarkCandidateCount,
   ) as ScraperPotentialMangaMatch[],
-  readingListCandidates: enrichedCandidates.slice(
+  readingListMatches: enrichedCandidates.slice(
     readingCandidateCount + bookmarkCandidateCount,
   ) as ScraperPotentialMangaMatch[],
 });
@@ -190,176 +44,44 @@ const splitEnrichedCandidates = (
 const isCurrentScraperMatch = (
   candidate: ScraperPotentialMangaMatch,
   scraperId: string,
-  sourceUrl: string,
+  currentSourceUrl: string,
 ): boolean => (
   candidate.target.kind === "scraperDetails"
   && candidate.target.scraperId === scraperId
-  && normalizeScraperViewHistorySourceUrl(candidate.target.sourceUrl) === sourceUrl
+  && normalizeScraperViewHistorySourceUrl(candidate.target.sourceUrl) === currentSourceUrl
 );
-
-const getPotentialMatchTargetSignature = (match: ScraperPotentialMangaMatch): unknown[] => (
-  match.target.kind === "library"
-    ? [match.target.kind, match.target.title]
-    : [
-      match.target.kind,
-      match.target.scraperId,
-      normalizeScraperViewHistorySourceUrl(match.target.sourceUrl),
-      match.target.title,
-    ]
-);
-
-const getPotentialMatchCandidateSignature = (match: ScraperPotentialMangaMatch): string => (
-  JSON.stringify([
-    match.id,
-    match.category,
-    match.title,
-    normalizeScraperViewHistorySourceUrl(match.sourceUrl),
-    match.authorNames ?? [],
-    match.sourceLabel,
-    match.detailLabel,
-    match.updatedAt,
-    match.readingStatus ?? "",
-    getPotentialMatchTargetSignature(match),
-  ])
-);
-
-const getPotentialMatchCandidatesSignature = (
-  candidates: ScraperPotentialMangaMatch[],
-): string => (
-  candidates.map(getPotentialMatchCandidateSignature).join("\n")
-);
-
-const useStablePotentialMatchCandidates = (
-  candidates: ScraperPotentialMangaMatch[],
-): ScraperPotentialMangaMatch[] => {
-  const previousRef = useRef<{
-    signature: string;
-    candidates: ScraperPotentialMangaMatch[];
-  } | null>(null);
-
-  return useMemo(() => {
-    const signature = getPotentialMatchCandidatesSignature(candidates);
-    if (previousRef.current?.signature === signature) {
-      return previousRef.current.candidates;
-    }
-
-    previousRef.current = {
-      signature,
-      candidates,
-    };
-    return candidates;
-  }, [candidates]);
-};
 
 export default function useScraperPotentialMangaMatches({
-  scraper,
+  scraperId,
   detailsResult,
-  libraryMangas,
   mergeOptions,
+  candidates,
   enabled = true,
-}: UseScraperPotentialMangaMatchesOptions): ScraperPotentialMangaMatchState {
+}: Options): ScraperPotentialMangaMatchState {
   const [matches, setMatches] = useState<ScraperPotentialMangaMatchState>(EMPTY_MATCH_STATE);
-  const { bookmarks } = useScraperBookmarks({ enabled });
-  const { records: viewHistoryRecords } = useScraperViewHistory({ enabled });
-  const {
-    historyRecords,
-    progressRecords,
-    savedReadingLists,
-    scrapers,
-  } = useSyncExternalStore(
-    enabled ? subscribeSharedPotentialMatchRecords : subscribeDisabled,
-    enabled ? getSharedPotentialMatchRecordsSnapshot : getDisabledSharedPotentialMatchRecordsSnapshot,
-    enabled ? getSharedPotentialMatchRecordsSnapshot : getDisabledSharedPotentialMatchRecordsSnapshot,
-  );
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    void loadSharedPotentialMatchRecords(scraper);
-
-    const reload = () => {
-      void loadSharedPotentialMatchRecords(scraper, true);
-    };
-
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    window.addEventListener("history-updated", reload as EventListener);
-    window.addEventListener("mangas-updated", reload as EventListener);
-    window.addEventListener("scrapers-updated", reload as EventListener);
-    const api = getApi();
-    const unsubscribeReadingLists = typeof api?.onSavedReadingListsUpdated === "function"
-      ? api.onSavedReadingListsUpdated(reload)
-      : undefined;
-    return () => {
-      window.removeEventListener("history-updated", reload as EventListener);
-      window.removeEventListener("mangas-updated", reload as EventListener);
-      window.removeEventListener("scrapers-updated", reload as EventListener);
-      unsubscribeReadingLists?.();
-    };
-  }, [enabled, scraper]);
-
-  const scrapersById = useMemo(() => (
-    new Map((scrapers.length ? scrapers : [scraper]).map((candidate) => [candidate.id, candidate]))
-  ), [scraper, scrapers]);
-
-  const currentMatchable = useMemo(
-    () => buildCurrentMatchable(detailsResult),
-    [detailsResult],
-  );
-  const currentSourceUrl = useMemo(() => (
-    normalizeScraperViewHistorySourceUrl(detailsResult?.finalUrl || detailsResult?.requestedUrl)
+  const currentMatchable = useMemo(() => buildCurrentMatchable(detailsResult), [detailsResult]);
+  const currentSourceUrl = useMemo(() => normalizeScraperViewHistorySourceUrl(
+    detailsResult?.finalUrl || detailsResult?.requestedUrl,
   ), [detailsResult?.finalUrl, detailsResult?.requestedUrl]);
 
   const readingCandidates = useMemo(() => (
-    buildReadingCandidates({
-      historyRecords,
-      libraryMangas,
-      progressRecords,
-      viewHistoryRecords,
-      bookmarks,
-      scrapersById,
-    })
-  ), [
-    bookmarks,
-    historyRecords,
-    libraryMangas,
-    progressRecords,
-    scrapersById,
-    viewHistoryRecords,
-  ]);
-
+    currentSourceUrl
+      ? candidates.readingCandidates.filter((candidate) => !isCurrentScraperMatch(
+        candidate,
+        scraperId,
+        currentSourceUrl,
+      ))
+      : candidates.readingCandidates
+  ), [candidates.readingCandidates, currentSourceUrl, scraperId]);
   const bookmarkCandidates = useMemo(() => (
-    bookmarks
-      .map((bookmark) => buildBookmarkCandidate(bookmark, scrapersById))
-      .filter((candidate): candidate is ScraperPotentialMangaMatch => Boolean(candidate))
-  ), [bookmarks, scrapersById]);
-
-  const readingListCandidates = useMemo(() => (
-    buildReadingListCandidates({
-      lists: savedReadingLists,
-      libraryMangas,
-      scrapersById,
-    })
-  ), [libraryMangas, savedReadingLists, scrapersById]);
-
-  const rawComparableReadingCandidates = useMemo(() => (
     currentSourceUrl
-      ? readingCandidates.filter((candidate) => !isCurrentScraperMatch(candidate, scraper.id, currentSourceUrl))
-      : readingCandidates
-  ), [currentSourceUrl, readingCandidates, scraper.id]);
-
-  const rawComparableBookmarkCandidates = useMemo(() => (
-    currentSourceUrl
-      ? bookmarkCandidates.filter((candidate) => !isCurrentScraperMatch(candidate, scraper.id, currentSourceUrl))
-      : bookmarkCandidates
-  ), [bookmarkCandidates, currentSourceUrl, scraper.id]);
-  const comparableReadingCandidates = useStablePotentialMatchCandidates(rawComparableReadingCandidates);
-  const comparableBookmarkCandidates = useStablePotentialMatchCandidates(rawComparableBookmarkCandidates);
-  const comparableReadingListCandidates = useStablePotentialMatchCandidates(readingListCandidates);
+      ? candidates.bookmarkCandidates.filter((candidate) => !isCurrentScraperMatch(
+        candidate,
+        scraperId,
+        currentSourceUrl,
+      ))
+      : candidates.bookmarkCandidates
+  ), [candidates.bookmarkCandidates, currentSourceUrl, scraperId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -372,11 +94,11 @@ export default function useScraperPotentialMangaMatches({
     }
 
     setMatches({
-      readingMatches: matchPotentialMangaCandidates(currentMatchable, comparableReadingCandidates, mergeOptions),
-      bookmarkMatches: matchPotentialMangaCandidates(currentMatchable, comparableBookmarkCandidates, mergeOptions),
+      readingMatches: matchPotentialMangaCandidates(currentMatchable, readingCandidates, mergeOptions),
+      bookmarkMatches: matchPotentialMangaCandidates(currentMatchable, bookmarkCandidates, mergeOptions),
       readingListMatches: matchPotentialMangaCandidates(
         currentMatchable,
-        comparableReadingListCandidates,
+        candidates.readingListCandidates,
         mergeOptions,
       ),
       loading: true,
@@ -385,9 +107,9 @@ export default function useScraperPotentialMangaMatches({
     const enrichAndMatch = async () => {
       const enrichedMangas = await enrichMatchableMangasWithJapaneseRomanization([
         currentMatchable,
-        ...comparableReadingCandidates,
-        ...comparableBookmarkCandidates,
-        ...comparableReadingListCandidates,
+        ...readingCandidates,
+        ...bookmarkCandidates,
+        ...candidates.readingListCandidates,
       ]);
       if (cancelled) {
         return;
@@ -396,24 +118,24 @@ export default function useScraperPotentialMangaMatches({
       const [enrichedCurrent, ...enrichedCandidates] = enrichedMangas;
       const enriched = splitEnrichedCandidates(
         enrichedCandidates,
-        comparableReadingCandidates.length,
-        comparableBookmarkCandidates.length,
+        readingCandidates.length,
+        bookmarkCandidates.length,
       );
 
       setMatches({
         readingMatches: matchPotentialMangaCandidates(
           enrichedCurrent,
-          enriched.readingCandidates,
+          enriched.readingMatches,
           mergeOptions,
         ),
         bookmarkMatches: matchPotentialMangaCandidates(
           enrichedCurrent,
-          enriched.bookmarkCandidates,
+          enriched.bookmarkMatches,
           mergeOptions,
         ),
         readingListMatches: matchPotentialMangaCandidates(
           enrichedCurrent,
-          enriched.readingListCandidates,
+          enriched.readingListMatches,
           mergeOptions,
         ),
         loading: false,
@@ -422,13 +144,13 @@ export default function useScraperPotentialMangaMatches({
 
     void enrichAndMatch()
       .catch(() => {
-        // The initial synchronous pass already produced usable matches.
+        // The synchronous pass already produced usable matches.
       })
       .finally(() => {
         if (!cancelled) {
           setMatches((current) => ({
             ...current,
-            loading: false,
+            loading: candidates.loading,
           }));
         }
       });
@@ -437,12 +159,13 @@ export default function useScraperPotentialMangaMatches({
       cancelled = true;
     };
   }, [
-    comparableBookmarkCandidates,
-    comparableReadingListCandidates,
-    comparableReadingCandidates,
+    bookmarkCandidates,
+    candidates.loading,
+    candidates.readingListCandidates,
     currentMatchable,
     enabled,
     mergeOptions,
+    readingCandidates,
   ]);
 
   return matches;

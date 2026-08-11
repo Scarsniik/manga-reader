@@ -7,6 +7,10 @@ import {
   type MangaMergeOptions,
   type MatchableManga,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
+import {
+  collectIndexedMangaMatchCandidates,
+  createMangaMatchCandidateIndex,
+} from "@/renderer/utils/mangaMatching/matchCandidateIndex";
 
 type BookmarkMatchable = MatchableManga & {
   bookmark: ScraperBookmarkRecord;
@@ -31,7 +35,7 @@ type FindScraperBookmarkDuplicateGroupsOptions = {
   onProgress?: (progress: ScraperBookmarkDuplicateDetectionProgress) => void;
 };
 
-const YIELD_EVERY_COMPARISONS = 500;
+const YIELD_EVERY_CANDIDATE_COMPARISONS = 5000;
 
 const normalizeText = (value: unknown): string => (
   String(value ?? "").trim().replace(/\s+/g, " ")
@@ -98,16 +102,23 @@ export const findScraperBookmarkDuplicateGroups = async ({
   }
 
   const enrichedMatchables = await enrichMatchableMangasWithJapaneseRomanization(matchables);
+  const candidateIndex = createMangaMatchCandidateIndex(enrichedMatchables, options);
   const parents = createParentIndex(enrichedMatchables.length);
   const matchKindsByRoot = new Map<number, Set<MangaMatchKind>>();
-  let compared = 0;
+  let comparedCandidates = 0;
+  let reportedComparisons = 0;
 
   for (let leftIndex = 0; leftIndex < enrichedMatchables.length; leftIndex += 1) {
     const left = enrichedMatchables[leftIndex];
+    const candidates = collectIndexedMangaMatchCandidates(candidateIndex, left)
+      .filter((candidate) => (candidateIndex.candidateIndexes.get(candidate) ?? -1) > leftIndex);
 
-    for (let rightIndex = leftIndex + 1; rightIndex < enrichedMatchables.length; rightIndex += 1) {
-      compared += 1;
-      const right = enrichedMatchables[rightIndex];
+    for (const right of candidates) {
+      comparedCandidates += 1;
+      const rightIndex = candidateIndex.candidateIndexes.get(right);
+      if (rightIndex === undefined) {
+        continue;
+      }
       const matchKind = getMangaMergeMatchKind(left, right, options);
 
       if (matchKind) {
@@ -118,8 +129,11 @@ export const findScraperBookmarkDuplicateGroups = async ({
         matchKindsByRoot.set(root, kinds);
       }
 
-      if (compared % YIELD_EVERY_COMPARISONS === 0) {
-        onProgress?.({ compared, total: totalComparisons });
+      if (comparedCandidates % YIELD_EVERY_CANDIDATE_COMPARISONS === 0) {
+        reportedComparisons = totalComparisons - (
+          ((enrichedMatchables.length - leftIndex - 1) * (enrichedMatchables.length - leftIndex - 2)) / 2
+        );
+        onProgress?.({ compared: reportedComparisons, total: totalComparisons });
         await yieldToUi();
       }
     }

@@ -4,10 +4,40 @@ import {
   type MatchableManga,
   type MangaMergeOptions,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
+import {
+  collectIndexedMangaMatchCandidates,
+  createMangaMatchCandidateIndex,
+  type MangaMatchCandidateIndex,
+} from "@/renderer/utils/mangaMatching/matchCandidateIndex";
 import type {
   ScraperPotentialMangaMatch,
   ScraperPotentialReadingStatus,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+
+const potentialMatchCandidateIndexCache = new WeakMap<
+  ScraperPotentialMangaMatch[],
+  Map<string, MangaMatchCandidateIndex<ScraperPotentialMangaMatch>>
+>();
+
+const getCandidateIndex = (
+  candidates: ScraperPotentialMangaMatch[],
+  options: MangaMergeOptions,
+): MangaMatchCandidateIndex<ScraperPotentialMangaMatch> => {
+  const cacheKey = options.enableRomajiPhoneticMerge ? "phonetic" : "standard";
+  const cachedIndexes = potentialMatchCandidateIndexCache.get(candidates);
+  const cachedIndex = cachedIndexes?.get(cacheKey);
+  if (cachedIndex) {
+    return cachedIndex;
+  }
+
+  const index = createMangaMatchCandidateIndex(candidates, options);
+  if (cachedIndexes) {
+    cachedIndexes.set(cacheKey, index);
+  } else {
+    potentialMatchCandidateIndexCache.set(candidates, new Map([[cacheKey, index]]));
+  }
+  return index;
+};
 
 const compareDatesDescending = (
   left: string | undefined,
@@ -80,7 +110,10 @@ export const matchPotentialMangaCandidates = (
   options: MangaMergeOptions,
 ): ScraperPotentialMangaMatch[] => (
   sortMatches(dedupeMatches(
-    candidates
+    collectIndexedMangaMatchCandidates(
+      getCandidateIndex(candidates, options),
+      current,
+    )
       .map((candidate) => ({
         ...candidate,
         matchKind: getMangaMergeMatchKind(current, candidate, options) ?? undefined,

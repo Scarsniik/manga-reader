@@ -25,6 +25,7 @@ let state: ScraperBookmarksState = {
   bookmarks: [],
   error: null,
 };
+let bookmarkIndex = new Map<string, ScraperBookmarkRecord>();
 
 let inFlightLoad: Promise<ScraperBookmarkRecord[]> | null = null;
 let hasBoundWindowEvents = false;
@@ -51,6 +52,10 @@ const setState = (updater: Partial<ScraperBookmarksState> | ((previous: ScraperB
       ...state,
       ...updater,
     };
+  bookmarkIndex = new Map(state.bookmarks.map((bookmark) => [
+    getScraperBookmarkKey(bookmark.scraperId, bookmark.sourceUrl),
+    bookmark,
+  ]));
   emitChange();
 };
 
@@ -104,10 +109,42 @@ const removeBookmark = (
   ))
 );
 
-const handleExternalBookmarksUpdate = () => {
+const handleExternalBookmarksUpdate = (event: Event) => {
   if (localBookmarkWriteEventSkips > 0) {
     localBookmarkWriteEventSkips -= 1;
     return;
+  }
+
+  if (!state.loaded) {
+    void loadScraperBookmarks(true);
+    return;
+  }
+
+  const change = (event as CustomEvent<unknown>).detail;
+  if (change && typeof change === 'object') {
+    const payload = change as {
+      kind?: unknown;
+      record?: ScraperBookmarkRecord;
+      request?: RemoveScraperBookmarkRequest;
+    };
+
+    if (payload.kind === 'upsert' && payload.record) {
+      setState((previous) => ({
+        ...previous,
+        loaded: true,
+        bookmarks: upsertBookmark(previous.bookmarks, payload.record as ScraperBookmarkRecord),
+      }));
+      return;
+    }
+
+    if (payload.kind === 'remove' && payload.request) {
+      setState((previous) => ({
+        ...previous,
+        loaded: true,
+        bookmarks: removeBookmark(previous.bookmarks, payload.request as RemoveScraperBookmarkRequest),
+      }));
+      return;
+    }
   }
 
   void loadScraperBookmarks(true);
@@ -316,10 +353,7 @@ export const useScraperBookmark = (
   const normalizedSourceUrl = String(sourceUrl ?? '').trim();
   const getBookmarkSnapshot = () => (
     enabled && normalizedScraperId && normalizedSourceUrl
-      ? state.bookmarks.find((candidate) => (
-        candidate.scraperId === normalizedScraperId
-        && candidate.sourceUrl === normalizedSourceUrl
-      )) ?? null
+      ? bookmarkIndex.get(getScraperBookmarkKey(normalizedScraperId, normalizedSourceUrl)) ?? null
       : null
   );
   const bookmark = useSyncExternalStore(

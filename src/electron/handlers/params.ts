@@ -684,6 +684,7 @@ const defaultSettings = {
     scraperAuthorFavoriteCacheResults: false,
     scraperScrapeDetailsWithCards: false,
     scraperHideBlacklistedTagCards: false,
+    scraperCardPotentialMatchesEnabled: true,
     scraperBlacklistedTagsByScraper: {} as Record<string, Array<{ value: string; label?: string; addedAt?: string }>>,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestScraperResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
@@ -932,6 +933,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperHideBlacklistedTagCards = typeof merged.scraperHideBlacklistedTagCards === "boolean"
         ? merged.scraperHideBlacklistedTagCards
         : defaultSettings.scraperHideBlacklistedTagCards;
+    merged.scraperCardPotentialMatchesEnabled = typeof merged.scraperCardPotentialMatchesEnabled === "boolean"
+        ? merged.scraperCardPotentialMatchesEnabled
+        : defaultSettings.scraperCardPotentialMatchesEnabled;
     merged.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
         merged.scraperBlacklistedTagsByScraper,
     );
@@ -1298,6 +1302,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperHideBlacklistedTagCards = typeof nextSettings.scraperHideBlacklistedTagCards === "boolean"
             ? nextSettings.scraperHideBlacklistedTagCards
             : defaultSettings.scraperHideBlacklistedTagCards;
+        nextSettings.scraperCardPotentialMatchesEnabled = typeof nextSettings.scraperCardPotentialMatchesEnabled === "boolean"
+            ? nextSettings.scraperCardPotentialMatchesEnabled
+            : defaultSettings.scraperCardPotentialMatchesEnabled;
         nextSettings.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
             nextSettings.scraperBlacklistedTagsByScraper,
         );
