@@ -38,6 +38,7 @@ const uniqueSearchResults = (results: ScraperSearchResultItem[]): ScraperSearchR
 };
 
 type SearchPageExtractionContext = {
+  requestedPageUrl: string;
   documentUrl: string;
   listingNames: string[];
   authorNames: string[];
@@ -60,6 +61,7 @@ const buildSearchPageExtractionContext = (
   const searchRoots = config.resultListSelector ? Array.from(doc.querySelectorAll(config.resultListSelector)) : [doc];
 
   return {
+    requestedPageUrl: requestMeta.requestedUrl,
     documentUrl,
     listingNames,
     authorNames: "authorNameSelector" in config ? listingNames : [],
@@ -123,6 +125,7 @@ const buildSearchPageResult = (
     : undefined;
 
   return {
+    requestedPageUrl: context.requestedPageUrl,
     currentPageUrl: context.documentUrl,
     nextPageUrl: nextPageValue ? toAbsoluteScraperUrl(nextPageValue, context.documentUrl) : undefined,
     authorNames: context.authorNames.length ? context.authorNames : undefined,

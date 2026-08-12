@@ -6,9 +6,11 @@ const esbuild = require("esbuild");
 const source = `
   export {
     BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
+    buildBackgroundListingPaginationUrlKey,
     filterBackgroundListingSourcesByBlacklist,
     isBackgroundListingBackfillPage,
     isBackgroundListingPaginationStalled,
+    isBackgroundListingRedirectedToVisitedPage,
     resolveBackgroundListingAcceptedTarget,
     shouldContinueBackgroundBlacklistBackfill,
   } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
@@ -34,9 +36,11 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 
 const {
   BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES,
+  buildBackgroundListingPaginationUrlKey,
   filterBackgroundListingSourcesByBlacklist,
   isBackgroundListingBackfillPage,
   isBackgroundListingPaginationStalled,
+  isBackgroundListingRedirectedToVisitedPage,
   resolveBackgroundListingAcceptedTarget,
   shouldContinueBackgroundBlacklistBackfill,
   isScraperListingPaginationEndError,
@@ -122,6 +126,33 @@ test("background blacklist backfill detects a pagination URL that no longer adva
     "https://example.test/?page=2",
   ), false);
   assert.equal(BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES, 3);
+});
+
+test("background pagination stops when a later request redirects to a visited page", () => {
+  const visitedPageUrlKeys = new Set();
+  const firstRequestedUrl = "https://example.test/search?page=1";
+  const firstCanonicalUrl = "https://example.test/search";
+
+  assert.equal(isBackgroundListingRedirectedToVisitedPage(
+    firstRequestedUrl,
+    firstCanonicalUrl,
+    visitedPageUrlKeys,
+  ), false);
+  visitedPageUrlKeys.add(buildBackgroundListingPaginationUrlKey(firstCanonicalUrl));
+
+  const secondPageUrl = "https://example.test/search?page=2";
+  assert.equal(isBackgroundListingRedirectedToVisitedPage(
+    secondPageUrl,
+    secondPageUrl,
+    visitedPageUrlKeys,
+  ), false);
+  visitedPageUrlKeys.add(buildBackgroundListingPaginationUrlKey(secondPageUrl));
+
+  assert.equal(isBackgroundListingRedirectedToVisitedPage(
+    "https://example.test/search?page=999",
+    firstCanonicalUrl,
+    visitedPageUrlKeys,
+  ), true);
 });
 
 test("blacklist backfill counts pages from the current checkpoint", () => {

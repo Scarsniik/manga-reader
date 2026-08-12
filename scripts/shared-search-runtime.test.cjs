@@ -151,6 +151,7 @@ test("the common listing loader fetches, parses and returns cards", async () => 
   });
 
   assert.equal(requests.length, 1);
+  assert.equal(page.requestedPageUrl, "https://example.test/search?q=manga");
   assert.equal(page.items[0].title, "Manga 1");
   assert.equal(page.items[0].detailUrl, "https://example.test/manga/1");
 });

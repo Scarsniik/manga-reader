@@ -40,6 +40,10 @@ import {
 import { buildScraperListingPageRequestKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
 import { normalizeMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import type { ScraperRuntimeSearchPageResult } from "@/renderer/utils/scraperRuntime";
+import {
+  buildBackgroundListingPaginationUrlKey,
+  isBackgroundListingRedirectedToVisitedPage,
+} from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -260,6 +264,7 @@ export const runAuthorCorrespondenceSearch = async (
     if (!isSearchableScraper(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
     const prefetchSourceKey = `${scraper.id}:${normalizeFuzzyText(name)}`;
+    const visitedPageUrlKeys = new Set<string>();
     let nextPageUrl: string | undefined;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
@@ -273,6 +278,15 @@ export const runAuthorCorrespondenceSearch = async (
           buildScraperListingPageRequestKey(pageIndex, nextPageUrl),
           loadPage,
         );
+        if (isBackgroundListingRedirectedToVisitedPage(
+          page.requestedPageUrl,
+          page.currentPageUrl,
+          visitedPageUrlKeys,
+        )) {
+          searchPagePrefetch.clear(prefetchSourceKey);
+          break;
+        }
+        visitedPageUrlKeys.add(buildBackgroundListingPaginationUrlKey(page.currentPageUrl));
         const { sources } = await processScraperListingPage({
           scraper,
           page,

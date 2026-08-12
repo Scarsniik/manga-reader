@@ -73,6 +73,7 @@ export type ScraperReaderSession = {
 };
 
 export type ScraperRuntimeSearchPageResult = {
+  requestedPageUrl?: string;
   currentPageUrl: string;
   nextPageUrl?: string;
   authorNames?: string[];

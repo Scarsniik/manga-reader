@@ -167,6 +167,37 @@ test("disabling correspondence safeguards preserves the requested page depth", a
   assert.ok(!(result.warnings ?? []).some((entry) => entry.code === "unproductivePages"));
 });
 
+test("correspondence stops an unlimited search redirected to an already visited page", async () => {
+  const requestedUrls = [];
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const requestedUrl = String(request.targetUrl);
+        requestedUrls.push(requestedUrl);
+        const parsedUrl = new URL(requestedUrl);
+        const requestedPage = Number(parsedUrl.searchParams.get("page") ?? "1");
+        const returnedPage = requestedPage >= 3 ? 1 : requestedPage;
+        parsedUrl.searchParams.set("page", String(returnedPage));
+        return {
+          ok: true,
+          requestedUrl,
+          finalUrl: parsedUrl.toString(),
+          html: `<article class="card"><a class="title" href="/details/redirect-${returnedPage}">Unrelated Redirect Work ${returnedPage}</a></article>`,
+        };
+      },
+    },
+  };
+
+  await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    maxPages: null,
+    safety: { enabled: false },
+  }), new AbortController().signal, async () => {});
+
+  assert.equal(requestedUrls.length, 3);
+  assert.match(requestedUrls[2], /[?&]page=3(?:&|$)/);
+});
+
 test("an unproductive discovered title is invalidated but remains available for review", async () => {
   let garbageRequestCount = 0;
   global.window = {

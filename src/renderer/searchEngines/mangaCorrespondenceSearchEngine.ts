@@ -61,7 +61,11 @@ import {
   isUsableCorrespondenceDiscoveredTitle,
   selectCorrespondenceDiscoverableTitles,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceMatching";
-import { isBackgroundListingPaginationStalled } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+import {
+  buildBackgroundListingPaginationUrlKey,
+  isBackgroundListingPaginationStalled,
+  isBackgroundListingRedirectedToVisitedPage,
+} from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
 import { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
 import {
@@ -1326,6 +1330,7 @@ export const runMangaCorrespondenceSearch = async (
     };
     const results: MultiSearchSourceResult[] = [];
     const resultKeys = new Set<string>();
+    const visitedPageUrlKeys = new Set<string>();
     const prefetchSourceKey = `${scraper.id}:${normalizeKey(term)}`;
     let nextPageUrl: string | undefined;
     let productivity = { ...EMPTY_SEARCH_PRODUCTIVITY_STATE };
@@ -1348,6 +1353,15 @@ export const runMangaCorrespondenceSearch = async (
           buildScraperListingPageRequestKey(pageIndex, nextPageUrl),
           loadPage,
         );
+        if (isBackgroundListingRedirectedToVisitedPage(
+          page.requestedPageUrl,
+          page.currentPageUrl,
+          visitedPageUrlKeys,
+        )) {
+          searchPagePrefetch.clear(prefetchSourceKey);
+          break;
+        }
+        visitedPageUrlKeys.add(buildBackgroundListingPaginationUrlKey(page.currentPageUrl));
         const pageHasNext = resolveHasNextPage(getSearchConfig(scraper), page);
         if (pageHasNext && pageIndex + 1 < pageLimit) {
           const followingPageIndex = pageIndex + 1;
@@ -1449,6 +1463,7 @@ export const runMangaCorrespondenceSearch = async (
     if (!canSearchAuthors(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
     const resultKeys = new Set<string>();
+    const visitedPageUrlKeys = new Set<string>();
     const prefetchSourceKey = `${scraper.id}:${normalizeKey(term)}:${JSON.stringify(templateContext ?? null)}`;
     let nextPageUrl: string | undefined;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
@@ -1465,6 +1480,15 @@ export const runMangaCorrespondenceSearch = async (
           buildScraperListingPageRequestKey(pageIndex, nextPageUrl),
           loadPage,
         );
+        if (isBackgroundListingRedirectedToVisitedPage(
+          page.requestedPageUrl,
+          page.currentPageUrl,
+          visitedPageUrlKeys,
+        )) {
+          authorPagePrefetch.clear(prefetchSourceKey);
+          break;
+        }
+        visitedPageUrlKeys.add(buildBackgroundListingPaginationUrlKey(page.currentPageUrl));
         const pageHasNext = resolveHasNextAuthorPage(getAuthorConfig(scraper), page);
         if (pageHasNext && pageIndex + 1 < maxPages) {
           const followingPageIndex = pageIndex + 1;

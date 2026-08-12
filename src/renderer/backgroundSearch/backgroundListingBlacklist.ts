@@ -25,7 +25,7 @@ export const isBackgroundListingBackfillPage = ({
   >= Math.max(1, Math.floor(configuredMaxPages))
 );
 
-const normalizePaginationUrl = (value: string): string => {
+export const buildBackgroundListingPaginationUrlKey = (value: string): string => {
   try {
     const url = new URL(value);
     url.hash = "";
@@ -41,8 +41,20 @@ export const isBackgroundListingPaginationStalled = (
 ): boolean => Boolean(
   requestedPageUrl
   && nextPageUrl
-  && normalizePaginationUrl(requestedPageUrl) === normalizePaginationUrl(nextPageUrl),
+  && buildBackgroundListingPaginationUrlKey(requestedPageUrl)
+    === buildBackgroundListingPaginationUrlKey(nextPageUrl),
 );
+
+export const isBackgroundListingRedirectedToVisitedPage = (
+  requestedPageUrl: string | undefined,
+  currentPageUrl: string | undefined,
+  visitedPageUrlKeys: ReadonlySet<string>,
+): boolean => {
+  if (!requestedPageUrl || !currentPageUrl) return false;
+  const requestedPageUrlKey = buildBackgroundListingPaginationUrlKey(requestedPageUrl);
+  const currentPageUrlKey = buildBackgroundListingPaginationUrlKey(currentPageUrl);
+  return requestedPageUrlKey !== currentPageUrlKey && visitedPageUrlKeys.has(currentPageUrlKey);
+};
 
 export const resolveBackgroundListingAcceptedTarget = (
   rawResultCount: number,
