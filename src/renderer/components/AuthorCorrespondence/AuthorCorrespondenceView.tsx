@@ -4,6 +4,7 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
 import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
 import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton";
+import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRevisionButton";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
@@ -35,7 +36,7 @@ export default function AuthorCorrespondenceView({
   onOpenAuthorTarget,
   resultOnly = false,
 }: Props) {
-  const { job, loading, error, cancel } = useBackgroundSearchJob(backgroundSearchJobId);
+  const { job, loading, error, cancel, reload } = useBackgroundSearchJob(backgroundSearchJobId);
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
@@ -211,8 +212,18 @@ export default function AuthorCorrespondenceView({
         </header>
       ) : null}
 
-      {validMatches.length ? (
-        <div className="author-correspondence-view__view-actions">
+      <div className="author-correspondence-view__view-actions">
+        <AuthorCorrespondenceRevisionButton
+          active={active}
+          backgroundSearchJobId={backgroundSearchJobId}
+          displayedMatches={displayedMatches}
+          input={input}
+          invalidatedMatchKeys={invalidatedMatchKeys}
+          onInvalidatedMatchKeysChange={setInvalidatedMatchKeys}
+          reload={reload}
+          result={result}
+        />
+        {validMatches.length ? (
           <button
             type="button"
             className="author-correspondence-view__open-combined"
@@ -225,8 +236,8 @@ export default function AuthorCorrespondenceView({
             <OpenBookIcon aria-hidden="true" focusable="false" />
             <span>Voir l’auteur combiné</span>
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {displayedMatches.length ? (
         <div className="author-correspondence-view__list">

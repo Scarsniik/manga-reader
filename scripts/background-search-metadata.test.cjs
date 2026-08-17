@@ -43,6 +43,10 @@ test("completed and cancelled results can be edited before a replay", () => {
     kind: "mangaCorrespondence",
   }), true);
   assert.equal(canReplayBackgroundSearch({
+    ...makeJob("author", "completed", "2026-01-01T00:00:00.000Z"),
+    kind: "authorCorrespondence",
+  }), true);
+  assert.equal(canReplayBackgroundSearch({
     ...makeJob("running", "running", "2026-01-01T00:00:00.000Z"),
     kind: "mangaCorrespondence",
   }), false);

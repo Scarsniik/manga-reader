@@ -1,10 +1,18 @@
 import React, { useMemo, useState } from "react";
 import type { MangaCorrespondenceDiscovery } from "@/renderer/backgroundSearch/types";
 import type { MangaCorrespondenceResultDecision } from "@/shared/backgroundSearch";
+import "./MangaCorrespondenceDiscoveriesDialog.scss";
 
 type Props = {
   discoveries: MangaCorrespondenceDiscovery[];
   resultDecisions: MangaCorrespondenceResultDecision[];
+  discoveryKinds?: MangaCorrespondenceDiscovery["kind"][];
+  introduction?: string;
+  filterPlaceholder?: string;
+  manualPlaceholders?: Partial<Record<MangaCorrespondenceDiscovery["kind"], string>>;
+  requiredActiveDiscoveryKind?: MangaCorrespondenceDiscovery["kind"];
+  requiredActiveDiscoveryError?: string;
+  requiredActiveDiscoveryHint?: string;
   disabled?: boolean;
   onCancel: () => void;
   onOpenAuthorPage: (discovery: MangaCorrespondenceDiscovery) => Promise<void>;
@@ -32,6 +40,13 @@ const ORIGIN_LABELS: Record<MangaCorrespondenceDiscovery["origin"], string> = {
 export default function MangaCorrespondenceDiscoveriesDialog({
   discoveries,
   resultDecisions,
+  discoveryKinds = ["title", "author"],
+  introduction = "Chaque valeur reste séparée par scrapper. Un résultat invalidé sert aussi de contre-exemple : les cards qui lui ressemblent davantage qu’aux références actives restent dans les potentiels.",
+  filterPlaceholder = "Filtrer par titre, auteur ou scrapper…",
+  manualPlaceholders,
+  requiredActiveDiscoveryKind = "title",
+  requiredActiveDiscoveryError = "Réactive au moins un titre avant de rejouer la recherche.",
+  requiredActiveDiscoveryHint = "Aucun titre actif : le rejeu est bloqué.",
   disabled = false,
   onCancel,
   onOpenAuthorPage,
@@ -66,8 +81,8 @@ export default function MangaCorrespondenceDiscoveriesDialog({
   const resultCount = nextResultDecisions.length;
   const titleCount = nextDiscoveries.filter((discovery) => discovery.kind === "title").length;
   const authorCount = nextDiscoveries.filter((discovery) => discovery.kind === "author").length;
-  const activeTitleCount = nextDiscoveries.filter((discovery) => (
-    discovery.kind === "title" && discovery.status === "active"
+  const activeRequiredDiscoveryCount = nextDiscoveries.filter((discovery) => (
+    discovery.kind === requiredActiveDiscoveryKind && discovery.status === "active"
   )).length;
   const changed = nextDiscoveries.some((discovery, index) => (
     discovery.key !== discoveries[index]?.key
@@ -114,8 +129,8 @@ export default function MangaCorrespondenceDiscoveriesDialog({
   };
 
   const submit = async (replay: boolean) => {
-    if (replay && activeTitleCount === 0) {
-      setError("Réactive au moins un titre avant de rejouer la recherche.");
+    if (replay && activeRequiredDiscoveryCount === 0) {
+      setError(requiredActiveDiscoveryError);
       return;
     }
     setSubmitting(true);
@@ -130,14 +145,15 @@ export default function MangaCorrespondenceDiscoveriesDialog({
 
   return (
     <div className="manga-correspondence-discoveries-dialog">
-      <p>
-        Chaque valeur reste séparée par scrapper. Un résultat invalidé sert aussi de contre-exemple :
-        les cards qui lui ressemblent davantage qu’aux références actives restent dans les potentiels.
-      </p>
+      <p>{introduction}</p>
       <div className="manga-correspondence-discoveries-dialog__tabs" role="tablist">
         <button type="button" className={tab === "result" ? "is-active" : ""} onClick={() => setTab("result")}>Résultats ({resultCount})</button>
-        <button type="button" className={tab === "title" ? "is-active" : ""} onClick={() => setTab("title")}>Titres ({titleCount})</button>
-        <button type="button" className={tab === "author" ? "is-active" : ""} onClick={() => setTab("author")}>Auteurs ({authorCount})</button>
+        {discoveryKinds.includes("title") ? (
+          <button type="button" className={tab === "title" ? "is-active" : ""} onClick={() => setTab("title")}>Titres ({titleCount})</button>
+        ) : null}
+        {discoveryKinds.includes("author") ? (
+          <button type="button" className={tab === "author" ? "is-active" : ""} onClick={() => setTab("author")}>Auteurs ({authorCount})</button>
+        ) : null}
       </div>
       {tab !== "result" ? (
         <div className="manga-correspondence-discoveries-dialog__manual-add">
@@ -150,9 +166,10 @@ export default function MangaCorrespondenceDiscoveriesDialog({
               event.preventDefault();
               void addManualDiscovery();
             }}
-            placeholder={tab === "title"
-              ? "Titre ou URL d’une fiche manga…"
-              : "Nom d’auteur ou URL d’une page auteur…"}
+            placeholder={manualPlaceholders?.[tab]
+              ?? (tab === "title"
+                ? "Titre ou URL d’une fiche manga…"
+                : "Nom d’auteur ou URL d’une page auteur…")}
           />
           <button
             type="button"
@@ -167,7 +184,7 @@ export default function MangaCorrespondenceDiscoveriesDialog({
         className="manga-correspondence-discoveries-dialog__filter"
         value={filter}
         onChange={(event) => setFilter(event.target.value)}
-        placeholder="Filtrer par titre, auteur ou scrapper…"
+        placeholder={filterPlaceholder}
       />
       <div className="manga-correspondence-discoveries-dialog__list">
         {tab === "result" ? (visibleResultDecisions.length ? visibleResultDecisions.map((decision) => (
@@ -242,12 +259,14 @@ export default function MangaCorrespondenceDiscoveriesDialog({
         )) : <div className="empty">Aucune découverte ne correspond à ce filtre.</div>}
       </div>
       {disabled ? <p className="manga-correspondence-discoveries-dialog__hint">Arrête ou termine la recherche avant de modifier ces choix.</p> : null}
-      {activeTitleCount === 0 ? <p className="manga-correspondence-discoveries-dialog__error">Aucun titre actif : le rejeu est bloqué.</p> : null}
+      {activeRequiredDiscoveryCount === 0 ? (
+        <p className="manga-correspondence-discoveries-dialog__error">{requiredActiveDiscoveryHint}</p>
+      ) : null}
       {error ? <p className="manga-correspondence-discoveries-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-discoveries-dialog__actions">
         <button type="button" className="secondary" disabled={submitting || adding} onClick={onCancel}>Annuler</button>
         <button type="button" disabled={disabled || submitting || adding || !changed} onClick={() => void submit(false)}>Enregistrer</button>
-        <button type="button" disabled={disabled || submitting || adding || activeTitleCount === 0} onClick={() => void submit(true)}>
+        <button type="button" disabled={disabled || submitting || adding || activeRequiredDiscoveryCount === 0} onClick={() => void submit(true)}>
           {submitting ? "Préparation…" : "Enregistrer et rejouer"}
         </button>
       </div>

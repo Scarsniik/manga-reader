@@ -1,4 +1,7 @@
-import type { MangaCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
+import type {
+  AuthorCorrespondenceBackgroundInput,
+  MangaCorrespondenceBackgroundInput,
+} from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
 import type { MangaCorrespondenceDiscovery } from "@/renderer/backgroundSearch/types";
 import {
@@ -24,6 +27,11 @@ import { analyzeMangaCorrespondenceSourceIdentity } from "@/renderer/backgroundS
 
 export type MangaCorrespondenceManualDiscoveryKind = MangaCorrespondenceDiscovery["kind"];
 
+type CorrespondenceManualDiscoveryInput = Pick<
+  MangaCorrespondenceBackgroundInput,
+  "paceMode" | "scraperFilterValues" | "scrapers"
+>;
+
 const MANUAL_SCRAPER_ID = "manual";
 const MANUAL_SCRAPER_NAME = "Ajout manuel";
 
@@ -36,7 +44,7 @@ const parseHttpUrl = (value: string): URL | null => {
   }
 };
 
-const selectEnabledScrapers = (input: MangaCorrespondenceBackgroundInput): ScraperRecord[] => {
+const selectEnabledScrapers = (input: CorrespondenceManualDiscoveryInput): ScraperRecord[] => {
   const filter = splitIncludeFilterValues(input.scraperFilterValues);
   return input.scrapers.filter((scraper) => (
     !filter.excludedValues.includes(scraper.id)
@@ -59,7 +67,7 @@ const canHandleUrlKind = (
 };
 
 const findUrlScraper = (
-  input: MangaCorrespondenceBackgroundInput,
+  input: CorrespondenceManualDiscoveryInput,
   kind: MangaCorrespondenceManualDiscoveryKind,
   targetUrl: URL,
 ): ScraperRecord => {
@@ -121,6 +129,60 @@ const buildManualDiscovery = (options: {
   };
 };
 
+const resolveManualAuthorPageDiscovery = async (options: {
+  input: CorrespondenceManualDiscoveryInput;
+  parsedUrl: URL;
+  fetchDocument?: ScraperDocumentFetcher;
+}): Promise<MangaCorrespondenceDiscovery[]> => {
+  if (!options.fetchDocument) {
+    throw new Error("Le chargement des scrapers n’est pas disponible.");
+  }
+  const scraper = findUrlScraper(options.input, "author", options.parsedUrl);
+  const normalizedUrl = options.parsedUrl.toString();
+  const authorPage = await fetchAuthorPageWithRetry(
+    scraper,
+    getAuthorConfig(scraper),
+    normalizedUrl,
+    0,
+    undefined,
+    getPaceConfig(options.input.paceMode),
+    undefined,
+    { fetchDocument: options.fetchDocument },
+  );
+  const authorName = authorPage.authorNames?.find((name) => name.trim())?.trim();
+  if (!authorName) {
+    throw new Error(`Le scraper ${scraper.name} reconnaît cette URL, mais n’a pas pu en extraire le nom d’auteur.`);
+  }
+  return [buildManualDiscovery({
+    kind: "author",
+    value: authorName,
+    scraperId: scraper.id,
+    scraperName: scraper.name,
+    sourceUrl: normalizedUrl,
+    authorPageUrl: normalizedUrl,
+  })];
+};
+
+export const resolveAuthorCorrespondenceManualDiscovery = async (options: {
+  rawValue: string;
+  input: AuthorCorrespondenceBackgroundInput;
+  fetchDocument?: ScraperDocumentFetcher;
+}): Promise<MangaCorrespondenceDiscovery[]> => {
+  const rawValue = options.rawValue.trim();
+  if (!rawValue) throw new Error("Saisis un nom d’auteur ou une URL.");
+  const parsedUrl = parseHttpUrl(rawValue);
+  const looksLikeUrl = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue);
+  if (!parsedUrl) {
+    if (looksLikeUrl) throw new Error("L’URL saisie n’est pas une URL HTTP ou HTTPS valide.");
+    return [buildManualDiscovery({ kind: "author", value: rawValue })];
+  }
+  return resolveManualAuthorPageDiscovery({
+    input: options.input,
+    parsedUrl,
+    fetchDocument: options.fetchDocument,
+  });
+};
+
 export const resolveMangaCorrespondenceManualDiscovery = async (options: {
   kind: MangaCorrespondenceManualDiscoveryKind;
   rawValue: string;
@@ -139,9 +201,9 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
     throw new Error("Le chargement des scrapers n’est pas disponible.");
   }
 
-  const scraper = findUrlScraper(options.input, options.kind, parsedUrl);
-  const normalizedUrl = parsedUrl.toString();
   if (options.kind === "title") {
+    const scraper = findUrlScraper(options.input, options.kind, parsedUrl);
+    const normalizedUrl = parsedUrl.toString();
     const detailsFeature = getScraperFeature(scraper, "details");
     const details = await resolveScraperCardDetails({
       scraper,
@@ -197,26 +259,9 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
     ])).values());
   }
 
-  const authorPage = await fetchAuthorPageWithRetry(
-    scraper,
-    getAuthorConfig(scraper),
-    normalizedUrl,
-    0,
-    undefined,
-    getPaceConfig(options.input.paceMode),
-    undefined,
-    { fetchDocument: options.fetchDocument },
-  );
-  const authorName = authorPage.authorNames?.find((name) => name.trim())?.trim();
-  if (!authorName) {
-    throw new Error(`Le scraper ${scraper.name} reconnaît cette URL, mais n’a pas pu en extraire le nom d’auteur.`);
-  }
-  return [buildManualDiscovery({
-    kind: "author",
-    value: authorName,
-    scraperId: scraper.id,
-    scraperName: scraper.name,
-    sourceUrl: normalizedUrl,
-    authorPageUrl: normalizedUrl,
-  })];
+  return resolveManualAuthorPageDiscovery({
+    input: options.input,
+    parsedUrl,
+    fetchDocument: options.fetchDocument,
+  });
 };

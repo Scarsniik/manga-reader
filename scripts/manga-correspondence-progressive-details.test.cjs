@@ -10,6 +10,10 @@ const source = `
   export { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
   export { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
   export { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
+  export {
+    buildAuthorCorrespondenceReplayInput,
+    buildInitialAuthorCorrespondenceDiscoveries,
+  } from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-progressive-details-test.ts" },
@@ -27,6 +31,8 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  buildAuthorCorrespondenceReplayInput,
+  buildInitialAuthorCorrespondenceDiscoveries,
   createSearchExecutionContext,
   resolveMangaCorrespondenceManualDiscovery,
   runAuthorCorrespondenceSearch,
@@ -1152,4 +1158,55 @@ test("author correspondence uses a reliable direct page once and reuses it as it
   assert.equal(result.matches.length, 1);
   assert.equal(result.matches[0].previewSources.length, 1);
   assert.deepEqual(result.matches[0].discoveryMethods, ["reference"]);
+});
+
+test("author correspondence replay searches added aliases and keeps their direct page targets", () => {
+  const input = {
+    referenceName: "Author A",
+    names: ["Author A"],
+    referenceSources: [{
+      scraperId: scraper.id,
+      authorUrl: "https://example.test/authors/a",
+      name: "Author A",
+    }],
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    authorPageCount: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+    replay: { revision: 2 },
+  };
+  const result = {
+    referenceName: "Author A",
+    searchedNames: ["Author A"],
+    matches: [{
+      key: `${scraper.id}::https://example.test/authors/b`,
+      scraperId: scraper.id,
+      scraperName: scraper.name,
+      authorName: "Author B",
+      authorUrl: "https://example.test/authors/b",
+      matchedName: "Author A",
+      discoveryMethods: ["search"],
+      previewSources: [],
+    }],
+  };
+  const discoveries = buildInitialAuthorCorrespondenceDiscoveries(input, result);
+  const revisedDiscoveries = discoveries.map((discovery) => (
+    discovery.value === "Author A"
+      ? { ...discovery, status: "invalidated" }
+      : discovery
+  ));
+  const replayInput = buildAuthorCorrespondenceReplayInput(input, revisedDiscoveries);
+
+  assert.deepEqual(replayInput.names, ["Author B"]);
+  assert.equal(replayInput.referenceName, "Author B");
+  assert.deepEqual(replayInput.referenceSources, [{
+    scraperId: scraper.id,
+    authorUrl: "https://example.test/authors/b",
+    name: "Author B",
+  }]);
+  assert.equal(replayInput.replay.revision, 3);
+  assert.deepEqual(input.names, ["Author A"]);
 });

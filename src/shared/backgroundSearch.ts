@@ -224,6 +224,9 @@ export type AuthorCorrespondenceBackgroundInput = {
     reference: MangaCorrespondenceReference;
     enableRomajiPhoneticMerge: boolean;
   };
+  replay?: {
+    revision: number;
+  };
 };
 
 export type ListingBackgroundSource = {

@@ -186,6 +186,7 @@ export type AuthorCorrespondenceBackgroundResult = {
   referenceName: string;
   matches: AuthorCorrespondenceMatch[];
   searchedNames: string[];
+  discoveries?: MangaCorrespondenceDiscovery[];
   mangaDiscovery?: {
     referenceTitle: string;
     names: string[];

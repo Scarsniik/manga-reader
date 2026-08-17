@@ -66,13 +66,22 @@ export const runAuthorCorrespondenceWorkflow = async (
 ): Promise<AuthorCorrespondenceBackgroundResult> => {
   const enteredNames = buildUniqueAuthorSearchNames([input.referenceName, ...input.names]);
   if (enteredNames.length || !input.mangaSeed) {
-    return runAuthorCorrespondenceSearch(
+    const preserveMangaDiscovery = (partialResult: AuthorCorrespondenceBackgroundResult) => (
+      previousResult?.mangaDiscovery
+        ? { ...partialResult, mangaDiscovery: previousResult.mangaDiscovery }
+        : partialResult
+    );
+    const result = await runAuthorCorrespondenceSearch(
       input,
       signal,
-      onSnapshot,
+      async (partialResult, progress) => onSnapshot(
+        preserveMangaDiscovery(partialResult as AuthorCorrespondenceBackgroundResult),
+        progress,
+      ),
       executionContext,
       previousResult,
     );
+    return preserveMangaDiscovery(result);
   }
 
   const referenceTitle = input.mangaSeed.reference.title;

@@ -166,6 +166,7 @@ export const runAuthorCorrespondenceSearch = async (
     paceMode: input.paceMode,
     scrapeDetailsWithCards: input.scrapeDetailsWithCards,
     correspondenceSafety,
+    replayRevision: input.replay?.revision ?? 0,
   };
   const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
   const resumeCheckpoint = previousResult?.checkpoint?.version === 1
@@ -195,6 +196,7 @@ export const runAuthorCorrespondenceSearch = async (
       left.authorName.localeCompare(right.authorName) || left.scraperName.localeCompare(right.scraperName)
     )),
     searchedNames: names,
+    discoveries: previousResult?.discoveries,
     checkpoint: {
       version: 1,
       inputFingerprint,

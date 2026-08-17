@@ -1,0 +1,157 @@
+.manga-correspondence-discoveries-modal {
+  max-width: calc(100vw - 32px);
+  width: min(920px, calc(100vw - 32px));
+}
+
+.manga-correspondence-discoveries-modal .app-modal-body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.manga-correspondence-discoveries-dialog {
+  display: grid;
+  gap: 14px;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.manga-correspondence-discoveries-dialog > p {
+  color: #aaa;
+  margin: 0;
+}
+
+.manga-correspondence-discoveries-dialog__tabs,
+.manga-correspondence-discoveries-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manga-correspondence-discoveries-dialog__tabs button,
+.manga-correspondence-discoveries-dialog__actions button {
+  background: #191919;
+  border: 1px solid #383838;
+  border-radius: 8px;
+  color: #ddd;
+  cursor: pointer;
+  font: inherit;
+  min-height: 36px;
+  padding: 0 13px;
+}
+
+.manga-correspondence-discoveries-dialog__tabs button.is-active,
+.manga-correspondence-discoveries-dialog__actions button:last-child {
+  background: rgba(93, 156, 255, 0.15);
+  border-color: rgba(93, 156, 255, 0.55);
+  color: #edf4ff;
+}
+
+.manga-correspondence-discoveries-dialog__manual-add {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.manga-correspondence-discoveries-dialog__manual-add input,
+.manga-correspondence-discoveries-dialog__filter {
+  background: #111;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #eee;
+  font: inherit;
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.manga-correspondence-discoveries-dialog__manual-add button,
+.manga-correspondence-discoveries-dialog__open-author {
+  background: rgba(93, 156, 255, 0.14);
+  border: 1px solid rgba(93, 156, 255, 0.48);
+  border-radius: 8px;
+  color: #e5efff;
+  cursor: pointer;
+  min-height: 38px;
+  padding: 0 13px;
+}
+
+.manga-correspondence-discoveries-dialog__manual-add button:disabled,
+.manga-correspondence-discoveries-dialog__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.manga-correspondence-discoveries-dialog__list {
+  display: grid;
+  gap: 7px;
+  max-height: min(58vh, 560px);
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.manga-correspondence-discoveries-dialog__list label {
+  align-items: center;
+  background: #141414;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.manga-correspondence-discoveries-dialog__list label.is-invalidated {
+  opacity: 0.58;
+}
+
+.manga-correspondence-discoveries-dialog__list span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.manga-correspondence-discoveries-dialog__list strong,
+.manga-correspondence-discoveries-dialog__list small {
+  overflow-wrap: anywhere;
+}
+
+.manga-correspondence-discoveries-dialog__list small {
+  color: #999;
+}
+
+.manga-correspondence-discoveries-dialog__list em {
+  color: #aaa;
+  font-size: 12px;
+  font-style: normal;
+  grid-column: 4;
+}
+
+.manga-correspondence-discoveries-dialog__open-author {
+  background: rgba(93, 156, 255, 0.12);
+  border-radius: 7px;
+  color: #dceaff;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.manga-correspondence-discoveries-dialog__open-author:hover {
+  background: rgba(93, 156, 255, 0.22);
+}
+
+.manga-correspondence-discoveries-dialog__actions {
+  justify-content: flex-end;
+}
+
+.manga-correspondence-discoveries-dialog__error {
+  color: #ef9b9b !important;
+}
+
+.manga-correspondence-discoveries-dialog__hint {
+  color: #d5b778 !important;
+}

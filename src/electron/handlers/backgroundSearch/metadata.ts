@@ -15,7 +15,7 @@ export const isBackgroundSearchResultEditable = (status: BackgroundSearchStatus 
 export const canReplayBackgroundSearch = (
   job: Pick<BackgroundSearchJobMetadata, "kind" | "status">,
 ): boolean => (
-  job.kind === "mangaCorrespondence"
+  (job.kind === "mangaCorrespondence" || job.kind === "authorCorrespondence")
   && isBackgroundSearchResultEditable(job.status)
 );
 
