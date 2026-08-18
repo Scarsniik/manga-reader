@@ -12,6 +12,16 @@ const normalizeHttpUrl = (value?: string | null): string => {
   }
 };
 
+export const isSupportedRemoteThumbnailUrl = (value?: string | null): boolean => {
+  const normalizedValue = String(value ?? "").trim();
+  if (!normalizedValue) {
+    return false;
+  }
+
+  const protocolMatch = normalizedValue.match(/^([a-z][a-z\d+.-]*):/i);
+  return !protocolMatch || protocolMatch[1].toLowerCase() === "http" || protocolMatch[1].toLowerCase() === "https";
+};
+
 const hasElectronApi = (): boolean => (
   typeof window !== "undefined" && Boolean((window as any).api)
 );

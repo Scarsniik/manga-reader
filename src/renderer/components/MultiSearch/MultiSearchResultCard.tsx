@@ -23,7 +23,10 @@ import {
   type MultiSearchReadingStatus,
   type MultiSearchSourceAvailability,
 } from "@/renderer/components/MultiSearch/multiSearchSourceState";
-import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
+import {
+  buildRemoteThumbnailUrl,
+  isSupportedRemoteThumbnailUrl,
+} from "@/renderer/utils/remoteThumbnails";
 import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import {
@@ -113,7 +116,7 @@ const uniqueCoverUrls = (values: CoverCandidate[]): string[] => {
 
   return values.reduce<string[]>((items, value) => {
     const normalized = value.url?.trim();
-    if (!normalized || seen.has(normalized)) {
+    if (!normalized || !isSupportedRemoteThumbnailUrl(normalized) || seen.has(normalized)) {
       return items;
     }
 

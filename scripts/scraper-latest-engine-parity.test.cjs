@@ -271,6 +271,36 @@ test("image fallback selectors keep the current image source first", async () =>
   ]);
 });
 
+test("image fallback selectors ignore lazy-loading data placeholders", async () => {
+  const { document } = parseHTML(`
+    <section class="results">
+      <article class="card">
+        <a class="title" href="/gallery/1">Gallery 1</a>
+        <img
+          class="thumb"
+          src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E"
+          data-src="https://cdn.example.test/cover.jpg"
+        >
+      </article>
+    </section>
+  `);
+  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(
+    document,
+    {
+      resultListSelector: ".results",
+      resultItemSelector: ".card",
+      titleSelector: { kind: "css", value: ".title" },
+      detailUrlSelector: { kind: "css", value: ".title@href" },
+      thumbnailSelector: { kind: "css", value: ".thumb@data-src" },
+      languageDetection: { detectFromTitle: false },
+    },
+    { requestedUrl: "https://example.test/latest" },
+  );
+
+  assert.equal(page.items[0].thumbnailUrl, "https://cdn.example.test/cover.jpg");
+  assert.equal(page.items[0].thumbnailCandidates, undefined);
+});
+
 test("exact checkpoints resume at the next fully unprocessed page", () => {
   const checkpoint = {
     id: "checkpoint",

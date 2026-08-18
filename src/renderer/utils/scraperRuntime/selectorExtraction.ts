@@ -9,6 +9,7 @@ import {
   type ScraperTagFeatureConfig,
 } from "@/shared/scraper";
 import { normalizeSelectorInput } from "@/renderer/utils/scraperRuntime/display";
+import { isSupportedRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import type { ScraperDocumentFetcher } from "@/renderer/utils/scraperRuntime/types";
 import {
   detectLanguageCodesFromMappedValues,
@@ -269,10 +270,10 @@ const extractImageSelectorCandidateValuesFromRoot = (
       getElementSelectorValue(element, attribute, "text"),
     );
     const currentImageSource = element.tagName === "IMG" && attribute !== "src"
-      ? element.getAttribute("src")?.trim()
+      ? element.getAttribute("src")?.trim() ?? ""
       : "";
 
-    return currentImageSource
+    return isSupportedRemoteThumbnailUrl(currentImageSource)
       ? [currentImageSource, ...configuredCandidates]
       : configuredCandidates;
   });
@@ -289,6 +290,7 @@ export const getImageSelectorCandidateUrls = (
 
   return uniqueValues(
     extractImageSelectorCandidateValuesFromRoot(root, selector)
+      .filter((value) => isSupportedRemoteThumbnailUrl(value))
       .map((value) => toAbsoluteScraperUrl(value, documentUrl))
       .filter(Boolean),
   );

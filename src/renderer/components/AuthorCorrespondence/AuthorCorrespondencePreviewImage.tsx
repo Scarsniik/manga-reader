@@ -1,5 +1,8 @@
 import React from "react";
-import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
+import {
+  buildRemoteThumbnailUrl,
+  isSupportedRemoteThumbnailUrl,
+} from "@/renderer/utils/remoteThumbnails";
 
 type Props = {
   thumbnailUrl?: string | null;
@@ -17,7 +20,11 @@ const buildThumbnailUrls = (
 
   return [thumbnailUrl, ...thumbnailCandidates].reduce<string[]>((urls, candidate) => {
     const normalizedCandidate = candidate?.trim();
-    if (!normalizedCandidate || seenUrls.has(normalizedCandidate)) {
+    if (
+      !normalizedCandidate
+      || !isSupportedRemoteThumbnailUrl(normalizedCandidate)
+      || seenUrls.has(normalizedCandidate)
+    ) {
       return urls;
     }
 
