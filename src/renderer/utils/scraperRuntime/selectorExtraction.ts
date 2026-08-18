@@ -249,6 +249,35 @@ const extractImageCandidateValues = (value: string): string[] => {
   return [normalizedValue];
 };
 
+const extractImageSelectorCandidateValuesFromRoot = (
+  root: ParentNode,
+  selectorInput: ScraperFieldSelector,
+): string[] => {
+  const normalizedSelector = normalizeScraperFieldSelector(selectorInput);
+  if (!normalizedSelector || normalizedSelector.kind === "regex") {
+    return extractFieldSelectorValuesFromRoot(root, selectorInput)
+      .flatMap((value) => extractImageCandidateValues(value));
+  }
+
+  const { selector, attribute } = parseSelectorExpression(normalizedSelector.value);
+  if (!selector) {
+    return [];
+  }
+
+  return Array.from(root.querySelectorAll(selector)).flatMap((element) => {
+    const configuredCandidates = extractImageCandidateValues(
+      getElementSelectorValue(element, attribute, "text"),
+    );
+    const currentImageSource = element.tagName === "IMG" && attribute !== "src"
+      ? element.getAttribute("src")?.trim()
+      : "";
+
+    return currentImageSource
+      ? [currentImageSource, ...configuredCandidates]
+      : configuredCandidates;
+  });
+};
+
 export const getImageSelectorCandidateUrls = (
   root: ParentNode,
   selector: ScraperFieldSelector | undefined,
@@ -259,8 +288,7 @@ export const getImageSelectorCandidateUrls = (
   }
 
   return uniqueValues(
-    extractFieldSelectorValuesFromRoot(root, selector)
-      .flatMap((value) => extractImageCandidateValues(value))
+    extractImageSelectorCandidateValuesFromRoot(root, selector)
       .map((value) => toAbsoluteScraperUrl(value, documentUrl))
       .filter(Boolean),
   );

@@ -1,0 +1,45 @@
+.author-correspondence-favorite-button {
+  align-items: center;
+  background: rgba(233, 194, 97, 0.14);
+  border: 1px solid rgba(233, 194, 97, 0.48);
+  border-radius: 8px;
+  color: #ffe08a;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.author-correspondence-favorite-button:hover,
+.author-correspondence-favorite-button:focus-visible {
+  background: rgba(233, 194, 97, 0.24);
+  border-color: rgba(233, 194, 97, 0.78);
+}
+
+.author-correspondence-favorite-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(233, 194, 97, 0.18);
+  outline: none;
+}
+
+.author-correspondence-favorite-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.author-correspondence-favorite-button svg {
+  height: 18px;
+  width: 18px;
+}
+
+.author-correspondence-favorite-button svg path {
+  fill: currentColor;
+}
+
+.scraper-author-favorite-dialog__description p {
+  color: #c9c9c9;
+  line-height: 1.45;
+  margin: 0;
+}

@@ -4,10 +4,11 @@ import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSea
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
 import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
 import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton";
+import AuthorCorrespondenceFavoriteButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceFavoriteButton";
+import AuthorCorrespondencePreviewImage from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondencePreviewImage";
 import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRevisionButton";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
-import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import {
@@ -111,6 +112,7 @@ export default function AuthorCorrespondenceView({
         scraperId: match.scraperId,
         authorUrl: match.authorUrl,
         name: match.authorName,
+        cover: match.previewSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
         templateContext: match.templateContext ?? undefined,
         createdAt: job.metadata.createdAt,
         updatedAt: job.metadata.updatedAt,
@@ -190,6 +192,12 @@ export default function AuthorCorrespondenceView({
         onBackFromFavoriteOverride={() => setShowCombinedView(false)}
         onInvalidateFavoriteOverrideSource={invalidateCombinedSource}
         onOpenAuthorTarget={onOpenAuthorTarget}
+        favoriteOverrideAction={(
+          <AuthorCorrespondenceFavoriteButton
+            favorite={combinedAuthor}
+            disabled={active}
+          />
+        )}
       />
     );
   }
@@ -223,6 +231,12 @@ export default function AuthorCorrespondenceView({
           reload={reload}
           result={result}
         />
+        {combinedAuthor ? (
+          <AuthorCorrespondenceFavoriteButton
+            favorite={combinedAuthor}
+            disabled={active}
+          />
+        ) : null}
         {validMatches.length ? (
           <button
             type="button"
@@ -266,15 +280,15 @@ export default function AuthorCorrespondenceView({
                 </div>
                 <div className="author-correspondence-view__previews" aria-label="Aperçu des mangas de l’auteur">
                 {match.previewSources.length ? match.previewSources.map((source, sourceIndex) => {
-                  const thumbnailUrl = buildRemoteThumbnailUrl(source.result.thumbnailUrl, source.result.detailUrl);
                   const sourceKey = `${source.scraper.id}::${source.result.detailUrl || source.result.title}::${sourceIndex}`;
                   return (
                     <div key={sourceKey} className="author-correspondence-view__preview" title={source.result.title}>
-                      {thumbnailUrl ? (
-                        <img src={thumbnailUrl} alt="" />
-                      ) : (
-                        <span>{source.result.title.slice(0, 2)}</span>
-                      )}
+                      <AuthorCorrespondencePreviewImage
+                        thumbnailUrl={source.result.thumbnailUrl}
+                        thumbnailCandidates={source.result.thumbnailCandidates}
+                        refererUrl={source.result.detailUrl || source.scraper.baseUrl}
+                        fallbackText={source.result.title}
+                      />
                       <small>{source.result.title}</small>
                     </div>
                   );

@@ -67,6 +67,7 @@ type Props = {
   onBackFromFavoriteOverride?: () => void;
   onInvalidateFavoriteOverrideSource?: (source: ScraperAuthorFavoriteSource) => void;
   onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
+  favoriteOverrideAction?: React.ReactNode;
   resultOnly?: boolean;
 };
 
@@ -82,6 +83,7 @@ export default function ScraperAuthorFavoritesView({
   onBackFromFavoriteOverride,
   onInvalidateFavoriteOverrideSource,
   onOpenAuthorTarget,
+  favoriteOverrideAction,
   resultOnly = false,
 }: Props) {
   const { openModal, closeModal } = useModal();
@@ -592,7 +594,7 @@ export default function ScraperAuthorFavoritesView({
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         resultOnly={resultOnly}
         backLabel={favoriteOverride ? "Retour aux correspondances auteur" : undefined}
-        correspondenceAction={!resultOnly && !favoriteOverride ? (
+        correspondenceAction={favoriteOverride ? favoriteOverrideAction : !resultOnly ? (
           <button
             type="button"
             className="scraper-author-favorites-view__multi-search"

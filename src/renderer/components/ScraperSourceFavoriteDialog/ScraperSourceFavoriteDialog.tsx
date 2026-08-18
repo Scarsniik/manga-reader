@@ -24,6 +24,7 @@ type SaveFavoriteRequest<TFavorite extends ScraperSourceFavoriteDialogRecord> = 
 type Props<TFavorite extends ScraperSourceFavoriteDialogRecord> = {
   favorites: TFavorite[];
   loading: boolean;
+  description?: React.ReactNode;
   labels: {
     existingMode: string;
     newMode: string;
@@ -38,7 +39,9 @@ type Props<TFavorite extends ScraperSourceFavoriteDialogRecord> = {
   };
   defaultFavoriteName: string;
   defaultSourceName: string;
+  sourceNamesForMatching?: string[];
   sourceCover?: string;
+  showSourceField?: boolean;
   onCancel: () => void;
   onSaved: (favorite: TFavorite) => void;
   onSave: (request: SaveFavoriteRequest<TFavorite>) => Promise<TFavorite>;
@@ -104,17 +107,24 @@ const findClosestFavorite = <TFavorite extends ScraperSourceFavoriteDialogRecord
 export default function ScraperSourceFavoriteDialog<TFavorite extends ScraperSourceFavoriteDialogRecord>({
   favorites,
   loading,
+  description,
   labels,
   defaultFavoriteName,
   defaultSourceName,
+  sourceNamesForMatching = [],
   sourceCover,
+  showSourceField = true,
   onCancel,
   onSaved,
   onSave,
 }: Props<TFavorite>) {
   const closestFavorite = useMemo(
-    () => findClosestFavorite(favorites, [defaultFavoriteName, defaultSourceName]),
-    [defaultFavoriteName, defaultSourceName, favorites],
+    () => findClosestFavorite(favorites, [
+      defaultFavoriteName,
+      defaultSourceName,
+      ...sourceNamesForMatching,
+    ]),
+    [defaultFavoriteName, defaultSourceName, favorites, sourceNamesForMatching],
   );
   const [mode, setMode] = useState<"existing" | "new">(() => getInitialMode(favorites));
   const [favoriteId, setFavoriteId] = useState(() => closestFavorite?.id ?? "");
@@ -130,7 +140,7 @@ export default function ScraperSourceFavoriteDialog<TFavorite extends ScraperSou
   const trimmedFavoriteName = favoriteName.trim();
   const trimmedSourceName = sourceName.trim();
   const canSubmit = Boolean(
-    trimmedSourceName
+    (!showSourceField || trimmedSourceName)
     && (effectiveMode === "new" ? trimmedFavoriteName : selectedFavorite),
   );
 
@@ -164,6 +174,9 @@ export default function ScraperSourceFavoriteDialog<TFavorite extends ScraperSou
 
   return (
     <form className="scraper-author-favorite-dialog" onSubmit={handleSubmit}>
+      {description ? (
+        <div className="scraper-author-favorite-dialog__description">{description}</div>
+      ) : null}
       <div className="scraper-author-favorite-dialog__modes">
         <button
           type="button"
@@ -210,15 +223,17 @@ export default function ScraperSourceFavoriteDialog<TFavorite extends ScraperSou
         </label>
       )}
 
-      <label className="scraper-author-favorite-dialog__field">
-        <span>{labels.sourceField}</span>
-        <input
-          type="text"
-          value={sourceName}
-          onChange={(event) => setSourceName(event.target.value)}
-          placeholder={labels.sourceNamePlaceholder}
-        />
-      </label>
+      {showSourceField ? (
+        <label className="scraper-author-favorite-dialog__field">
+          <span>{labels.sourceField}</span>
+          <input
+            type="text"
+            value={sourceName}
+            onChange={(event) => setSourceName(event.target.value)}
+            placeholder={labels.sourceNamePlaceholder}
+          />
+        </label>
+      ) : null}
 
       {error ? <div className="scraper-author-favorite-dialog__error">{error}</div> : null}
 

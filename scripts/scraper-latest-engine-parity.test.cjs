@@ -237,6 +237,40 @@ test("latest listing thumbnails keep fallbacks without validating images during 
   ]);
 });
 
+test("image fallback selectors keep the current image source first", async () => {
+  const { document } = parseHTML(`
+    <section class="results">
+      <article class="card">
+        <a class="title" href="/gallery/1">Gallery 1</a>
+        <img
+          class="thumb"
+          src="/cover.webp"
+          data-images='["/missing.jpg", "/fallback.webp"]'
+        >
+      </article>
+    </section>
+  `);
+  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(
+    document,
+    {
+      resultListSelector: ".results",
+      resultItemSelector: ".card",
+      titleSelector: { kind: "css", value: ".title" },
+      detailUrlSelector: { kind: "css", value: ".title@href" },
+      thumbnailSelector: { kind: "css", value: ".thumb@data-images" },
+      languageDetection: { detectFromTitle: false },
+    },
+    { requestedUrl: "https://example.test/latest" },
+  );
+
+  assert.equal(page.items[0].thumbnailUrl, "https://example.test/cover.webp");
+  assert.deepEqual(page.items[0].thumbnailCandidates, [
+    "https://example.test/cover.webp",
+    "https://example.test/missing.jpg",
+    "https://example.test/fallback.webp",
+  ]);
+});
+
 test("exact checkpoints resume at the next fully unprocessed page", () => {
   const checkpoint = {
     id: "checkpoint",
