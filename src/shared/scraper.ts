@@ -695,6 +695,7 @@ export type ScraperBookmarkLanguageFilterMode = "default" | "only" | "without";
 export type ScraperBookmarkLanguageFilterModes = Record<string, ScraperBookmarkLanguageFilterMode>;
 
 export type ScraperBookmarkReadingStatus = "read" | "inProgress" | "unread";
+export type ScraperBookmarkSeriesFilterMode = "default" | "only" | "without";
 
 export type ScraperBookmarkSortKey =
   | "created-desc"
@@ -712,6 +713,7 @@ export type ScraperBookmarkFilterState = {
   minPages: string;
   maxPages: string;
   readingStatuses: ScraperBookmarkReadingStatus[];
+  seriesFilterMode: ScraperBookmarkSeriesFilterMode;
   sortBy: ScraperBookmarkSortKey;
 };
 
@@ -721,6 +723,7 @@ export const DEFAULT_SCRAPER_BOOKMARK_FILTERS: ScraperBookmarkFilterState = {
   minPages: "",
   maxPages: "",
   readingStatuses: [],
+  seriesFilterMode: "default",
   sortBy: "created-desc",
 };
 

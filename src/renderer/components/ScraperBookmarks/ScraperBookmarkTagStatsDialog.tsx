@@ -8,6 +8,8 @@ import {
 } from "@/renderer/components/ScraperBookmarks/bookmarkFiltering";
 import { useScraperTagFavorites } from "@/renderer/stores/scraperTagFavorites";
 import useScraperBookmarkView from "@/renderer/components/ScraperBookmarks/useScraperBookmarkView";
+import { matchesScraperBookmarkSeriesFilter } from "@/renderer/components/ScraperBookmarks/bookmarkSeriesFiltering";
+import useScraperTitleAnalysisConfigs from "@/renderer/hooks/useScraperTitleAnalysisConfigs";
 import {
   buildBookmarkTagStats,
   DEFAULT_BOOKMARK_TAG_STATS_FUZZY_LEVEL,
@@ -90,6 +92,7 @@ export function ScraperBookmarkTagStatsPanel({
   onOpenTagInWorkspace,
 }: Props) {
   const { params } = useParams();
+  const { configsByScraperId } = useScraperTitleAnalysisConfigs();
   const { favorites: tagFavorites } = useScraperTagFavorites();
   const [minOccurrencesInput, setMinOccurrencesInput] = useState(
     String(DEFAULT_BOOKMARK_TAG_STATS_MIN_OCCURRENCES),
@@ -100,12 +103,15 @@ export function ScraperBookmarkTagStatsPanel({
     DEFAULT_BOOKMARK_TAG_STATS_FUZZY_LEVEL,
   );
   const normalizedFilters = useMemo(() => normalizeFilters(filters), [filters]);
-  const displayedRequest = useMemo(() => ({
-    scraperId: filterScraperId ?? null,
-    filters: normalizedFilters,
-    hideBlacklistedCards: params?.scraperHideBlacklistedTagCards === true,
-    blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
-  }), [
+  const displayedRequest = useMemo(() => {
+    const { seriesFilterMode: _seriesFilterMode, ...serverFilters } = normalizedFilters;
+    return {
+      scraperId: filterScraperId ?? null,
+      filters: serverFilters,
+      hideBlacklistedCards: params?.scraperHideBlacklistedTagCards === true,
+      blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
+    };
+  }, [
     filterScraperId,
     normalizedFilters,
     params?.scraperBlacklistedTagsByScraper,
@@ -121,8 +127,14 @@ export function ScraperBookmarkTagStatsPanel({
   const scopeView = useScraperBookmarkView(scopeRequest);
   const activeView = scope === "displayed" ? displayedView : scopeView;
   const activeBookmarks = useMemo(() => (
-    activeView.response.bookmarks.map((record) => record.bookmark)
-  ), [activeView.response.bookmarks]);
+    activeView.response.bookmarks
+      .map((record) => record.bookmark)
+      .filter((bookmark) => matchesScraperBookmarkSeriesFilter(
+        bookmark,
+        scope === "displayed" ? normalizedFilters.seriesFilterMode : "default",
+        configsByScraperId,
+      ))
+  ), [activeView.response.bookmarks, configsByScraperId, normalizedFilters.seriesFilterMode, scope]);
   const minOccurrences = parseMinOccurrences(minOccurrencesInput);
   const fuzzyMode = fuzzyEnabled ? fuzzyLevel : "off";
   const stats = useMemo(() => (

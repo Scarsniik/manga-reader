@@ -30,8 +30,10 @@ import {
   DEFAULT_BOOKMARK_FILTERS,
   type ScraperBookmarkFilterState,
 } from '@/renderer/components/ScraperBookmarks/bookmarkFiltering';
+import { matchesScraperBookmarkSeriesFilter } from '@/renderer/components/ScraperBookmarks/bookmarkSeriesFiltering';
 import type { Manga } from '@/renderer/types';
 import { findMangaLinkedToSource } from '@/renderer/utils/mangaSource';
+import { buildScraperTitleAnalysisConfigs } from '@/renderer/utils/scraperTitleAnalysisConfigs';
 import { writeScraperRouteState } from '@/renderer/utils/scraperBrowserNavigation';
 import { buildBookmarkViewHistoryIdentity } from '@/renderer/utils/scraperViewHistory';
 import {
@@ -174,6 +176,10 @@ export default function ScraperBookmarksView({
     () => new Map(scrapers.map((scraper) => [scraper.id, scraper])),
     [scrapers],
   );
+  const titleAnalysisConfigs = useMemo(
+    () => buildScraperTitleAnalysisConfigs(scrapers),
+    [scrapers],
+  );
   const filteredScraper = filterScraperId ? scrapersById.get(filterScraperId) ?? null : null;
   const bookmarksReturn = locationState?.bookmarksReturn ?? null;
   const hideBlacklistedBookmarkCards = params?.scraperHideBlacklistedTagCards === true;
@@ -182,12 +188,15 @@ export default function ScraperBookmarksView({
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
   } = useLocalBlacklistedCardsDisplay(hideBlacklistedBookmarkCards);
-  const bookmarkViewRequest = useMemo((): ScraperBookmarkViewRequest => ({
-    scraperId: filterScraperId ?? null,
-    filters: bookmarkFilters,
-    hideBlacklistedCards: shouldHideBlacklistedBookmarkCards,
-    blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
-  }), [
+  const bookmarkViewRequest = useMemo((): ScraperBookmarkViewRequest => {
+    const { seriesFilterMode: _seriesFilterMode, ...serverFilters } = bookmarkFilters;
+    return {
+      scraperId: filterScraperId ?? null,
+      filters: serverFilters,
+      hideBlacklistedCards: shouldHideBlacklistedBookmarkCards,
+      blacklistedTagsByScraper: params?.scraperBlacklistedTagsByScraper ?? null,
+    };
+  }, [
     bookmarkFilters,
     filterScraperId,
     params?.scraperBlacklistedTagsByScraper,
@@ -200,16 +209,24 @@ export default function ScraperBookmarksView({
     error,
     reload: reloadBookmarkView,
   } = useScraperBookmarkView(bookmarkViewRequest);
+  const displayedBookmarkRecords = useMemo(
+    () => bookmarkView.bookmarks.filter((record) => matchesScraperBookmarkSeriesFilter(
+      record.bookmark,
+      bookmarkFilters.seriesFilterMode,
+      titleAnalysisConfigs,
+    )),
+    [bookmarkFilters.seriesFilterMode, bookmarkView.bookmarks, titleAnalysisConfigs],
+  );
   const displayedBookmarks = useMemo(
-    () => bookmarkView.bookmarks.map((record) => record.bookmark),
-    [bookmarkView.bookmarks],
+    () => displayedBookmarkRecords.map((record) => record.bookmark),
+    [displayedBookmarkRecords],
   );
   const bookmarkViewRecordsByKey = useMemo(
-    () => new Map(bookmarkView.bookmarks.map((record) => [
+    () => new Map(displayedBookmarkRecords.map((record) => [
       getBookmarkKey(record.bookmark),
       record,
     ])),
-    [bookmarkView.bookmarks],
+    [displayedBookmarkRecords],
   );
   const bookmarkLanguageFilterCodes = bookmarkView.languageCodes;
   const hiddenBlacklistedBookmarkCount = bookmarkView.hiddenBlacklistedCount;

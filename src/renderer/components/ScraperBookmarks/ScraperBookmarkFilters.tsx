@@ -1,5 +1,6 @@
 import React from "react";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
+import ScraperBookmarkFilterModeButton from "@/renderer/components/ScraperBookmarks/ScraperBookmarkFilterModeButton";
 import {
   getMultiSearchLanguageFilterMode,
   toggleMultiSearchLanguageFilterMode,
@@ -53,6 +54,7 @@ const countActiveFilters = (filters: ScraperBookmarkFilterState): number => (
   + (filters.minPages.trim() ? 1 : 0)
   + (filters.maxPages.trim() ? 1 : 0)
   + filters.readingStatuses.length
+  + (filters.seriesFilterMode !== DEFAULT_BOOKMARK_FILTERS.seriesFilterMode ? 1 : 0)
   + (filters.sortBy !== DEFAULT_BOOKMARK_FILTERS.sortBy ? 1 : 0)
 );
 
@@ -106,6 +108,12 @@ export default function ScraperBookmarkFilters({
   ) => {
     updateFilters({
       languageFilterModes: updateLanguageFilterMode(filters.languageFilterModes, languageCode, mode),
+    });
+  };
+
+  const toggleSeriesMode = (mode: Exclude<MultiSearchLanguageFilterMode, "default">) => {
+    updateFilters({
+      seriesFilterMode: toggleMultiSearchLanguageFilterMode(filters.seriesFilterMode, mode),
     });
   };
 
@@ -167,6 +175,20 @@ export default function ScraperBookmarkFilters({
           />
         </label>
 
+        <div className="scraper-bookmarks-view__field">
+          <span>Séries</span>
+          <div className="scraper-bookmarks-view__filter-mode-bar">
+            <ScraperBookmarkFilterModeButton
+              mode={filters.seriesFilterMode}
+              onToggle={toggleSeriesMode}
+              ariaLabel="Filtre des mangas en série"
+              title="Clic gauche : uniquement les séries. Clic droit : masquer les suites en conservant le chapitre 1."
+            >
+              Séries
+            </ScraperBookmarkFilterModeButton>
+          </div>
+        </div>
+
         <fieldset className="scraper-bookmarks-view__field scraper-bookmarks-view__field-group">
           <legend>Lecture</legend>
           <div className="scraper-bookmarks-view__checkboxes">
@@ -191,23 +213,15 @@ export default function ScraperBookmarkFilters({
               const languageLabel = getLanguageLabel(languageCode);
 
               return (
-                <button
+                <ScraperBookmarkFilterModeButton
                   key={languageCode}
-                  type="button"
-                  className={[
-                    "scraper-bookmarks-view__language-button",
-                    `is-${filterMode}`,
-                  ].join(" ")}
-                  onClick={() => toggleLanguageMode(languageCode, "only")}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    toggleLanguageMode(languageCode, "without");
-                  }}
+                  mode={filterMode}
+                  onToggle={(mode) => toggleLanguageMode(languageCode, mode)}
                   title={languageLabel}
-                  aria-label={`${languageLabel} : ${filterMode}`}
+                  ariaLabel={languageLabel}
                 >
                   <LanguageFlags languageCodes={[languageCode]} />
-                </button>
+                </ScraperBookmarkFilterModeButton>
               );
             }) : (
               <span className="scraper-bookmarks-view__language-empty">Aucune langue</span>

@@ -224,14 +224,15 @@
   accent-color: #5d9cff;
 }
 
-.scraper-bookmarks-view__language-filter-bar {
+.scraper-bookmarks-view__language-filter-bar,
+.scraper-bookmarks-view__filter-mode-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   min-height: 40px;
 }
 
-.scraper-bookmarks-view__language-button {
+.scraper-bookmarks-view__filter-mode-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -245,19 +246,19 @@
   cursor: pointer;
 }
 
-.scraper-bookmarks-view__language-button.is-only {
+.scraper-bookmarks-view__filter-mode-button.is-only {
   border-color: rgba(95, 173, 122, 0.5);
   background: rgba(95, 173, 122, 0.18);
 }
 
-.scraper-bookmarks-view__language-button.is-without {
+.scraper-bookmarks-view__filter-mode-button.is-without {
   border-color: rgba(239, 112, 112, 0.52);
   background: rgba(239, 112, 112, 0.16);
   opacity: 0.72;
 }
 
-.scraper-bookmarks-view__language-button:hover,
-.scraper-bookmarks-view__language-button:focus-visible {
+.scraper-bookmarks-view__filter-mode-button:hover,
+.scraper-bookmarks-view__filter-mode-button:focus-visible {
   outline: none;
   border-color: #5d9cff;
   box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.14);

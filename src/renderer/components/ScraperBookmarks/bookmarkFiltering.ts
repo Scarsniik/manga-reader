@@ -2,6 +2,7 @@ import type {
   ScraperBookmarkFilterState,
   ScraperBookmarkRecord,
   ScraperBookmarkReadingStatus,
+  ScraperBookmarkSeriesFilterMode,
   ScraperReaderProgressRecord,
   ScraperRecord,
   ScraperBookmarkSortKey,
@@ -26,10 +27,13 @@ import {
   getScraperViewHistoryRecord,
 } from "@/renderer/utils/scraperViewHistory";
 import { getScraperBookmarkLanguageCodes } from "@/renderer/utils/scraperBookmarkMetadata";
+import { matchesScraperBookmarkSeriesFilter } from "@/renderer/components/ScraperBookmarks/bookmarkSeriesFiltering";
+import { buildScraperTitleAnalysisConfigs } from "@/renderer/utils/scraperTitleAnalysisConfigs";
 
 export type {
   ScraperBookmarkFilterState,
   ScraperBookmarkReadingStatus,
+  ScraperBookmarkSeriesFilterMode,
   ScraperBookmarkSortKey,
 } from "@/shared/scraper";
 
@@ -302,6 +306,7 @@ export const filterAndSortScraperBookmarks = ({
   const maxPages = toPositiveNumber(filters.maxPages);
   const selectedStatuses = new Set(filters.readingStatuses);
   const progressIndex = buildProgressIndex(progressRecords);
+  const titleAnalysisConfigs = buildScraperTitleAnalysisConfigs(Array.from(scrapersById.values()));
   const getStatus = (bookmark: ScraperBookmarkRecord) => (
     getBookmarkReadingStatusFromIndex(bookmark, viewHistoryRecordsById, progressIndex)
   );
@@ -314,6 +319,10 @@ export const filterAndSortScraperBookmarks = ({
     }
 
     if (!matchesLanguageFilters(bookmark, scraper, filters.languageFilterModes)) {
+      return false;
+    }
+
+    if (!matchesScraperBookmarkSeriesFilter(bookmark, filters.seriesFilterMode, titleAnalysisConfigs)) {
       return false;
     }
 

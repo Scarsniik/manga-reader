@@ -9,6 +9,7 @@ import {
   type ScraperBookmarkReaderProgress,
   type ScraperBookmarkReadingStatus,
   type ScraperBookmarkRecord,
+  type ScraperBookmarkSeriesFilterMode,
   type ScraperBookmarkSortKey,
   type ScraperBookmarkViewRecord,
   type ScraperBookmarkViewRequest,
@@ -213,6 +214,10 @@ const normalizeSortKey = (value: unknown): ScraperBookmarkSortKey => {
     : DEFAULT_SCRAPER_BOOKMARK_FILTERS.sortBy;
 };
 
+const normalizeSeriesFilterMode = (value: unknown): ScraperBookmarkSeriesFilterMode => (
+  value === "only" || value === "without" ? value : "default"
+);
+
 const normalizeBookmarkFilters = (
   filters: Partial<ScraperBookmarkFilterState> | null | undefined,
 ): ScraperBookmarkFilterState => ({
@@ -221,6 +226,7 @@ const normalizeBookmarkFilters = (
   minPages: String(filters?.minPages ?? DEFAULT_SCRAPER_BOOKMARK_FILTERS.minPages),
   maxPages: String(filters?.maxPages ?? DEFAULT_SCRAPER_BOOKMARK_FILTERS.maxPages),
   readingStatuses: normalizeReadingStatuses(filters?.readingStatuses),
+  seriesFilterMode: normalizeSeriesFilterMode(filters?.seriesFilterMode),
   sortBy: normalizeSortKey(filters?.sortBy),
 });
 
