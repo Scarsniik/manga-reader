@@ -45,6 +45,7 @@ type Props = {
   resultOnly?: boolean;
   backLabel?: string;
   correspondenceAction?: React.ReactNode;
+  statusNotice?: React.ReactNode;
   renderSourceAction?: (run: AuthorFavoriteSourceRun) => React.ReactNode;
   onBack: () => void;
   onReload: () => void;
@@ -101,6 +102,7 @@ export default function ScraperAuthorFavoriteResults({
   resultOnly = false,
   backLabel,
   correspondenceAction = null,
+  statusNotice = null,
   renderSourceAction,
   onBack,
   onReload,
@@ -148,6 +150,7 @@ export default function ScraperAuthorFavoriteResults({
       hideBlacklistedCards={hideBlacklistedCards}
       readOnly={resultOnly}
       favoriteAction={correspondenceAction}
+      statusNotice={statusNotice}
       backLabel={resultOnly ? null : backLabel ?? "Retour aux auteurs favoris"}
       onBack={onBack}
       onReload={onReload}

@@ -77,6 +77,7 @@ type Props = {
   onInvalidateFavoriteOverrideSource?: (source: ScraperAuthorFavoriteSource) => void;
   onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
   favoriteOverrideAction?: React.ReactNode;
+  favoriteOverrideStatus?: React.ReactNode;
   favoriteOverrideRuns?: BackgroundListingRun[];
   favoriteOverrideMangaEnrichments?: AuthorCorrespondenceMangaEnrichment[];
   favoriteOverrideSessionCacheEnabled?: boolean;
@@ -122,6 +123,7 @@ export default function ScraperAuthorFavoritesView({
   onInvalidateFavoriteOverrideSource,
   onOpenAuthorTarget,
   favoriteOverrideAction,
+  favoriteOverrideStatus,
   favoriteOverrideRuns = [],
   favoriteOverrideMangaEnrichments = [],
   favoriteOverrideSessionCacheEnabled = false,
@@ -682,6 +684,7 @@ export default function ScraperAuthorFavoritesView({
             <span>Trouver les correspondances</span>
           </button>
         ) : null}
+        statusNotice={favoriteOverride ? favoriteOverrideStatus : null}
         renderSourceAction={favoriteOverride && onInvalidateFavoriteOverrideSource
           ? (run) => (
             <button

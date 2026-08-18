@@ -199,6 +199,7 @@ export type AuthorCorrespondenceBackgroundResult = {
     processedMangaCount: number;
     discoveredMangaSourceCount: number;
     discoveredAuthorPageCount: number;
+    discoveredAuthorMatchKeys?: string[];
     remainingCandidateCount: number;
   };
   checkpoint?: {

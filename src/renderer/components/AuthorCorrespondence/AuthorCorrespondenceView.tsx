@@ -1,5 +1,4 @@
 import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
 import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
@@ -8,11 +7,11 @@ import AuthorCorrespondenceFavoriteButton from "@/renderer/components/AuthorCorr
 import AuthorCorrespondencePreviewImage from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondencePreviewImage";
 import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRevisionButton";
 import AuthorCorrespondenceAdvancedButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton";
+import AuthorCorrespondenceAdvancedStatus from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedStatus";
+import useAuthorCorrespondenceNavigation from "@/renderer/components/AuthorCorrespondence/useAuthorCorrespondenceNavigation";
 import useAuthorCorrespondenceSessionCache from "@/renderer/backgroundSearch/useAuthorCorrespondenceSessionCache";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
-import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
-import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import {
   buildAuthorCorrespondenceMatchKey,
   normalizeAuthorCorrespondenceTarget,
@@ -40,8 +39,7 @@ export default function AuthorCorrespondenceView({
   resultOnly = false,
 }: Props) {
   const { job, loading, error, cancel, reload } = useBackgroundSearchJob(backgroundSearchJobId);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { openAuthor, openAuthorInWorkspace } = useAuthorCorrespondenceNavigation(onOpenAuthorTarget);
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
   const input = job?.input as AuthorCorrespondenceBackgroundInput | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
@@ -62,6 +60,13 @@ export default function AuthorCorrespondenceView({
     () => displayedMatches.filter((match) => !invalidatedMatchKeys.has(match.key)),
     [displayedMatches, invalidatedMatchKeys],
   );
+  const advancedDiscoveredMatchKeys = React.useMemo(() => new Set([
+    ...(result?.advancedSearch?.discoveredAuthorMatchKeys ?? []),
+    ...sessionCache.discoveredAuthorMatchKeys,
+  ]), [result?.advancedSearch?.discoveredAuthorMatchKeys, sessionCache.discoveredAuthorMatchKeys]);
+  const newAuthorPageCount = React.useMemo(() => validMatches.filter((match) => (
+    advancedDiscoveredMatchKeys.has(match.key)
+  )).length, [advancedDiscoveredMatchKeys, validMatches]);
 
   React.useEffect(() => {
     if (!job?.metadata.id) {
@@ -125,66 +130,17 @@ export default function AuthorCorrespondenceView({
     };
   }, [job, result?.referenceName, validMatches]);
 
-  const buildAuthorTarget = (
-    scraperId: string,
-    authorUrl: string,
-    authorName: string,
-    templateContext?: Record<string, string | undefined> | null,
-  ): ScraperAuthorWorkspaceTarget => ({
-    kind: "scraper.author",
-    scraperId,
-    query: authorUrl,
-    title: authorName,
-    templateContext: templateContext ?? undefined,
-  });
-
-  const openAuthor = (
-    scraperId: string,
-    authorUrl: string,
-    authorName: string,
-    templateContext?: Record<string, string | undefined> | null,
-  ) => {
-    const target = buildAuthorTarget(scraperId, authorUrl, authorName, templateContext);
-    if (onOpenAuthorTarget) {
-      onOpenAuthorTarget(target);
-      return;
-    }
-
-    navigate({
-      pathname: location.pathname,
-      search: writeScraperRouteState(location.search, {
-        scraperId,
-        mode: "author",
-        homepageActive: false,
-        homepagePage: 1,
-        searchActive: false,
-        searchQuery: "",
-        searchPage: 1,
-        authorActive: true,
-        authorQuery: authorUrl,
-        authorPage: 1,
-        mangaQuery: "",
-        mangaUrl: "",
-        bookmarksFilterScraperId: null,
-      }),
-    }, {
-      state: {
-        scraperBrowserAuthorTemplateContext: templateContext ?? null,
-      },
-    });
-  };
-
-  const openAuthorInWorkspace = (
-    scraperId: string,
-    authorUrl: string,
-    authorName: string,
-    templateContext?: Record<string, string | undefined> | null,
-  ) => {
-    void openWorkspaceTarget(buildAuthorTarget(scraperId, authorUrl, authorName, templateContext));
-  };
-
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
+  const advancedStatus = (
+    <AuthorCorrespondenceAdvancedStatus
+      enabled={input?.advancedSearch?.enabled === true}
+      status={job.metadata.status}
+      progress={job.metadata.progress}
+      summary={result?.advancedSearch}
+      newAuthorPageCount={newAuthorPageCount}
+    />
+  );
 
   if (showCombinedView && combinedAuthor) {
     return (
@@ -201,6 +157,7 @@ export default function AuthorCorrespondenceView({
           sessionCache.revision > 0
           || (result?.advancedSearch && !sessionCache.hydrated)
         )}
+        favoriteOverrideStatus={advancedStatus}
         favoriteOverrideAction={(
           <>
             <AuthorCorrespondenceAdvancedButton
@@ -280,21 +237,13 @@ export default function AuthorCorrespondenceView({
         ) : null}
       </div>
 
-      {result?.advancedSearch ? (
-        <div className="author-correspondence-view__advanced-status">
-          <strong>Recherche poussée · {result.advancedSearch.processedMangaCount} manga(s) analysé(s)</strong>
-          <span>
-            {result.advancedSearch.discoveredMangaSourceCount} source(s) manga ajoutée(s)
-            {" · "}{result.advancedSearch.discoveredAuthorPageCount} page(s) auteur découverte(s)
-            {" · "}{result.advancedSearch.remainingCandidateCount} candidat(s) restant(s)
-          </span>
-        </div>
-      ) : null}
+      {advancedStatus}
 
       {displayedMatches.length ? (
         <div className="author-correspondence-view__list">
           {displayedMatches.map((match) => {
             const invalidated = invalidatedMatchKeys.has(match.key);
+            const discoveredByAdvancedSearch = advancedDiscoveredMatchKeys.has(match.key);
             const referenceSource = input?.referenceSources.find((source) => (
               buildAuthorCorrespondenceMatchKey(source.scraperId, source.authorUrl) === match.key
             ));
@@ -303,12 +252,18 @@ export default function AuthorCorrespondenceView({
                 key={match.key}
                 className={[
                   "author-correspondence-view__row",
+                  discoveredByAdvancedSearch ? "is-advanced-discovery" : "",
                   invalidated ? "is-invalidated" : "",
                 ].filter(Boolean).join(" ")}
               >
               <div className="author-correspondence-view__content">
                 <div className="author-correspondence-view__identity">
                   <span className="author-correspondence-view__source">{match.scraperName}</span>
+                  {discoveredByAdvancedSearch ? (
+                    <span className="author-correspondence-view__advanced-badge">
+                      Nouveau · recherche poussée
+                    </span>
+                  ) : null}
                   <h3>{match.authorName}</h3>
                   {match.authorName !== match.matchedName ? (
                     <p>Correspond à <strong>{match.matchedName}</strong></p>

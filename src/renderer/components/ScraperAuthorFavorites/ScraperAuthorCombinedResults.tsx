@@ -61,6 +61,7 @@ type Props = {
   loadingMessage?: string;
   viewModeAction?: React.ReactNode;
   favoriteAction?: React.ReactNode;
+  statusNotice?: React.ReactNode;
   multiSearchButtonLabel?: string;
   onBack?: () => void;
   onReload: () => void;
@@ -125,6 +126,7 @@ export default function ScraperAuthorCombinedResults({
   loadingMessage = "Chargement de l'auteur combine...",
   viewModeAction = null,
   favoriteAction = null,
+  statusNotice = null,
   multiSearchButtonLabel = "Recherche multi-source",
   onBack,
   onReload,
@@ -213,6 +215,7 @@ export default function ScraperAuthorCombinedResults({
         </div> : null}
       </div>
 
+      {statusNotice}
       {message ? <div className="multi-search__message is-info">{message}</div> : null}
       {error ? <div className="multi-search__message is-error">{error}</div> : null}
 

@@ -1313,9 +1313,22 @@ test("advanced author orchestration reuses the canonical search engines", () => 
     path.resolve("src/renderer/searchEngines/authorCorrespondenceSessionListings.ts"),
     "utf8",
   );
+  const resultView = fs.readFileSync(
+    path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceView.tsx"),
+    "utf8",
+  );
+  const advancedStatus = fs.readFileSync(
+    path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedStatus.tsx"),
+    "utf8",
+  );
 
   assert.match(advancedEngine, /runMangaCorrespondenceSearch\s*\(/);
+  assert.match(advancedEngine, /request:\s*"sameManga"/);
+  assert.doesNotMatch(advancedEngine, /purpose:\s*"authorDiscovery"/);
   assert.match(advancedEngine, /runAuthorCorrespondenceSearch\s*\(/);
   assert.match(sessionListings, /buildAuthorListingSearchInput\s*\(/);
   assert.match(sessionListings, /runAuthorFavoriteRefreshSearchEngine\s*\(/);
+  assert.match(resultView, /is-advanced-discovery/);
+  assert.match(resultView, /Nouveau · recherche poussée/);
+  assert.match(advancedStatus, /role="progressbar"/);
 });

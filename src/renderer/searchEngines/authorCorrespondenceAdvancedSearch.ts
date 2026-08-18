@@ -125,7 +125,6 @@ const buildMangaInput = (
   scrapingConcurrency: input.scrapingConcurrency,
   scrapeDetailsWithCards: input.scrapeDetailsWithCards,
   enableRomajiPhoneticMerge: input.advancedSearch?.enableRomajiPhoneticMerge === true,
-  purpose: "authorDiscovery",
   safety: input.correspondenceSafety,
 });
 
@@ -208,7 +207,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     signal,
     executionContext,
     publishCache: cacheController.publish,
-    onProgress: emitProgress,
+    onProgress: (label) => emitProgress(`Préparation · ${label}`),
   });
 
   const authorSources = collectActiveAuthorSources(cache, input, result);
@@ -240,7 +239,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       buildMangaInput(input, seed),
       signal,
       async (_partialResult, progress) => emitProgress(
-        `Manga ${seedIndex + 1}/${seeds.length} · ${progress.currentLabel ?? seed.result.title}`,
+        `Correspondances du manga ${seedIndex + 1}/${seeds.length} · ${progress.currentLabel ?? seed.result.title}`,
         seedIndex,
         seeds.length,
       ),
@@ -299,6 +298,8 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
         progress.currentLabel
           ? `Nouveaux auteurs · ${progress.currentLabel}`
           : "Recherche des nouvelles pages auteur",
+        seeds.length,
+        seeds.length,
       ),
       executionContext,
     );
@@ -340,7 +341,11 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       signal,
       executionContext,
       publishCache: cacheController.publish,
-      onProgress: emitProgress,
+      onProgress: (label) => emitProgress(
+        `Nouvelles pages auteur · ${label}`,
+        seeds.length,
+        seeds.length,
+      ),
     });
   }
 
@@ -368,6 +373,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       processedMangaCount: cache.mangaEnrichments.length,
       discoveredMangaSourceCount,
       discoveredAuthorPageCount: cache.discoveredAuthorMatchKeys.length,
+      discoveredAuthorMatchKeys: cache.discoveredAuthorMatchKeys,
       remainingCandidateCount,
     },
   };
