@@ -11,6 +11,27 @@ export type AuthorCorrespondenceAdvancedSeed = {
   referenceSource: MultiSearchSourceResult;
 };
 
+export const resolveAuthorCorrespondenceAdvancedBatchSize = (options: {
+  batchSize: number;
+  cachedMangaCount: number;
+  requestedBatchCount: number;
+  requestedProcessedMangaCount?: number;
+}): number => {
+  const batchSize = Math.max(1, Math.floor(options.batchSize));
+  const legacyRequestedMangaCount = Math.max(
+    1,
+    Math.floor(options.requestedBatchCount),
+  ) * batchSize;
+  const requestedMangaCount = Math.max(
+    0,
+    Math.floor(options.requestedProcessedMangaCount ?? legacyRequestedMangaCount),
+  );
+  return Math.min(
+    batchSize,
+    Math.max(0, requestedMangaCount - Math.max(0, options.cachedMangaCount)),
+  );
+};
+
 export const selectAuthorCorrespondenceAdvancedSeeds = (
   results: MultiSearchMergedResult[],
   authorSourceKeys: Set<string>,

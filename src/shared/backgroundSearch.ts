@@ -215,6 +215,7 @@ export type AuthorCorrespondenceAdvancedSearchRequest = {
   enabled: boolean;
   batchSize: number;
   requestedBatchCount: number;
+  requestedProcessedMangaCount?: number;
   continueFromResult?: boolean;
   invalidatedAuthorMatchKeys?: string[];
   enableRomajiPhoneticMerge?: boolean;

@@ -1,6 +1,7 @@
 import React from "react";
 import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
 import { MagnifyingGlassIcon } from "@/renderer/components/icons";
+import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
 import type { AuthorCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
 import { DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE } from "@/shared/backgroundSearch";
 
@@ -36,7 +37,7 @@ export default function AuthorCorrespondenceAdvancedButton({
     ),
   );
 
-  const startAdvancedSearch = async () => {
+  const startAdvancedSearch = async (requestedMangaCount: number) => {
     if (!backgroundSearchJobId || !input || !result || active || pending) return;
     setPending(true);
     setLaunchError(null);
@@ -52,8 +53,11 @@ export default function AuthorCorrespondenceAdvancedButton({
           replay: undefined,
           advancedSearch: {
             enabled: true,
-            batchSize,
+            batchSize: requestedMangaCount,
             requestedBatchCount,
+            requestedProcessedMangaCount: (
+              result.advancedSearch?.processedMangaCount ?? 0
+            ) + requestedMangaCount,
             continueFromResult: true,
             invalidatedAuthorMatchKeys: Array.from(invalidatedMatchKeys),
             enableRomajiPhoneticMerge: input.advancedSearch?.enableRomajiPhoneticMerge === true,
@@ -77,26 +81,28 @@ export default function AuthorCorrespondenceAdvancedButton({
 
   return (
     <>
-      <button
-        type="button"
-        className="author-correspondence-view__open-combined"
-        onClick={() => void startAdvancedSearch()}
+      <ScraperPageAppendControl
+        loading={active || pending}
         disabled={active || pending || hasNoRemainingCandidate}
-        title={hasNoRemainingCandidate
+        disabledTitle={hasNoRemainingCandidate
           ? "Tous les mangas disponibles ont déjà été analysés"
-          : `Analyser les ${batchSize} prochains mangas les plus présents`}
-      >
-        <MagnifyingGlassIcon aria-hidden="true" focusable="false" />
-        <span>
-          {pending || active
-            ? "Recherche poussée en cours…"
-            : hasNoRemainingCandidate
-              ? "Aucun manga suivant"
-              : completedBatchCount
-                ? `Approfondir avec les ${batchSize} suivants`
-                : "Lancer la recherche poussée"}
-        </span>
-      </button>
+          : undefined}
+        initialCount={batchSize}
+        label="Analyser"
+        unitSingular="manga"
+        unitPlural="mangas"
+        formAriaLabel="Choisir le nombre de mangas à analyser en recherche poussée"
+        inputAriaLabel="Nombre de mangas à analyser"
+        submitLabel={hasNoRemainingCandidate
+          ? "Aucun manga suivant"
+          : completedBatchCount
+            ? "Approfondir les suivants"
+            : "Lancer la recherche poussée"}
+        loadingLabel="Recherche en cours…"
+        submitTitle="Analyser les prochains mangas les plus présents"
+        submitIcon={<MagnifyingGlassIcon aria-hidden="true" focusable="false" />}
+        onAppendPages={(mangaCount) => void startAdvancedSearch(mangaCount)}
+      />
       {launchError ? (
         <small className="author-correspondence-view__advanced-error" role="alert">
           {launchError}

@@ -1,4 +1,9 @@
-import React, { FormEvent, useId, useState } from "react";
+import React, {
+  FormEvent,
+  useEffect,
+  useId,
+  useState,
+} from "react";
 import {
   LoadingSpinnerIcon,
   PlusSignIcon,
@@ -9,6 +14,16 @@ type Props = {
   loading: boolean;
   disabled?: boolean;
   disabledTitle?: string;
+  initialCount?: number;
+  label?: string;
+  unitSingular?: string;
+  unitPlural?: string;
+  formAriaLabel?: string;
+  inputAriaLabel?: string;
+  submitLabel?: string;
+  loadingLabel?: string;
+  submitTitle?: string;
+  submitIcon?: React.ReactNode;
   onAppendPages: (pageCount: number) => void;
 };
 
@@ -25,10 +40,24 @@ export default function ScraperPageAppendControl({
   loading,
   disabled = false,
   disabledTitle,
+  initialCount = 1,
+  label = "Ajouter",
+  unitSingular = "page",
+  unitPlural = "pages",
+  formAriaLabel = "Ajouter des pages aux résultats affichés",
+  inputAriaLabel = "Nombre de pages à scraper",
+  submitLabel = "Scraper et ajouter",
+  loadingLabel = "Scraping...",
+  submitTitle = "Scraper et ajouter ces pages à la vue actuelle",
+  submitIcon,
   onAppendPages,
 }: Props) {
   const inputId = useId();
-  const [pageCount, setPageCount] = useState("1");
+  const [pageCount, setPageCount] = useState(String(Math.max(1, Math.floor(initialCount))));
+
+  useEffect(() => {
+    setPageCount(String(Math.max(1, Math.floor(initialCount))));
+  }, [initialCount]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,10 +74,10 @@ export default function ScraperPageAppendControl({
     <form
       className="scraper-page-append"
       onSubmit={handleSubmit}
-      aria-label="Ajouter des pages aux resultats affiches"
+      aria-label={formAriaLabel}
     >
       <label htmlFor={inputId} className="scraper-page-append__label">
-        Ajouter
+        {label}
       </label>
       <input
         id={inputId}
@@ -61,10 +90,10 @@ export default function ScraperPageAppendControl({
         onChange={(event) => setPageCount(event.target.value)}
         onBlur={() => setPageCount(String(normalizePageCount(pageCount)))}
         disabled={loading}
-        aria-label="Nombre de pages a scraper"
+        aria-label={inputAriaLabel}
       />
       <span className="scraper-page-append__unit" aria-hidden="true">
-        {normalizePageCount(pageCount) > 1 ? "pages" : "page"}
+        {normalizePageCount(pageCount) > 1 ? unitPlural : unitSingular}
       </span>
       <button
         type="submit"
@@ -72,7 +101,7 @@ export default function ScraperPageAppendControl({
         disabled={loading || disabled}
         title={disabled
           ? disabledTitle ?? "Aucune page suivante disponible"
-          : "Scraper et ajouter ces pages a la vue actuelle"}
+          : submitTitle}
       >
         {loading ? (
           <LoadingSpinnerIcon
@@ -80,10 +109,12 @@ export default function ScraperPageAppendControl({
             aria-hidden="true"
             focusable="false"
           />
+        ) : submitIcon ? (
+          submitIcon
         ) : (
           <PlusSignIcon aria-hidden="true" focusable="false" />
         )}
-        <span>{loading ? "Scraping..." : "Scraper et ajouter"}</span>
+        <span>{loading ? loadingLabel : submitLabel}</span>
       </button>
     </form>
   );

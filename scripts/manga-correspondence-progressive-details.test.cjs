@@ -9,7 +9,10 @@ const source = `
   export { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
-  export { selectAuthorCorrespondenceAdvancedSeeds } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
+  export {
+    resolveAuthorCorrespondenceAdvancedBatchSize,
+    selectAuthorCorrespondenceAdvancedSeeds,
+  } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
   export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
   export { buildMultiSearchSourceIdentityKey, mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
@@ -41,6 +44,7 @@ const {
   createSearchExecutionContext,
   mergeAuthorCorrespondenceSessionResults,
   mergeMultiSearchResults,
+  resolveAuthorCorrespondenceAdvancedBatchSize,
   resolveMangaCorrespondenceManualDiscovery,
   runAuthorCorrespondenceSearch,
   runAuthorCorrespondenceWorkflow,
@@ -1273,6 +1277,26 @@ test("advanced author search selects the most sourced unprocessed manga cards", 
   assert.equal(secondBatch[0].result.title, "Next Work");
 });
 
+test("advanced author search accepts a different manga count for every continuation", () => {
+  assert.equal(resolveAuthorCorrespondenceAdvancedBatchSize({
+    batchSize: 5,
+    cachedMangaCount: 21,
+    requestedBatchCount: 8,
+    requestedProcessedMangaCount: 26,
+  }), 5);
+  assert.equal(resolveAuthorCorrespondenceAdvancedBatchSize({
+    batchSize: 1,
+    cachedMangaCount: 21,
+    requestedBatchCount: 8,
+    requestedProcessedMangaCount: 22,
+  }), 1);
+  assert.equal(resolveAuthorCorrespondenceAdvancedBatchSize({
+    batchSize: 3,
+    cachedMangaCount: 21,
+    requestedBatchCount: 7,
+  }), 0);
+});
+
 test("session manga matches stay attached to their originating combined card", () => {
   const anchor = buildAdvancedSource(
     "source-a",
@@ -1321,6 +1345,10 @@ test("advanced author orchestration reuses the canonical search engines", () => 
     path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedStatus.tsx"),
     "utf8",
   );
+  const advancedButton = fs.readFileSync(
+    path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton.tsx"),
+    "utf8",
+  );
 
   assert.match(advancedEngine, /runMangaCorrespondenceSearch\s*\(/);
   assert.match(advancedEngine, /request:\s*"sameManga"/);
@@ -1331,4 +1359,6 @@ test("advanced author orchestration reuses the canonical search engines", () => 
   assert.match(resultView, /is-advanced-discovery/);
   assert.match(resultView, /Nouveau · recherche poussée/);
   assert.match(advancedStatus, /role="progressbar"/);
+  assert.match(advancedButton, /<ScraperPageAppendControl/);
+  assert.match(advancedButton, /requestedProcessedMangaCount/);
 });

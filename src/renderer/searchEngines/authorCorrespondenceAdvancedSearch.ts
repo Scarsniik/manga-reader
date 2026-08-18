@@ -21,6 +21,7 @@ import { buildInitialAuthorCorrespondenceDiscoveries } from "@/renderer/backgrou
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import {
+  resolveAuthorCorrespondenceAdvancedBatchSize,
   selectAuthorCorrespondenceAdvancedSeeds,
   type AuthorCorrespondenceAdvancedSeed,
 } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
@@ -184,11 +185,12 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
   const requestedBatchCount = Math.max(1, Math.floor(request.requestedBatchCount));
   const completedBatchCount = result.advancedSearch?.completedBatchCount ?? 0;
   if (requestedBatchCount <= completedBatchCount && cache.processedMangaKeys.length) return result;
-  const requestedMangaCount = requestedBatchCount * Math.max(1, Math.floor(request.batchSize));
-  const remainingBatchSize = Math.min(
-    Math.max(1, Math.floor(request.batchSize)),
-    Math.max(0, requestedMangaCount - cache.mangaEnrichments.length),
-  );
+  const remainingBatchSize = resolveAuthorCorrespondenceAdvancedBatchSize({
+    batchSize: request.batchSize,
+    cachedMangaCount: cache.mangaEnrichments.length,
+    requestedBatchCount,
+    requestedProcessedMangaCount: request.requestedProcessedMangaCount,
+  });
 
   const emitProgress = async (label: string, completedUnits = 0, totalUnits = 0) => {
     await onSnapshot(result, {
