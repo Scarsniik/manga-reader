@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const esbuild = require("esbuild");
@@ -8,6 +9,9 @@ const source = `
   export { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
+  export { selectAuthorCorrespondenceAdvancedSeeds } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
+  export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
+  export { buildMultiSearchSourceIdentityKey, mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
   export { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
   export {
@@ -33,11 +37,15 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 const {
   buildAuthorCorrespondenceReplayInput,
   buildInitialAuthorCorrespondenceDiscoveries,
+  buildMultiSearchSourceIdentityKey,
   createSearchExecutionContext,
+  mergeAuthorCorrespondenceSessionResults,
+  mergeMultiSearchResults,
   resolveMangaCorrespondenceManualDiscovery,
   runAuthorCorrespondenceSearch,
   runAuthorCorrespondenceWorkflow,
   runMangaCorrespondenceSearch,
+  selectAuthorCorrespondenceAdvancedSeeds,
 } = bundledModule.exports;
 
 global.DOMParser = class DOMParser {
@@ -1209,4 +1217,105 @@ test("author correspondence replay searches added aliases and keeps their direct
   }]);
   assert.equal(replayInput.replay.revision, 3);
   assert.deepEqual(input.names, ["Author A"]);
+});
+
+const buildAdvancedSource = (scraperId, title, detailUrl) => ({
+  scraper: {
+    ...scraper,
+    id: scraperId,
+    name: scraperId,
+    baseUrl: `https://${scraperId}.test/`,
+  },
+  result: { title, detailUrl },
+  searchTerm: "Author A",
+  pageIndex: 1,
+  sourceLanguageCodes: ["en"],
+  detectedLanguageCodes: [],
+  tentativeAuthorNames: ["Author A"],
+  advancedRomanizedTitleVariants: [],
+  advancedRomanizedTentativeAuthorNameVariants: [],
+  contentTypes: ["Manga"],
+  canOpenDetails: true,
+});
+
+test("advanced author search selects the most sourced unprocessed manga cards", () => {
+  const frequentSources = [
+    buildAdvancedSource("source-a", "Frequent Work", "https://source-a.test/work/1"),
+    buildAdvancedSource("source-b", "Frequent Work", "https://source-b.test/work/1"),
+    buildAdvancedSource("source-c", "Frequent Work", "https://source-c.test/work/1"),
+  ];
+  const nextSources = [
+    buildAdvancedSource("source-a", "Next Work", "https://source-a.test/work/2"),
+    buildAdvancedSource("source-b", "Next Work", "https://source-b.test/work/2"),
+  ];
+  const merged = mergeMultiSearchResults([...nextSources, ...frequentSources]);
+  const authorSourceKeys = new Set([...nextSources, ...frequentSources].map(
+    buildMultiSearchSourceIdentityKey,
+  ));
+
+  const firstBatch = selectAuthorCorrespondenceAdvancedSeeds(
+    merged,
+    authorSourceKeys,
+    new Set(),
+    1,
+  );
+  assert.equal(firstBatch.length, 1);
+  assert.equal(firstBatch[0].result.title, "Frequent Work");
+  assert.equal(firstBatch[0].result.sources.length, 3);
+
+  const secondBatch = selectAuthorCorrespondenceAdvancedSeeds(
+    merged,
+    authorSourceKeys,
+    new Set(firstBatch[0].anchorSourceKeys),
+    1,
+  );
+  assert.equal(secondBatch.length, 1);
+  assert.equal(secondBatch[0].result.title, "Next Work");
+});
+
+test("session manga matches stay attached to their originating combined card", () => {
+  const anchor = buildAdvancedSource(
+    "source-a",
+    "Original Work",
+    "https://source-a.test/work/original",
+  );
+  const automaticallyMerged = buildAdvancedSource(
+    "source-b",
+    "Original Work",
+    "https://source-b.test/work/original",
+  );
+  const correspondenceMatch = buildAdvancedSource(
+    "source-c",
+    "Completely Different Localized Title",
+    "https://source-c.test/work/equivalent",
+  );
+  const results = mergeAuthorCorrespondenceSessionResults(
+    [anchor, automaticallyMerged],
+    [{
+      seedKey: buildMultiSearchSourceIdentityKey(anchor),
+      anchorSourceKeys: [buildMultiSearchSourceIdentityKey(anchor)],
+      sources: [correspondenceMatch],
+    }],
+    { enableRomajiPhoneticMerge: false, preferredTitleLanguageCodes: [] },
+  );
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].sources.length, 3);
+  assert.ok(results[0].sources.includes(correspondenceMatch));
+});
+
+test("advanced author orchestration reuses the canonical search engines", () => {
+  const advancedEngine = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/authorCorrespondenceAdvancedSearch.ts"),
+    "utf8",
+  );
+  const sessionListings = fs.readFileSync(
+    path.resolve("src/renderer/searchEngines/authorCorrespondenceSessionListings.ts"),
+    "utf8",
+  );
+
+  assert.match(advancedEngine, /runMangaCorrespondenceSearch\s*\(/);
+  assert.match(advancedEngine, /runAuthorCorrespondenceSearch\s*\(/);
+  assert.match(sessionListings, /buildAuthorListingSearchInput\s*\(/);
+  assert.match(sessionListings, /runAuthorFavoriteRefreshSearchEngine\s*\(/);
 });

@@ -208,6 +208,18 @@ export type AuthorCorrespondenceReferenceSource = {
   templateContext?: Record<string, string | undefined> | null;
 };
 
+export const DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE = 3;
+export const MAX_AUTHOR_CORRESPONDENCE_SESSION_CACHE_COUNT = 20;
+
+export type AuthorCorrespondenceAdvancedSearchRequest = {
+  enabled: boolean;
+  batchSize: number;
+  requestedBatchCount: number;
+  continueFromResult?: boolean;
+  invalidatedAuthorMatchKeys?: string[];
+  enableRomajiPhoneticMerge?: boolean;
+};
+
 export type AuthorCorrespondenceBackgroundInput = {
   referenceName: string;
   names: string[];
@@ -219,6 +231,7 @@ export type AuthorCorrespondenceBackgroundInput = {
   paceMode: "fast" | "careful";
   scrapingConcurrency: number;
   scrapeDetailsWithCards: boolean;
+  advancedSearch?: AuthorCorrespondenceAdvancedSearchRequest;
   correspondenceSafety?: MangaCorrespondenceSafetySettings;
   mangaSeed?: {
     reference: MangaCorrespondenceReference;

@@ -8,6 +8,10 @@ const {
   isBackgroundSearchResultEditable,
   isBackgroundSearchUnopened,
 } = require("../dist/electron/handlers/backgroundSearch/metadata.js");
+const {
+  getAuthorCorrespondenceSessionCache,
+  setAuthorCorrespondenceSessionCache,
+} = require("../dist/electron/handlers/authorCorrespondenceSessionCache.js");
 
 const makeJob = (id, status, createdAt, expiresAt) => ({
   id,
@@ -91,4 +95,16 @@ test("expiration ignores future and already-expired jobs", () => {
     makeJob("expired", "expired", "2026-01-01T00:00:00.000Z", "2026-01-01T12:00:00.000Z"),
     now,
   ), false);
+});
+
+test("author correspondence session cache stays memory-bounded and refreshes recent entries", () => {
+  for (let index = 0; index < 20; index += 1) {
+    setAuthorCorrespondenceSessionCache(`author-${index}`, { revision: index });
+  }
+  assert.deepEqual(getAuthorCorrespondenceSessionCache("author-0"), { revision: 0 });
+  setAuthorCorrespondenceSessionCache("author-20", { revision: 20 });
+
+  assert.equal(getAuthorCorrespondenceSessionCache("author-1"), null);
+  assert.deepEqual(getAuthorCorrespondenceSessionCache("author-0"), { revision: 0 });
+  assert.deepEqual(getAuthorCorrespondenceSessionCache("author-20"), { revision: 20 });
 });

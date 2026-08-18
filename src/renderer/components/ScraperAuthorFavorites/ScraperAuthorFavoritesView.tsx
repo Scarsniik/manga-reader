@@ -52,10 +52,19 @@ import "./style.scss";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
-import type { ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
+import type {
+  BackgroundListingRun,
+  ListingBackgroundResult,
+} from "@/renderer/backgroundSearch/types";
+import type { AuthorCorrespondenceMangaEnrichment } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
+import {
+  collectAuthorCorrespondenceSessionSources,
+  mergeAuthorCorrespondenceSessionResults,
+} from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import { buildAuthorListingSearchInput } from "@/renderer/searchEngines/authorListingSearchInput";
+import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -68,10 +77,39 @@ type Props = {
   onInvalidateFavoriteOverrideSource?: (source: ScraperAuthorFavoriteSource) => void;
   onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
   favoriteOverrideAction?: React.ReactNode;
+  favoriteOverrideRuns?: BackgroundListingRun[];
+  favoriteOverrideMangaEnrichments?: AuthorCorrespondenceMangaEnrichment[];
+  favoriteOverrideSessionCacheEnabled?: boolean;
   resultOnly?: boolean;
 };
 
 const RESULT_TEXT_FILTER_DELAY_MS = 350;
+
+const buildFavoriteSourceRuns = (
+  runs: BackgroundListingRun[],
+  favorite: ScraperAuthorFavoriteRecord,
+  createdAt: string,
+  updatedAt: string,
+): AuthorFavoriteSourceRun[] => runs.map((run) => ({
+  key: run.key,
+  favoriteSource: favorite.sources.find((source) => (
+    source.scraperId === run.scraper.id && source.authorUrl === run.query
+  )) ?? {
+    scraperId: run.scraper.id,
+    authorUrl: run.query,
+    name: run.name,
+    createdAt,
+    updatedAt,
+  },
+  scraper: run.scraper,
+  status: run.status === "cancelled" ? "done" as const : run.status,
+  results: run.results,
+  loadedPages: run.loadedPages,
+  hasNextPage: run.hasNextPage,
+  currentPageUrl: run.currentPageUrl,
+  nextPageUrl: run.nextPageUrl,
+  error: run.error,
+}));
 
 export default function ScraperAuthorFavoritesView({
   scrapers,
@@ -84,6 +122,9 @@ export default function ScraperAuthorFavoritesView({
   onInvalidateFavoriteOverrideSource,
   onOpenAuthorTarget,
   favoriteOverrideAction,
+  favoriteOverrideRuns = [],
+  favoriteOverrideMangaEnrichments = [],
+  favoriteOverrideSessionCacheEnabled = false,
   resultOnly = false,
 }: Props) {
   const { openModal, closeModal } = useModal();
@@ -119,7 +160,11 @@ export default function ScraperAuthorFavoritesView({
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
   const [refreshingAllFavorites, setRefreshingAllFavorites] = useState(false);
   const [refreshAllMessage, setRefreshAllMessage] = useState<string | null>(null);
+  const [ignoreFavoriteOverrideSessionCache, setIgnoreFavoriteOverrideSessionCache] = useState(false);
   const automaticallyStartedFavoriteIdRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    setIgnoreFavoriteOverrideSessionCache(false);
+  }, [favoriteOverride?.id]);
   const initialPageCount = Math.max(
     1,
     Math.floor(initialPageCountOverride ?? params?.scraperAuthorFavoritePageCount ?? 1),
@@ -137,6 +182,11 @@ export default function ScraperAuthorFavoritesView({
       : ""
   ), [selectedFavorite]);
   const canShowUnseenFirst = false;
+  const sessionOverrideActive = Boolean(
+    favoriteOverride
+    && favoriteOverrideSessionCacheEnabled
+    && !ignoreFavoriteOverrideSessionCache,
+  );
   const showUnseenFirst = canShowUnseenFirst && params?.scraperAuthorFavoriteShowUnseenFirst === true;
   const {
     runs,
@@ -149,7 +199,7 @@ export default function ScraperAuthorFavoritesView({
     loadAllForAll,
     loadMoreForRun,
   } = useAuthorFavoriteRuns(
-    attachedSearch.attached ? null : selectedFavorite,
+    attachedSearch.attached || sessionOverrideActive ? null : selectedFavorite,
     scrapersById,
     {
       initialPageCount,
@@ -160,29 +210,29 @@ export default function ScraperAuthorFavoritesView({
   const attachedResult = attachedSearch.job?.result as ListingBackgroundResult | undefined;
   const attachedRuns = useMemo(() => {
     if (!selectedFavorite || !attachedResult?.runs) return [];
-    return attachedResult.runs.map((run) => ({
-      key: run.key,
-      favoriteSource: selectedFavorite.sources.find((source) => (
-        source.scraperId === run.scraper.id && source.authorUrl === run.query
-      )) ?? {
-        scraperId: run.scraper.id,
-        authorUrl: run.query,
-        name: run.name,
-        createdAt: attachedSearch.job?.metadata.createdAt ?? new Date().toISOString(),
-        updatedAt: attachedSearch.job?.metadata.updatedAt ?? new Date().toISOString(),
-      },
-      scraper: run.scraper,
-      status: run.status === "cancelled" ? "done" as const : run.status,
-      results: run.results,
-      loadedPages: run.loadedPages,
-      hasNextPage: run.hasNextPage,
-      currentPageUrl: run.currentPageUrl,
-      nextPageUrl: run.nextPageUrl,
-      error: run.error,
-    }));
+    return buildFavoriteSourceRuns(
+      attachedResult.runs,
+      selectedFavorite,
+      attachedSearch.job?.metadata.createdAt ?? new Date().toISOString(),
+      attachedSearch.job?.metadata.updatedAt ?? new Date().toISOString(),
+    );
   }, [attachedResult?.runs, attachedSearch.job?.metadata.createdAt, attachedSearch.job?.metadata.updatedAt, selectedFavorite]);
+  const sessionOverrideRuns = useMemo(() => (
+    selectedFavorite && sessionOverrideActive
+      ? buildFavoriteSourceRuns(
+        favoriteOverrideRuns,
+        selectedFavorite,
+        selectedFavorite.createdAt,
+        selectedFavorite.updatedAt,
+      )
+      : []
+  ), [favoriteOverrideRuns, selectedFavorite, sessionOverrideActive]);
   const effectiveRuns = useMemo(() => {
-    const currentRuns = attachedSearch.attached ? attachedRuns : runs;
+    const currentRuns = attachedSearch.attached
+      ? attachedRuns
+      : sessionOverrideActive
+        ? sessionOverrideRuns
+        : runs;
     if (!favoriteOverride) {
       return currentRuns;
     }
@@ -191,8 +241,17 @@ export default function ScraperAuthorFavoritesView({
       (source) => `${source.scraperId}::${source.authorUrl}`,
     ));
     return currentRuns.filter((run) => sourceKeys.has(run.key));
-  }, [attachedRuns, attachedSearch.attached, favoriteOverride, runs]);
-  const loadedSources = useMemo(() => flattenMultiSearchSources(effectiveRuns), [effectiveRuns]);
+  }, [attachedRuns, attachedSearch.attached, favoriteOverride, runs, sessionOverrideActive, sessionOverrideRuns]);
+  const authorPageSources = useMemo(() => flattenMultiSearchSources(effectiveRuns), [effectiveRuns]);
+  const hasSessionEnrichments = Boolean(
+    favoriteOverride
+    && favoriteOverrideSessionCacheEnabled
+    && favoriteOverrideMangaEnrichments.length,
+  );
+  const loadedSources = useMemo(() => collectAuthorCorrespondenceSessionSources(
+    authorPageSources,
+    hasSessionEnrichments ? favoriteOverrideMangaEnrichments : [],
+  ), [authorPageSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments]);
   const {
     libraryMangas,
     bookmarkedSourceKeys,
@@ -221,8 +280,14 @@ export default function ScraperAuthorFavoritesView({
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
   const mergedResults = useMemo(
-    () => mergeMultiSearchResults(loadedSources, mergeOptions),
-    [loadedSources, mergeOptions],
+    () => hasSessionEnrichments
+      ? mergeAuthorCorrespondenceSessionResults(
+        authorPageSources,
+        favoriteOverrideMangaEnrichments,
+        mergeOptions,
+      )
+      : mergeMultiSearchResults(loadedSources, mergeOptions),
+    [authorPageSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments, loadedSources, mergeOptions],
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
@@ -439,6 +504,7 @@ export default function ScraperAuthorFavoritesView({
       automaticallyStartedFavoriteIdRef.current = null;
       return;
     }
+    if (sessionOverrideActive) return;
     if (attachedSearch.attached || automaticallyStartedFavoriteIdRef.current === selectedFavoriteStartKey) return;
     automaticallyStartedFavoriteIdRef.current = selectedFavoriteStartKey;
     setLanguageFilterModes({});
@@ -459,10 +525,16 @@ export default function ScraperAuthorFavoritesView({
     params?.scraperAuthorFavoriteRefreshBackgroundEnabled,
     selectedFavorite,
     selectedFavoriteStartKey,
+    sessionOverrideActive,
     start,
   ]);
 
   const handleReloadSelectedFavorite = useCallback(() => {
+    if (favoriteOverride && sessionOverrideActive) {
+      automaticallyStartedFavoriteIdRef.current = null;
+      setIgnoreFavoriteOverrideSessionCache(true);
+      return;
+    }
     if (attachedSearch.attached) {
       void attachedSearch.reload();
     } else if (!favoriteOverride && params?.scraperAuthorFavoriteRefreshBackgroundEnabled === true) {
@@ -477,6 +549,7 @@ export default function ScraperAuthorFavoritesView({
     enqueueSelectedFavoriteRefresh,
     favoriteOverride,
     params?.scraperAuthorFavoriteRefreshBackgroundEnabled,
+    sessionOverrideActive,
     start,
   ]);
 
@@ -577,12 +650,16 @@ export default function ScraperAuthorFavoritesView({
         textFilter={resultTextFilter}
         loading={attachedSearch.attached
           ? attachedSearch.status === "queued" || attachedSearch.status === "running"
+          : sessionOverrideActive
+            ? false
           : loadingRuns}
         message={attachedSearch.attached
           ? `Recherche en arrière-plan ${attachedSearch.status === "running" ? "en cours" : "chargée"}.`
+          : sessionOverrideActive
+            ? "Résultats conservés en mémoire pendant cette session."
           : runMessage}
         error={attachedSearch.error || attachedSearch.job?.metadata.error || runError || openError}
-        canLoadMore={!attachedSearch.attached && canLoadMore}
+        canLoadMore={!attachedSearch.attached && !sessionOverrideActive && canLoadMore}
         selectedFavoriteMultiSearchQuery={selectedFavoriteMultiSearchQuery}
         libraryMangas={libraryMangas}
         bookmarkedSourceKeys={bookmarkedSourceKeys}

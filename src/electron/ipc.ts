@@ -25,6 +25,7 @@ import * as japaneseRomanization from "./handlers/japaneseRomanization";
 import * as japaneseInflection from "./handlers/japaneseInflection";
 import * as voicevox from "./handlers/voicevox";
 import * as backgroundSearch from "./handlers/backgroundSearch";
+import * as authorCorrespondenceSessionCache from "./handlers/authorCorrespondenceSessionCache";
 import * as statistics from "./handlers/statistics";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
@@ -94,6 +95,12 @@ const notifySavedReadingListsUpdated = () => {
     }
 };
 
+const notifyAuthorCorrespondenceSessionCacheUpdated = (jobId: string, snapshot: unknown) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("author-correspondence-session-cache-updated", { jobId, snapshot });
+    }
+};
+
 // Links
 ipcMain.handle("get-links", async () => links.getLinks());
 ipcMain.handle("add-link", async (event: IpcMainInvokeEvent, link: { url: string; title: string; description?: string }) => links.addLink(event, link));
@@ -144,6 +151,22 @@ ipcMain.handle("background-search-mark-opened", async (_event: IpcMainInvokeEven
 ipcMain.handle("background-search-delete", async (_event: IpcMainInvokeEvent, jobId: string) => (
     backgroundSearch.deleteBackgroundSearch(jobId)
 ));
+ipcMain.handle("author-correspondence-session-cache-get", async (
+    _event: IpcMainInvokeEvent,
+    jobId: string,
+) => authorCorrespondenceSessionCache.getAuthorCorrespondenceSessionCache(jobId));
+ipcMain.handle("author-correspondence-session-cache-set", async (
+    _event: IpcMainInvokeEvent,
+    jobId: string,
+    snapshot: unknown,
+) => {
+    const savedSnapshot = authorCorrespondenceSessionCache.setAuthorCorrespondenceSessionCache(
+        jobId,
+        snapshot,
+    );
+    if (savedSnapshot) notifyAuthorCorrespondenceSessionCacheUpdated(jobId, savedSnapshot);
+    return savedSnapshot;
+});
 
 // Window controls
 ipcMain.handle("window-get-state", async (event: IpcMainInvokeEvent) => windowControls.getWindowState(event));

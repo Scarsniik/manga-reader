@@ -193,6 +193,14 @@ export type AuthorCorrespondenceBackgroundResult = {
     referenceSources: AuthorCorrespondenceReferenceSource[];
     result?: MangaCorrespondenceBackgroundResult;
   };
+  advancedSearch?: {
+    completedBatchCount: number;
+    lastBatchMangaCount: number;
+    processedMangaCount: number;
+    discoveredMangaSourceCount: number;
+    discoveredAuthorPageCount: number;
+    remainingCandidateCount: number;
+  };
   checkpoint?: {
     version: 1;
     inputFingerprint: string;

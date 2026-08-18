@@ -1,6 +1,5 @@
 import type {
   AuthorCorrespondenceBackgroundInput,
-  AuthorCorrespondenceReferenceSource,
   BackgroundSearchProgress,
   MangaCorrespondenceBackgroundInput,
 } from "@/shared/backgroundSearch";
@@ -14,50 +13,15 @@ import { dedupeAuthorCorrespondenceReferenceSources } from "@/renderer/utils/aut
 import { runMangaCorrespondenceSearch } from "@/renderer/searchEngines/mangaCorrespondenceSearchEngine";
 import { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
 import type { SearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
+import { collectMangaCorrespondenceAuthors } from "@/renderer/searchEngines/authorCorrespondenceMangaDiscovery";
+import { runAuthorCorrespondenceAdvancedSearch } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSearch";
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
   progress: BackgroundSearchProgress,
 ) => Promise<void>;
 
-const collectMangaAuthors = (
-  result: MangaCorrespondenceBackgroundResult,
-): { names: string[]; referenceSources: AuthorCorrespondenceReferenceSource[] } => {
-  const activeDiscoveries = (result.discoveries ?? []).filter((discovery) => (
-    discovery.kind === "author" && discovery.status === "active"
-  ));
-  const names = buildUniqueAuthorSearchNames([
-    ...activeDiscoveries.map((discovery) => discovery.value),
-    ...result.matches.flatMap((match) => match.authors),
-  ]);
-  const discoverySources = activeDiscoveries.flatMap((discovery) => (
-    discovery.authorPageUrl
-      ? [{
-        scraperId: discovery.scraperId,
-        authorUrl: discovery.authorPageUrl,
-        name: discovery.value,
-        templateContext: discovery.authorTemplateContext,
-      }]
-      : []
-  ));
-  const matchSources = result.matches.flatMap((match) => {
-    const urls = Array.from(new Set([
-      match.source.result.authorUrl,
-      ...(match.source.result.authorUrls ?? []),
-    ].map((url) => url?.trim()).filter((url): url is string => Boolean(url))));
-    return urls.map((authorUrl, index) => ({
-      scraperId: match.source.scraper.id,
-      authorUrl,
-      name: match.authors[index] ?? match.authors[0] ?? names[0] ?? "",
-    }));
-  });
-  return {
-    names,
-    referenceSources: dedupeAuthorCorrespondenceReferenceSources([...discoverySources, ...matchSources]),
-  };
-};
-
-export const runAuthorCorrespondenceWorkflow = async (
+const runBaseAuthorCorrespondenceWorkflow = async (
   input: AuthorCorrespondenceBackgroundInput,
   signal: AbortSignal,
   onSnapshot: SnapshotCallback,
@@ -129,7 +93,7 @@ export const runAuthorCorrespondenceWorkflow = async (
       previousResult?.mangaDiscovery?.result,
       executionContext,
     );
-    const discovered = collectMangaAuthors(mangaResult);
+    const discovered = collectMangaCorrespondenceAuthors(mangaResult);
     resolvedNames = discovered.names;
     resolvedSources = dedupeAuthorCorrespondenceReferenceSources([
       ...resolvedSources,
@@ -168,4 +132,37 @@ export const runAuthorCorrespondenceWorkflow = async (
     previousResult,
   );
   return { ...result, mangaDiscovery };
+};
+
+export const runAuthorCorrespondenceWorkflow = async (
+  input: AuthorCorrespondenceBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: SnapshotCallback,
+  executionContext: SearchExecutionContext,
+  previousResult?: AuthorCorrespondenceBackgroundResult,
+): Promise<AuthorCorrespondenceBackgroundResult> => {
+  const canContinueFromResult = Boolean(
+    input.advancedSearch?.enabled
+    && input.advancedSearch.continueFromResult
+    && previousResult
+    && !input.replay,
+  );
+  const baseResult = canContinueFromResult && previousResult
+    ? previousResult
+    : await runBaseAuthorCorrespondenceWorkflow(
+      input,
+      signal,
+      onSnapshot,
+      executionContext,
+      previousResult,
+    );
+  return input.advancedSearch?.enabled
+    ? runAuthorCorrespondenceAdvancedSearch(
+      input,
+      baseResult,
+      signal,
+      onSnapshot,
+      executionContext,
+    )
+    : baseResult;
 };

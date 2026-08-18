@@ -3,6 +3,7 @@ import type {
   AuthorCorrespondenceBackgroundInput,
   AuthorCorrespondenceReferenceSource,
 } from "@/shared/backgroundSearch";
+import { DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
 import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
 import { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
@@ -40,6 +41,7 @@ export default function AuthorCorrespondenceDialog({
   const [name, setName] = useState(initialName);
   const [otherNames, setOtherNames] = useState(initialNames.filter((entry) => entry !== initialName).join(", "));
   const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
+  const [advancedSearchEnabled, setAdvancedSearchEnabled] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +80,12 @@ export default function AuthorCorrespondenceDialog({
         paceMode,
         scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
+        advancedSearch: advancedSearchEnabled ? {
+          enabled: true,
+          batchSize: DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE,
+          requestedBatchCount: 1,
+          enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+        } : undefined,
         mangaSeed,
         correspondenceSafety: buildMangaCorrespondenceSafetySettings(params),
       };
@@ -109,6 +117,19 @@ export default function AuthorCorrespondenceDialog({
           ? "La recherche parcourt les résultats multi-sources, en extrait les auteurs et teste directement les modules Auteur compatibles."
           : "Aucun auteur n’a été détecté sur la fiche. La recherche retrouvera d’abord ce manga sur les autres sources, extraira un auteur fiable, puis cherchera ses pages correspondantes."}
       </p>
+      <label className="manga-correspondence-dialog__advanced-toggle">
+        <input
+          type="checkbox"
+          checked={advancedSearchEnabled}
+          onChange={(event) => setAdvancedSearchEnabled(event.target.checked)}
+        />
+        <span>
+          <strong>Recherche poussée</strong>
+          <small>
+            Analyse les {DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE} mangas les plus présents pour découvrir d’autres pages auteur.
+          </small>
+        </span>
+      </label>
       {error ? <p className="manga-correspondence-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-dialog__actions">
         <button type="button" className="secondary" onClick={onCancel}>Annuler</button>

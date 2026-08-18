@@ -365,6 +365,15 @@ contextBridge.exposeInMainWorld('api', {
     onBackgroundSearchOpenRequested: (callback: (event: { jobId: string }) => void) => (
         createIpcSubscription("background-search-open-requested", callback)
     ),
+    getAuthorCorrespondenceSessionCache: (jobId: string) => (
+        ipcRenderer.invoke("author-correspondence-session-cache-get", jobId)
+    ),
+    setAuthorCorrespondenceSessionCache: (jobId: string, snapshot: unknown) => (
+        ipcRenderer.invoke("author-correspondence-session-cache-set", jobId, snapshot)
+    ),
+    onAuthorCorrespondenceSessionCacheUpdated: (
+        callback: (event: { jobId: string; snapshot: unknown }) => void,
+    ) => createIpcSubscription("author-correspondence-session-cache-updated", callback),
     // Window controls
     getAppRuntimeInfo: () => ipcRenderer.invoke("app-runtime-info"),
     getWindowState: () => ipcRenderer.invoke("window-get-state"),

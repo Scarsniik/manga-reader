@@ -412,6 +412,14 @@ export const mergeMultiSearchSourceIntoGroups = (
   groups.push(buildMergedResult(source, state.options));
 };
 
+export const appendMultiSearchSourceToGroup = (
+  group: MultiSearchMergedResult,
+  source: MultiSearchSourceResult,
+  options: Partial<MultiSearchMergeOptions> | null | undefined = undefined,
+): void => {
+  appendSourceToGroup(group, source, normalizeMultiSearchMergeOptions(options));
+};
+
 export const sortMultiSearchMergedResults = (
   groups: MultiSearchMergedResult[],
 ): MultiSearchMergedResult[] => (

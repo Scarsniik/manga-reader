@@ -7,6 +7,8 @@ import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavo
 import AuthorCorrespondenceFavoriteButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceFavoriteButton";
 import AuthorCorrespondencePreviewImage from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondencePreviewImage";
 import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRevisionButton";
+import AuthorCorrespondenceAdvancedButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton";
+import useAuthorCorrespondenceSessionCache from "@/renderer/backgroundSearch/useAuthorCorrespondenceSessionCache";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
@@ -43,6 +45,7 @@ export default function AuthorCorrespondenceView({
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
   const input = job?.input as AuthorCorrespondenceBackgroundInput | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
+  const sessionCache = useAuthorCorrespondenceSessionCache(job?.metadata.id);
   const [showCombinedView, setShowCombinedView] = React.useState(false);
   const [invalidatedMatchKeys, setInvalidatedMatchKeys] = React.useState<Set<string>>(() => new Set());
   const displayedMatches = React.useMemo(() => {
@@ -192,11 +195,27 @@ export default function AuthorCorrespondenceView({
         onBackFromFavoriteOverride={() => setShowCombinedView(false)}
         onInvalidateFavoriteOverrideSource={invalidateCombinedSource}
         onOpenAuthorTarget={onOpenAuthorTarget}
+        favoriteOverrideRuns={sessionCache.runs}
+        favoriteOverrideMangaEnrichments={sessionCache.mangaEnrichments}
+        favoriteOverrideSessionCacheEnabled={Boolean(
+          sessionCache.revision > 0
+          || (result?.advancedSearch && !sessionCache.hydrated)
+        )}
         favoriteOverrideAction={(
-          <AuthorCorrespondenceFavoriteButton
-            favorite={combinedAuthor}
-            disabled={active}
-          />
+          <>
+            <AuthorCorrespondenceAdvancedButton
+              active={active}
+              backgroundSearchJobId={job.metadata.id}
+              input={input}
+              result={result}
+              invalidatedMatchKeys={invalidatedMatchKeys}
+              reload={reload}
+            />
+            <AuthorCorrespondenceFavoriteButton
+              favorite={combinedAuthor}
+              disabled={active}
+            />
+          </>
         )}
       />
     );
@@ -223,13 +242,21 @@ export default function AuthorCorrespondenceView({
       <div className="author-correspondence-view__view-actions">
         <AuthorCorrespondenceRevisionButton
           active={active}
-          backgroundSearchJobId={backgroundSearchJobId}
+          backgroundSearchJobId={job.metadata.id}
           displayedMatches={displayedMatches}
           input={input}
           invalidatedMatchKeys={invalidatedMatchKeys}
           onInvalidatedMatchKeysChange={setInvalidatedMatchKeys}
           reload={reload}
           result={result}
+        />
+        <AuthorCorrespondenceAdvancedButton
+          active={active}
+          backgroundSearchJobId={job.metadata.id}
+          input={input}
+          result={result}
+          invalidatedMatchKeys={invalidatedMatchKeys}
+          reload={reload}
         />
         {combinedAuthor ? (
           <AuthorCorrespondenceFavoriteButton
@@ -252,6 +279,17 @@ export default function AuthorCorrespondenceView({
           </button>
         ) : null}
       </div>
+
+      {result?.advancedSearch ? (
+        <div className="author-correspondence-view__advanced-status">
+          <strong>Recherche poussée · {result.advancedSearch.processedMangaCount} manga(s) analysé(s)</strong>
+          <span>
+            {result.advancedSearch.discoveredMangaSourceCount} source(s) manga ajoutée(s)
+            {" · "}{result.advancedSearch.discoveredAuthorPageCount} page(s) auteur découverte(s)
+            {" · "}{result.advancedSearch.remainingCandidateCount} candidat(s) restant(s)
+          </span>
+        </div>
+      ) : null}
 
       {displayedMatches.length ? (
         <div className="author-correspondence-view__list">

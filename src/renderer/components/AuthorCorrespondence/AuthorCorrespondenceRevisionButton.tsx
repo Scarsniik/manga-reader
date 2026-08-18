@@ -82,9 +82,16 @@ export default function AuthorCorrespondenceRevisionButton({
     writeAuthorCorrespondenceInvalidations(backgroundSearchJobId, nextInvalidatedMatchKeys);
     onInvalidatedMatchKeysChange(nextInvalidatedMatchKeys);
     if (replay) {
+      const replayInput = buildAuthorCorrespondenceReplayInput(input, nextDiscoveries);
       const replayed = await window.api?.replayBackgroundSearch?.({
         jobId: backgroundSearchJobId,
-        input: buildAuthorCorrespondenceReplayInput(input, nextDiscoveries),
+        input: replayInput.advancedSearch ? {
+          ...replayInput,
+          advancedSearch: {
+            ...replayInput.advancedSearch,
+            invalidatedAuthorMatchKeys: Array.from(nextInvalidatedMatchKeys),
+          },
+        } : replayInput,
       });
       if (!replayed) throw new Error("Le rejeu de la recherche n’a pas pu être lancé.");
     }
