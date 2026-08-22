@@ -2,6 +2,7 @@ import React, { useCallback } from "react";
 import type { DetailsHistoryRecord, ReadingHistoryRecord } from "@/shared/history";
 import type { ScraperRecord } from "@/shared/scraper";
 import type { Manga } from "@/renderer/types";
+import type { ScraperDetailsWorkspaceTarget } from "@/renderer/types/workspace";
 import ScraperBookmarkButton from "@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton";
 import HistoryCard from "@/renderer/components/History/HistoryCard";
 import {
@@ -16,6 +17,7 @@ import {
   canOpenScraperReader,
   getScraperHistoryCover,
 } from "@/renderer/components/History/historyReader";
+import { getMangaSourceUrl } from "@/renderer/utils/mangaSource";
 
 type ProgressIndexes = ReturnType<typeof buildScraperProgressIndexes>;
 
@@ -25,6 +27,7 @@ type ReadingCardProps = {
   mangaById: Map<string, Manga>;
   progressIndexes: ProgressIndexes;
   scrapersById: Map<string, ScraperRecord>;
+  onOpenDetails: (target: ScraperDetailsWorkspaceTarget, openInWorkspace?: boolean) => void;
   onOpenLibraryReader: (record: ReadingHistoryRecord, openInWorkspace?: boolean) => void;
   onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord, openInWorkspace?: boolean) => void;
   onRemove: (record: ReadingHistoryRecord) => void;
@@ -35,9 +38,32 @@ type DetailsCardProps = {
   record: DetailsHistoryRecord;
   busyRecordId: string | null;
   scrapersById: Map<string, ScraperRecord>;
-  onOpenDetails: (record: DetailsHistoryRecord) => void;
+  onOpenDetails: (target: ScraperDetailsWorkspaceTarget, openInWorkspace?: boolean) => void;
   onOpenScraperReader: (record: ReadingHistoryRecord | DetailsHistoryRecord, openInWorkspace?: boolean) => void;
   onRemove: (record: DetailsHistoryRecord) => void;
+};
+
+const buildReadingDetailsTarget = (
+  record: ReadingHistoryRecord,
+  manga: Manga | null,
+): ScraperDetailsWorkspaceTarget | null => {
+  const scraperId = record.sourceKind === "scraper" ? record.scraperId : manga?.scraperId;
+  const sourceUrl = record.sourceKind === "scraper"
+    ? record.sourceUrl
+    : manga
+      ? getMangaSourceUrl(manga)
+      : "";
+
+  if (!scraperId || !sourceUrl) {
+    return null;
+  }
+
+  return {
+    kind: "scraper.details",
+    scraperId,
+    sourceUrl,
+    title: manga?.title || record.title,
+  };
 };
 
 const getReadingRecordSourceLabel = (
@@ -66,6 +92,7 @@ export function HistoryReadingCard({
   mangaById,
   progressIndexes,
   scrapersById,
+  onOpenDetails,
   onOpenLibraryReader,
   onOpenScraperReader,
   onRemove,
@@ -77,6 +104,7 @@ export function HistoryReadingCard({
     ?? buildProgressDisplay(record.currentPage, record.totalPages);
   const isBusy = busyRecordId === record.id;
   const canRead = record.sourceKind === "library" || canOpenScraperReader(scraper, record.chapterUrl);
+  const detailsTarget = buildReadingDetailsTarget(record, manga);
   const coverUrl = record.sourceKind === "library"
     ? toLocalImageUrl(manga?.thumbnailPath || record.cover)
     : getScraperHistoryCover(record.cover, record.sourceUrl);
@@ -171,6 +199,16 @@ export function HistoryReadingCard({
       chapterLabel={record.chapterLabel}
       progress={progress}
       actions={actions()}
+      onClick={detailsTarget ? () => onOpenDetails(detailsTarget) : undefined}
+      onMiddleClick={detailsTarget ? () => onOpenDetails(detailsTarget, true) : undefined}
+      onKeyDown={detailsTarget ? (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+
+        event.preventDefault();
+        onOpenDetails(detailsTarget);
+      } : undefined}
     />
   );
 }
@@ -185,6 +223,12 @@ export function HistoryDetailsCard({
 }: DetailsCardProps) {
   const scraper = scrapersById.get(record.scraperId) ?? null;
   const isBusy = busyRecordId === record.id;
+  const detailsTarget: ScraperDetailsWorkspaceTarget = {
+    kind: "scraper.details",
+    scraperId: record.scraperId,
+    sourceUrl: record.sourceUrl,
+    title: record.title,
+  };
   const actions: ScraperCardAction[] = [
     {
       id: "bookmark",
@@ -228,14 +272,15 @@ export function HistoryDetailsCard({
       sourceLabel={getDetailsRecordSourceLabel(record, scrapersById)}
       updatedAt={record.updatedAt}
       actions={actions}
-      onClick={() => onOpenDetails(record)}
+      onClick={() => onOpenDetails(detailsTarget)}
+      onMiddleClick={() => onOpenDetails(detailsTarget, true)}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") {
           return;
         }
 
         event.preventDefault();
-        onOpenDetails(record);
+        onOpenDetails(detailsTarget);
       }}
     />
   );

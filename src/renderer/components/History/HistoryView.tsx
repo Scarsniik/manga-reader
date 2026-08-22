@@ -6,6 +6,7 @@ import type {
   SearchHistoryRecord,
 } from "@/shared/history";
 import type { ScraperRecord } from "@/shared/scraper";
+import type { ScraperDetailsWorkspaceTarget } from "@/renderer/types/workspace";
 import {
   HISTORY_MULTI_SOURCE_FILTER,
   HISTORY_PAGE_SIZE,
@@ -35,6 +36,7 @@ import { recordReadingHistorySafe, toLocalImageUrl } from "@/renderer/utils/hist
 import {
   buildReaderPath,
   openReaderWorkspaceTarget,
+  openWorkspaceTarget,
 } from "@/renderer/utils/workspaceTargets";
 import "./style.scss";
 
@@ -124,11 +126,27 @@ export default function HistoryView({ scrapers }: Props) {
     currentPage * HISTORY_PAGE_SIZE,
   );
 
-  const openDetailsRecord = useCallback((record: DetailsHistoryRecord) => {
+  const openDetailsTarget = useCallback((
+    target: ScraperDetailsWorkspaceTarget,
+    openInWorkspace = false,
+  ) => {
+    setError(null);
+
+    if (openInWorkspace) {
+      void openWorkspaceTarget(target).then((opened) => {
+        if (!opened) {
+          setError("Impossible d'ouvrir cette fiche dans un onglet workspace.");
+        }
+      }).catch((openError: unknown) => {
+        setError(openError instanceof Error ? openError.message : "Impossible d'ouvrir cette fiche.");
+      });
+      return;
+    }
+
     navigate({
       pathname: location.pathname,
       search: writeScraperRouteState(location.search, {
-        scraperId: record.scraperId,
+        scraperId: target.scraperId,
         mode: "manga",
         searchActive: false,
         searchQuery: "",
@@ -137,7 +155,7 @@ export default function HistoryView({ scrapers }: Props) {
         authorQuery: "",
         authorPage: 1,
         mangaQuery: "",
-        mangaUrl: record.sourceUrl,
+        mangaUrl: target.sourceUrl,
       }),
     });
   }, [location.pathname, location.search, navigate]);
@@ -341,6 +359,7 @@ export default function HistoryView({ scrapers }: Props) {
           mangaById={mangaById}
           progressIndexes={progressIndexes}
           scrapersById={scrapersById}
+          onOpenDetails={openDetailsTarget}
           onOpenLibraryReader={(nextRecord, openInWorkspace) => void openLibraryReader(nextRecord, openInWorkspace)}
           onOpenScraperReader={(nextRecord, openInWorkspace) => void openScraperReader(nextRecord, openInWorkspace)}
           onRemove={(nextRecord) => void removeReadingRecord(nextRecord)}
@@ -356,7 +375,7 @@ export default function HistoryView({ scrapers }: Props) {
           record={record}
           busyRecordId={busyRecordId}
           scrapersById={scrapersById}
-          onOpenDetails={openDetailsRecord}
+          onOpenDetails={openDetailsTarget}
           onOpenScraperReader={(nextRecord, openInWorkspace) => void openScraperReader(nextRecord, openInWorkspace)}
           onRemove={(nextRecord) => void removeDetailsRecord(nextRecord)}
         />

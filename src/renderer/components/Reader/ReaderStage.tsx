@@ -29,6 +29,7 @@ type Props = {
     continuationCoverSrc: string | null;
     continuationLoading: boolean;
     continuationError: string | null;
+    loading: boolean;
     onContinue: (direction: 'previous' | 'next') => void;
     onFinishReadingList?: () => void;
     onOpenReadingListDetails?: () => void;
@@ -81,6 +82,7 @@ const ReaderStage: React.FC<Props> = ({
     continuationCoverSrc,
     continuationLoading,
     continuationError,
+    loading,
     onContinue,
     onFinishReadingList,
     onOpenReadingListDetails,
@@ -160,6 +162,10 @@ const ReaderStage: React.FC<Props> = ({
                                 onContinue(transitionDirection === 'previous' ? 'previous' : 'next');
                             }}
                         />
+                    ) : loading ? (
+                        <div className="reader-empty" role="status">
+                            <p>Chargement du manga...</p>
+                        </div>
                     ) : currentImageSrc ? (
                         <ImageViewer
                             src={currentImageSrc}

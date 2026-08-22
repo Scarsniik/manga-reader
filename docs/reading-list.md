@@ -85,6 +85,7 @@ du lecteur revient à la page de préparation de la liste.
 
 Pendant la lecture, l'action `Passer au manga suivant` ouvre directement cette transition sans marquer le manga courant
 comme lu et sans retirer son bookmark. La poursuite depuis la transition charge ensuite l'élément suivant normalement.
+Si le lecteur est en plein écran, le passage à l'élément suivant conserve ce mode pendant le chargement et la lecture.
 
 Tant qu'il reste des mangas, la transition propose aussi `Terminer la liste`. Cette action ouvre immédiatement le résumé
 sans marquer les éléments restants comme lus. Les cards du résumé indiquent explicitement `Lu` ou `Non lu` selon ce qui

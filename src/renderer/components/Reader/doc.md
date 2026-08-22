@@ -61,6 +61,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
   le prochain manga, tandis que la fin du dernier élément rend le résumé de la liste. Une action dédiée permet aussi
   d'ouvrir cette transition avant la dernière page sans valider le manga courant comme lu.
 - Le bouton plein écran et le raccourci configurable `F` affichent seulement l'image et le panneau OCR en plein écran. `Échap`, `F` ou le bouton flottant à gauche permettent d'en sortir.
+- Dans une liste de lecture, le même bloc lecteur reste monté entre deux mangas afin de conserver le plein écran pendant l'enchaînement.
 - Les dialogues ouverts depuis le panneau OCR, dont les fiches d'aide grammaticale, restent affichables en plein écran.
 - Pour les mangas en bibliothèque rangés dans une série, le passage au chapitre précédent/suivant s'appuie sur les métadonnées de série et de chapitre, y compris pour les entrées distantes issues d'un scraper.
 - En fin de manga ou de dernier chapitre de série, il affiche des suggestions de mangas non lus à partir des tags et de la langue. Les séries ne proposent que leur prochain chapitre non lu, la série courante est exclue, les mangas finis sont exclus, les mangas avec tags cachés sont exclus quand le contenu caché n'est pas affiché, et la langue doit correspondre à la lecture en cours.

@@ -35,3 +35,9 @@ La vue fournit :
 - des onglets declaratifs pour pouvoir ajouter d'autres historiques plus tard.
 
 Les onglets `Lecture` et `Fiches consultees` utilisent des cards. L'onglet `Recherches` utilise des lignes compactes pour supporter un volume plus important.
+
+Quand une fiche source est disponible, un clic gauche sur une card l'ouvre dans
+la vue courante et un clic molette l'ouvre dans un nouvel onglet workspace. Dans
+l'onglet `Lecture`, le bouton `Reprendre` conserve un comportement distinct : il
+ouvre le lecteur, avec le clic molette disponible pour l'ouvrir dans un nouvel
+onglet workspace.

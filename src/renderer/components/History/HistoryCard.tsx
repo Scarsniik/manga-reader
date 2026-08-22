@@ -13,6 +13,7 @@ type Props = {
   actions: ScraperCardAction[];
   className?: string;
   onClick?: () => void;
+  onMiddleClick?: () => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
 };
 
@@ -26,6 +27,7 @@ export default function HistoryCard({
   actions,
   className = "",
   onClick,
+  onMiddleClick,
   onKeyDown,
 }: Props) {
   const formattedDate = formatHistoryDate(updatedAt);
@@ -69,6 +71,7 @@ export default function HistoryCard({
       className={["history-card", className].join(" ").trim()}
       isActionable={Boolean(onClick)}
       onClick={onClick}
+      onMiddleClick={onMiddleClick}
       onKeyDown={onKeyDown}
       ariaLabel={onClick ? `Ouvrir ${title}` : undefined}
     />

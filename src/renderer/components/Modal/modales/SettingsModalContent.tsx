@@ -34,14 +34,21 @@ declare global {
 }
 
 export default function SettingsModalContent() {
-  const { params, loading, setParams } = useParams()
-  const { setModalActions } = useModal()
+  const { params, loading, savePartial } = useParams()
+  const { closeModal, setModalActions } = useModal()
   const [activeTab, setActiveTab] = React.useState<
     'options' | 'scraping' | 'reader' | 'shortcuts' | 'statistics' | 'developer' | 'version-installation'
   >('options')
   const [isOpeningUserDataDirectory, setIsOpeningUserDataDirectory] = React.useState(false)
   const [userDataDirectoryError, setUserDataDirectoryError] = React.useState<string | null>(null)
   const [mergedTitleLanguagePriority, setMergedTitleLanguagePriority] = React.useState<string[]>([])
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [saveFeedback, setSaveFeedback] = React.useState<{
+    kind: 'saving' | 'success' | 'error'
+    message: string
+  } | null>(null)
+  const closeAfterSaveRef = React.useRef(false)
+  const savingRef = React.useRef(false)
   const activeSubmitButtonId = activeTab === 'options'
     ? OPTIONS_SUBMIT_BUTTON_ID
     : activeTab === 'scraping'
@@ -52,6 +59,64 @@ export default function SettingsModalContent() {
           ? DEVELOPER_SUBMIT_BUTTON_ID
           : null
 
+  const saveSettings = React.useCallback(async (settings: Record<string, any>) => {
+    if (savingRef.current) {
+      return
+    }
+
+    savingRef.current = true
+    setIsSaving(true)
+    setSaveFeedback({
+      kind: 'saving',
+      message: 'Enregistrement des paramètres...',
+    })
+
+    try {
+      await savePartial(settings, { remount: false })
+
+      if (closeAfterSaveRef.current) {
+        closeAfterSaveRef.current = false
+        closeModal()
+        return
+      }
+
+      setSaveFeedback({
+        kind: 'success',
+        message: 'Paramètres enregistrés.',
+      })
+    } catch (error) {
+      closeAfterSaveRef.current = false
+      setSaveFeedback({
+        kind: 'error',
+        message: error instanceof Error && error.message.trim()
+          ? error.message
+          : "Impossible d'enregistrer les paramètres.",
+      })
+    } finally {
+      savingRef.current = false
+      setIsSaving(false)
+    }
+  }, [closeModal, savePartial])
+
+  const saveAndClose = React.useCallback(() => {
+    if (!activeSubmitButtonId || isSaving) {
+      return
+    }
+
+    closeAfterSaveRef.current = false
+    const submitButton = document.getElementById(activeSubmitButtonId)
+    if (!submitButton) {
+      setSaveFeedback({
+        kind: 'error',
+        message: "Impossible de lancer l'enregistrement des paramètres.",
+      })
+      return
+    }
+
+    submitButton.click()
+    closeAfterSaveRef.current = savingRef.current
+  }, [activeSubmitButtonId, isSaving])
+
   React.useEffect(() => {
     setMergedTitleLanguagePriority(normalizeMultiSearchTitleLanguagePriority(
       params?.multiSearchMergedTitleLanguagePriority,
@@ -59,16 +124,33 @@ export default function SettingsModalContent() {
   }, [params?.multiSearchMergedTitleLanguagePriority])
 
   React.useEffect(() => {
+    closeAfterSaveRef.current = false
+    setSaveFeedback(null)
+  }, [activeTab])
+
+  React.useEffect(() => {
     setModalActions(activeSubmitButtonId ? [
       {
-        label: 'Enregistrer',
-        variant: 'primary',
+        label: isSaving ? 'Enregistrement...' : 'Enregistrer',
+        variant: 'secondary',
         id: activeSubmitButtonId,
         closeOnClick: false,
+        disabled: isSaving,
+        onClick: () => {
+          closeAfterSaveRef.current = false
+        },
+      },
+      {
+        label: isSaving ? 'Enregistrement...' : 'Enregistrer et quitter',
+        variant: 'primary',
+        closeOnClick: false,
+        disabled: isSaving,
+        onClick: saveAndClose,
       },
       {
         label: 'Fermer',
         variant: 'secondary',
+        disabled: isSaving,
       },
     ] : [
       {
@@ -85,7 +167,7 @@ export default function SettingsModalContent() {
         },
       ])
     }
-  }, [activeSubmitButtonId, setModalActions])
+  }, [activeSubmitButtonId, isSaving, saveAndClose, setModalActions])
 
   const fields: FormItem[] = [
     {
@@ -623,7 +705,7 @@ export default function SettingsModalContent() {
       stackMangaInSeries,
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }
-    await setParams(toSave, { remount: false })
+    await saveSettings(toSave)
   }
 
   const onScrapingSubmit = async (values: Record<string, any>) => {
@@ -703,7 +785,7 @@ export default function SettingsModalContent() {
       ...scraperViewHistorySettings,
       ...safetySettings,
     }
-    await setParams(toSave, { remount: false })
+    await saveSettings(toSave)
   }
 
   const handleOpenUserDataDirectory = React.useCallback(async () => {
@@ -729,11 +811,11 @@ export default function SettingsModalContent() {
 
   const onDeveloperSubmit = React.useCallback(async (values: Record<string, any>) => {
     const performanceReportsEnabled = values.scraperPerformanceReportsEnabled === true
-    await setParams({
+    await saveSettings({
       scraperPerformanceReportsEnabled: performanceReportsEnabled,
       scraperLatestPerformanceReportsEnabled: performanceReportsEnabled,
-    }, { remount: false })
-  }, [setParams])
+    })
+  }, [saveSettings])
 
   if (loading) return <div>Chargement...</div>
 
@@ -744,6 +826,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'options' ? 'active' : ''}`}
           onClick={() => setActiveTab('options')}
+          disabled={isSaving}
         >
           Options
         </button>
@@ -751,6 +834,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'scraping' ? 'active' : ''}`}
           onClick={() => setActiveTab('scraping')}
+          disabled={isSaving}
         >
           Scraping
         </button>
@@ -758,6 +842,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'developer' ? 'active' : ''}`}
           onClick={() => setActiveTab('developer')}
+          disabled={isSaving}
         >
           Développeur
         </button>
@@ -765,6 +850,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'reader' ? 'active' : ''}`}
           onClick={() => setActiveTab('reader')}
+          disabled={isSaving}
         >
           Lecteur
         </button>
@@ -772,6 +858,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'shortcuts' ? 'active' : ''}`}
           onClick={() => setActiveTab('shortcuts')}
+          disabled={isSaving}
         >
           Raccourcis
         </button>
@@ -779,6 +866,7 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'statistics' ? 'active' : ''}`}
           onClick={() => setActiveTab('statistics')}
+          disabled={isSaving}
         >
           Statistiques
         </button>
@@ -786,9 +874,21 @@ export default function SettingsModalContent() {
           type="button"
           className={`settings-modal-tab ${activeTab === 'version-installation' ? 'active' : ''}`}
           onClick={() => setActiveTab('version-installation')}
+          disabled={isSaving}
         >
           Version et installation
         </button>
+      </div>
+
+      <div className="settings-modal-feedback-slot" aria-live="polite">
+        {saveFeedback ? (
+          <div
+            className={`settings-modal-feedback is-${saveFeedback.kind}`}
+            role={saveFeedback.kind === 'error' ? 'alert' : 'status'}
+          >
+            {saveFeedback.message}
+          </div>
+        ) : null}
       </div>
 
       <div className="settings-modal-panels">
@@ -844,7 +944,10 @@ export default function SettingsModalContent() {
 
         {activeTab === 'reader' ? (
           <div className="settings-modal-panel">
-            <ReaderSettingsPanel submitButtonId={READER_SUBMIT_BUTTON_ID} />
+            <ReaderSettingsPanel
+              submitButtonId={READER_SUBMIT_BUTTON_ID}
+              onSave={saveSettings}
+            />
           </div>
         ) : null}
 

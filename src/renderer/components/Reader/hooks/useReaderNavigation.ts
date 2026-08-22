@@ -61,6 +61,7 @@ type Args = {
     containerRef: React.RefObject<HTMLDivElement | null>;
     navigate: NavigateFunction;
     onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
+    readerSessionKey?: string;
     readingListNavigation?: ReaderReadingListNavigation;
 };
 
@@ -82,6 +83,7 @@ const useReaderNavigation = ({
     containerRef,
     navigate,
     onOpenMangaSource,
+    readerSessionKey,
     readingListNavigation,
 }: Args) => {
     const [transitionDirection, setTransitionDirection] = React.useState<'previous' | 'next' | null>(null);
@@ -92,6 +94,16 @@ const useReaderNavigation = ({
     const [copyFeedback, setCopyFeedback] = React.useState<ReaderCopyFeedback | null>(null);
     const [resolvedPageCounts, setResolvedPageCounts] = React.useState<Record<string, number>>({});
     const readingListCompletionNotifiedRef = React.useRef(false);
+
+    React.useLayoutEffect(() => {
+        setTransitionDirection(null);
+        setIsCompletionPage(false);
+        setContinuationLoading(false);
+        setContinuationError(null);
+        setIsReadingListSkipTransition(false);
+        setCopyFeedback(null);
+        readingListCompletionNotifiedRef.current = false;
+    }, [locationSearch, readerSessionKey]);
 
     const ocrAvailable = !isRemoteScraperManga(manga);
     const previousSeriesManga = React.useMemo(

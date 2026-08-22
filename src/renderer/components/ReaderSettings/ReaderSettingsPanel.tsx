@@ -92,6 +92,7 @@ import {
 
 type Props = {
   submitButtonId?: string
+  onSave?: (settings: Record<string, any>) => Promise<void>
 }
 
 const VOICEVOX_TEST_ACTION_ID = 'reader-voicevox-test'
@@ -536,8 +537,8 @@ const buildReaderSettingsFields = (voicevoxOptions: VoicevoxFormOptions): FormIt
   ]
 }
 
-export default function ReaderSettingsPanel({ submitButtonId }: Props) {
-  const { params, loading, setParams } = useParams()
+export default function ReaderSettingsPanel({ submitButtonId, onSave }: Props) {
+  const { params, loading, savePartial } = useParams()
   const [voicevoxConfigured, setVoicevoxConfigured] = React.useState<boolean | null>(null)
   const [voicevoxVoicesLoading, setVoicevoxVoicesLoading] = React.useState<boolean>(true)
   const [voicevoxStatusMessage, setVoicevoxStatusMessage] = React.useState<string | null>(null)
@@ -822,7 +823,7 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
     const selectedSpeakerUuid = normalizeReaderOcrVoicevoxSpeakerUuid(values.readerOcrVoicevoxSpeakerUuid)
     const selectedStyleId = resolveSelectedVoicevoxStyleId(values, voicevoxStyleOptionsBySpeaker)
 
-    await setParams({
+    const settingsToSave = {
       readerImageMaxWidth: normalizeReaderImageMaxWidth(values.readerImageMaxWidth),
       readerShowProgressIndicator: values.readerShowProgressIndicator !== false,
       readerOcrPreloadPageCount: normalizeReaderOcrPreloadPageCount(values.readerOcrPreloadPageCount),
@@ -871,9 +872,14 @@ export default function ReaderSettingsPanel({ submitButtonId }: Props) {
       readerOpenOcrPanelForJapaneseManga: !!values.readerOpenOcrPanelForJapaneseManga,
       readerRecommendBookmarks: !!values.readerRecommendBookmarks,
       readerSurpriseNextOnCompletion: !!values.readerSurpriseNextOnCompletion,
-    }, {
-      remount: false,
-    })
+    }
+
+    if (onSave) {
+      await onSave(settingsToSave)
+      return
+    }
+
+    await savePartial(settingsToSave, { remount: false })
   }
 
   if (loading) {

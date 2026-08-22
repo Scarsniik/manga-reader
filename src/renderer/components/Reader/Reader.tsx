@@ -96,6 +96,7 @@ type ReaderProps = {
     initialLocationState?: ReaderLocationState;
     onBack?: () => void;
     onOpenMangaSource?: (request: ReaderMangaSourceRequest) => boolean | void | Promise<boolean | void>;
+    readerSessionKey?: string;
     showBackButton?: boolean;
     syncWindowPageParam?: boolean;
     readingListNavigation?: ReaderReadingListNavigation;
@@ -120,6 +121,7 @@ const Reader: React.FC<ReaderProps> = ({
     initialLocationState = null,
     onBack,
     onOpenMangaSource,
+    readerSessionKey,
     showBackButton = true,
     syncWindowPageParam = true,
     readingListNavigation,
@@ -135,10 +137,17 @@ const Reader: React.FC<ReaderProps> = ({
         search: normalizeReaderSearch(initialLocationSearch),
         state: initialLocationState,
     }));
-    const locationSearch = usesLocalLocation ? localLocation.search : routerLocation.search;
-    const locationState = usesLocalLocation
-        ? localLocation.state
-        : routerLocation.state as ReaderLocationState;
+    const usesControlledReaderSession = usesLocalLocation && typeof readerSessionKey === "string";
+    const locationSearch = usesControlledReaderSession
+        ? normalizeReaderSearch(initialLocationSearch)
+        : usesLocalLocation
+            ? localLocation.search
+            : routerLocation.search;
+    const locationState = usesControlledReaderSession
+        ? initialLocationState
+        : usesLocalLocation
+            ? localLocation.state
+            : routerLocation.state as ReaderLocationState;
     const navigate = React.useMemo<NavigateFunction>(() => {
         if (!usesLocalLocation) {
             return routerNavigate;
@@ -336,11 +345,13 @@ const Reader: React.FC<ReaderProps> = ({
         debugList,
         debugError,
         coverData,
+        loading: readerDataLoading,
         runDebugListPages,
     } = useReaderData({
         locationSearch,
         locationState,
         preloadPageCount: imagePreloadPageCount,
+        readerSessionKey,
         syncWindowPageParam,
     });
     const fullscreen = useReaderFullscreen(containerRef);
@@ -391,6 +402,7 @@ const Reader: React.FC<ReaderProps> = ({
         containerRef,
         navigate,
         onOpenMangaSource,
+        readerSessionKey,
         readingListNavigation,
     });
     const handleBack = onBack ?? navigation.handleBack;
@@ -560,6 +572,7 @@ const Reader: React.FC<ReaderProps> = ({
                     continuationCoverSrc={navigation.continuationCoverSrc}
                     continuationLoading={navigation.continuationLoading}
                     continuationError={navigation.continuationError}
+                    loading={readerDataLoading}
                     onContinue={(direction) => {
                         void navigation.continueToAdjacentChapter(direction);
                     }}

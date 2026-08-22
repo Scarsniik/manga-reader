@@ -26,6 +26,7 @@ type Args = {
     locationSearch: string;
     locationState: ReaderLocationState;
     preloadPageCount: number | null;
+    readerSessionKey?: string;
     syncWindowPageParam?: boolean;
 };
 
@@ -33,6 +34,7 @@ const useReaderData = ({
     locationSearch,
     locationState,
     preloadPageCount,
+    readerSessionKey,
     syncWindowPageParam = true,
 }: Args) => {
     const [images, setImages] = React.useState<string[]>([]);
@@ -43,6 +45,7 @@ const useReaderData = ({
     const [debugList, setDebugList] = React.useState<string[] | null>(null);
     const [debugError, setDebugError] = React.useState<string | null>(null);
     const [coverData, setCoverData] = React.useState<string | null>(null);
+    const [loading, setLoading] = React.useState(true);
     const imgRef = React.useRef<HTMLImageElement | null>(null);
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const openedCompletedRef = React.useRef<boolean>(false);
@@ -50,7 +53,26 @@ const useReaderData = ({
     const resolvingLazyPagesRef = React.useRef<Set<string>>(new Set());
     const query = React.useMemo(() => new URLSearchParams(locationSearch), [locationSearch]);
 
+    React.useLayoutEffect(() => {
+        if (typeof readerSessionKey !== "string") {
+            return;
+        }
+
+        setImages([]);
+        setCurrentIndex(0);
+        setManga(null);
+        setLibraryMangas([]);
+        setBookmarkExcludedFields([]);
+        setDebugList(null);
+        setDebugError(null);
+        setCoverData(null);
+        setLoading(true);
+        openedCompletedRef.current = false;
+    }, [readerSessionKey]);
+
     React.useEffect(() => {
+        let cancelled = false;
+
         const init = async () => {
             const id = query.get('id');
             const pageParam = query.get('page');
@@ -283,8 +305,17 @@ const useReaderData = ({
             }
         };
 
-        void init();
-    }, [locationSearch, locationState, query]);
+        setLoading(true);
+        void init().finally(() => {
+            if (!cancelled) {
+                setLoading(false);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [locationSearch, locationState, query, readerSessionKey]);
 
     React.useEffect(() => {
         try {
@@ -576,6 +607,7 @@ const useReaderData = ({
         debugList,
         debugError,
         coverData,
+        loading,
         runDebugListPages,
     };
 };

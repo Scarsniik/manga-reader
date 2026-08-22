@@ -219,6 +219,32 @@ export function useParams() {
         }
     }, [dispatchSettingsUpdated, refresh]);
 
+    const savePartial = useCallback(async (
+        partial: Partial<AppParams>,
+        options?: SetParamsOptions,
+    ): Promise<AppParams> => {
+        const { broadcast = true, remount = true } = options || {};
+        const next = { ...(params || {}), ...partial } as AppParams;
+        let persistedSettings = next;
+
+        if (window.api && typeof window.api.saveSettings === 'function') {
+            const persisted = await window.api.saveSettings(partial);
+            if (persisted && typeof persisted === 'object') {
+                persistedSettings = persisted as AppParams;
+            }
+        }
+
+        setParamsState(persistedSettings);
+        if (broadcast) {
+            dispatchSettingsUpdated({
+                settings: persistedSettings,
+                remount,
+            });
+        }
+
+        return persistedSettings;
+    }, [dispatchSettingsUpdated, params]);
+
     // setParams accepts a Partial of AppParams, applies an optimistic update and saves in background
     const setParams = useCallback((partial: Partial<AppParams>, options?: SetParamsOptions) => {
         const { broadcast = true, remount = true } = options || {};
@@ -255,7 +281,7 @@ export function useParams() {
         return next;
     }, [dispatchSettingsUpdated, params]);
 
-    return { params, loading, reload: load, save, setParams } as const;
+    return { params, loading, reload: load, save, savePartial, setParams } as const;
 }
 
 export default useParams;

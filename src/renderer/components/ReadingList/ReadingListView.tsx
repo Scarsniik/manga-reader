@@ -299,7 +299,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
   }, []);
 
   if (phase === "reading") {
-    if (loading) {
+    if (loading && !activeTarget) {
       return <div className="reading-list-state">Chargement du manga...</div>;
     }
 
@@ -319,7 +319,6 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
 
     return (
       <Reader
-        key={`${activeItem.id}:${activeTarget.mangaId}`}
         initialLocationSearch={buildReaderSearch(activeTarget.mangaId, activeTarget.page ?? 1)}
         initialLocationState={activeTarget.locationState ?? null}
         onBack={() => {
@@ -328,6 +327,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
           setPhase("setup");
         }}
         showBackButton
+        readerSessionKey={activeItem.id}
         syncWindowPageParam={false}
         readingListNavigation={readingListNavigation}
       />

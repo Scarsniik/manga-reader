@@ -9,7 +9,7 @@
 .settings-modal-content {
   display: grid;
   min-height: min(70vh, 720px);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .settings-modal-tabs {
@@ -39,6 +39,38 @@
 .settings-modal-panels {
   overflow: auto;
   padding: 18px 20px 20px;
+}
+
+.settings-modal-tab:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.settings-modal-feedback-slot {
+  padding: 0 20px;
+}
+
+.settings-modal-feedback {
+  margin-top: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(30, 64, 175, 0.16);
+  color: #bfdbfe;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-modal-feedback.is-success {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(22, 101, 52, 0.18);
+  color: #bbf7d0;
+}
+
+.settings-modal-feedback.is-error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
 }
 
 .settings-modal-panel {
