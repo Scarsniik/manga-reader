@@ -156,10 +156,10 @@ export default function ScraperAuthorCombinedView({
     onOpenSourceDetails,
   });
   const mergeOptions = useMemo(() => ({
-    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+    enableRomajiPhoneticMerge: true,
+    assumeSameAuthor: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
   }), [
-    params?.multiSearchEnableRomajiPhoneticMerge,
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
   const mergedResults = useMemo(

@@ -69,6 +69,16 @@ const getProgressPercent = (job: BackgroundSearchJobMetadata): number | null => 
   )));
 };
 
+const formatProgressUnits = (job: BackgroundSearchJobMetadata): string | null => {
+  const total = job.progress.totalUnits;
+  if (typeof total !== "number" || total <= 0) return null;
+  const completed = Math.max(0, job.progress.completedUnits);
+  if (job.status === "running" && completed < total) {
+    return `${completed}/${total} terminés · élément ${completed + 1}/${total} en cours`;
+  }
+  return `${completed}/${total} terminés`;
+};
+
 export default function BackgroundSearchQueueModalContent() {
   const { closeModal } = useModal();
   const [queue, setQueue] = React.useState<BackgroundSearchQueueSummary>(EMPTY_QUEUE);
@@ -185,6 +195,7 @@ export default function BackgroundSearchQueueModalContent() {
           </div>
         ) : queue.jobs.map((job) => {
           const progressPercent = getProgressPercent(job);
+          const progressUnits = formatProgressUnits(job);
           const canCancel = !TERMINAL_STATUSES.has(job.status);
           const canDelete = TERMINAL_STATUSES.has(job.status);
           const isUnopened = job.openedAt === null;
@@ -215,6 +226,7 @@ export default function BackgroundSearchQueueModalContent() {
                   <small>{formatKind(job.kind)} · {formatDate(job.createdAt)}</small>
                   <span className="background-search-card__meta">
                     <span>{formatResultCount(job)}</span>
+                    {progressUnits ? <span>{progressUnits}</span> : null}
                     {job.progress.currentLabel ? <span>{job.progress.currentLabel}</span> : null}
                     <span>{job.storageMode === "temporaryFile" ? "Fichier temporaire" : "Cache mémoire"}</span>
                   </span>

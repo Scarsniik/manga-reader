@@ -44,6 +44,15 @@ import {
   buildBackgroundListingPaginationUrlKey,
   isBackgroundListingRedirectedToVisitedPage,
 } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import { isAuthorCorrespondenceNameSearchSourceVerified } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
+
+const formatProgressSubject = (value: string, maxLength = 80): string => {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1)}…`
+    : normalized;
+};
 
 type SnapshotCallback = (
   result: BackgroundSearchExecutionResult,
@@ -182,6 +191,11 @@ export const runAuthorCorrespondenceSearch = async (
   const matches = new Map<string, AuthorCorrespondenceMatch>(
     (resumeCheckpoint ? previousResult?.matches ?? [] : []).map((match) => [match.key, match]),
   );
+  const nameSearchSources = new Map<string, MultiSearchSourceResult>(
+    (resumeCheckpoint ? previousResult?.nameSearchSources ?? [] : [])
+      .filter(isAuthorCorrespondenceNameSearchSourceVerified)
+      .map((source) => [buildMultiSearchSourceIdentityKey(source), source]),
+  );
   const resolvedTargetsByMatchKey = new Map<string, string>();
   matches.forEach((match) => {
     resolvedTargetsByMatchKey.set(match.key, normalizeAuthorCorrespondenceTarget(match.authorUrl));
@@ -196,6 +210,7 @@ export const runAuthorCorrespondenceSearch = async (
       left.authorName.localeCompare(right.authorName) || left.scraperName.localeCompare(right.scraperName)
     )),
     searchedNames: names,
+    nameSearchSources: Array.from(nameSearchSources.values()),
     discoveries: previousResult?.discoveries,
     checkpoint: {
       version: 1,
@@ -262,18 +277,29 @@ export const runAuthorCorrespondenceSearch = async (
     });
   });
 
-  const loadSearchSources = async (scraper: ScraperRecord, name: string): Promise<MultiSearchSourceResult[]> => {
+  const loadSearchSources = async (
+    scraper: ScraperRecord,
+    name: string,
+    discoverAuthorCandidates: boolean,
+  ): Promise<MultiSearchSourceResult[]> => {
     if (!isSearchableScraper(scraper)) return [];
     const results: MultiSearchSourceResult[] = [];
+    let shouldDiscoverAuthorCandidates = discoverAuthorCandidates;
     const prefetchSourceKey = `${scraper.id}:${normalizeFuzzyText(name)}`;
     const visitedPageUrlKeys = new Set<string>();
     let nextPageUrl: string | undefined;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
+        await emit(
+          `Recherche auteur · ${scraper.name} · page ${pageIndex + 1}/${maxPages} · « ${formatProgressSubject(name)} »`,
+        );
         const loadPage = () => fetchSearchPageWithRetry(
           scraper, getSearchConfig(scraper), name, pageIndex, nextPageUrl, pace,
-          { scrapeDetailsWithCards: false, fetchDocument: executionContext.fetchDocument },
+          {
+            scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+            fetchDocument: executionContext.fetchDocument,
+          },
         );
         const page = await searchPagePrefetch.load(
           prefetchSourceKey,
@@ -294,9 +320,18 @@ export const runAuthorCorrespondenceSearch = async (
           page,
           pageIndex,
           searchTerm: name,
+          contextualAuthorNames: names,
         });
         results.push(...sources);
+        sources.filter(isAuthorCorrespondenceNameSearchSourceVerified).forEach((source) => {
+          nameSearchSources.set(buildMultiSearchSourceIdentityKey(source), source);
+        });
         if (sources.length) {
+          await emit(
+            `Résultats par nom · ${scraper.name} · page ${pageIndex + 1}/${maxPages} · « ${formatProgressSubject(name)} »`,
+          );
+        }
+        if (sources.length && shouldDiscoverAuthorCandidates) {
           const extracted = await extractMultiSearchAuthors(sources, input.paceMode, undefined, {
             concurrency,
             signal,
@@ -316,7 +351,7 @@ export const runAuthorCorrespondenceSearch = async (
             });
           });
           if (extracted.authors.some((author) => Boolean(findMatchedName(author.name, names)))) {
-            break;
+            shouldDiscoverAuthorCandidates = false;
           }
         }
         nextPageUrl = page.nextPageUrl;
@@ -330,7 +365,10 @@ export const runAuthorCorrespondenceSearch = async (
             buildScraperListingPageRequestKey(followingPageIndex, followingPageUrl),
             () => fetchSearchPageWithRetry(
               scraper, getSearchConfig(scraper), name, followingPageIndex, followingPageUrl, pace,
-              { scrapeDetailsWithCards: false, fetchDocument: executionContext.fetchDocument },
+              {
+                scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+                fetchDocument: executionContext.fetchDocument,
+              },
             ),
           );
         }
@@ -348,12 +386,13 @@ export const runAuthorCorrespondenceSearch = async (
     if (completedUnitKeys.has(unitKey)) return;
     if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
     try {
+      await emit(`Préparation · ${scraper.name} · « ${formatProgressSubject(name)} »`);
       const hasDirectCandidate = Array.from(candidates.values()).some((candidate) => (
         candidate.scraperId === scraper.id
         && candidate.discoveryMethods.includes("reference")
         && Boolean(findMatchedName(candidate.matchedName, [name]))
       ));
-      if (!hasDirectCandidate) await loadSearchSources(scraper, name);
+      await loadSearchSources(scraper, name, !hasDirectCandidate);
 
       const hasResolvedCandidate = Array.from(candidates.values()).some((candidate) => (
         candidate.scraperId === scraper.id && Boolean(findMatchedName(candidate.matchedName, [name]))
@@ -361,6 +400,7 @@ export const runAuthorCorrespondenceSearch = async (
       if (!hasResolvedCandidate && canUseAuthorModule(scraper) && getAuthorConfig(scraper).urlStrategy === "template") {
         for (const authorValue of buildAuthorSearchValues(scraper, name)) {
           try {
+            await emit(`Vérification page auteur · ${scraper.name} · « ${formatProgressSubject(name)} »`);
             const page = await fetchAuthorPageWithRetry(
               scraper,
               getAuthorConfig(scraper),
@@ -403,6 +443,9 @@ export const runAuthorCorrespondenceSearch = async (
     const scraper = scrapers.find((entry) => entry.id === candidate.scraperId);
     if (!scraper || !canUseAuthorModule(scraper)) return;
     try {
+      await emit(
+        `Validation page auteur · ${scraper.name} · « ${formatProgressSubject(candidate.authorName)} »`,
+      );
       const page = await fetchAuthorPageWithRetry(
         scraper,
         getAuthorConfig(scraper),

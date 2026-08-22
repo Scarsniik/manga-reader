@@ -53,6 +53,7 @@ const ROMAN_SEQUENCE_VALUES: Record<string, number> = {
 
 export type MangaMergeOptions = {
   enableRomajiPhoneticMerge: boolean;
+  assumeSameAuthor?: boolean;
 };
 
 export type MatchableManga = {
@@ -84,9 +85,11 @@ type MangaTitleMergeProfile = {
 const mangaTitleMergeProfileCache = new WeakMap<MatchableManga, Map<string, MangaTitleMergeProfile>>();
 const mangaTitleMergeProfileValueCache = new Map<string, MangaTitleMergeProfile>();
 const MAX_MANGA_TITLE_PROFILE_VALUE_CACHE_SIZE = 5000;
+const SAME_AUTHOR_COMPACT_ROMAJI_MIN_CHARACTERS = 14;
 
 export const DEFAULT_MANGA_MERGE_OPTIONS: MangaMergeOptions = {
   enableRomajiPhoneticMerge: false,
+  assumeSameAuthor: false,
 };
 
 export const normalizeMangaMergeOptions = (
@@ -101,6 +104,7 @@ export const areMangaMergeOptionsEqual = (
   right: MangaMergeOptions,
 ): boolean => (
   left.enableRomajiPhoneticMerge === right.enableRomajiPhoneticMerge
+  && (left.assumeSameAuthor === true) === (right.assumeSameAuthor === true)
 );
 
 const uniqueValues = (values: string[]): string[] => {
@@ -387,6 +391,37 @@ const selectComparableAuthorNames = (
     : normalizedContextualAuthorNames
 );
 
+const areNormalizedAuthorLabelsCompatible = (
+  leftValue: string,
+  rightValue: string,
+): boolean => {
+  if (leftValue === rightValue) {
+    return true;
+  }
+
+  const paddedLeftValue = ` ${leftValue} `;
+  const paddedRightValue = ` ${rightValue} `;
+  return paddedLeftValue.includes(paddedRightValue)
+    || paddedRightValue.includes(paddedLeftValue);
+};
+
+const isSameAuthorCompactRomajiFuzzyCandidate = (
+  value: string,
+  variants: string[],
+): boolean => {
+  if (
+    !/^[a-z0-9]+$/u.test(value)
+    || Array.from(value).length < SAME_AUTHOR_COMPACT_ROMAJI_MIN_CHARACTERS
+  ) {
+    return false;
+  }
+
+  return variants.some((variant) => {
+    const tokens = variant.split(" ").filter(Boolean);
+    return tokens.length >= 3 && variant.replace(/\s+/g, "") === value;
+  });
+};
+
 const buildTitleAlternativeMergeProfile = (
   title: string,
   advancedRomanizedVariants: string[] = [],
@@ -404,7 +439,13 @@ const buildTitleAlternativeMergeProfile = (
     variants,
     variantKindSets: buildVariantKindSets(variantEntries),
     sequenceMarkers,
-    fuzzyVariants: variants.filter(isFuzzyTitleCandidate),
+    fuzzyVariants: variants.filter((variant) => (
+      isFuzzyTitleCandidate(variant)
+      || (
+        options.assumeSameAuthor
+        && isSameAuthorCompactRomajiFuzzyCandidate(variant, variants)
+      )
+    )),
   };
 };
 
@@ -437,19 +478,26 @@ const buildMangaTitleMergeProfile = (
 
   return {
     alternatives,
-    normalizedAuthorNames: normalizeAuthorNames(
-      manga.authorNames ?? [],
-      manga.advancedRomanizedAuthorNameVariants ?? [],
-    ),
-    normalizedContextualAuthorNames: normalizeAuthorNames(
-      manga.contextualAuthorNames ?? [],
-      manga.advancedRomanizedContextualAuthorNameVariants ?? [],
-    ),
+    normalizedAuthorNames: options.assumeSameAuthor
+      ? []
+      : normalizeAuthorNames(
+        manga.authorNames ?? [],
+        manga.advancedRomanizedAuthorNameVariants ?? [],
+      ),
+    normalizedContextualAuthorNames: options.assumeSameAuthor
+      ? []
+      : normalizeAuthorNames(
+        manga.contextualAuthorNames ?? [],
+        manga.advancedRomanizedContextualAuthorNameVariants ?? [],
+      ),
   };
 };
 
 const getTitleMergeOptionsCacheKey = (options: MangaMergeOptions): string => (
-  options.enableRomajiPhoneticMerge ? "phonetic" : "standard"
+  [
+    options.enableRomajiPhoneticMerge ? "phonetic" : "standard",
+    options.assumeSameAuthor ? "same-author" : "check-author",
+  ].join(":")
 );
 
 const getMangaTitleMergeProfileValueCacheKey = (
@@ -459,11 +507,11 @@ const getMangaTitleMergeProfileValueCacheKey = (
   JSON.stringify([
     getTitleMergeOptionsCacheKey(options),
     manga.title,
-    manga.authorNames ?? [],
-    manga.contextualAuthorNames ?? [],
+    options.assumeSameAuthor ? [] : manga.authorNames ?? [],
+    options.assumeSameAuthor ? [] : manga.contextualAuthorNames ?? [],
     manga.advancedRomanizedTitleVariants ?? [],
-    manga.advancedRomanizedAuthorNameVariants ?? [],
-    manga.advancedRomanizedContextualAuthorNameVariants ?? [],
+    options.assumeSameAuthor ? [] : manga.advancedRomanizedAuthorNameVariants ?? [],
+    options.assumeSameAuthor ? [] : manga.advancedRomanizedContextualAuthorNameVariants ?? [],
   ])
 );
 
@@ -527,6 +575,41 @@ const getMangaTitleMergeProfile = (
   }
 
   return profile;
+};
+
+/**
+ * Detects explicit author labels that cannot refer to the same credited author.
+ * Compound credits remain compatible when they contain one complete known name.
+ */
+export const haveClearlyConflictingMangaAuthors = (
+  left: MatchableManga,
+  right: MatchableManga,
+  options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
+): boolean => {
+  if (options.assumeSameAuthor) {
+    return false;
+  }
+
+  const leftProfile = getMangaTitleMergeProfile(left, options);
+  const rightProfile = getMangaTitleMergeProfile(right, options);
+  const leftAuthorNames = selectComparableAuthorNames(
+    leftProfile.normalizedAuthorNames,
+    leftProfile.normalizedContextualAuthorNames,
+  );
+  const rightAuthorNames = selectComparableAuthorNames(
+    rightProfile.normalizedAuthorNames,
+    rightProfile.normalizedContextualAuthorNames,
+  );
+
+  if (!leftAuthorNames.length || !rightAuthorNames.length) {
+    return false;
+  }
+
+  return leftAuthorNames.every((leftAuthor) => (
+    rightAuthorNames.every((rightAuthor) => (
+      !areNormalizedAuthorLabelsCompatible(leftAuthor, rightAuthor)
+    ))
+  ));
 };
 
 const doTitleAlternativeProfilesMatch = (

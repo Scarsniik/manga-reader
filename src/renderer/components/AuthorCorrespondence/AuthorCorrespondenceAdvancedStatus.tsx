@@ -32,6 +32,11 @@ export default function AuthorCorrespondenceAdvancedStatus({
   const progressPercent = totalUnits > 0
     ? Math.min(100, Math.round((completedUnits / totalUnits) * 100))
     : 0;
+  const activeProgressLabel = status === "queued"
+    ? `${completedUnits}/${totalUnits} en attente`
+    : completedUnits < totalUnits
+      ? `Manga ${completedUnits + 1}/${totalUnits} en cours · ${completedUnits} terminé${completedUnits === 1 ? "" : "s"}`
+      : `${completedUnits}/${totalUnits} terminés`;
 
   if (active) {
     return (
@@ -55,7 +60,7 @@ export default function AuthorCorrespondenceAdvancedStatus({
             >
               <i style={{ width: `${progressPercent}%` }} />
             </div>
-            <small>{completedUnits}/{totalUnits}</small>
+            <small>{activeProgressLabel}</small>
           </div>
         ) : null}
       </section>
@@ -63,9 +68,18 @@ export default function AuthorCorrespondenceAdvancedStatus({
   }
 
   return (
-    <section className="author-correspondence-view__advanced-status is-complete">
+    <section className={[
+      "author-correspondence-view__advanced-status",
+      status === "cancelled" ? "is-cancelled" : "is-complete",
+    ].join(" ")}>
       <strong>
-        {newAuthorPageCount > 0
+        {status === "cancelled"
+          ? formatCount(
+            summary?.lastBatchMangaCount ?? 0,
+            "manga validé avant l’arrêt",
+            "mangas validés avant l’arrêt",
+          )
+          : newAuthorPageCount > 0
           ? formatCount(newAuthorPageCount, "nouvelle page auteur trouvée", "nouvelles pages auteur trouvées")
           : "Recherche poussée terminée"}
       </strong>

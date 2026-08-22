@@ -25,6 +25,7 @@ export default function AuthorCorrespondenceAdvancedButton({
   const [pending, setPending] = React.useState(false);
   const [launchError, setLaunchError] = React.useState<string | null>(null);
   const completedBatchCount = result?.advancedSearch?.completedBatchCount ?? 0;
+  const processedMangaCount = result?.advancedSearch?.processedMangaCount ?? 0;
   const hasNoRemainingCandidate = Boolean(
     completedBatchCount
     && result?.advancedSearch?.remainingCandidateCount === 0,
@@ -94,8 +95,8 @@ export default function AuthorCorrespondenceAdvancedButton({
         formAriaLabel="Choisir le nombre de mangas à analyser en recherche poussée"
         inputAriaLabel="Nombre de mangas à analyser"
         submitLabel={hasNoRemainingCandidate
-          ? "Aucun manga suivant"
-          : completedBatchCount
+            ? "Aucun manga suivant"
+          : completedBatchCount || processedMangaCount
             ? "Approfondir les suivants"
             : "Lancer la recherche poussée"}
         loadingLabel="Recherche en cours…"

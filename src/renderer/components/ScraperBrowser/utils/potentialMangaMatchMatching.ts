@@ -23,7 +23,10 @@ const getCandidateIndex = (
   candidates: ScraperPotentialMangaMatch[],
   options: MangaMergeOptions,
 ): MangaMatchCandidateIndex<ScraperPotentialMangaMatch> => {
-  const cacheKey = options.enableRomajiPhoneticMerge ? "phonetic" : "standard";
+  const cacheKey = [
+    options.enableRomajiPhoneticMerge ? "phonetic" : "standard",
+    options.assumeSameAuthor ? "same-author" : "check-author",
+  ].join(":");
   const cachedIndexes = potentialMatchCandidateIndexCache.get(candidates);
   const cachedIndex = cachedIndexes?.get(cacheKey);
   if (cachedIndex) {

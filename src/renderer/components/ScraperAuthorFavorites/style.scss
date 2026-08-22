@@ -31,6 +31,7 @@
 .scraper-author-favorites-view__back,
 .scraper-author-favorites-view__clear,
 .scraper-author-favorites-view__multi-search,
+.scraper-author-favorites-view__name-search-toggle,
 .scraper-author-favorites-view__source-more {
   min-height: 34px;
   border-radius: 8px;
@@ -61,6 +62,17 @@
   white-space: nowrap;
 }
 
+.scraper-author-favorites-view__name-search-toggle {
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.scraper-author-favorites-view__name-search-toggle.is-active {
+  border-color: rgba(93, 156, 255, 0.5);
+  background: rgba(93, 156, 255, 0.18);
+  color: #dcebff;
+}
+
 .scraper-author-favorites-view__multi-search svg {
   width: 18px;
   height: 18px;
@@ -69,6 +81,7 @@
 .scraper-author-favorites-view__back:hover,
 .scraper-author-favorites-view__clear:hover,
 .scraper-author-favorites-view__multi-search:hover,
+.scraper-author-favorites-view__name-search-toggle:hover,
 .scraper-author-favorites-view__source-more:hover {
   border-color: rgba(93, 156, 255, 0.45);
   background: rgba(93, 156, 255, 0.12);
@@ -78,6 +91,7 @@
 .scraper-author-favorites-view__back:focus-visible,
 .scraper-author-favorites-view__clear:focus-visible,
 .scraper-author-favorites-view__multi-search:focus-visible,
+.scraper-author-favorites-view__name-search-toggle:focus-visible,
 .scraper-author-favorites-view__source-more:focus-visible {
   outline: none;
   border-color: #5d9cff;

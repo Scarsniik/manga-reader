@@ -54,9 +54,14 @@ const getProgressDescription = (metadata: BackgroundSearchJobMetadata): string =
   const unitLabel = metadata.kind === "mangaCorrespondence"
     ? "recherches exécutées"
     : "étapes exécutées";
-  return metadata.progress.currentLabel
-    ? `${unitLabel} · ${metadata.progress.currentLabel}`
-    : unitLabel;
+  const total = metadata.progress.totalUnits;
+  const completed = Math.max(0, metadata.progress.completedUnits);
+  const activeUnit = metadata.status === "running"
+    && typeof total === "number"
+    && total > completed
+    ? `élément ${completed + 1}/${total} en cours`
+    : "";
+  return [unitLabel, activeUnit, metadata.progress.currentLabel].filter(Boolean).join(" · ");
 };
 
 export default function BackgroundSearchResultView({

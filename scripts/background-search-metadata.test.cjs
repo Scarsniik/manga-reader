@@ -1,5 +1,10 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const test = require("node:test");
+const authorCacheDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "scaramanga-author-cache-test-"));
+process.env.SCARAMANGA_AUTHOR_CORRESPONDENCE_CACHE_DIR = authorCacheDirectory;
 const {
   buildBackgroundSearchQueueSummary,
   canReplayBackgroundSearch,
@@ -10,8 +15,16 @@ const {
 } = require("../dist/electron/handlers/backgroundSearch/metadata.js");
 const {
   getAuthorCorrespondenceSessionCache,
+  loadAuthorCorrespondenceSessionCache,
+  persistAuthorCorrespondenceSessionCache,
+  pruneAuthorCorrespondenceSessionCaches,
+  removeAuthorCorrespondenceSessionCache,
   setAuthorCorrespondenceSessionCache,
 } = require("../dist/electron/handlers/authorCorrespondenceSessionCache.js");
+
+test.after(() => {
+  fs.rmSync(authorCacheDirectory, { recursive: true, force: true });
+});
 
 const makeJob = (id, status, createdAt, expiresAt) => ({
   id,
@@ -107,4 +120,39 @@ test("author correspondence session cache stays memory-bounded and refreshes rec
   assert.equal(getAuthorCorrespondenceSessionCache("author-1"), null);
   assert.deepEqual(getAuthorCorrespondenceSessionCache("author-0"), { revision: 0 });
   assert.deepEqual(getAuthorCorrespondenceSessionCache("author-20"), { revision: 20 });
+});
+
+test("author correspondence cache is compressed and reloads after memory eviction", async () => {
+  const jobId = "persisted-author";
+  const snapshot = {
+    revision: 7,
+    runs: [{ title: "Repeated title ".repeat(100) }],
+    mangaEnrichments: [],
+  };
+  await persistAuthorCorrespondenceSessionCache(jobId, snapshot);
+  const latestSnapshot = { ...snapshot, revision: 8 };
+  await persistAuthorCorrespondenceSessionCache(jobId, latestSnapshot);
+  const cachePath = path.join(authorCacheDirectory, `${jobId}.json.gz`);
+  const compressed = fs.readFileSync(cachePath);
+  assert.deepEqual(Array.from(compressed.subarray(0, 2)), [0x1f, 0x8b]);
+
+  for (let index = 0; index < 25; index += 1) {
+    setAuthorCorrespondenceSessionCache(`eviction-${index}`, { revision: index });
+  }
+  assert.equal(getAuthorCorrespondenceSessionCache(jobId), null);
+  assert.deepEqual(await loadAuthorCorrespondenceSessionCache(jobId), latestSnapshot);
+
+  await removeAuthorCorrespondenceSessionCache(jobId);
+  assert.equal(getAuthorCorrespondenceSessionCache(jobId), null);
+  assert.equal(fs.existsSync(cachePath), false);
+});
+
+test("author correspondence cache pruning removes orphaned job files", async () => {
+  await persistAuthorCorrespondenceSessionCache("retained-author", { revision: 1 });
+  await persistAuthorCorrespondenceSessionCache("orphaned-author", { revision: 2 });
+  await pruneAuthorCorrespondenceSessionCaches(["retained-author"]);
+
+  assert.deepEqual(await loadAuthorCorrespondenceSessionCache("retained-author"), { revision: 1 });
+  assert.equal(await loadAuthorCorrespondenceSessionCache("orphaned-author"), null);
+  await removeAuthorCorrespondenceSessionCache("retained-author");
 });

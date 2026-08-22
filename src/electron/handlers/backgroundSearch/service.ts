@@ -35,6 +35,10 @@ import {
   pruneExpiredSearchDocumentCaches,
   removeSearchDocumentCacheScope,
 } from "../scrapers/searchDocumentCache";
+import {
+  pruneAuthorCorrespondenceSessionCaches,
+  removeAuthorCorrespondenceSessionCache,
+} from "../authorCorrespondenceSessionCache";
 
 const memoryJobs = new Map<string, BackgroundSearchJob>();
 let metadata: BackgroundSearchJobMetadata[] = [];
@@ -107,7 +111,10 @@ const initialize = async (): Promise<void> => {
     const currentTime = Date.now();
     metadata = await Promise.all(metadata.map(async (job) => {
       if (job.storageMode === "memory") {
-        await removeSearchDocumentCacheScope(job.id).catch(() => undefined);
+        await Promise.all([
+          removeSearchDocumentCacheScope(job.id),
+          removeAuthorCorrespondenceSessionCache(job.id),
+        ]).catch(() => undefined);
         return {
           ...job,
           status: "expired" as const,
@@ -135,6 +142,7 @@ const initialize = async (): Promise<void> => {
         await Promise.all([
           removeBackgroundSearchResult(job.id),
           removeSearchDocumentCacheScope(job.id),
+          removeAuthorCorrespondenceSessionCache(job.id),
         ]);
         return {
           ...job,
@@ -147,6 +155,11 @@ const initialize = async (): Promise<void> => {
       }
       return job;
     }));
+    await pruneAuthorCorrespondenceSessionCaches(metadata
+      .filter((job) => job.kind === "authorCorrespondence" && job.status !== "expired")
+      .map((job) => job.id)).catch((error) => {
+      console.warn("Failed to prune author correspondence caches", error);
+    });
     await persistMetadata();
   })();
 
@@ -249,6 +262,7 @@ export const getBackgroundSearchQueue = async (): Promise<BackgroundSearchQueueS
       await Promise.all(expiredJobs.flatMap((job) => [
         removeBackgroundSearchResult(job.id),
         removeSearchDocumentCacheScope(job.id),
+        removeAuthorCorrespondenceSessionCache(job.id),
       ]));
       const expiredIds = new Set(expiredJobs.map((job) => job.id));
       expiredIds.forEach((jobId) => memoryJobs.delete(jobId));
@@ -566,6 +580,7 @@ export const deleteBackgroundSearch = async (jobId: string): Promise<boolean> =>
   await removeBackgroundSearchResult(jobId);
   await removeBackgroundSearchInput(jobId);
   await removeSearchDocumentCacheScope(jobId);
+  await removeAuthorCorrespondenceSessionCache(jobId);
   await persistMetadata();
   broadcastChange({ ...current, status: "expired", revision: current.revision + 1 }, true);
   return true;

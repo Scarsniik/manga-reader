@@ -19,7 +19,10 @@ import {
   filterMultiSearchMergedResultsByReadingStatus,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
-import type { MultiSearchReadingStatusFilter } from "@/renderer/components/MultiSearch/types";
+import type {
+  MultiSearchReadingStatusFilter,
+  MultiSearchSourceResult,
+} from "@/renderer/components/MultiSearch/types";
 import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import {
@@ -80,6 +83,8 @@ type Props = {
   favoriteOverrideStatus?: React.ReactNode;
   favoriteOverrideRuns?: BackgroundListingRun[];
   favoriteOverrideMangaEnrichments?: AuthorCorrespondenceMangaEnrichment[];
+  favoriteOverrideNameSearchSources?: MultiSearchSourceResult[];
+  favoriteOverrideSearchNames?: string[];
   favoriteOverrideSessionCacheEnabled?: boolean;
   resultOnly?: boolean;
 };
@@ -126,6 +131,8 @@ export default function ScraperAuthorFavoritesView({
   favoriteOverrideStatus,
   favoriteOverrideRuns = [],
   favoriteOverrideMangaEnrichments = [],
+  favoriteOverrideNameSearchSources = [],
+  favoriteOverrideSearchNames = [],
   favoriteOverrideSessionCacheEnabled = false,
   resultOnly = false,
 }: Props) {
@@ -163,9 +170,11 @@ export default function ScraperAuthorFavoritesView({
   const [refreshingAllFavorites, setRefreshingAllFavorites] = useState(false);
   const [refreshAllMessage, setRefreshAllMessage] = useState<string | null>(null);
   const [ignoreFavoriteOverrideSessionCache, setIgnoreFavoriteOverrideSessionCache] = useState(false);
+  const [showFavoriteOverrideNameSearchSources, setShowFavoriteOverrideNameSearchSources] = useState(true);
   const automaticallyStartedFavoriteIdRef = React.useRef<string | null>(null);
   useEffect(() => {
     setIgnoreFavoriteOverrideSessionCache(false);
+    setShowFavoriteOverrideNameSearchSources(true);
   }, [favoriteOverride?.id]);
   const initialPageCount = Math.max(
     1,
@@ -180,9 +189,11 @@ export default function ScraperAuthorFavoritesView({
     : null;
   const selectedFavoriteMultiSearchQuery = useMemo(() => (
     selectedFavorite
-      ? formatAuthorMultiSearchQuery(selectedFavorite.sources.map((source) => source.name))
+      ? formatAuthorMultiSearchQuery(favoriteOverride
+        ? favoriteOverrideSearchNames
+        : selectedFavorite.sources.map((source) => source.name))
       : ""
-  ), [selectedFavorite]);
+  ), [favoriteOverride, favoriteOverrideSearchNames, selectedFavorite]);
   const canShowUnseenFirst = false;
   const sessionOverrideActive = Boolean(
     favoriteOverride
@@ -201,7 +212,11 @@ export default function ScraperAuthorFavoritesView({
     loadAllForAll,
     loadMoreForRun,
   } = useAuthorFavoriteRuns(
-    attachedSearch.attached || sessionOverrideActive ? null : selectedFavorite,
+    attachedSearch.attached
+      || sessionOverrideActive
+      || (favoriteOverride && !selectedFavorite?.sources.length)
+      ? null
+      : selectedFavorite,
     scrapersById,
     {
       initialPageCount,
@@ -245,15 +260,24 @@ export default function ScraperAuthorFavoritesView({
     return currentRuns.filter((run) => sourceKeys.has(run.key));
   }, [attachedRuns, attachedSearch.attached, favoriteOverride, runs, sessionOverrideActive, sessionOverrideRuns]);
   const authorPageSources = useMemo(() => flattenMultiSearchSources(effectiveRuns), [effectiveRuns]);
+  const visibleNameSearchSources = useMemo(() => (
+    favoriteOverride && showFavoriteOverrideNameSearchSources
+      ? favoriteOverrideNameSearchSources
+      : []
+  ), [favoriteOverride, favoriteOverrideNameSearchSources, showFavoriteOverrideNameSearchSources]);
+  const combinedBaseSources = useMemo(
+    () => [...authorPageSources, ...visibleNameSearchSources],
+    [authorPageSources, visibleNameSearchSources],
+  );
   const hasSessionEnrichments = Boolean(
     favoriteOverride
     && favoriteOverrideSessionCacheEnabled
     && favoriteOverrideMangaEnrichments.length,
   );
   const loadedSources = useMemo(() => collectAuthorCorrespondenceSessionSources(
-    authorPageSources,
+    combinedBaseSources,
     hasSessionEnrichments ? favoriteOverrideMangaEnrichments : [],
-  ), [authorPageSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments]);
+  ), [combinedBaseSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments]);
   const {
     libraryMangas,
     bookmarkedSourceKeys,
@@ -275,21 +299,21 @@ export default function ScraperAuthorFavoritesView({
     logLabel: "author favorites",
   });
   const mergeOptions = useMemo(() => ({
-    enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
+    enableRomajiPhoneticMerge: true,
+    assumeSameAuthor: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
   }), [
-    params?.multiSearchEnableRomajiPhoneticMerge,
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
   const mergedResults = useMemo(
     () => hasSessionEnrichments
       ? mergeAuthorCorrespondenceSessionResults(
-        authorPageSources,
+        combinedBaseSources,
         favoriteOverrideMangaEnrichments,
         mergeOptions,
       )
       : mergeMultiSearchResults(loadedSources, mergeOptions),
-    [authorPageSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments, loadedSources, mergeOptions],
+    [combinedBaseSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments, loadedSources, mergeOptions],
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
@@ -672,7 +696,29 @@ export default function ScraperAuthorFavoritesView({
         tagFavorites={tagFavorites}
         hideBlacklistedCards={params?.scraperHideBlacklistedTagCards === true}
         resultOnly={resultOnly}
+        description={favoriteOverride
+          ? `${favoriteOverride.sources.length} page(s) auteur · ${favoriteOverrideNameSearchSources.length} résultat(s) trouvé(s) par nom disponible(s).`
+          : undefined}
         backLabel={favoriteOverride ? "Retour aux correspondances auteur" : undefined}
+        sourceSectionTitle={favoriteOverride ? "Pages auteur" : undefined}
+        resultsSectionTitle={favoriteOverride ? "Mangas associés à l’auteur" : undefined}
+        viewModeAction={favoriteOverride && favoriteOverrideNameSearchSources.length ? (
+          <button
+            type="button"
+            className={[
+              "scraper-author-favorites-view__name-search-toggle",
+              showFavoriteOverrideNameSearchSources ? "is-active" : "",
+            ].filter(Boolean).join(" ")}
+            aria-pressed={showFavoriteOverrideNameSearchSources}
+            onClick={() => setShowFavoriteOverrideNameSearchSources((currentValue) => !currentValue)}
+            title={showFavoriteOverrideNameSearchSources
+              ? "Masquer les mangas trouvés par le nom de l’auteur mais absents des pages auteur chargées"
+              : "Afficher les mangas trouvés par le nom de l’auteur en plus des pages auteur chargées"}
+          >
+            Hors pages auteur · {showFavoriteOverrideNameSearchSources ? "affichés" : "masqués"}
+            {` (${favoriteOverrideNameSearchSources.length})`}
+          </button>
+        ) : null}
         correspondenceAction={favoriteOverride ? favoriteOverrideAction : !resultOnly ? (
           <button
             type="button"

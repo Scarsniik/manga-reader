@@ -42,6 +42,11 @@
   border-color: rgba(77, 190, 133, 0.28);
 }
 
+.author-correspondence-view__advanced-status.is-cancelled {
+  background: rgba(230, 171, 76, 0.08);
+  border-color: rgba(230, 171, 76, 0.28);
+}
+
 .author-correspondence-view__advanced-status-head,
 .author-correspondence-view__advanced-progress-row {
   align-items: center;
@@ -79,7 +84,7 @@
 }
 
 .author-correspondence-view__advanced-progress-row small {
-  min-width: 3rem;
+  min-width: max-content;
   opacity: 0.7;
   text-align: right;
 }

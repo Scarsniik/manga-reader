@@ -12,6 +12,7 @@ export type MultiSearchMergePhase = "idle" | "queued" | "merging" | "sorting";
 
 export type MultiSearchMergeOptions = {
   enableRomajiPhoneticMerge: boolean;
+  assumeSameAuthor?: boolean;
   preferredTitleLanguageCodes: string[];
 };
 

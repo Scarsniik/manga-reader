@@ -21,6 +21,7 @@ import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
 } from "@/shared/scraper";
+import { filterAuthorCorrespondenceNameSearchSources } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
 import {
   readAuthorCorrespondenceInvalidations,
   writeAuthorCorrespondenceInvalidations,
@@ -67,6 +68,25 @@ export default function AuthorCorrespondenceView({
   const newAuthorPageCount = React.useMemo(() => validMatches.filter((match) => (
     advancedDiscoveredMatchKeys.has(match.key)
   )).length, [advancedDiscoveredMatchKeys, validMatches]);
+  const nameSearchSources = React.useMemo(() => filterAuthorCorrespondenceNameSearchSources({
+    sources: result?.nameSearchSources ?? [],
+    requestedNames: [
+      result?.referenceName,
+      input?.referenceName,
+      ...(input?.names ?? []),
+      ...(input?.referenceSources ?? []).map((source) => source.name),
+    ],
+    matches: displayedMatches,
+    invalidatedMatchKeys,
+  }), [
+    displayedMatches,
+    input?.names,
+    input?.referenceName,
+    input?.referenceSources,
+    invalidatedMatchKeys,
+    result?.nameSearchSources,
+    result?.referenceName,
+  ]);
 
   React.useEffect(() => {
     if (!job?.metadata.id) {
@@ -105,7 +125,7 @@ export default function AuthorCorrespondenceView({
   }, [result?.matches, setMatchInvalidated]);
 
   const combinedAuthor = React.useMemo<ScraperAuthorFavoriteRecord | null>(() => {
-    if (!job || !validMatches.length) {
+    if (!job || (!validMatches.length && !nameSearchSources.length)) {
       return null;
     }
 
@@ -115,7 +135,8 @@ export default function AuthorCorrespondenceView({
       cover: validMatches
         .flatMap((match) => match.previewSources)
         .find((source) => source.result.thumbnailUrl)
-        ?.result.thumbnailUrl,
+        ?.result.thumbnailUrl
+        ?? nameSearchSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
       sources: validMatches.map((match) => ({
         scraperId: match.scraperId,
         authorUrl: match.authorUrl,
@@ -128,7 +149,7 @@ export default function AuthorCorrespondenceView({
       createdAt: job.metadata.createdAt,
       updatedAt: job.metadata.updatedAt,
     };
-  }, [job, result?.referenceName, validMatches]);
+  }, [job, nameSearchSources, result?.referenceName, validMatches]);
 
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
@@ -153,6 +174,8 @@ export default function AuthorCorrespondenceView({
         onOpenAuthorTarget={onOpenAuthorTarget}
         favoriteOverrideRuns={sessionCache.runs}
         favoriteOverrideMangaEnrichments={sessionCache.mangaEnrichments}
+        favoriteOverrideNameSearchSources={nameSearchSources}
+        favoriteOverrideSearchNames={result?.searchedNames ?? input?.names ?? []}
         favoriteOverrideSessionCacheEnabled={Boolean(
           sessionCache.revision > 0
           || (result?.advancedSearch && !sessionCache.hydrated)
@@ -187,6 +210,7 @@ export default function AuthorCorrespondenceView({
             <h2>{job.metadata.primaryTerm}</h2>
             <span>
               {validMatches.length} page(s) auteur conservée(s)
+              {nameSearchSources.length ? ` · ${nameSearchSources.length} résultat(s) trouvé(s) par nom` : ""}
               {invalidatedMatchKeys.size ? ` · ${invalidatedMatchKeys.size} invalidée(s)` : ""}
               {" · "}
               {active ? "Recherche en cours" : "Recherche terminée"}
@@ -221,7 +245,7 @@ export default function AuthorCorrespondenceView({
             disabled={active}
           />
         ) : null}
-        {validMatches.length ? (
+        {combinedAuthor ? (
           <button
             type="button"
             className="author-correspondence-view__open-combined"
@@ -229,7 +253,7 @@ export default function AuthorCorrespondenceView({
             disabled={active}
             title={active
               ? "Attends la fin de la recherche pour ouvrir la vue combinée"
-              : "Afficher ensemble les mangas de toutes les pages auteur trouvées"}
+              : "Afficher ensemble les pages auteur et les mangas trouvés par nom"}
           >
             <OpenBookIcon aria-hidden="true" focusable="false" />
             <span>Voir l’auteur combiné</span>

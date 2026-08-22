@@ -43,8 +43,12 @@ type Props = {
   tagFavorites?: ScraperTagFavoriteRecord[];
   hideBlacklistedCards?: boolean;
   resultOnly?: boolean;
+  description?: string;
   backLabel?: string;
+  sourceSectionTitle?: string;
+  resultsSectionTitle?: string;
   correspondenceAction?: React.ReactNode;
+  viewModeAction?: React.ReactNode;
   statusNotice?: React.ReactNode;
   renderSourceAction?: (run: AuthorFavoriteSourceRun) => React.ReactNode;
   onBack: () => void;
@@ -100,8 +104,12 @@ export default function ScraperAuthorFavoriteResults({
   tagFavorites = [],
   hideBlacklistedCards = false,
   resultOnly = false,
+  description,
   backLabel,
+  sourceSectionTitle,
+  resultsSectionTitle,
   correspondenceAction = null,
+  viewModeAction = null,
   statusNotice = null,
   renderSourceAction,
   onBack,
@@ -126,7 +134,7 @@ export default function ScraperAuthorFavoriteResults({
   return (
     <ScraperAuthorCombinedResults
       title={favorite.name}
-      description={`${favorite.sources.length} source(s) auteur associee(s).`}
+      description={description ?? `${favorite.sources.length} source(s) auteur associee(s).`}
       runs={runs}
       displayedResults={displayedResults}
       visibleResultCount={visibleResultCount}
@@ -149,9 +157,12 @@ export default function ScraperAuthorFavoriteResults({
       tagFavorites={tagFavorites}
       hideBlacklistedCards={hideBlacklistedCards}
       readOnly={resultOnly}
+      viewModeAction={viewModeAction}
       favoriteAction={correspondenceAction}
       statusNotice={statusNotice}
       backLabel={resultOnly ? null : backLabel ?? "Retour aux auteurs favoris"}
+      sourceSectionTitle={sourceSectionTitle}
+      resultsSectionTitle={resultsSectionTitle}
       onBack={onBack}
       onReload={onReload}
       onOpenMultiSearch={onOpenMultiSearch}

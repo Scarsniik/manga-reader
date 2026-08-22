@@ -22,7 +22,10 @@ import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSear
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advancedJapaneseRomanization";
-import { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
+import {
+  getMangaTitleMergeMatchKind,
+  haveClearlyConflictingMangaAuthors,
+} from "@/renderer/utils/mangaMatching/titleProfiles";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
 import {
   doMangaCorrespondenceChaptersOverlap,
@@ -114,6 +117,13 @@ const CORRESPONDENCE_DETAIL_REQUIREMENTS = SCRAPER_METADATA_REQUIREMENTS_BY_PHAS
 
 const normalizeKey = (value: string): string => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
+const formatProgressSubject = (value: string, maxLength = 80): string => {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1)}…`
+    : normalized;
+};
+
 const uniqueText = (values: Array<string | undefined>): string[] => {
   const seen = new Set<string>();
   return values.map((value) => value?.trim().replace(/\s+/g, " ") ?? "").filter((value) => {
@@ -201,6 +211,7 @@ const sourceMatchesReference = (
   matchedTerm?: string;
   matchedByContainment: boolean;
   matchedByMerge: boolean;
+  authorsConflict: boolean;
   discoverableTitles: string[];
 } => {
   const config = getScraperTitleAnalysisFeatureConfig(getScraperFeature(source.scraper, "titleAnalysis"));
@@ -218,6 +229,15 @@ const sourceMatchesReference = (
     advancedRomanizedTitleVariants: source.advancedRomanizedTitleVariants,
     advancedRomanizedAuthorNameVariants: source.advancedRomanizedTentativeAuthorNameVariants,
   };
+  const reference = {
+    title: input.reference.title,
+    authorNames: input.reference.authors,
+  };
+  const authorsConflict = haveClearlyConflictingMangaAuthors(
+    reference,
+    candidate,
+    { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
+  );
   const analyzedTitleFields = uniqueText([analysis.title, ...titleAlternatives]);
   const derivative = isClearlyDerivativeMangaCorrespondenceTitle(source.result.title);
   const match = derivative
@@ -262,6 +282,7 @@ const sourceMatchesReference = (
     matchedTerm: match?.title,
     matchedByContainment: match?.directMatch === true,
     matchedByMerge: Boolean(match && match.mergeMatchKind !== null),
+    authorsConflict,
     discoverableTitles,
   };
 };
@@ -274,6 +295,9 @@ const resolveSourceRejectionReason = (
 ): MangaCorrespondenceRejectionReason | undefined => {
   if (!analyzed.matchedTerm || (requireContainment && !analyzed.matchedByContainment)) {
     return analyzed.derivative ? "derivative" : "titleMismatch";
+  }
+  if (analyzed.authorsConflict) {
+    return "authorMismatch";
   }
   if (
     request === "sameManga"
@@ -1125,12 +1149,19 @@ export const runMangaCorrespondenceSearch = async (
       attemptedDetailSourceKeys.add(key);
       return true;
     });
+    let startedDetailCount = 0;
     await runWithConcurrency(initialDetailCandidates.map((source) => async () => {
+      startedDetailCount += 1;
+      const detailNumber = startedDetailCount;
+      await emit(
+        `Vérification fiche ${detailNumber}/${initialDetailCandidates.length} · ${source.scraper.name} · « ${formatProgressSubject(source.result.title)} »`,
+      );
       enrichedSources.set(source, await enrichCandidateSource(source));
       checkedDetailCount += 1;
     }), concurrency);
 
-    for (const listedSource of sources) {
+    for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex += 1) {
+      const listedSource = sources[sourceIndex];
       let source = enrichedSources.get(listedSource) ?? listedSource;
       let analyzed = sourceMatchesReference(
         input,
@@ -1146,6 +1177,9 @@ export const runMangaCorrespondenceSearch = async (
         && shouldEnrichSourceWithDetails(source, analyzed)
       ) {
         attemptedDetailSourceKeys.add(sourceKey);
+        await emit(
+          `Vérification fiche ${sourceIndex + 1}/${sources.length} · ${source.scraper.name} · « ${formatProgressSubject(source.result.title)} »`,
+        );
         source = await enrichCandidateSource(source);
         analyzed = sourceMatchesReference(
           input,
@@ -1269,6 +1303,7 @@ export const runMangaCorrespondenceSearch = async (
       return true;
     });
     if (sourcesRequiringAuthorExtraction.length) {
+      await emit(`Extraction des auteurs · ${sourcesRequiringAuthorExtraction.length} correspondance(s)`);
       const extracted = await extractMultiSearchAuthors(
         sourcesRequiringAuthorExtraction,
         input.paceMode,
@@ -1338,6 +1373,9 @@ export const runMangaCorrespondenceSearch = async (
     for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
+        await emit(
+          `Recherche titre · ${scraper.name} · page ${pageIndex + 1}/${pageLimit} · « ${formatProgressSubject(term)} »`,
+        );
         const requestedPageUrl = nextPageUrl;
         const loadPage = () => fetchSearchPageWithRetry(
           scraper,
@@ -1469,6 +1507,9 @@ export const runMangaCorrespondenceSearch = async (
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");
       try {
+        await emit(
+          `Lecture page auteur · ${scraper.name} · page ${pageIndex + 1}/${maxPages} · « ${formatProgressSubject(term)} »`,
+        );
         const requestedPageUrl = nextPageUrl;
         const loadPage = () => fetchAuthorPageWithRetry(
           scraper, getAuthorConfig(scraper), term, pageIndex, nextPageUrl, pace,
@@ -1535,6 +1576,7 @@ export const runMangaCorrespondenceSearch = async (
     url: string,
     term: string,
   ): Promise<MultiSearchSourceResult[]> => {
+    await emit(`Lecture fiche directe · ${scraper.name} · « ${formatProgressSubject(term)} »`);
     const details = await resolveScraperCardDetails({
       scraper,
       detailsConfig: getScraperDetailsFeatureConfig(getScraperFeature(scraper, "details")),
@@ -1651,7 +1693,11 @@ export const runMangaCorrespondenceSearch = async (
         const authorResult = await runAuthorCorrespondenceSearch(
           authorInput,
           signal,
-          async () => {},
+          async (_partialResult, progress) => emit(
+            progress.currentLabel
+              ? `Recherche de page auteur · ${progress.currentLabel}`
+              : `Recherche de page auteur · « ${task.term} »`,
+          ),
           executionContext,
         );
         await runWithConcurrency(authorResult.matches.map((authorMatch) => async () => {
@@ -1719,6 +1765,7 @@ export const runMangaCorrespondenceSearch = async (
         }), concurrency);
       }
     }
+    await emit(`Analyse de ${collected.length} candidat(s) · « ${formatProgressSubject(task.term)} »`);
     const discoveryResult = await discoverFromSources(collected, step);
     if (
       isTitle

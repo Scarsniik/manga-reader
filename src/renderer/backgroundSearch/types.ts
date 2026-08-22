@@ -114,6 +114,7 @@ export type MangaCorrespondenceChapterOverride = {
 
 export type MangaCorrespondenceRejectionReason =
   | "titleMismatch"
+  | "authorMismatch"
   | "chapterMismatch"
   | "derivative"
   | "invalidatedResult";
@@ -186,6 +187,7 @@ export type AuthorCorrespondenceBackgroundResult = {
   referenceName: string;
   matches: AuthorCorrespondenceMatch[];
   searchedNames: string[];
+  nameSearchSources?: MultiSearchSourceResult[];
   discoveries?: MangaCorrespondenceDiscovery[];
   mangaDiscovery?: {
     referenceTitle: string;
@@ -201,6 +203,8 @@ export type AuthorCorrespondenceBackgroundResult = {
     discoveredAuthorPageCount: number;
     discoveredAuthorMatchKeys?: string[];
     remainingCandidateCount: number;
+    pendingAuthorNames?: string[];
+    pendingAuthorReferenceSources?: AuthorCorrespondenceReferenceSource[];
   };
   checkpoint?: {
     version: 1;

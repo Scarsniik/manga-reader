@@ -22,9 +22,11 @@ const source = `
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceSourceExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
+  export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
   export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
   export { getMangaTitleAlternatives } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
+  export { haveClearlyConflictingMangaAuthors } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getTokenBasedRomanizationVariants } from "@/electron/handlers/japaneseRomanizationTokenVariants";
   export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
   export { isClearlyDerivativeMangaCorrespondenceTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
@@ -96,9 +98,11 @@ const {
   toggleMangaCorrespondenceChapterExclusion,
   toggleMangaCorrespondenceSourceExclusion,
   mergeMultiSearchResults,
+  mergeAuthorCorrespondenceSessionResults,
   selectMangaCorrespondenceRomanizedSearchTerms,
   getMangaTitleAlternatives,
   getMangaTitleMergeMatchKind,
+  haveClearlyConflictingMangaAuthors,
   getTokenBasedRomanizationVariants,
   applyCommonReadingAlternatives,
   isClearlyDerivativeMangaCorrespondenceTitle,
@@ -938,6 +942,26 @@ test("multi-search normalizes common Japanese author romanization spellings", ()
   );
 });
 
+test("correspondence rejects distant authors but keeps compound credits", () => {
+  const reference = {
+    title: "Tomodachi no Imouto",
+    authorNames: ["Poriuretan"],
+  };
+
+  assert.equal(haveClearlyConflictingMangaAuthors(reference, {
+    title: "Tomodachi no Imouto",
+    authorNames: ["Motsuaki"],
+  }), true);
+  assert.equal(haveClearlyConflictingMangaAuthors(reference, {
+    title: "Tomodachi no Imouto",
+    authorNames: ["Crimson x Poriuretan"],
+  }), false);
+  assert.equal(haveClearlyConflictingMangaAuthors(reference, {
+    title: "Tomodachi no Imouto",
+    authorNames: [],
+  }), false);
+});
+
 test("multi-search uses author-page context when card titles omit authors", () => {
   const title = "A sufficiently distinctive manga title";
 
@@ -1387,4 +1411,102 @@ test("a bilingual source consolidates pre-existing monolingual groups", () => {
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].sources.length, 3);
+});
+
+test("author correspondence merge ignores conflicting author labels for the same logical author", () => {
+  const directName = buildMergeSource(
+    "Fiction Marnie",
+    "en",
+    "https://example.test/direct-name",
+  );
+  const circleName = buildMergeSource(
+    "Fiction Marnie",
+    "ja",
+    "https://example.test/circle-name",
+  );
+  directName.tentativeAuthorNames = ["ie"];
+  circleName.tentativeAuthorNames = ["ie Kenkyuushitsu (ie)"];
+  const options = {
+    enableRomajiPhoneticMerge: false,
+    preferredTitleLanguageCodes: [],
+  };
+
+  assert.equal(mergeMultiSearchResults([directName, circleName], options).length, 2);
+  const merged = mergeAuthorCorrespondenceSessionResults(
+    [directName, circleName],
+    [],
+    options,
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].sources.length, 2);
+});
+
+test("same-author merge keeps sequence markers as separate works", () => {
+  const first = buildMergeSource(
+    "Kouseinou AI Sexaroid 1",
+    "en",
+    "https://example.test/part-1",
+  );
+  const second = buildMergeSource(
+    "Kouseinou AI Sexaroid 2",
+    "en",
+    "https://example.test/part-2",
+  );
+  first.tentativeAuthorNames = ["ie"];
+  second.tentativeAuthorNames = ["ie Kenkyuushitsu (ie)"];
+
+  const merged = mergeMultiSearchResults([first, second], {
+    enableRomajiPhoneticMerge: false,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: [],
+  });
+  assert.equal(merged.length, 2);
+});
+
+test("compact romaji fuzzy matching is limited to same-author views", () => {
+  const spaced = buildMergeSource(
+    "Danson Johi no Katei de Sodatta Yome",
+    "en",
+    "https://example.test/danson-johi",
+  );
+  const compact = buildMergeSource(
+    "Dansonjyohi no Katei de Sodatta Yome",
+    "ko",
+    "https://example.test/dansonjyohi",
+  );
+
+  const regularOptions = {
+    enableRomajiPhoneticMerge: false,
+    preferredTitleLanguageCodes: [],
+  };
+  assert.equal(mergeMultiSearchResults([spaced, compact], regularOptions).length, 2);
+  assert.equal(mergeMultiSearchResults([spaced, compact], {
+    ...regularOptions,
+    assumeSameAuthor: true,
+  }).length, 1);
+});
+
+test("author correspondence always enables phonetic title merging", () => {
+  const romaji = buildMergeSource(
+    "Cool na Yome-san Matome",
+    "en",
+    "https://example.test/cool-wife-romaji",
+  );
+  const japanese = buildMergeSource(
+    "クールな嫁さんまとめ",
+    "ja",
+    "https://example.test/cool-wife-japanese",
+  );
+  japanese.advancedRomanizedTitleVariants = ["kuuru na yome san matome"];
+  const disabledOptions = {
+    enableRomajiPhoneticMerge: false,
+    preferredTitleLanguageCodes: [],
+  };
+
+  assert.equal(mergeMultiSearchResults([romaji, japanese], disabledOptions).length, 2);
+  assert.equal(mergeAuthorCorrespondenceSessionResults(
+    [romaji, japanese],
+    [],
+    disabledOptions,
+  ).length, 1);
 });

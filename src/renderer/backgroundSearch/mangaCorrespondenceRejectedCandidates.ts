@@ -132,6 +132,9 @@ export const scoreMangaCorrespondenceRejectedCandidate = ({
     reasons.push("Éléments communs conservés dans le même ordre");
   }
   if (authorMatch) reasons.push("Auteur identique");
+  if (rejectionReason === "authorMismatch") {
+    reasons.push("Auteur explicite trop éloigné de la référence");
+  }
   if (
     !matchedTerm
     && similarity.knownTokens.length

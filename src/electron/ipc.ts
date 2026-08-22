@@ -154,13 +154,13 @@ ipcMain.handle("background-search-delete", async (_event: IpcMainInvokeEvent, jo
 ipcMain.handle("author-correspondence-session-cache-get", async (
     _event: IpcMainInvokeEvent,
     jobId: string,
-) => authorCorrespondenceSessionCache.getAuthorCorrespondenceSessionCache(jobId));
+) => authorCorrespondenceSessionCache.loadAuthorCorrespondenceSessionCache(jobId));
 ipcMain.handle("author-correspondence-session-cache-set", async (
     _event: IpcMainInvokeEvent,
     jobId: string,
     snapshot: unknown,
 ) => {
-    const savedSnapshot = authorCorrespondenceSessionCache.setAuthorCorrespondenceSessionCache(
+    const savedSnapshot = await authorCorrespondenceSessionCache.persistAuthorCorrespondenceSessionCache(
         jobId,
         snapshot,
     );

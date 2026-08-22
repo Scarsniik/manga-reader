@@ -34,6 +34,7 @@ type MultiSearchGroupMatch = {
 
 export const DEFAULT_MULTI_SEARCH_MERGE_OPTIONS: MultiSearchMergeOptions = {
   enableRomajiPhoneticMerge: false,
+  assumeSameAuthor: false,
   preferredTitleLanguageCodes: [],
 };
 
@@ -57,6 +58,7 @@ export const areMultiSearchMergeOptionsEqual = (
   right: MultiSearchMergeOptions,
 ): boolean => (
   left.enableRomajiPhoneticMerge === right.enableRomajiPhoneticMerge
+  && (left.assumeSameAuthor === true) === (right.assumeSameAuthor === true)
   && left.preferredTitleLanguageCodes.length === right.preferredTitleLanguageCodes.length
   && left.preferredTitleLanguageCodes.every((
     languageCode,

@@ -251,6 +251,7 @@ export default function useIncrementalMultiSearchMerge(
 
     worker.postMessage(request);
   }, [
+    options.assumeSameAuthor,
     options.enableRomajiPhoneticMerge,
     preferredTitleLanguageCodesKey,
     refreshKey,

@@ -10,6 +10,14 @@ const source = `
   export { runAuthorCorrespondenceSearch } from "@/renderer/searchEngines/authorCorrespondenceSearchEngine";
   export { runAuthorCorrespondenceWorkflow } from "@/renderer/searchEngines/authorCorrespondenceWorkflow";
   export {
+    filterAuthorCorrespondenceNameSearchSources,
+    isAuthorCorrespondenceNameSearchSourceVerified,
+  } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
+  export {
+    buildAuthorCorrespondenceAdvancedMangaInput,
+    buildAuthorCorrespondenceAdvancedProgressSummary,
+  } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSearch";
+  export {
     resolveAuthorCorrespondenceAdvancedBatchSize,
     selectAuthorCorrespondenceAdvancedSeeds,
   } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
@@ -38,10 +46,14 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  buildAuthorCorrespondenceAdvancedMangaInput,
+  buildAuthorCorrespondenceAdvancedProgressSummary,
   buildAuthorCorrespondenceReplayInput,
   buildInitialAuthorCorrespondenceDiscoveries,
   buildMultiSearchSourceIdentityKey,
   createSearchExecutionContext,
+  filterAuthorCorrespondenceNameSearchSources,
+  isAuthorCorrespondenceNameSearchSourceVerified,
   mergeAuthorCorrespondenceSessionResults,
   mergeMultiSearchResults,
   resolveAuthorCorrespondenceAdvancedBatchSize,
@@ -366,6 +378,46 @@ test("abnormal author expansion is reported and queued automatic author branches
   assert.ok(warning);
   assert.equal(warning.evidence.distinctAuthorCount, 3);
   assert.deepEqual(result.searchedAuthors, []);
+});
+
+test("an exact title from a distant explicit author is rejected before propagation", async () => {
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => ({
+        ok: true,
+        requestedUrl: request.targetUrl,
+        finalUrl: request.targetUrl,
+        html: `
+          <article class="card">
+            <a class="title" href="/details/motsuaki">[Motsuaki] Tomodachi no Imouto</a>
+          </article>
+        `,
+      }),
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    request: "sameManga",
+    reference: {
+      scraperId: scraper.id,
+      sourceUrl: "https://example.test/details/poriuretan",
+      rawTitle: "[Poriuretan] Tomodachi no Imouto",
+      title: "Tomodachi no Imouto",
+      alternativeTitles: [],
+      authors: ["Poriuretan"],
+      authorUrls: [],
+    },
+    maxPages: 1,
+  }), new AbortController().signal, async () => {});
+
+  assert.equal(result.matches.length, 0);
+  const rejected = result.rejectedCandidates.find((candidate) => (
+    candidate.source.result.detailUrl.endsWith("/details/motsuaki")
+  ));
+  assert.ok(rejected);
+  assert.equal(rejected.rejectionReason, "authorMismatch");
+  assert.ok(result.discoveries.every((discovery) => discovery.value !== "Motsuaki"));
 });
 
 test("manga correspondence only fetches details for matches and possible candidates", async () => {
@@ -725,6 +777,7 @@ test("author correspondence discovers an unknown author from the same manga befo
   assert.equal(result.referenceName, "YD");
   assert.ok(result.matches.some((match) => match.authorUrl === "https://example.test/authors/yd"));
   assert.ok(snapshots.some((label) => label?.startsWith("Recherche du manga")));
+  assert.ok(snapshots.some((label) => label?.includes("Source A · page 1/1")));
 });
 
 test("a replay processes manually added manga and author pages as direct targets", async () => {
@@ -1112,7 +1165,7 @@ test("a replay does not propagate legacy titles learned through a fuzzy author b
   assert.ok(searchedUrls.every((url) => !url.includes("q=OrangeMaru Special")));
 });
 
-test("author correspondence uses a reliable direct page once and reuses it as its preview", async () => {
+test("author correspondence keeps name-search cards even with a reliable direct author page", async () => {
   const authorScraper = {
     ...scraper,
     features: [...scraper.features, {
@@ -1142,7 +1195,7 @@ test("author correspondence uses a reliable direct page once and reuses it as it
           finalUrl: request.targetUrl,
           html: `
             <h1 class="author-name">Author A</h1>
-            <article class="card"><a class="title" href="/details/one">Series One</a></article>
+            <article class="card"><a class="title" href="/details/one">[Author A] Series One</a></article>
           `,
         };
       },
@@ -1166,10 +1219,20 @@ test("author correspondence uses a reliable direct page once and reuses it as it
     scrapeDetailsWithCards: false,
   }, new AbortController().signal, async () => {});
 
-  assert.deepEqual(requests, ["https://example.test/authors/a"]);
+  assert.deepEqual(requests, [
+    "https://example.test/search?q=Author%20A&page=1",
+    "https://example.test/search?q=Author%20A&page=2",
+    "https://example.test/search?q=Author%20A&page=3",
+    "https://example.test/search?q=Author%20A&page=4",
+    "https://example.test/search?q=Author%20A&page=5",
+    "https://example.test/authors/a",
+  ]);
   assert.equal(result.matches.length, 1);
   assert.equal(result.matches[0].previewSources.length, 1);
   assert.deepEqual(result.matches[0].discoveryMethods, ["reference"]);
+  assert.equal(result.nameSearchSources.length, 1);
+  assert.equal(result.nameSearchSources[0].result.detailUrl, "https://example.test/details/one");
+  assert.deepEqual(result.nameSearchSources[0].contextualAuthorNames, ["Author A"]);
 });
 
 test("author correspondence replay searches added aliases and keeps their direct page targets", () => {
@@ -1242,6 +1305,53 @@ const buildAdvancedSource = (scraperId, title, detailUrl) => ({
   canOpenDetails: true,
 });
 
+test("author name-search results require actual author evidence and follow invalidations", () => {
+  const verifiedAuthorSource = {
+    ...buildAdvancedSource("source-a", "[ie] Verified work", "https://source-a.test/work/ie"),
+    searchTerm: "ie",
+    tentativeAuthorNames: ["ie"],
+  };
+  const titleOnlyMatch = {
+    ...buildAdvancedSource(
+      "source-a",
+      "[Hakaba] Kedamono no Ie (Gekan)",
+      "https://source-a.test/work/hakaba",
+    ),
+    searchTerm: "ie",
+    tentativeAuthorNames: ["Hakaba"],
+  };
+  const invalidatedDiscoveredAuthorSource = {
+    ...buildAdvancedSource("source-b", "[TER] Another work", "https://source-b.test/work/ter"),
+    searchTerm: "ter",
+    tentativeAuthorNames: ["TER"],
+  };
+  const discoveredAuthorMatch = {
+    key: "source-b::ter",
+    scraperId: "source-b",
+    scraperName: "source-b",
+    authorName: "TER",
+    authorUrl: "https://source-b.test/authors/ter",
+    matchedName: "ter",
+    discoveryMethods: ["search"],
+    previewSources: [],
+  };
+
+  assert.equal(isAuthorCorrespondenceNameSearchSourceVerified(verifiedAuthorSource), true);
+  assert.equal(isAuthorCorrespondenceNameSearchSourceVerified(titleOnlyMatch), false);
+  assert.deepEqual(filterAuthorCorrespondenceNameSearchSources({
+    sources: [verifiedAuthorSource, titleOnlyMatch, invalidatedDiscoveredAuthorSource],
+    requestedNames: ["ie"],
+    matches: [discoveredAuthorMatch],
+    invalidatedMatchKeys: new Set([discoveredAuthorMatch.key]),
+  }), [verifiedAuthorSource]);
+  assert.deepEqual(filterAuthorCorrespondenceNameSearchSources({
+    sources: [verifiedAuthorSource, titleOnlyMatch, invalidatedDiscoveredAuthorSource],
+    requestedNames: ["ie"],
+    matches: [discoveredAuthorMatch],
+    invalidatedMatchKeys: new Set(),
+  }), [verifiedAuthorSource, invalidatedDiscoveredAuthorSource]);
+});
+
 test("advanced author search selects the most sourced unprocessed manga cards", () => {
   const frequentSources = [
     buildAdvancedSource("source-a", "Frequent Work", "https://source-a.test/work/1"),
@@ -1297,6 +1407,32 @@ test("advanced author search accepts a different manga count for every continuat
   }), 0);
 });
 
+test("cancelling an advanced author pass validates completed manga and keeps pending discoveries", () => {
+  const pendingSource = {
+    scraperId: "source-a",
+    authorUrl: "https://source-a.test/authors/new",
+    name: "New Author",
+  };
+  const summary = buildAuthorCorrespondenceAdvancedProgressSummary({
+    batchCompleted: false,
+    completedBatchCount: 2,
+    requestedBatchCount: 3,
+    completedSeedCount: 15,
+    processedMangaCount: 35,
+    discoveredMangaSourceCount: 12,
+    discoveredAuthorMatchKeys: ["source-a::new"],
+    remainingCandidateCount: 5,
+    pendingAuthorNames: ["New Author", "new author"],
+    pendingAuthorReferenceSources: [pendingSource, pendingSource],
+  });
+
+  assert.equal(summary.completedBatchCount, 2);
+  assert.equal(summary.lastBatchMangaCount, 15);
+  assert.equal(summary.processedMangaCount, 35);
+  assert.deepEqual(summary.pendingAuthorNames, ["New Author"]);
+  assert.deepEqual(summary.pendingAuthorReferenceSources, [pendingSource]);
+});
+
 test("session manga matches stay attached to their originating combined card", () => {
   const anchor = buildAdvancedSource(
     "source-a",
@@ -1328,6 +1464,58 @@ test("session manga matches stay attached to their originating combined card", (
   assert.ok(results[0].sources.includes(correspondenceMatch));
 });
 
+test("advanced author references infer chapter one from parsed titles", () => {
+  const referenceSource = buildAdvancedSource(
+    "source-a",
+    "[ie] Kouseinou AI Sexaroid | High-performance AI sexdroid [English]",
+    "https://source-a.test/work/sexaroid",
+  );
+  const [mergedResult] = mergeMultiSearchResults([referenceSource]);
+  const mangaInput = buildAuthorCorrespondenceAdvancedMangaInput({
+    scraperFilterValues: [],
+    scrapers: [referenceSource.scraper],
+    maxPages: 2,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  }, {
+    key: buildMultiSearchSourceIdentityKey(referenceSource),
+    anchorSourceKeys: [buildMultiSearchSourceIdentityKey(referenceSource)],
+    result: mergedResult,
+    referenceSource,
+  });
+
+  assert.equal(mangaInput.reference.title, "Kouseinou AI Sexaroid");
+  assert.equal(mangaInput.reference.chapter, "1");
+  assert.deepEqual(mangaInput.reference.alternativeTitles, ["High-performance AI sexdroid"]);
+});
+
+test("cached advanced matches with another chapter return to their own card", () => {
+  const anchor = buildAdvancedSource(
+    "source-a",
+    "[ie] Kouseinou AI Sexaroid | High-performance AI sexdroid [English]",
+    "https://source-a.test/work/sexaroid",
+  );
+  const sequel = buildAdvancedSource(
+    "source-b",
+    "[ie] Kouseinou AI Sexaroid 2",
+    "https://source-b.test/work/sexaroid-2",
+  );
+  const results = mergeAuthorCorrespondenceSessionResults(
+    [anchor],
+    [{
+      seedKey: buildMultiSearchSourceIdentityKey(anchor),
+      anchorSourceKeys: [buildMultiSearchSourceIdentityKey(anchor)],
+      sources: [sequel],
+    }],
+    { enableRomajiPhoneticMerge: false, preferredTitleLanguageCodes: [] },
+  );
+
+  assert.equal(results.length, 2);
+  assert.ok(results.some((result) => result.sources.length === 1 && result.sources[0] === anchor));
+  assert.ok(results.some((result) => result.sources.length === 1 && result.sources[0] === sequel));
+});
+
 test("advanced author orchestration reuses the canonical search engines", () => {
   const advancedEngine = fs.readFileSync(
     path.resolve("src/renderer/searchEngines/authorCorrespondenceAdvancedSearch.ts"),
@@ -1339,6 +1527,10 @@ test("advanced author orchestration reuses the canonical search engines", () => 
   );
   const resultView = fs.readFileSync(
     path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceView.tsx"),
+    "utf8",
+  );
+  const favoriteView = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView.tsx"),
     "utf8",
   );
   const advancedStatus = fs.readFileSync(
@@ -1358,6 +1550,9 @@ test("advanced author orchestration reuses the canonical search engines", () => 
   assert.match(sessionListings, /runAuthorFavoriteRefreshSearchEngine\s*\(/);
   assert.match(resultView, /is-advanced-discovery/);
   assert.match(resultView, /Nouveau · recherche poussée/);
+  assert.match(resultView, /favoriteOverrideNameSearchSources=\{nameSearchSources\}/);
+  assert.match(favoriteView, /Hors pages auteur ·/);
+  assert.match(favoriteView, /showFavoriteOverrideNameSearchSources/);
   assert.match(advancedStatus, /role="progressbar"/);
   assert.match(advancedButton, /<ScraperPageAppendControl/);
   assert.match(advancedButton, /requestedProcessedMangaCount/);
