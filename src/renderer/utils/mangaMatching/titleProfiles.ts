@@ -86,6 +86,7 @@ const mangaTitleMergeProfileCache = new WeakMap<MatchableManga, Map<string, Mang
 const mangaTitleMergeProfileValueCache = new Map<string, MangaTitleMergeProfile>();
 const MAX_MANGA_TITLE_PROFILE_VALUE_CACHE_SIZE = 5000;
 const SAME_AUTHOR_COMPACT_ROMAJI_MIN_CHARACTERS = 14;
+const FUZZY_AUTHOR_MIN_CHARACTERS = 12;
 
 export const DEFAULT_MANGA_MERGE_OPTIONS: MangaMergeOptions = {
   enableRomajiPhoneticMerge: false,
@@ -345,6 +346,89 @@ const getNormalizedAuthorNameVariants = (
       .map((variant) => variant.value),
   )
 );
+
+const getEmbeddedAuthorLabels = (value: string): string[] => {
+  const contextPattern = /\(([^()]*)\)|\[([^\]]*)\]|\{([^}]*)\}/gu;
+  const labels = Array.from(value.matchAll(contextPattern))
+    .map((match) => match[1] ?? match[2] ?? match[3] ?? "")
+    .map((label) => label.trim())
+    .filter(Boolean);
+  const outerLabel = value.replace(contextPattern, " ").trim();
+
+  return uniqueValues([outerLabel, ...labels]);
+};
+
+const haveSingleEditAuthorVariant = (
+  leftVariants: string[],
+  rightVariants: string[],
+): boolean => leftVariants.some((leftVariant) => (
+  Array.from(leftVariant).length >= FUZZY_AUTHOR_MIN_CHARACTERS
+  && rightVariants.some((rightVariant) => (
+    Array.from(rightVariant).length >= FUZZY_AUTHOR_MIN_CHARACTERS
+    && hasSingleEditDifference(leftVariant, rightVariant)
+  ))
+));
+
+export type MangaAuthorNameMatch = {
+  referenceName: string;
+  kind: "normalized" | "singleEdit" | "embeddedLabel";
+};
+
+/**
+ * Matches an extracted author against known identities without using title fuzzy rules.
+ * Parenthetical labels are accepted as explicit aliases, while compound free text is not.
+ */
+export const findCompatibleMangaAuthorName = (
+  candidateName: string,
+  referenceNames: string[],
+): MangaAuthorNameMatch | undefined => {
+  const candidateVariants = getNormalizedAuthorNameVariants(candidateName);
+  if (!candidateVariants.length) return undefined;
+
+  for (const referenceName of referenceNames) {
+    const referenceVariants = getNormalizedAuthorNameVariants(referenceName);
+    if (!referenceVariants.length) continue;
+    const referenceVariantSet = new Set(referenceVariants);
+    if (candidateVariants.some((variant) => referenceVariantSet.has(variant))) {
+      return { referenceName, kind: "normalized" };
+    }
+    if (haveSingleEditAuthorVariant(candidateVariants, referenceVariants)) {
+      return { referenceName, kind: "singleEdit" };
+    }
+
+    const candidateEmbeddedVariants = getEmbeddedAuthorLabels(candidateName)
+      .flatMap((label) => getNormalizedAuthorNameVariants(label));
+    const referenceEmbeddedVariants = getEmbeddedAuthorLabels(referenceName)
+      .flatMap((label) => getNormalizedAuthorNameVariants(label));
+    const candidateComparisonVariants = uniqueValues([
+      ...candidateVariants,
+      ...candidateEmbeddedVariants,
+    ]);
+    const referenceComparisonVariants = uniqueValues([
+      ...referenceVariants,
+      ...referenceEmbeddedVariants,
+    ]);
+    const embeddedReferenceSet = new Set(referenceComparisonVariants);
+    if (candidateComparisonVariants.some((variant) => embeddedReferenceSet.has(variant))) {
+      return { referenceName, kind: "embeddedLabel" };
+    }
+    if (haveSingleEditAuthorVariant(candidateEmbeddedVariants, referenceComparisonVariants)) {
+      return { referenceName, kind: "embeddedLabel" };
+    }
+  }
+
+  return undefined;
+};
+
+export const resolveCompatibleMangaAuthorName = (
+  candidateName: string,
+  referenceNames: string[],
+): string | undefined => {
+  const match = findCompatibleMangaAuthorName(candidateName, referenceNames);
+  if (!match) return undefined;
+
+  return candidateName.trim();
+};
 
 const normalizeAuthorNames = (
   values: string[],

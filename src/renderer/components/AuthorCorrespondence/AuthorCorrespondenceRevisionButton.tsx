@@ -15,7 +15,7 @@ import type {
   AuthorCorrespondenceBackgroundInput,
   MangaCorrespondenceResultDecision,
 } from "@/shared/backgroundSearch";
-import { writeAuthorCorrespondenceInvalidations } from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceInvalidations";
+import { writeAuthorCorrespondenceInvalidations } from "@/renderer/backgroundSearch/authorCorrespondenceInvalidations";
 
 type Props = {
   active: boolean;

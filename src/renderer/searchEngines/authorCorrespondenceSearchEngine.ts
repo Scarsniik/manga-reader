@@ -23,7 +23,10 @@ import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSear
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
-import { buildUniqueAuthorSearchNames } from "@/renderer/utils/authorSearchNames";
+import {
+  buildAuthorModuleSearchValues,
+  buildUniqueAuthorSearchNames,
+} from "@/renderer/utils/authorSearchNames";
 import {
   buildAuthorCorrespondenceMatchKey,
   normalizeAuthorCorrespondenceTarget,
@@ -79,26 +82,6 @@ const canUseAuthorModule = (scraper: ScraperRecord): boolean => {
   } catch {
     return false;
   }
-};
-
-const buildAuthorSlug = (value: string, separator: "-" | "_" | ""): string => value
-  .normalize("NFKD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLocaleLowerCase()
-  .replace(/[^\p{L}\p{N}]+/gu, separator)
-  .replace(new RegExp(`^${separator || "\\s"}+|${separator || "\\s"}+$`, "g"), "");
-
-const buildAuthorSearchValues = (scraper: ScraperRecord, authorName: string): string[] => {
-  const config = getAuthorConfig(scraper);
-  const hyphenSlug = buildAuthorSlug(authorName, "-");
-  const underscoreSlug = buildAuthorSlug(authorName, "_");
-  const compactSlug = buildAuthorSlug(authorName, "");
-  const testPrefix = config.testValue?.match(/^([\p{L}\p{N}_-]+):/u)?.[1];
-  return buildUniqueAuthorSearchNames(testPrefix
-    ? [`${testPrefix}:${underscoreSlug}`, `${testPrefix}:${hyphenSlug}`, authorName, underscoreSlug, hyphenSlug, compactSlug]
-    : /\/artists?\//i.test(config.urlTemplate ?? "")
-      ? [hyphenSlug, underscoreSlug, authorName, compactSlug]
-      : [authorName, hyphenSlug, underscoreSlug, compactSlug]);
 };
 
 const findMatchedName = (candidateName: string, names: string[]): string | undefined => names.find((name) => {
@@ -211,6 +194,7 @@ export const runAuthorCorrespondenceSearch = async (
     )),
     searchedNames: names,
     nameSearchSources: Array.from(nameSearchSources.values()),
+    rejectedAuthorCandidates: previousResult?.rejectedAuthorCandidates,
     discoveries: previousResult?.discoveries,
     checkpoint: {
       version: 1,
@@ -398,7 +382,7 @@ export const runAuthorCorrespondenceSearch = async (
         candidate.scraperId === scraper.id && Boolean(findMatchedName(candidate.matchedName, [name]))
       ));
       if (!hasResolvedCandidate && canUseAuthorModule(scraper) && getAuthorConfig(scraper).urlStrategy === "template") {
-        for (const authorValue of buildAuthorSearchValues(scraper, name)) {
+        for (const authorValue of buildAuthorModuleSearchValues(getAuthorConfig(scraper), name)) {
           try {
             await emit(`Vérification page auteur · ${scraper.name} · « ${formatProgressSubject(name)} »`);
             const page = await fetchAuthorPageWithRetry(

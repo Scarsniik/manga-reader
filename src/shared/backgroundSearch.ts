@@ -160,6 +160,7 @@ export type MangaCorrespondenceReference = {
 
 export type MangaCorrespondenceBackgroundInput = {
   reference: MangaCorrespondenceReference;
+  authorPropagationReferenceNames?: string[];
   request: MangaCorrespondenceRequest;
   strategy: MangaCorrespondenceStrategy;
   scraperFilterValues: string[];

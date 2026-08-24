@@ -17,6 +17,17 @@ import {
 const PROGRESS_UPDATE_THROTTLE_MS = 1000;
 const RESULT_CHECKPOINT_THROTTLE_MS = 5000;
 
+const buildAuthorResultCheckpointSignature = (
+  result: BackgroundSearchExecutionResult,
+): string | null => {
+  if (!("searchedNames" in result)) return null;
+  return [
+    result.matches.length,
+    result.searchedNames.length,
+    result.rejectedAuthorCandidates?.length ?? 0,
+  ].join(":");
+};
+
 type PendingSnapshot = {
   progress: BackgroundSearchProgress;
   result?: BackgroundSearchExecutionResult;
@@ -92,6 +103,7 @@ export default function BackgroundSearchRunner() {
   const latestResultsRef = React.useRef(new Map<string, BackgroundSearchExecutionResult>());
   const updateTimersRef = React.useRef(new Map<string, number>());
   const lastResultCheckpointAtRef = React.useRef(new Map<string, number>());
+  const lastAuthorResultSignatureRef = React.useRef(new Map<string, string>());
   const maxConcurrentRef = React.useRef(3);
 
   const flushSnapshot = React.useCallback(async (jobId: string, forceLatestResult = false) => {
@@ -118,13 +130,22 @@ export default function BackgroundSearchRunner() {
     latestResultsRef.current.set(jobId, result);
     const now = Date.now();
     const lastCheckpointAt = lastResultCheckpointAtRef.current.get(jobId) ?? 0;
-    const shouldCheckpointResult = now - lastCheckpointAt >= RESULT_CHECKPOINT_THROTTLE_MS;
+    const authorResultSignature = buildAuthorResultCheckpointSignature(result);
+    const authorResultChanged = authorResultSignature !== null
+      && lastAuthorResultSignatureRef.current.get(jobId) !== authorResultSignature;
+    const shouldCheckpointResult = authorResultChanged
+      || now - lastCheckpointAt >= RESULT_CHECKPOINT_THROTTLE_MS;
     const previous = pendingSnapshotsRef.current.get(jobId);
     pendingSnapshotsRef.current.set(jobId, {
       progress,
       result: shouldCheckpointResult ? result : previous?.result,
     });
-    if (shouldCheckpointResult) lastResultCheckpointAtRef.current.set(jobId, now);
+    if (shouldCheckpointResult) {
+      lastResultCheckpointAtRef.current.set(jobId, now);
+      if (authorResultSignature !== null) {
+        lastAuthorResultSignatureRef.current.set(jobId, authorResultSignature);
+      }
+    }
     if (!updateTimersRef.current.has(jobId)) {
       const timer = window.setTimeout(() => {
         void flushSnapshot(jobId);
@@ -165,6 +186,7 @@ export default function BackgroundSearchRunner() {
       runningRef.current.delete(jobId);
       latestResultsRef.current.delete(jobId);
       lastResultCheckpointAtRef.current.delete(jobId);
+      lastAuthorResultSignatureRef.current.delete(jobId);
       window.dispatchEvent(new CustomEvent("background-search-runner-slot-available"));
     }
   }, [flushSnapshot, queueSnapshot]);

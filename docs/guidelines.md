@@ -31,6 +31,7 @@
 
 - les messages de commit doivent être explicites et en anglais
 - Les messages de commit commencent par : fix, feat, refactor, doc
+- Faire un patchnote quand on commit. Pour savoir si on change de version, utiliser : npm run release:status qui dira si la version en court est déployée.  Si pas de nouvelle version, on continue le patchnote dernier
 
 ## Versioning
 
@@ -45,6 +46,7 @@
   une release déjà distribuée, on publie une nouvelle version.
 - Les artefacts OCR doivent avoir leur propre versioning dans un dépôt séparé
   pour éviter toute confusion avec les releases de l'application.
+- Pour savoir si on change de version, utiliser : npm run release:status qui dira si la version en court est déployée
 
 ## Deploy
 

@@ -183,11 +183,33 @@ export type AuthorCorrespondenceMatch = {
   previewSources: MultiSearchSourceResult[];
 };
 
+export type AuthorCorrespondenceRejectedAuthorReason =
+  | "insufficientMangaEvidence"
+  | "insufficientScraperEvidence"
+  | "multipleAuthorsOnly"
+  | "implausibleName";
+
+export type AuthorCorrespondenceRejectedAuthorCandidate = {
+  key: string;
+  name: string;
+  reason: AuthorCorrespondenceRejectedAuthorReason;
+  decision: "pending" | "accepted";
+  mangaCount: number;
+  soleAuthorMangaCount: number;
+  scraperCount: number;
+  evidenceMangaKeys: string[];
+  scraperIds: string[];
+  scraperNames: string[];
+  sampleTitles: string[];
+  referenceSources: AuthorCorrespondenceReferenceSource[];
+};
+
 export type AuthorCorrespondenceBackgroundResult = {
   referenceName: string;
   matches: AuthorCorrespondenceMatch[];
   searchedNames: string[];
   nameSearchSources?: MultiSearchSourceResult[];
+  rejectedAuthorCandidates?: AuthorCorrespondenceRejectedAuthorCandidate[];
   discoveries?: MangaCorrespondenceDiscovery[];
   mangaDiscovery?: {
     referenceTitle: string;

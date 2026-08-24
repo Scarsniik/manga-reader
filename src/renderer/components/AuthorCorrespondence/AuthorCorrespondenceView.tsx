@@ -1,6 +1,9 @@
 import React from "react";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
-import type { AuthorCorrespondenceBackgroundResult } from "@/renderer/backgroundSearch/types";
+import type {
+  AuthorCorrespondenceBackgroundResult,
+  AuthorCorrespondenceRejectedAuthorCandidate,
+} from "@/renderer/backgroundSearch/types";
 import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorFavoritesView";
 import ScraperAuthorFavoriteButton from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteButton";
 import AuthorCorrespondenceFavoriteButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceFavoriteButton";
@@ -8,12 +11,15 @@ import AuthorCorrespondencePreviewImage from "@/renderer/components/AuthorCorres
 import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRevisionButton";
 import AuthorCorrespondenceAdvancedButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton";
 import AuthorCorrespondenceAdvancedStatus from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedStatus";
+import AuthorCorrespondenceRejectedAuthors from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRejectedAuthors";
+import { buildAuthorCorrespondenceRejectedOpenTargets } from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
 import useAuthorCorrespondenceNavigation from "@/renderer/components/AuthorCorrespondence/useAuthorCorrespondenceNavigation";
 import useAuthorCorrespondenceSessionCache from "@/renderer/backgroundSearch/useAuthorCorrespondenceSessionCache";
 import { OpenBookIcon } from "@/renderer/components/icons";
 import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import {
   buildAuthorCorrespondenceMatchKey,
+  dedupeAuthorCorrespondenceReferenceSources,
   normalizeAuthorCorrespondenceTarget,
 } from "@/renderer/utils/authorCorrespondenceIdentity";
 import type { AuthorCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
@@ -23,9 +29,20 @@ import type {
 } from "@/shared/scraper";
 import { filterAuthorCorrespondenceNameSearchSources } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
 import {
+  analyzeAdvancedAuthorAliases,
+  mergeAuthorCorrespondenceRejectedAuthorCandidates,
+} from "@/renderer/backgroundSearch/authorCorrespondenceRejectedAuthors";
+import {
+  buildAuthorCorrespondenceReplayInput,
+  buildInitialAuthorCorrespondenceDiscoveries,
+} from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
+import { resolveAuthorCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
+import { buildUniqueAuthorSearchNames } from "@/renderer/utils/authorSearchNames";
+import { normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
+import {
   readAuthorCorrespondenceInvalidations,
   writeAuthorCorrespondenceInvalidations,
-} from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceInvalidations";
+} from "@/renderer/backgroundSearch/authorCorrespondenceInvalidations";
 import "./style.scss";
 
 type Props = {
@@ -47,6 +64,8 @@ export default function AuthorCorrespondenceView({
   const sessionCache = useAuthorCorrespondenceSessionCache(job?.metadata.id);
   const [showCombinedView, setShowCombinedView] = React.useState(false);
   const [invalidatedMatchKeys, setInvalidatedMatchKeys] = React.useState<Set<string>>(() => new Set());
+  const [pendingRejectedAuthorName, setPendingRejectedAuthorName] = React.useState<string | null>(null);
+  const [rejectedAuthorError, setRejectedAuthorError] = React.useState<string | null>(null);
   const displayedMatches = React.useMemo(() => {
     const matchesByTarget = new Map<string, AuthorCorrespondenceBackgroundResult["matches"][number]>();
     result?.matches.forEach((match) => {
@@ -87,6 +106,38 @@ export default function AuthorCorrespondenceView({
     result?.nameSearchSources,
     result?.referenceName,
   ]);
+  const rejectedAuthorCandidates = React.useMemo(() => {
+    if (!input) return [];
+    const cachedCandidates = analyzeAdvancedAuthorAliases({
+      enrichments: sessionCache.mangaEnrichments,
+      authorSources: sessionCache.runs.flatMap((run) => run.results),
+      referenceNames: [input.referenceName, ...(input.names ?? [])],
+    }).rejectedCandidates;
+    const activeNameKeys = new Set([
+      input.referenceName,
+      ...(input.names ?? []),
+      ...(result?.searchedNames ?? []),
+    ].map(normalizeFuzzyText));
+    return mergeAuthorCorrespondenceRejectedAuthorCandidates([
+      ...(result?.rejectedAuthorCandidates ?? []),
+      ...cachedCandidates,
+    ]).filter((candidate) => (
+      candidate.decision === "pending"
+      && !activeNameKeys.has(normalizeFuzzyText(candidate.name))
+    ));
+  }, [
+    input,
+    result?.rejectedAuthorCandidates,
+    result?.searchedNames,
+    sessionCache.mangaEnrichments,
+    sessionCache.runs,
+  ]);
+  const rejectedAuthorOpenTargets = React.useMemo(() => new Map(
+    input ? rejectedAuthorCandidates.map((candidate) => [
+      candidate.key,
+      buildAuthorCorrespondenceRejectedOpenTargets({ candidate, input }),
+    ]) : [],
+  ), [input, rejectedAuthorCandidates]);
 
   React.useEffect(() => {
     if (!job?.metadata.id) {
@@ -123,6 +174,97 @@ export default function AuthorCorrespondenceView({
       setMatchInvalidated(match.key, true);
     }
   }, [result?.matches, setMatchInvalidated]);
+
+  const forceValidateRejectedAuthor = React.useCallback(async (
+    candidate: AuthorCorrespondenceRejectedAuthorCandidate,
+  ) => {
+    if (!job?.metadata.id || !input || !result || active || pendingRejectedAuthorName) return;
+    setPendingRejectedAuthorName(candidate.name);
+    setRejectedAuthorError(null);
+    let savedCandidate = false;
+    try {
+      const manualDiscoveries = await resolveAuthorCorrespondenceManualDiscovery({
+        rawValue: candidate.name,
+        input,
+        fetchDocument: window.api?.fetchScraperDocument,
+      });
+      const discoveries = Array.from(new Map([
+        ...buildInitialAuthorCorrespondenceDiscoveries(input, result),
+        ...manualDiscoveries,
+      ].map((discovery) => [discovery.key, { ...discovery, status: "active" as const }])).values());
+      const rejectedCandidates = mergeAuthorCorrespondenceRejectedAuthorCandidates([
+        ...(result.rejectedAuthorCandidates ?? []),
+        candidate,
+      ]).map((entry) => (
+        entry.key === candidate.key ? { ...entry, decision: "accepted" as const } : entry
+      ));
+      const nextResult: AuthorCorrespondenceBackgroundResult = {
+        ...result,
+        discoveries,
+        rejectedAuthorCandidates: rejectedCandidates,
+      };
+      const saved = await window.api?.saveBackgroundSearchResult?.({
+        jobId: job.metadata.id,
+        result: nextResult,
+        resultCount: validMatches.length,
+      });
+      if (!saved) throw new Error("La validation de cet auteur n’a pas pu être enregistrée.");
+      savedCandidate = true;
+
+      const nextReferenceSources = dedupeAuthorCorrespondenceReferenceSources([
+        ...input.referenceSources,
+        ...candidate.referenceSources,
+      ]);
+      const replayInput = input.advancedSearch
+        ? {
+          ...input,
+          names: buildUniqueAuthorSearchNames([
+            input.referenceName,
+            ...input.names,
+            candidate.name,
+          ]),
+          referenceSources: nextReferenceSources,
+          replay: undefined,
+          advancedSearch: {
+            ...input.advancedSearch,
+            continueFromResult: true,
+            invalidatedAuthorMatchKeys: Array.from(invalidatedMatchKeys),
+          },
+        }
+        : {
+          ...buildAuthorCorrespondenceReplayInput(input, discoveries),
+          referenceSources: nextReferenceSources,
+        };
+      const replayed = await window.api?.replayBackgroundSearch?.({
+        jobId: job.metadata.id,
+        input: replayInput,
+      });
+      if (!replayed) throw new Error("La recherche des pages de cet auteur n’a pas pu être lancée.");
+      await reload();
+    } catch (forceError) {
+      if (savedCandidate) {
+        await window.api?.saveBackgroundSearchResult?.({
+          jobId: job.metadata.id,
+          result,
+          resultCount: validMatches.length,
+        });
+      }
+      setRejectedAuthorError(forceError instanceof Error
+        ? forceError.message
+        : "La validation forcée de cet auteur a échoué.");
+    } finally {
+      setPendingRejectedAuthorName(null);
+    }
+  }, [
+    active,
+    input,
+    invalidatedMatchKeys,
+    job?.metadata.id,
+    pendingRejectedAuthorName,
+    reload,
+    result,
+    validMatches.length,
+  ]);
 
   const combinedAuthor = React.useMemo<ScraperAuthorFavoriteRecord | null>(() => {
     if (!job || (!validMatches.length && !nameSearchSources.length)) {
@@ -355,6 +497,9 @@ export default function AuthorCorrespondenceView({
                   type="button"
                   className="author-correspondence-view__invalidate"
                   onClick={() => setMatchInvalidated(match.key, !invalidated)}
+                  title={active
+                    ? "Appliqué à l’approfondissement en cours dès le prochain manga"
+                    : undefined}
                 >
                   {invalidated ? "Réintégrer" : "Invalider"}
                 </button>
@@ -368,6 +513,32 @@ export default function AuthorCorrespondenceView({
           ? "La recherche est en cours. Les auteurs apparaîtront ici dès qu’ils seront trouvés."
           : "Aucune page auteur correspondante n’a été trouvée."}</div>
       )}
+
+      <AuthorCorrespondenceRejectedAuthors
+        candidates={rejectedAuthorCandidates}
+        active={active}
+        pendingCandidateName={pendingRejectedAuthorName}
+        error={rejectedAuthorError}
+        openTargetsByCandidateKey={rejectedAuthorOpenTargets}
+        onAccept={(candidate) => void forceValidateRejectedAuthor(candidate)}
+        onOpenReferenceSource={(candidate, source, inWorkspace) => {
+          if (inWorkspace) {
+            openAuthorInWorkspace(
+              source.scraperId,
+              source.authorUrl,
+              candidate.name,
+              source.templateContext,
+            );
+            return;
+          }
+          openAuthor(
+            source.scraperId,
+            source.authorUrl,
+            candidate.name,
+            source.templateContext,
+          );
+        }}
+      />
     </section>
   );
 }

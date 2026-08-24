@@ -16,11 +16,24 @@ const source = `
   export {
     buildAuthorCorrespondenceAdvancedMangaInput,
     buildAuthorCorrespondenceAdvancedProgressSummary,
+    collectEvidenceBackedAdvancedAuthorAliases,
+    filterIncompatibleAdvancedAuthorMatches,
+    isAuthorCorrespondenceAdvancedSeedActive,
   } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSearch";
+  export {
+    readAuthorCorrespondenceInvalidations,
+    writeAuthorCorrespondenceInvalidations,
+  } from "@/renderer/backgroundSearch/authorCorrespondenceInvalidations";
+  export {
+    analyzeAdvancedAuthorAliases,
+    mergeAuthorCorrespondenceRejectedAuthorCandidates,
+  } from "@/renderer/backgroundSearch/authorCorrespondenceRejectedAuthors";
   export {
     resolveAuthorCorrespondenceAdvancedBatchSize,
     selectAuthorCorrespondenceAdvancedSeeds,
   } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
+  export { collectMangaCorrespondenceAuthors } from "@/renderer/searchEngines/authorCorrespondenceMangaDiscovery";
+  export { findCompatibleMangaAuthorName } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
   export { buildMultiSearchSourceIdentityKey, mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { createSearchExecutionContext } from "@/renderer/searchEngines/searchExecutionContext";
@@ -29,6 +42,9 @@ const source = `
     buildAuthorCorrespondenceReplayInput,
     buildInitialAuthorCorrespondenceDiscoveries,
   } from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
+  export {
+    buildAuthorCorrespondenceRejectedOpenTargets,
+  } from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "manga-correspondence-progressive-details-test.ts" },
@@ -46,22 +62,32 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  analyzeAdvancedAuthorAliases,
   buildAuthorCorrespondenceAdvancedMangaInput,
   buildAuthorCorrespondenceAdvancedProgressSummary,
+  buildAuthorCorrespondenceRejectedOpenTargets,
   buildAuthorCorrespondenceReplayInput,
   buildInitialAuthorCorrespondenceDiscoveries,
   buildMultiSearchSourceIdentityKey,
+  collectEvidenceBackedAdvancedAuthorAliases,
+  collectMangaCorrespondenceAuthors,
   createSearchExecutionContext,
   filterAuthorCorrespondenceNameSearchSources,
+  filterIncompatibleAdvancedAuthorMatches,
+  findCompatibleMangaAuthorName,
   isAuthorCorrespondenceNameSearchSourceVerified,
+  isAuthorCorrespondenceAdvancedSeedActive,
   mergeAuthorCorrespondenceSessionResults,
+  mergeAuthorCorrespondenceRejectedAuthorCandidates,
   mergeMultiSearchResults,
   resolveAuthorCorrespondenceAdvancedBatchSize,
   resolveMangaCorrespondenceManualDiscovery,
+  readAuthorCorrespondenceInvalidations,
   runAuthorCorrespondenceSearch,
   runAuthorCorrespondenceWorkflow,
   runMangaCorrespondenceSearch,
   selectAuthorCorrespondenceAdvancedSeeds,
+  writeAuthorCorrespondenceInvalidations,
 } = bundledModule.exports;
 
 global.DOMParser = class DOMParser {
@@ -378,6 +404,78 @@ test("abnormal author expansion is reported and queued automatic author branches
   assert.ok(warning);
   assert.equal(warning.evidence.distinctAuthorCount, 3);
   assert.deepEqual(result.searchedAuthors, []);
+});
+
+test("anthology matches keep their credits but only propagate corresponding authors", async () => {
+  const anthologyScraper = {
+    ...scraper,
+    features: scraper.features.map((feature) => feature.kind === "details"
+      ? {
+        ...feature,
+        config: {
+          ...feature.config,
+          authorsSelector: { kind: "css", value: ".author" },
+        },
+      }
+      : feature),
+  };
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        if (targetUrl.includes("/search?")) {
+          return {
+            ok: true,
+            requestedUrl: targetUrl,
+            finalUrl: targetUrl,
+            html: '<article class="card"><a class="title" href="/details/anthology">Series One</a></article>',
+          };
+        }
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: `
+            <h1 class="details-title">Series One</h1>
+            <span class="author">Mika Sayaki</span>
+            <span class="author">Punchin Namatamago</span>
+            <span class="author">Towai Raito</span>
+          `,
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    request: "sameManga",
+    reference: {
+      scraperId: anthologyScraper.id,
+      sourceUrl: "https://example.test/details/reference",
+      rawTitle: "Series One",
+      title: "Series One",
+      alternativeTitles: [],
+      authors: ["Punching Namatamago"],
+      authorUrls: [],
+    },
+    authorPropagationReferenceNames: ["Punching Namatamago"],
+    scrapers: [anthologyScraper],
+    maxPages: 1,
+    scrapeDetailsWithCards: true,
+  }), new AbortController().signal, async () => {});
+
+  assert.equal(result.matches.length, 1);
+  assert.deepEqual(result.matches[0].authors, [
+    "Mika Sayaki",
+    "Punchin Namatamago",
+    "Towai Raito",
+  ]);
+  assert.deepEqual(
+    result.discoveries.filter((entry) => entry.kind === "author").map((entry) => entry.value),
+    ["Punchin Namatamago", "Punching Namatamago"],
+  );
+  assert.ok(!result.searchedAuthors.includes("Mika Sayaki"));
+  assert.ok(!result.searchedAuthors.includes("Towai Raito"));
 });
 
 test("an exact title from a distant explicit author is rejected before propagation", async () => {
@@ -1305,6 +1403,361 @@ const buildAdvancedSource = (scraperId, title, detailUrl) => ({
   canOpenDetails: true,
 });
 
+test("author identity matching reuses normalized variants and a conservative typo fallback", () => {
+  assert.deepEqual(
+    findCompatibleMangaAuthorName("Ooshima Aki", ["Oshima Aki"]),
+    { referenceName: "Oshima Aki", kind: "normalized" },
+  );
+  assert.deepEqual(
+    findCompatibleMangaAuthorName("Punchin Namatamago", ["Punching Namatamago"]),
+    { referenceName: "Punching Namatamago", kind: "singleEdit" },
+  );
+  assert.deepEqual(
+    findCompatibleMangaAuthorName(
+      "LIME&MINT (Punching Namatamago)",
+      ["Punching Namatamago"],
+    ),
+    { referenceName: "Punching Namatamago", kind: "embeddedLabel" },
+  );
+  assert.equal(findCompatibleMangaAuthorName("Towai Raito", ["Punching Namatamago"]), undefined);
+  assert.equal(
+    findCompatibleMangaAuthorName(
+      "Punching Namatamago Mika Sayaki",
+      ["Punching Namatamago"],
+    ),
+    undefined,
+  );
+});
+
+test("advanced manga discovery does not export unrelated anthology coauthors", () => {
+  const source = {
+    ...buildAdvancedSource("source-a", "Anthology", "https://source-a.test/work/anthology"),
+    result: {
+      title: "Anthology",
+      detailUrl: "https://source-a.test/work/anthology",
+      authorUrl: "https://source-a.test/authors/mika",
+      authorUrls: [
+        "https://source-a.test/authors/mika",
+        "https://source-a.test/authors/punching",
+        "https://source-a.test/authors/towai",
+      ],
+      authorNames: ["Mika Sayaki", "Punchin Namatamago", "Towai Raito"],
+    },
+  };
+  const result = {
+    matches: [{
+      source,
+      authors: ["Mika Sayaki", "Punchin Namatamago", "Towai Raito"],
+    }],
+    discoveries: [{
+      kind: "author",
+      status: "active",
+      value: "LIME&MINT (Punching Namatamago)",
+      scraperId: "source-a",
+      authorPageUrl: "https://source-a.test/authors/lime-and-mint",
+    }],
+  };
+
+  const discovered = collectMangaCorrespondenceAuthors(result, {
+    referenceNames: ["Punching Namatamago"],
+  });
+
+  assert.deepEqual(discovered.names, [
+    "LIME&MINT (Punching Namatamago)",
+    "Punchin Namatamago",
+  ]);
+  assert.deepEqual(discovered.referenceSources.map((entry) => entry.authorUrl).sort(), [
+    "https://source-a.test/authors/lime-and-mint",
+    "https://source-a.test/authors/punching",
+  ]);
+  assert.deepEqual(discovered.rejectedAuthors.map((entry) => entry.name).sort(), [
+    "Mika Sayaki",
+    "Towai Raito",
+  ]);
+});
+
+test("advanced author aliases can be promoted by repeated single-author manga evidence", () => {
+  const buildAliasSource = (scraperId, detailId, authorName) => ({
+    ...buildAdvancedSource(
+      scraperId,
+      `[${authorName}] Work ${detailId}`,
+      `https://${scraperId}.test/work/${detailId}`,
+    ),
+    tentativeAuthorNames: [authorName],
+  });
+  const limeSource = buildAliasSource(
+    "source-a",
+    "lime",
+    "LIME&MINT (Punching Namatamago)",
+  );
+  const japaneseOneA = buildAliasSource("source-a", "japanese-1-a", "パンチング生卵");
+  const japaneseOneB = buildAliasSource("source-b", "japanese-1-b", "パンチング生卵");
+  const japaneseTwo = buildAliasSource("source-a", "japanese-2", "パンチング生卵");
+  const anthologySources = ["source-a", "source-b", "source-c"].map((scraperId) => (
+    buildAliasSource(scraperId, `anthology-${scraperId}`, "Omiyaback (Various)")
+  ));
+  const buildEnrichment = (seedKey, sources) => ({
+    seedKey,
+    anchorSourceKeys: sources.map(buildMultiSearchSourceIdentityKey),
+    sources: [],
+  });
+  const authorSources = [
+    limeSource,
+    japaneseOneA,
+    japaneseOneB,
+    japaneseTwo,
+    ...anthologySources,
+  ];
+
+  const aliases = collectEvidenceBackedAdvancedAuthorAliases({
+    enrichments: [
+      buildEnrichment("lime", [limeSource]),
+      buildEnrichment("japanese-1", [japaneseOneA, japaneseOneB]),
+      buildEnrichment("japanese-2", [japaneseTwo]),
+      buildEnrichment("anthology", anthologySources),
+    ],
+    authorSources,
+    referenceNames: ["Punching Namatamago"],
+  });
+
+  assert.deepEqual(aliases, [{
+    name: "LIME&MINT (Punching Namatamago)",
+    mangaCount: 1,
+    scraperCount: 1,
+    evidence: "compatibleName",
+  }, {
+    name: "パンチング生卵",
+    mangaCount: 2,
+    scraperCount: 2,
+    evidence: "repeatedManga",
+  }]);
+
+  const analysis = analyzeAdvancedAuthorAliases({
+    enrichments: [
+      buildEnrichment("lime", [limeSource]),
+      buildEnrichment("japanese-1", [japaneseOneA, japaneseOneB]),
+      buildEnrichment("japanese-2", [japaneseTwo]),
+      buildEnrichment("anthology", anthologySources),
+    ],
+    authorSources,
+    referenceNames: ["Punching Namatamago"],
+  });
+  assert.deepEqual(analysis.rejectedCandidates.map((candidate) => ({
+    name: candidate.name,
+    reason: candidate.reason,
+    mangaCount: candidate.mangaCount,
+    scraperCount: candidate.scraperCount,
+  })), [{
+    name: "Omiyaback (Various)",
+    reason: "insufficientMangaEvidence",
+    mangaCount: 1,
+    scraperCount: 3,
+  }]);
+});
+
+test("rejected author evidence keeps anthology coauthors available for manual validation", () => {
+  const anthologySources = ["source-a", "source-b"].map((scraperId) => ({
+    ...buildAdvancedSource(
+      scraperId,
+      "Anthology",
+      `https://${scraperId}.test/work/anthology`,
+    ),
+    result: {
+      title: "Anthology",
+      detailUrl: `https://${scraperId}.test/work/anthology`,
+      authorNames: ["Punching Namatamago", "Towai Raito", "Sakura Pochi"],
+      authorUrls: [
+        `https://${scraperId}.test/authors/punching`,
+        `https://${scraperId}.test/authors/towai`,
+        `https://${scraperId}.test/authors/sakura`,
+      ],
+    },
+    tentativeAuthorNames: [],
+  }));
+  const analysis = analyzeAdvancedAuthorAliases({
+    enrichments: [{
+      seedKey: "anthology",
+      anchorSourceKeys: anthologySources.map(buildMultiSearchSourceIdentityKey),
+      sources: [],
+    }],
+    authorSources: anthologySources,
+    referenceNames: ["Punching Namatamago"],
+  });
+
+  assert.deepEqual(analysis.acceptedAliases, []);
+  assert.deepEqual(analysis.rejectedCandidates.map((candidate) => ({
+    name: candidate.name,
+    reason: candidate.reason,
+    pageCount: candidate.referenceSources.length,
+  })), [{
+    name: "Sakura Pochi",
+    reason: "multipleAuthorsOnly",
+    pageCount: 2,
+  }, {
+    name: "Towai Raito",
+    reason: "multipleAuthorsOnly",
+    pageCount: 2,
+  }]);
+});
+
+test("manual author validation decisions survive evidence refreshes", () => {
+  const buildCandidate = (decision, scraperId) => ({
+    key: "rejected-author::towai raito",
+    name: "Towai Raito",
+    reason: "multipleAuthorsOnly",
+    decision,
+    mangaCount: 1,
+    soleAuthorMangaCount: 0,
+    scraperCount: 1,
+    evidenceMangaKeys: ["anthology"],
+    scraperIds: [scraperId],
+    scraperNames: [scraperId],
+    sampleTitles: ["Anthology"],
+    referenceSources: [],
+  });
+  const merged = mergeAuthorCorrespondenceRejectedAuthorCandidates([
+    buildCandidate("accepted", "source-a"),
+    buildCandidate("pending", "source-b"),
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].decision, "accepted");
+  assert.deepEqual(merged[0].scraperIds, ["source-a", "source-b"]);
+});
+
+test("rejected authors can open configured author modules even without an extracted page URL", () => {
+  const buildAuthorScraper = (id, name, config) => ({
+    ...scraper,
+    id,
+    name,
+    baseUrl: `https://${id}.test/`,
+    features: [{
+      kind: "author",
+      label: "Author",
+      description: "",
+      status: "validated",
+      config: {
+        resultItemSelector: ".card",
+        titleSelector: ".title",
+        ...config,
+      },
+    }],
+  });
+  const templateScraper = buildAuthorScraper("template", "Template", {
+    urlStrategy: "template",
+    urlTemplate: "/artists/{{query}}",
+    testValue: "sample-author",
+  });
+  const prefixScraper = buildAuthorScraper("prefix", "Prefix", {
+    urlStrategy: "template",
+    urlTemplate: "/search?f={{query}}",
+    testValue: "artist:sample_author",
+  });
+  const contextScraper = buildAuthorScraper("context", "Context", {
+    urlStrategy: "template",
+    urlTemplate: "/artists/{{raw:artistSlug}}/{{page}}",
+  });
+  const resultUrlScraper = buildAuthorScraper("result-url", "Result URL", {
+    urlStrategy: "result_url",
+    testUrl: "https://result-url.test/author/sample",
+  });
+  const excludedScraper = buildAuthorScraper("excluded", "Excluded", {
+    urlStrategy: "template",
+    urlTemplate: "/author/{{query}}",
+  });
+  const candidate = {
+    key: "rejected-author::towai raito",
+    name: "Towai Raito",
+    reason: "multipleAuthorsOnly",
+    decision: "pending",
+    mangaCount: 1,
+    soleAuthorMangaCount: 0,
+    scraperCount: 2,
+    evidenceMangaKeys: ["anthology"],
+    scraperIds: ["template", "prefix", "context", "result-url"],
+    scraperNames: ["Template", "Prefix", "Context", "Result URL"],
+    sampleTitles: ["Anthology"],
+    referenceSources: [{
+      scraperId: "template",
+      authorUrl: "https://template.test/artists/towai-raito",
+      name: "Towai Raito",
+    }],
+  };
+
+  const targets = buildAuthorCorrespondenceRejectedOpenTargets({
+    candidate,
+    input: {
+      referenceName: "Punching Namatamago",
+      names: ["Punching Namatamago"],
+      referenceSources: [],
+      scraperFilterValues: ["__include_filter_excluded__:excluded"],
+      scrapers: [templateScraper, prefixScraper, contextScraper, resultUrlScraper, excludedScraper],
+      maxPages: null,
+      paceMode: "fast",
+      scrapingConcurrency: 2,
+      scrapeDetailsWithCards: true,
+    },
+  });
+
+  assert.deepEqual(targets.map(({ scraperId, scraperName, authorUrl, templateContext }) => ({
+    scraperId,
+    scraperName,
+    authorUrl,
+    templateContext,
+  })), [{
+    scraperId: "template",
+    scraperName: "Template",
+    authorUrl: "https://template.test/artists/towai-raito",
+    templateContext: undefined,
+  }, {
+    scraperId: "prefix",
+    scraperName: "Prefix",
+    authorUrl: "artist:towai_raito",
+    templateContext: undefined,
+  }, {
+    scraperId: "context",
+    scraperName: "Context",
+    authorUrl: "towai-raito",
+    templateContext: { artistSlug: "towai-raito" },
+  }]);
+});
+
+test("a continued advanced pass removes previously discovered coauthor pages", () => {
+  const buildMatch = (authorName, matchedName, authorUrl) => ({
+    key: `source-a::${authorUrl}`,
+    scraperId: "source-a",
+    scraperName: "Source A",
+    authorName,
+    authorUrl,
+    matchedName,
+    discoveryMethods: ["search"],
+    previewSources: [],
+  });
+  const originalMatch = buildMatch(
+    "LIME&MINT",
+    "Punching Namatamago",
+    "https://source-a.test/authors/lime-and-mint",
+  );
+  const typoMatch = buildMatch(
+    "Punchin Namatamago",
+    "Punchin Namatamago",
+    "https://source-a.test/authors/punchin",
+  );
+  const coauthorMatch = buildMatch(
+    "Mika Sayaki",
+    "Mika Sayaki",
+    "https://source-a.test/authors/mika",
+  );
+
+  const filtered = filterIncompatibleAdvancedAuthorMatches({
+    matches: [originalMatch, typoMatch, coauthorMatch],
+    discoveredMatchKeys: [typoMatch.key, coauthorMatch.key],
+    referenceNames: ["Punching Namatamago"],
+  });
+
+  assert.deepEqual(filtered, [originalMatch, typoMatch]);
+});
+
 test("author name-search results require actual author evidence and follow invalidations", () => {
   const verifiedAuthorSource = {
     ...buildAdvancedSource("source-a", "[ie] Verified work", "https://source-a.test/work/ie"),
@@ -1387,6 +1840,90 @@ test("advanced author search selects the most sourced unprocessed manga cards", 
   assert.equal(secondBatch[0].result.title, "Next Work");
 });
 
+test("live author invalidation removes only seeds no longer backed by an active page", () => {
+  const sourceA = buildAdvancedSource(
+    "source-a",
+    "Shared Work",
+    "https://source-a.test/work/shared",
+  );
+  const sourceB = buildAdvancedSource(
+    "source-b",
+    "Shared Work",
+    "https://source-b.test/work/shared",
+  );
+  const [mergedResult] = mergeMultiSearchResults([sourceA, sourceB]);
+  const seed = {
+    key: buildMultiSearchSourceIdentityKey(sourceA),
+    anchorSourceKeys: [
+      buildMultiSearchSourceIdentityKey(sourceA),
+      buildMultiSearchSourceIdentityKey(sourceB),
+    ],
+    result: mergedResult,
+    referenceSource: sourceA,
+  };
+  const matchA = {
+    key: "match-a",
+    scraperId: "source-a",
+    scraperName: "Source A",
+    authorName: "Author A",
+    authorUrl: "https://source-a.test/authors/a",
+    matchedName: "Author A",
+    discoveryMethods: ["reference"],
+    previewSources: [],
+  };
+  const matchB = {
+    ...matchA,
+    key: "match-b",
+    scraperId: "source-b",
+    scraperName: "Source B",
+    authorUrl: "https://source-b.test/authors/a",
+  };
+  const cache = {
+    revision: 1,
+    runs: [{
+      key: `${matchA.scraperId}::${matchA.authorUrl}`,
+      results: [sourceA],
+    }, {
+      key: `${matchB.scraperId}::${matchB.authorUrl}`,
+      results: [sourceB],
+    }],
+    mangaEnrichments: [],
+    processedMangaKeys: [],
+    discoveredAuthorMatchKeys: [],
+  };
+
+  assert.equal(isAuthorCorrespondenceAdvancedSeedActive({
+    seed,
+    cache,
+    matches: [matchA, matchB],
+    invalidatedMatchKeys: new Set([matchA.key]),
+  }), true);
+  assert.equal(isAuthorCorrespondenceAdvancedSeedActive({
+    seed,
+    cache,
+    matches: [matchA, matchB],
+    invalidatedMatchKeys: new Set([matchA.key, matchB.key]),
+  }), false);
+});
+
+test("a running renderer shares author invalidations even when local storage is unavailable", () => {
+  global.window = {
+    localStorage: {
+      getItem: () => { throw new Error("storage unavailable"); },
+      setItem: () => { throw new Error("storage unavailable"); },
+      removeItem: () => { throw new Error("storage unavailable"); },
+    },
+  };
+  const jobId = "live-author-invalidation-test";
+  writeAuthorCorrespondenceInvalidations(jobId, new Set(["match-a", "match-b"]));
+  assert.deepEqual(
+    Array.from(readAuthorCorrespondenceInvalidations(jobId)).sort(),
+    ["match-a", "match-b"],
+  );
+  writeAuthorCorrespondenceInvalidations(jobId, new Set());
+  assert.deepEqual(Array.from(readAuthorCorrespondenceInvalidations(jobId)), []);
+});
+
 test("advanced author search accepts a different manga count for every continuation", () => {
   assert.equal(resolveAuthorCorrespondenceAdvancedBatchSize({
     batchSize: 5,
@@ -1462,6 +1999,50 @@ test("session manga matches stay attached to their originating combined card", (
   assert.equal(results.length, 1);
   assert.equal(results[0].sources.length, 3);
   assert.ok(results[0].sources.includes(correspondenceMatch));
+});
+
+test("advanced anthology input only seeds corresponding author names and URLs", () => {
+  const referenceSource = {
+    ...buildAdvancedSource(
+      "source-a",
+      "Anthology Work",
+      "https://source-a.test/work/anthology",
+    ),
+    result: {
+      title: "Anthology Work",
+      detailUrl: "https://source-a.test/work/anthology",
+      authorUrl: "https://source-a.test/authors/mika",
+      authorUrls: [
+        "https://source-a.test/authors/mika",
+        "https://source-a.test/authors/punching",
+        "https://source-a.test/authors/towai",
+      ],
+      authorNames: ["Mika Sayaki", "Punchin Namatamago", "Towai Raito"],
+    },
+    tentativeAuthorNames: ["Mika Sayaki", "Punchin Namatamago", "Towai Raito"],
+  };
+  const [mergedResult] = mergeMultiSearchResults([referenceSource]);
+  const mangaInput = buildAuthorCorrespondenceAdvancedMangaInput({
+    referenceName: "Punching Namatamago",
+    names: ["Punching Namatamago"],
+    scraperFilterValues: [],
+    scrapers: [referenceSource.scraper],
+    maxPages: 2,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  }, {
+    key: buildMultiSearchSourceIdentityKey(referenceSource),
+    anchorSourceKeys: [buildMultiSearchSourceIdentityKey(referenceSource)],
+    result: mergedResult,
+    referenceSource,
+  });
+
+  assert.deepEqual(mangaInput.reference.authors, ["Punchin Namatamago"]);
+  assert.deepEqual(mangaInput.reference.authorUrls, [
+    "https://source-a.test/authors/punching",
+  ]);
+  assert.deepEqual(mangaInput.authorPropagationReferenceNames, ["Punching Namatamago"]);
 });
 
 test("advanced author references infer chapter one from parsed titles", () => {
@@ -1541,11 +2122,17 @@ test("advanced author orchestration reuses the canonical search engines", () => 
     path.resolve("src/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton.tsx"),
     "utf8",
   );
+  const backgroundRunner = fs.readFileSync(
+    path.resolve("src/renderer/backgroundSearch/BackgroundSearchRunner.tsx"),
+    "utf8",
+  );
 
   assert.match(advancedEngine, /runMangaCorrespondenceSearch\s*\(/);
   assert.match(advancedEngine, /request:\s*"sameManga"/);
   assert.doesNotMatch(advancedEngine, /purpose:\s*"authorDiscovery"/);
   assert.match(advancedEngine, /runAuthorCorrespondenceSearch\s*\(/);
+  assert.match(advancedEngine, /await flushAuthorDiscoveries\([\s\S]*seedIndex \+ 1/);
+  assert.match(advancedEngine, /readLiveInvalidatedMatchKeys\(\)/);
   assert.match(sessionListings, /buildAuthorListingSearchInput\s*\(/);
   assert.match(sessionListings, /runAuthorFavoriteRefreshSearchEngine\s*\(/);
   assert.match(resultView, /is-advanced-discovery/);
@@ -1556,4 +2143,5 @@ test("advanced author orchestration reuses the canonical search engines", () => 
   assert.match(advancedStatus, /role="progressbar"/);
   assert.match(advancedButton, /<ScraperPageAppendControl/);
   assert.match(advancedButton, /requestedProcessedMangaCount/);
+  assert.match(backgroundRunner, /authorResultChanged/);
 });

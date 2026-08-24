@@ -25,6 +25,7 @@ import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advan
 import {
   getMangaTitleMergeMatchKind,
   haveClearlyConflictingMangaAuthors,
+  resolveCompatibleMangaAuthorName,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
 import {
@@ -233,7 +234,14 @@ const sourceMatchesReference = (
     title: input.reference.title,
     authorNames: input.reference.authors,
   };
-  const authorsConflict = haveClearlyConflictingMangaAuthors(
+  const hasCompatiblePropagationAuthor = Boolean(
+    input.authorPropagationReferenceNames?.length
+    && authors.some((author) => Boolean(resolveCompatibleMangaAuthorName(
+      author,
+      input.authorPropagationReferenceNames!,
+    ))),
+  );
+  const authorsConflict = !hasCompatiblePropagationAuthor && haveClearlyConflictingMangaAuthors(
     reference,
     candidate,
     { enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge },
@@ -354,6 +362,12 @@ export const runMangaCorrespondenceSearch = async (
     ? safety.retainedPotentialCount
     : Number.MAX_SAFE_INTEGER;
   const authorDiscoveryOnly = input.purpose === "authorDiscovery";
+  const authorPropagationReferenceNames = uniqueText(input.authorPropagationReferenceNames ?? []);
+  const resolvePropagatedAuthorName = (authorName: string): string | undefined => (
+    authorPropagationReferenceNames.length
+      ? resolveCompatibleMangaAuthorName(authorName, authorPropagationReferenceNames)
+      : authorName.trim() || undefined
+  );
   const referenceScraper = scrapers.find((scraper) => scraper.id === input.reference.scraperId) ?? scrapers[0];
   const referenceAnalysis = analyzeMangaCorrespondenceTitle(
     input.reference.rawTitle,
@@ -361,6 +375,7 @@ export const runMangaCorrespondenceSearch = async (
   );
   const checkpointInput = {
     reference: input.reference,
+    authorPropagationReferenceNames,
     request: input.request,
     strategy: input.strategy,
     scraperFilterValues: input.scraperFilterValues,
@@ -460,11 +475,13 @@ export const runMangaCorrespondenceSearch = async (
     });
   });
   input.reference.authors.forEach((author, index) => {
+    const propagatedAuthor = resolvePropagatedAuthorName(author);
+    if (!propagatedAuthor) return;
     const authorPageUrl = input.reference.authorUrls[index]
       ?? (input.reference.authorUrls.length === 1 ? input.reference.authorUrls[0] : undefined);
     addDiscovery({
       kind: "author",
-      value: author,
+      value: propagatedAuthor,
       scraperId: referenceScraper.id,
       scraperName: referenceScraper.name,
       origin: "reference",
@@ -486,16 +503,19 @@ export const runMangaCorrespondenceSearch = async (
         propagationConfidence: "manual",
       });
     });
-    const candidateAuthorUrls = uniqueText([
-      candidate.source.result.authorUrl,
-      ...(candidate.source.result.authorUrls ?? []),
-    ]);
+    const candidateAuthorUrls = candidate.source.result.authorUrls?.length
+      ? candidate.source.result.authorUrls
+      : candidate.source.result.authorUrl
+        ? [candidate.source.result.authorUrl]
+        : [];
     candidate.authors.forEach((author, index) => {
+      const propagatedAuthor = resolvePropagatedAuthorName(author);
+      if (!propagatedAuthor) return;
       const authorPageUrl = candidateAuthorUrls[index]
         ?? (candidateAuthorUrls.length === 1 ? candidateAuthorUrls[0] : undefined);
       addDiscovery({
         kind: "author",
-        value: author,
+        value: propagatedAuthor,
         scraperId: candidate.source.scraper.id,
         scraperName: candidate.source.scraper.name,
         origin: candidate.source.result.detailsMetadataFetched ? "details" : "card",
@@ -582,7 +602,7 @@ export const runMangaCorrespondenceSearch = async (
       && discovery.propagationConfidence !== "fuzzyTitle"
     ))
     .sort((left, right) => discoveryPriority(left) - discoveryPriority(right))
-    .map((discovery) => discovery.value));
+    .map((discovery) => resolvePropagatedAuthorName(discovery.value)));
   const romanizedTitleVariantsByKey = new Map<string, string[]>();
   const searchedTitles: string[] = isContinuation || isResume ? [...(previousResult?.searchedTitles ?? [])] : [];
   const searchedAuthors: string[] = isContinuation || isResume ? [...(previousResult?.searchedAuthors ?? [])] : [];
@@ -842,7 +862,9 @@ export const runMangaCorrespondenceSearch = async (
     : isResume
     ? []
     : isContinuation
-    ? uniqueText(acceptedSearchSeeds.flatMap((candidate) => candidate.authors))
+    ? uniqueText(acceptedSearchSeeds.flatMap((candidate) => (
+      candidate.authors.map(resolvePropagatedAuthorName)
+    )))
     : [...knownAuthors];
   initialAuthorTasks.forEach((term) => addTask({
     kind: "author",
@@ -859,9 +881,11 @@ export const runMangaCorrespondenceSearch = async (
       ) return;
       const scraper = scrapers.find((entry) => entry.id === discovery.scraperId);
       if (!scraper) return;
+      const propagatedAuthor = resolvePropagatedAuthorName(discovery.value);
+      if (!propagatedAuthor) return;
       addTask({
         kind: "author",
-        term: discovery.value,
+        term: propagatedAuthor,
         protectedSeed: discovery.origin === "reference" || discovery.origin === "manual",
         directTargets: [{
           scraper,
@@ -874,16 +898,28 @@ export const runMangaCorrespondenceSearch = async (
   if (isContinuation) acceptedSearchSeeds.forEach((candidate) => {
     const scraper = scrapers.find((entry) => entry.id === candidate.source.scraper.id);
     if (!scraper) return;
-    uniqueText([
-      candidate.source.result.authorUrl,
-      ...(candidate.source.result.authorUrls ?? []),
-    ]).forEach((url) => addTask({
-      kind: "author",
-      term: candidate.authors[0] || url,
-      parentId: continuationStep?.id,
-      protectedSeed: true,
-      directTargets: [{ scraper, url }],
-    }));
+    const candidateAuthorUrls = candidate.source.result.authorUrls?.length
+      ? candidate.source.result.authorUrls
+      : candidate.source.result.authorUrl
+        ? [candidate.source.result.authorUrl]
+        : [];
+    candidateAuthorUrls.forEach((url, index) => {
+      const authorName = candidate.authors[index]
+        ?? (candidateAuthorUrls.length === 1 && candidate.authors.length === 1
+          ? candidate.authors[0]
+          : undefined);
+      const propagatedAuthor = authorName
+        ? resolvePropagatedAuthorName(authorName)
+        : undefined;
+      if (!propagatedAuthor) return;
+      addTask({
+        kind: "author",
+        term: propagatedAuthor,
+        parentId: continuationStep?.id,
+        protectedSeed: true,
+        directTargets: [{ scraper, url }],
+      });
+    });
   });
   if (!isContinuation && !isResume && knownAuthors.length) input.reference.authorUrls.forEach((url) => {
     const scraper = scrapers.find((entry) => entry.id === input.reference.scraperId);
@@ -1229,13 +1265,24 @@ export const runMangaCorrespondenceSearch = async (
       matchedSourceCount += 1;
       accepted += existing ? 0 : 1;
       if (canPropagateFromSource) acceptedSources.push(source);
-      const directAuthorUrls = uniqueText([source.result.authorUrl, ...(source.result.authorUrls ?? [])]);
-      analyzed.authors.forEach((author, index) => {
+      const directAuthorUrls = source.result.authorUrls?.length
+        ? source.result.authorUrls
+        : source.result.authorUrl
+          ? [source.result.authorUrl]
+          : [];
+      const propagatableAuthors = analyzed.authors.flatMap((author, index) => {
+        const propagatedAuthor = resolvePropagatedAuthorName(author);
+        if (!propagatedAuthor) return [];
+        const authorPageUrl = directAuthorUrls[index]
+          ?? (directAuthorUrls.length === 1 && analyzed.authors.length === 1
+            ? directAuthorUrls[0]
+            : undefined);
+        return [{ name: propagatedAuthor, authorPageUrl }];
+      });
+      propagatableAuthors.forEach(({ name: author, authorPageUrl }) => {
         const isNewAuthor = !knownAuthors.some((value) => normalizeKey(value) === normalizeKey(author));
         const discoveryKey = buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, author);
         const wasAlreadyDiscovered = discoveries.has(discoveryKey);
-        const authorPageUrl = directAuthorUrls[index]
-          ?? (directAuthorUrls.length === 1 ? directAuthorUrls[0] : undefined);
         const discovery = addDiscovery({
           kind: "author",
           value: author,
@@ -1257,15 +1304,18 @@ export const runMangaCorrespondenceSearch = async (
           addTask({ kind: "author", term: author, parentId: authorParentId });
         }
       });
-      const hasActiveDiscoveredAuthor = analyzed.authors.some((author) => (
-        discoveries.get(buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, author))?.status === "active"
+      const activeDirectAuthors = propagatableAuthors.filter(({ name }) => (
+        discoveries.get(buildMangaCorrespondenceDiscoveryKey("author", source.scraper.id, name))?.status === "active"
       ));
-      if (canPropagateFromSource && !authorDiscoveryOnly && directAuthorUrls.length && hasActiveDiscoveredAuthor) {
+      const activeDirectTargets = activeDirectAuthors.flatMap(({ authorPageUrl }) => (
+        authorPageUrl ? [{ scraper: source.scraper, url: authorPageUrl }] : []
+      ));
+      if (canPropagateFromSource && !authorDiscoveryOnly && activeDirectTargets.length) {
         addTask({
           kind: "author",
-          term: analyzed.authors[0] || directAuthorUrls[0],
+          term: activeDirectAuthors[0].name,
           parentId: step.id,
-          directTargets: directAuthorUrls.map((url) => ({ scraper: source.scraper, url })),
+          directTargets: activeDirectTargets,
         });
       }
       analyzed.discoverableTitles.forEach((title) => {
@@ -1318,10 +1368,14 @@ export const runMangaCorrespondenceSearch = async (
       extracted.authors.forEach((author) => {
         const scraper = scrapers.find((entry) => entry.id === author.scraperId);
         if (!scraper) return;
-        const isNewAuthor = !knownAuthors.some((value) => normalizeKey(value) === normalizeKey(author.name));
+        const propagatedAuthor = resolvePropagatedAuthorName(author.name);
+        if (!propagatedAuthor) return;
+        const isNewAuthor = !knownAuthors.some((value) => (
+          normalizeKey(value) === normalizeKey(propagatedAuthor)
+        ));
         const discovery = addDiscovery({
           kind: "author",
-          value: author.name,
+          value: propagatedAuthor,
           scraperId: scraper.id,
           scraperName: scraper.name,
           origin: author.discoveryMethod === "details" ? "details" : "card",
@@ -1331,13 +1385,18 @@ export const runMangaCorrespondenceSearch = async (
           propagationConfidence: "directTitle",
         });
         if (!discovery || discovery.status !== "active") return;
-        if (pauseAutomaticAuthorExpansion(author.name)) return;
-        const authorStep = addTrace("authorDiscovered", "Page auteur correspondante trouvée", author.name, step.id);
-        if (isNewAuthor) knownAuthors.push(author.name);
+        if (pauseAutomaticAuthorExpansion(propagatedAuthor)) return;
+        const authorStep = addTrace(
+          "authorDiscovered",
+          "Page auteur correspondante trouvée",
+          propagatedAuthor,
+          step.id,
+        );
+        if (isNewAuthor) knownAuthors.push(propagatedAuthor);
         if (scraper && !authorDiscoveryOnly) {
           addTask({
             kind: "author",
-            term: author.name,
+            term: propagatedAuthor,
             parentId: authorStep.id,
             directTargets: [{ scraper, url: author.url }],
           });
@@ -1705,12 +1764,14 @@ export const runMangaCorrespondenceSearch = async (
           resolvedAuthorPageKeys.add(authorMatch.key);
           const scraper = scrapers.find((entry) => entry.id === authorMatch.scraperId);
           if (!scraper) return;
+          const propagatedAuthor = resolvePropagatedAuthorName(authorMatch.authorName);
+          if (!propagatedAuthor) return;
           const isNewAuthor = !knownAuthors.some((value) => (
-            normalizeKey(value) === normalizeKey(authorMatch.authorName)
+            normalizeKey(value) === normalizeKey(propagatedAuthor)
           ));
           const discovery = addDiscovery({
             kind: "author",
-            value: authorMatch.authorName,
+            value: propagatedAuthor,
             scraperId: scraper.id,
             scraperName: scraper.name,
             origin: "authorPage",
@@ -1723,13 +1784,13 @@ export const runMangaCorrespondenceSearch = async (
             propagationConfidence: task.protectedSeed ? "manual" : "directTitle",
           });
           if (!discovery || discovery.status !== "active") return;
-          if (!task.protectedSeed && pauseAutomaticAuthorExpansion(authorMatch.authorName)) return;
+          if (!task.protectedSeed && pauseAutomaticAuthorExpansion(propagatedAuthor)) return;
 
-          if (isNewAuthor) knownAuthors.push(authorMatch.authorName);
+          if (isNewAuthor) knownAuthors.push(propagatedAuthor);
           const authorPageStep = addTrace(
             "authorDiscovered",
             "Page auteur équivalente trouvée",
-            `${authorMatch.authorName} · ${authorMatch.scraperName}`,
+            `${propagatedAuthor} · ${authorMatch.scraperName}`,
             step.id,
           );
           try {
