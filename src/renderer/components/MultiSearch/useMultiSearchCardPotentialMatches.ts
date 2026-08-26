@@ -65,15 +65,24 @@ export default function useMultiSearchCardPotentialMatches({
       return [];
     }
 
+    const matchTitles = Array.from(new Set([
+      result.title,
+      ...result.sources.map((source) => source.result.detailsTitle),
+    ].map((title) => String(title ?? "").trim()).filter(Boolean)));
+    const sourceIdentities = result.sources.flatMap((source) => ([
+      source.result.detailUrl,
+      source.result.detailsSourceUrl,
+    ].filter(Boolean).map((sourceUrl) => ({
+      scraperId: source.scraper.id,
+      sourceUrl,
+    }))));
+
     return [{
       key: result.id,
       scraperId: primarySource.scraper.id,
-      title: result.title,
-      sourceUrl: primarySource.result.detailUrl,
-      sourceIdentities: result.sources.map((source) => ({
-        scraperId: source.scraper.id,
-        sourceUrl: source.result.detailUrl,
-      })),
+      title: matchTitles.join(" | "),
+      sourceUrl: primarySource.result.detailsSourceUrl || primarySource.result.detailUrl,
+      sourceIdentities,
       authorNames: [
         ...result.tentativeAuthorNames,
         ...result.sources.flatMap((source) => source.tentativeAuthorNames),

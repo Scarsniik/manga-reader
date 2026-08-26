@@ -13,7 +13,7 @@ export const buildSearchResultViewHistoryIdentity = (
   result: ScraperSearchResultItem,
 ): ScraperViewHistoryCardIdentity => ({
   scraperId,
-  sourceUrl: result.detailUrl || result.authorUrl || undefined,
+  sourceUrl: result.detailsSourceUrl || result.detailUrl || result.authorUrl || undefined,
   title: result.title,
   thumbnailUrl: result.thumbnailUrl,
 });

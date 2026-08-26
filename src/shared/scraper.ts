@@ -475,6 +475,8 @@ export interface ScraperSearchResultItem {
   title: string;
   detailUrl?: string;
   detailsMetadataFetched?: boolean;
+  detailsTitle?: string;
+  detailsSourceUrl?: string;
   authorUrl?: string;
   authorUrls?: string[];
   authorNames?: string[];

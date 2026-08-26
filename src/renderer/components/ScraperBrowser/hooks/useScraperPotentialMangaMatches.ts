@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
+import { useMemo } from "react";
 import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
-import type { MangaMergeOptions, MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
-import { enrichMatchableMangasWithJapaneseRomanization } from "@/renderer/utils/mangaMatching/advancedRomanization";
-import { buildCurrentMatchable } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchCandidates";
-import { matchPotentialMangaCandidates } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchMatching";
-import type {
-  ScraperPotentialMangaMatch,
-  ScraperPotentialMangaMatchState,
-} from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import type { MangaMergeOptions } from "@/renderer/utils/mangaMatching/titleProfiles";
+import useScraperCardPotentialMatches, {
+  buildScraperCardPotentialMatchInput,
+  type ScraperCardPotentialMatchInput,
+} from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
 import type { PotentialMangaMatchCandidateCollections } from "@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates";
+import type { ScraperPotentialMangaMatchState } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 
 type Options = {
   scraperId: string;
@@ -26,30 +23,29 @@ const EMPTY_MATCH_STATE: ScraperPotentialMangaMatchState = {
   loading: false,
 };
 
-const splitEnrichedCandidates = (
-  enrichedCandidates: MatchableManga[],
-  readingCandidateCount: number,
-  bookmarkCandidateCount: number,
-): Omit<ScraperPotentialMangaMatchState, "loading"> => ({
-  readingMatches: enrichedCandidates.slice(0, readingCandidateCount) as ScraperPotentialMangaMatch[],
-  bookmarkMatches: enrichedCandidates.slice(
-    readingCandidateCount,
-    readingCandidateCount + bookmarkCandidateCount,
-  ) as ScraperPotentialMangaMatch[],
-  readingListMatches: enrichedCandidates.slice(
-    readingCandidateCount + bookmarkCandidateCount,
-  ) as ScraperPotentialMangaMatch[],
-});
-
-const isCurrentScraperMatch = (
-  candidate: ScraperPotentialMangaMatch,
+export const buildScraperDetailsPotentialMatchInput = (
   scraperId: string,
-  currentSourceUrl: string,
-): boolean => (
-  candidate.target.kind === "scraperDetails"
-  && candidate.target.scraperId === scraperId
-  && normalizeScraperViewHistorySourceUrl(candidate.target.sourceUrl) === currentSourceUrl
-);
+  detailsResult: ScraperRuntimeDetailsResult | null,
+): ScraperCardPotentialMatchInput | null => {
+  if (!detailsResult) {
+    return null;
+  }
+
+  const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+  const title = detailsResult.title || sourceUrl;
+  if (!title) {
+    return null;
+  }
+
+  return buildScraperCardPotentialMatchInput(scraperId, {
+    title,
+    detailUrl: detailsResult.requestedUrl,
+    detailsMetadataFetched: true,
+    detailsTitle: title,
+    detailsSourceUrl: sourceUrl,
+    authorNames: detailsResult.authors,
+  });
+};
 
 export default function useScraperPotentialMangaMatches({
   scraperId,
@@ -58,115 +54,27 @@ export default function useScraperPotentialMangaMatches({
   candidates,
   enabled = true,
 }: Options): ScraperPotentialMangaMatchState {
-  const [matches, setMatches] = useState<ScraperPotentialMangaMatchState>(EMPTY_MATCH_STATE);
-  const currentMatchable = useMemo(() => buildCurrentMatchable(detailsResult), [detailsResult]);
-  const currentSourceUrl = useMemo(() => normalizeScraperViewHistorySourceUrl(
-    detailsResult?.finalUrl || detailsResult?.requestedUrl,
-  ), [detailsResult?.finalUrl, detailsResult?.requestedUrl]);
-
-  const readingCandidates = useMemo(() => (
-    currentSourceUrl
-      ? candidates.readingCandidates.filter((candidate) => !isCurrentScraperMatch(
-        candidate,
-        scraperId,
-        currentSourceUrl,
-      ))
-      : candidates.readingCandidates
-  ), [candidates.readingCandidates, currentSourceUrl, scraperId]);
-  const bookmarkCandidates = useMemo(() => (
-    currentSourceUrl
-      ? candidates.bookmarkCandidates.filter((candidate) => !isCurrentScraperMatch(
-        candidate,
-        scraperId,
-        currentSourceUrl,
-      ))
-      : candidates.bookmarkCandidates
-  ), [candidates.bookmarkCandidates, currentSourceUrl, scraperId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!enabled || !currentMatchable) {
-      setMatches(EMPTY_MATCH_STATE);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setMatches({
-      readingMatches: matchPotentialMangaCandidates(currentMatchable, readingCandidates, mergeOptions),
-      bookmarkMatches: matchPotentialMangaCandidates(currentMatchable, bookmarkCandidates, mergeOptions),
-      readingListMatches: matchPotentialMangaCandidates(
-        currentMatchable,
-        candidates.readingListCandidates,
-        mergeOptions,
-      ),
-      loading: true,
-    });
-
-    const enrichAndMatch = async () => {
-      const enrichedMangas = await enrichMatchableMangasWithJapaneseRomanization([
-        currentMatchable,
-        ...readingCandidates,
-        ...bookmarkCandidates,
-        ...candidates.readingListCandidates,
-      ]);
-      if (cancelled) {
-        return;
-      }
-
-      const [enrichedCurrent, ...enrichedCandidates] = enrichedMangas;
-      const enriched = splitEnrichedCandidates(
-        enrichedCandidates,
-        readingCandidates.length,
-        bookmarkCandidates.length,
-      );
-
-      setMatches({
-        readingMatches: matchPotentialMangaCandidates(
-          enrichedCurrent,
-          enriched.readingMatches,
-          mergeOptions,
-        ),
-        bookmarkMatches: matchPotentialMangaCandidates(
-          enrichedCurrent,
-          enriched.bookmarkMatches,
-          mergeOptions,
-        ),
-        readingListMatches: matchPotentialMangaCandidates(
-          enrichedCurrent,
-          enriched.readingListMatches,
-          mergeOptions,
-        ),
-        loading: false,
-      });
-    };
-
-    void enrichAndMatch()
-      .catch(() => {
-        // The synchronous pass already produced usable matches.
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setMatches((current) => ({
-            ...current,
-            loading: candidates.loading,
-          }));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    bookmarkCandidates,
-    candidates.loading,
-    candidates.readingListCandidates,
-    currentMatchable,
-    enabled,
+  const input = useMemo(
+    () => buildScraperDetailsPotentialMatchInput(scraperId, detailsResult),
+    [detailsResult, scraperId],
+  );
+  const inputs = useMemo(() => input ? [input] : [], [input]);
+  const matches = useScraperCardPotentialMatches({
+    inputs,
+    candidates,
     mergeOptions,
-    readingCandidates,
-  ]);
+    enabled,
+  });
+  const result = input ? matches.matchesByKey.get(input.key) : null;
 
-  return matches;
+  if (!enabled || !input) {
+    return EMPTY_MATCH_STATE;
+  }
+
+  return {
+    readingMatches: result?.readingMatches ?? [],
+    bookmarkMatches: result?.bookmarkMatches ?? [],
+    readingListMatches: result?.readingListMatches ?? [],
+    loading: matches.loading || candidates.loading,
+  };
 }

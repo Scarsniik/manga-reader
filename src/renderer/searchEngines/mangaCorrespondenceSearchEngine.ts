@@ -1650,6 +1650,8 @@ export const runMangaCorrespondenceSearch = async (
         title: details.title,
         detailUrl: url,
         detailsMetadataFetched: true,
+        detailsTitle: details.title,
+        detailsSourceUrl: details.finalUrl || details.requestedUrl,
         authorUrl: details.authorUrls[0],
         authorUrls: details.authorUrls,
         authorNames: details.authors,

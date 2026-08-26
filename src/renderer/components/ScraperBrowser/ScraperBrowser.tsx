@@ -29,7 +29,7 @@ import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks
 import useScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches';
 import usePotentialMangaMatchCandidates from '@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates';
 import useScraperCardPotentialMatches, {
-  getScraperCardPotentialMatchKey,
+  buildScraperCardPotentialMatchInput,
 } from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
 import useScraperBrowserRouteSync from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserRouteSync';
 import useScraperBrowserSearch from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch';
@@ -1119,13 +1119,13 @@ export default function ScraperBrowser({
     () => listingResults.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
     [listingResults],
   );
-  const cardPotentialMatchInputs = useMemo(() => visibleSearchResults.map((result) => ({
-    key: getScraperCardPotentialMatchKey(scraper.id, result.detailUrl, result.title),
-    scraperId: scraper.id,
-    title: result.title,
-    sourceUrl: result.detailUrl,
-    authorNames: result.authorNames,
-  })), [scraper.id, visibleSearchResults]);
+  const cardPotentialMatchInputs = useMemo(
+    () => visibleSearchResults.map((result) => buildScraperCardPotentialMatchInput(
+      scraper.id,
+      result,
+    )),
+    [scraper.id, visibleSearchResults],
+  );
   const cardPotentialMatches = useScraperCardPotentialMatches({
     inputs: cardPotentialMatchInputs,
     candidates: potentialMatchCandidates,
@@ -2354,14 +2354,16 @@ export default function ScraperBrowser({
       return null;
     }
 
+    const sourceUrl = result.detailsSourceUrl || result.detailUrl;
+
     return {
-      id: `bookmark-${result.detailUrl}`,
+      id: `bookmark-${sourceUrl}`,
       type: 'custom',
       label: `Basculer le bookmark de ${result.title}`,
       render: () => (
         <ScraperBookmarkButton
           scraperId={scraper.id}
-          sourceUrl={result.detailUrl}
+          sourceUrl={sourceUrl}
           title={result.title}
           cover={result.thumbnailUrl}
           summary={result.summary}
@@ -2380,7 +2382,7 @@ export default function ScraperBrowser({
     }
 
     const detailUrl = result.detailUrl;
-    const linkedManga = getLinkedMangaForListingSource(detailUrl);
+    const linkedManga = getLinkedMangaForListingSource(result.detailsSourceUrl || detailUrl);
     const label = linkedManga ? 'Mettre a jour la bibliotheque' : 'Ajouter a la bibliotheque';
 
     return {

@@ -12,8 +12,6 @@ import type {
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import type { Manga } from "@/renderer/types";
 import type { ReaderLocationState } from "@/renderer/components/Reader/types";
-import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
-import type { MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
 import type {
   ScraperPotentialMangaMatch,
@@ -138,22 +136,6 @@ const getAuthorNames = (title: string, values: string[] = []): string[] => (
     ...values,
   ])
 );
-
-export const buildCurrentMatchable = (
-  detailsResult: ScraperRuntimeDetailsResult | null,
-): MatchableManga | null => {
-  const sourceUrl = detailsResult?.finalUrl || detailsResult?.requestedUrl || "";
-  const title = normalizePotentialMatchText(detailsResult?.title || sourceUrl);
-  if (!title) {
-    return null;
-  }
-
-  return {
-    title,
-    sourceUrl,
-    authorNames: getAuthorNames(title, detailsResult?.authors ?? []),
-  };
-};
 
 const buildLibraryTarget = (title: string): ScraperPotentialMatchTarget => ({
   kind: "library",

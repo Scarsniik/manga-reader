@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
+import type { ScraperSearchResultItem } from "@/shared/scraper";
 import type { MangaMergeOptions, MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { enrichMatchableMangasWithJapaneseRomanization } from "@/renderer/utils/mangaMatching/advancedRomanization";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
@@ -69,6 +70,41 @@ export const getScraperCardPotentialMatchKey = (
   title.trim().toLowerCase(),
 ].join("::");
 
+const getScraperCardSourceIdentities = (
+  scraperId: string,
+  result: ScraperSearchResultItem,
+): ScraperCardPotentialMatchInput["sourceIdentities"] => {
+  const seenSourceUrls = new Set<string>();
+
+  return [result.detailUrl, result.detailsSourceUrl].reduce<NonNullable<
+    ScraperCardPotentialMatchInput["sourceIdentities"]
+  >>((identities, sourceUrl) => {
+    const normalizedSourceUrl = normalizeScraperViewHistorySourceUrl(sourceUrl);
+    if (!normalizedSourceUrl || seenSourceUrls.has(normalizedSourceUrl)) {
+      return identities;
+    }
+
+    seenSourceUrls.add(normalizedSourceUrl);
+    identities.push({
+      scraperId,
+      sourceUrl: normalizedSourceUrl,
+    });
+    return identities;
+  }, []);
+};
+
+export const buildScraperCardPotentialMatchInput = (
+  scraperId: string,
+  result: ScraperSearchResultItem,
+): ScraperCardPotentialMatchInput => ({
+  key: getScraperCardPotentialMatchKey(scraperId, result.detailUrl, result.title),
+  scraperId,
+  title: result.detailsTitle || result.title,
+  sourceUrl: result.detailsSourceUrl || result.detailUrl,
+  sourceIdentities: getScraperCardSourceIdentities(scraperId, result),
+  authorNames: result.authorNames,
+});
+
 export const getScraperCardPotentialMatchInputSignature = (
   input: ScraperCardPotentialMatchInput,
 ): string => JSON.stringify([
@@ -86,7 +122,9 @@ export const getScraperCardPotentialMatchInputSignature = (
     .sort(),
 ]);
 
-const buildCurrentMatchable = (input: ScraperCardPotentialMatchInput): MatchableManga | null => {
+export const buildScraperPotentialMatchable = (
+  input: ScraperCardPotentialMatchInput,
+): MatchableManga | null => {
   const title = input.title.trim().replace(/\s+/g, " ");
   if (!title) {
     return null;
@@ -329,7 +367,7 @@ export default function useScraperCardPotentialMatches({
   const enrichedCandidateCacheRef = useRef<EnrichedCandidateCache | null>(null);
   const validInputs = useMemo(() => inputs.filter((input) => Boolean(input.title.trim())), [inputs]);
   const preparedInputs = useMemo(() => validInputs.reduce<PreparedInput[]>((prepared, input) => {
-    const current = buildCurrentMatchable(input);
+    const current = buildScraperPotentialMatchable(input);
     if (current) {
       prepared.push({
         input,

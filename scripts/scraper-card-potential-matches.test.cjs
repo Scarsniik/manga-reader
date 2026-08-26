@@ -5,10 +5,15 @@ const esbuild = require("esbuild");
 
 const source = `
   export {
+    buildScraperCardPotentialMatchInput,
+    buildScraperPotentialMatchable,
     getScraperCardPotentialMatchInputSignature,
     matchScraperCardPotentialMatchInput,
     retainScraperCardPotentialMatches,
   } from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
+  export {
+    buildScraperDetailsPotentialMatchInput,
+  } from "@/renderer/components/ScraperBrowser/hooks/useScraperPotentialMangaMatches";
   export {
     getPotentialMatchReadHistoryRevision,
     shouldReloadPotentialMatchCandidatesForHistoryUpdate,
@@ -16,6 +21,9 @@ const source = `
   export {
     buildPotentialMatchEntries,
   } from "@/renderer/components/ScraperBrowser/utils/potentialMatchDisplay";
+  export {
+    mergeScraperCardWithDetails,
+  } from "@/renderer/utils/scraperRuntime/cardDetailsEnrichment";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "scraper-card-potential-matches-test.ts" },
@@ -33,12 +41,16 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 );
 
 const {
+  buildScraperCardPotentialMatchInput,
+  buildScraperDetailsPotentialMatchInput,
+  buildScraperPotentialMatchable,
   getScraperCardPotentialMatchInputSignature,
   getPotentialMatchReadHistoryRevision,
   shouldReloadPotentialMatchCandidatesForHistoryUpdate,
   matchScraperCardPotentialMatchInput,
   retainScraperCardPotentialMatches,
   buildPotentialMatchEntries,
+  mergeScraperCardWithDetails,
 } = bundledModule.exports;
 const options = { enableRomajiPhoneticMerge: false };
 const currentInput = {
@@ -80,6 +92,56 @@ test("card cache fingerprints ignore presentation-only rerenders and input order
       title: "A genuinely different title",
     }),
   );
+});
+
+test("enriched cards and details use the same canonical matching input", () => {
+  const details = {
+    requestedUrl: "https://source.test/redirect",
+    finalUrl: "https://source.test/canonical",
+    title: "Canonical Manga Title",
+    authors: ["Canonical Author"],
+    authorUrls: [],
+    tags: [],
+    tagUrls: [],
+    languageCodes: [],
+    derivedValues: {},
+  };
+  const card = mergeScraperCardWithDetails({
+    title: "Noisy listing title that does not match",
+    detailUrl: details.requestedUrl,
+  }, details);
+  const cardInput = buildScraperCardPotentialMatchInput("source", card);
+  const detailsInput = buildScraperDetailsPotentialMatchInput("source", details);
+
+  assert.equal(card.title, "Noisy listing title that does not match");
+  assert.equal(card.detailsTitle, details.title);
+  assert.equal(card.detailsSourceUrl, details.finalUrl);
+  assert.equal(cardInput.title, detailsInput.title);
+  assert.equal(cardInput.sourceUrl, detailsInput.sourceUrl);
+  assert.deepEqual(cardInput.authorNames, detailsInput.authorNames);
+  assert.deepEqual(
+    buildScraperPotentialMatchable(cardInput),
+    buildScraperPotentialMatchable(detailsInput),
+  );
+
+  const canonicalBookmark = candidate({
+    id: "canonical-bookmark",
+    category: "bookmark",
+    scraperId: "other-source",
+    sourceUrl: "https://other.test/canonical",
+    title: details.title,
+    authorNames: details.authors,
+  });
+  const cardMatches = matchScraperCardPotentialMatchInput(
+    cardInput,
+    buildScraperPotentialMatchable(cardInput),
+    [],
+    [canonicalBookmark],
+    [],
+    options,
+  );
+
+  assert.deepEqual(cardMatches.bookmarkMatches.map((match) => match.id), ["canonical-bookmark"]);
 });
 
 test("seen-only card history does not invalidate potential-reading candidates", () => {

@@ -83,6 +83,10 @@ export const mergeScraperCardWithDetails = (
     ...item,
     title: optionalText(item.title) || optionalText(details.title) || item.title,
     detailsMetadataFetched: true,
+    detailsTitle: optionalText(details.title) || item.detailsTitle,
+    detailsSourceUrl: optionalText(details.finalUrl)
+      || optionalText(details.requestedUrl)
+      || item.detailsSourceUrl,
     authorUrl: optionalText(item.authorUrl) || authorUrls[0],
     authorUrls: authorUrls.length ? authorUrls : item.authorUrls,
     authorNames: authorNames.length ? authorNames : item.authorNames,

@@ -37,6 +37,8 @@ const buildSourceSnapshot = (source: MultiSearchSourceResult) => ({
   result: {
     title: source.result.title,
     detailUrl: source.result.detailUrl,
+    detailsTitle: source.result.detailsTitle,
+    detailsSourceUrl: source.result.detailsSourceUrl,
     authorUrl: source.result.authorUrl,
     authorUrls: source.result.authorUrls,
     authorNames: source.result.authorNames,
