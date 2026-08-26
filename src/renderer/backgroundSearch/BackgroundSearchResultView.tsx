@@ -21,6 +21,7 @@ import ScraperLatestView from "@/renderer/components/ScraperLatest/ScraperLatest
 import "./resultView.scss";
 
 type Props = {
+  authorCorrespondenceCombined?: boolean;
   backgroundSearchJobId?: string;
   onOpenAuthorTarget?: (
     target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget,
@@ -70,6 +71,7 @@ const getProgressDescription = (metadata: BackgroundSearchJobMetadata): string =
 };
 
 export default function BackgroundSearchResultView({
+  authorCorrespondenceCombined = false,
   backgroundSearchJobId,
   onOpenAuthorTarget,
   scrapers,
@@ -112,6 +114,7 @@ export default function BackgroundSearchResultView({
       return (
         <AuthorCorrespondenceView
           backgroundSearchJobId={metadata.id}
+          initialCombinedView={authorCorrespondenceCombined}
           onOpenAuthorTarget={onOpenAuthorTarget}
           resultOnly
         />

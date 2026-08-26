@@ -685,6 +685,7 @@ export interface ScraperBookmarkRecord {
   summary?: string;
   description?: string;
   authors: string[];
+  authorUrls?: string[];
   tags: string[];
   mangaStatus?: string;
   pageCount?: string;
@@ -891,6 +892,7 @@ export interface SaveScraperBookmarkRequest {
   summary?: string;
   description?: string;
   authors?: string[];
+  authorUrls?: string[];
   tags?: string[];
   mangaStatus?: string;
   pageCount?: string;

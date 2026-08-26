@@ -341,10 +341,29 @@ const createTagStatGroups = (
   ));
   const parents = createParentIndex(sortedStats.length);
 
-  for (let leftIndex = 0; leftIndex < sortedStats.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < sortedStats.length; rightIndex += 1) {
-      if (shouldMergeTagStats(sortedStats[leftIndex], sortedStats[rightIndex], fuzzyMode)) {
-        unionParentIndexes(parents, leftIndex, rightIndex);
+  if (fuzzyMode === "off" || fuzzyMode === "strict") {
+    const indexesByMatchKey = new Map<string, number>();
+    sortedStats.forEach((stat, index) => {
+      const normalizedMatchKey = fuzzyMode === "off" ? stat.exactKey : stat.strictKey;
+      const matchKeys = [
+        ...(normalizedMatchKey ? [`${fuzzyMode}::${normalizedMatchKey}`] : []),
+        ...Array.from(stat.favoriteKeys).map((favoriteKey) => `favorite::${favoriteKey}`),
+      ];
+      matchKeys.forEach((matchKey) => {
+        const matchingIndex = indexesByMatchKey.get(matchKey);
+        if (matchingIndex === undefined) {
+          indexesByMatchKey.set(matchKey, index);
+        } else {
+          unionParentIndexes(parents, matchingIndex, index);
+        }
+      });
+    });
+  } else {
+    for (let leftIndex = 0; leftIndex < sortedStats.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < sortedStats.length; rightIndex += 1) {
+        if (shouldMergeTagStats(sortedStats[leftIndex], sortedStats[rightIndex], fuzzyMode)) {
+          unionParentIndexes(parents, leftIndex, rightIndex);
+        }
       }
     }
   }

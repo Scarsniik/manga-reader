@@ -14,7 +14,9 @@ import VirtualizedScraperBookmarkGrid from '@/renderer/components/ScraperBookmar
 import useScraperBookmarkView from '@/renderer/components/ScraperBookmarks/useScraperBookmarkView';
 import buildScraperBookmarkDuplicateReviewModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkDuplicateReviewModal';
 import buildScraperBookmarkSurpriseModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkSurpriseModal';
-import buildScraperBookmarkTagStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
+import buildScraperBookmarkFrequentStatsModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog';
+import ScraperBookmarkStatsMenu from "@/renderer/components/ScraperBookmarks/ScraperBookmarkStatsMenu";
+import type { BookmarkFrequentStatsKind } from "@/renderer/components/ScraperBookmarks/bookmarkFrequentStats.worker";
 import buildScraperBookmarkReadingListModal from '@/renderer/components/ScraperBookmarks/ScraperBookmarkReadingListModal';
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import SavedReadingListsView from '@/renderer/components/ScraperBookmarks/SavedReadingListsView';
@@ -44,6 +46,10 @@ import {
 import { findLocalMangaLinkedToSource } from '@/renderer/utils/mangaSource';
 import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import {
+  buildBackgroundSearchWorkspaceTarget,
+  requestBackgroundSearchOpenInCurrentView,
+} from "@/renderer/backgroundSearch/backgroundSearchNavigation";
+import {
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
@@ -58,6 +64,7 @@ import BlacklistedCardsDisplayToggle, {
 } from '@/renderer/components/BlacklistedCardsDisplayToggle';
 import { saveStandaloneScraperCardToLibrary } from '@/renderer/utils/scraperLibrary';
 import type { WorkspaceTarget } from '@/renderer/types/workspace';
+import type { BackgroundSearchJob } from "@/shared/backgroundSearch";
 import type { ReadingListItem } from '@/renderer/types/readingList';
 import { useModal } from '@/renderer/hooks/useModal';
 import { useParams } from '@/renderer/hooks/useParams';
@@ -286,33 +293,61 @@ export default function ScraperBookmarksView({
     });
   }, [bookmarkFilters, filterScraperId]);
 
-  const handleOpenBookmarkTagStats = useCallback(() => {
-    openModal(buildScraperBookmarkTagStatsModal({
+  const handleOpenBookmarkAuthorCombined = useCallback((job: BackgroundSearchJob) => {
+    requestBackgroundSearchOpenInCurrentView(job, {
+      authorCorrespondenceCombined: true,
+    });
+  }, []);
+
+  const handleOpenBookmarkAuthorCombinedInWorkspace = useCallback((job: BackgroundSearchJob) => {
+    void openWorkspaceTarget(buildBackgroundSearchWorkspaceTarget(job, {
+      authorCorrespondenceCombined: true,
+    })).then((opened) => {
+      if (!opened) {
+        setHistoryError("Impossible d'ouvrir cet auteur combiné dans un onglet workspace.");
+      }
+    }).catch((error: unknown) => {
+      setHistoryError(error instanceof Error
+        ? error.message
+        : "Impossible d'ouvrir cet auteur combiné dans un onglet workspace.");
+    });
+  }, []);
+
+  const handleOpenBookmarkFrequentStats = useCallback((kind: BookmarkFrequentStatsKind) => {
+    openModal(buildScraperBookmarkFrequentStatsModal({
       filterScraperId,
       filters: bookmarkFilters,
-      onOpenTag: handleOpenBookmarkTag,
-      onOpenTagInWorkspace: handleOpenBookmarkTagInWorkspace,
+      kind,
+      onFilterValue: handleOpenBookmarkTag,
+      onFilterValueInWorkspace: handleOpenBookmarkTagInWorkspace,
+      onOpenAuthorCombined: handleOpenBookmarkAuthorCombined,
+      onOpenAuthorCombinedInWorkspace: handleOpenBookmarkAuthorCombinedInWorkspace,
     }));
   }, [
     bookmarkFilters,
     filterScraperId,
+    handleOpenBookmarkAuthorCombined,
+    handleOpenBookmarkAuthorCombinedInWorkspace,
     handleOpenBookmarkTag,
     handleOpenBookmarkTagInWorkspace,
     openModal,
   ]);
 
-  const handleOpenBookmarkTagStatsInWorkspace = useCallback(() => {
+  const handleOpenBookmarkFrequentStatsInWorkspace = useCallback((
+    kind: BookmarkFrequentStatsKind,
+  ) => {
     void openWorkspaceTarget({
       kind: 'scraper.bookmarkTags',
       filterScraperId: filterScraperId ?? null,
       filters: bookmarkFilters,
-      title: 'Tags bookmarks',
+      statsKind: kind,
+      title: kind === "tags" ? "Tags fréquents" : "Auteurs fréquents",
     }).then((opened) => {
       if (!opened) {
-        setHistoryError('Impossible d\'ouvrir les tags dans un onglet workspace.');
+        setHistoryError("Impossible d'ouvrir les fréquences dans un onglet workspace.");
       }
     }).catch((error: unknown) => {
-      setHistoryError(error instanceof Error ? error.message : 'Impossible d\'ouvrir les tags dans un onglet workspace.');
+      setHistoryError(error instanceof Error ? error.message : "Impossible d'ouvrir les fréquences dans un onglet workspace.");
     });
   }, [bookmarkFilters, filterScraperId]);
   const loadBookmarksForScope = useCallback(async (): Promise<ScraperBookmarkRecord[]> => {
@@ -1150,31 +1185,11 @@ export default function ScraperBookmarksView({
             Créer une liste de lecture
           </button>
 
-          <button
-            type="button"
-            className="scraper-bookmarks-view__clear"
-            onClick={handleOpenBookmarkTagStats}
-            onMouseDown={(event) => {
-              if (event.button === MIDDLE_BUTTON) {
-                event.preventDefault();
-                event.stopPropagation();
-              }
-            }}
-            onAuxClick={(event) => {
-              if (event.button !== MIDDLE_BUTTON) {
-                return;
-              }
-
-              event.preventDefault();
-              event.stopPropagation();
-              handleOpenBookmarkTagStatsInWorkspace();
-            }}
+          <ScraperBookmarkStatsMenu
             disabled={bookmarkView.scopeCount === 0}
-            title="Voir les tags les plus presents. Clic molette : nouvel onglet workspace"
-            data-prevent-middle-click-autoscroll="true"
-          >
-            Tags frequents
-          </button>
+            onOpen={handleOpenBookmarkFrequentStats}
+            onOpenInWorkspace={handleOpenBookmarkFrequentStatsInWorkspace}
+          />
 
           <button
             type="button"

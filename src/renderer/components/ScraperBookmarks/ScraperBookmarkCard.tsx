@@ -151,6 +151,7 @@ export default function ScraperBookmarkCard({
         summary={bookmark.summary}
         description={bookmark.description}
         authors={bookmark.authors}
+        authorUrls={bookmark.authorUrls}
         tags={bookmark.tags}
         mangaStatus={bookmark.mangaStatus}
         pageCount={bookmark.pageCount}

@@ -5,6 +5,10 @@ import { BACKGROUND_SEARCH_RESULTS_VIEW_ID } from "@/renderer/utils/scraperBrows
 export const BACKGROUND_SEARCH_OPEN_EVENT = "background-search-open";
 const PENDING_BACKGROUND_SEARCH_JOB_KEY = "manga-helper.background-search.pending-open.v1";
 
+export type BackgroundSearchOpenOptions = {
+  authorCorrespondenceCombined?: boolean;
+};
+
 export const getBackgroundSearchViewId = (_job: BackgroundSearchJob): string => (
   BACKGROUND_SEARCH_RESULTS_VIEW_ID
 );
@@ -19,17 +23,26 @@ export const isRestorableBackgroundSearchJob = (
 
 export const buildBackgroundSearchWorkspaceTarget = (
   job: BackgroundSearchJob,
+  options: BackgroundSearchOpenOptions = {},
 ): MangaManagerViewWorkspaceTarget => ({
   kind: "manga-manager.view",
   viewId: getBackgroundSearchViewId(job),
   title: job.metadata.title,
   locationState: {
     backgroundSearchJobId: job.metadata.id,
+    ...(options.authorCorrespondenceCombined
+      ? { authorCorrespondenceCombined: true }
+      : {}),
   },
 });
 
-export const requestBackgroundSearchOpenInCurrentView = (job: BackgroundSearchJob): void => {
-  window.dispatchEvent(new CustomEvent(BACKGROUND_SEARCH_OPEN_EVENT, { detail: { job } }));
+export const requestBackgroundSearchOpenInCurrentView = (
+  job: BackgroundSearchJob,
+  options: BackgroundSearchOpenOptions = {},
+): void => {
+  window.dispatchEvent(new CustomEvent(BACKGROUND_SEARCH_OPEN_EVENT, {
+    detail: { job, ...options },
+  }));
 };
 
 export const queuePendingBackgroundSearchOpen = (jobId: string): void => {

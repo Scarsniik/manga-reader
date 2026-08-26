@@ -53,6 +53,7 @@ import "./style.scss";
 
 type Props = {
   backgroundSearchJobId?: string;
+  initialCombinedView?: boolean;
   onOpenAuthorTarget?: (
     target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget,
   ) => void;
@@ -61,6 +62,7 @@ type Props = {
 
 export default function AuthorCorrespondenceView({
   backgroundSearchJobId,
+  initialCombinedView = false,
   onOpenAuthorTarget,
   resultOnly = false,
 }: Props) {
@@ -75,10 +77,15 @@ export default function AuthorCorrespondenceView({
   const input = job?.input as AuthorCorrespondenceBackgroundInput | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
   const sessionCache = useAuthorCorrespondenceSessionCache(job?.metadata.id);
-  const [showCombinedView, setShowCombinedView] = React.useState(false);
+  const [showCombinedView, setShowCombinedView] = React.useState(initialCombinedView);
   const [invalidatedMatchKeys, setInvalidatedMatchKeys] = React.useState<Set<string>>(() => new Set());
   const [pendingRejectedAuthorName, setPendingRejectedAuthorName] = React.useState<string | null>(null);
   const [rejectedAuthorError, setRejectedAuthorError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setShowCombinedView(initialCombinedView);
+  }, [backgroundSearchJobId, initialCombinedView]);
+
   const displayedMatches = React.useMemo(() => {
     const matchesByTarget = new Map<string, AuthorCorrespondenceBackgroundResult["matches"][number]>();
     result?.matches.forEach((match) => {
@@ -293,9 +300,35 @@ export default function AuthorCorrespondenceView({
   ]);
 
   const combinedAuthor = React.useMemo<ScraperAuthorFavoriteRecord | null>(() => {
-    if (!job || (!validMatches.length && !nameSearchSources.length)) {
+    if (!job || (!validMatches.length && !nameSearchSources.length && !input?.referenceSources.length)) {
       return null;
     }
+
+    const combinedSources = Array.from(new Map([
+      ...(input?.referenceSources ?? []).map((source) => [
+        `${source.scraperId}::${source.authorUrl}`,
+        {
+          scraperId: source.scraperId,
+          authorUrl: source.authorUrl,
+          name: source.name,
+          templateContext: source.templateContext ?? undefined,
+          createdAt: job.metadata.createdAt,
+          updatedAt: job.metadata.updatedAt,
+        },
+      ] as const),
+      ...validMatches.map((match) => [
+        `${match.scraperId}::${match.authorUrl}`,
+        {
+          scraperId: match.scraperId,
+          authorUrl: match.authorUrl,
+          name: match.authorName,
+          cover: match.previewSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
+          templateContext: match.templateContext ?? undefined,
+          createdAt: job.metadata.createdAt,
+          updatedAt: job.metadata.updatedAt,
+        },
+      ] as const),
+    ]).values());
 
     return {
       id: `author-correspondence:${job.metadata.id}`,
@@ -305,19 +338,11 @@ export default function AuthorCorrespondenceView({
         .find((source) => source.result.thumbnailUrl)
         ?.result.thumbnailUrl
         ?? nameSearchSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
-      sources: validMatches.map((match) => ({
-        scraperId: match.scraperId,
-        authorUrl: match.authorUrl,
-        name: match.authorName,
-        cover: match.previewSources.find((source) => source.result.thumbnailUrl)?.result.thumbnailUrl,
-        templateContext: match.templateContext ?? undefined,
-        createdAt: job.metadata.createdAt,
-        updatedAt: job.metadata.updatedAt,
-      })),
+      sources: combinedSources,
       createdAt: job.metadata.createdAt,
       updatedAt: job.metadata.updatedAt,
     };
-  }, [job, nameSearchSources, result?.referenceName, validMatches]);
+  }, [input?.referenceSources, job, nameSearchSources, result?.referenceName, validMatches]);
 
   if (loading) return <div className="app-route-loading" aria-busy="true" />;
   if (error || !job) return <div className="empty">{error || "Recherche introuvable."}</div>;
@@ -547,6 +572,7 @@ export default function AuthorCorrespondenceView({
         error={rejectedAuthorError}
         openTargetsByCandidateKey={rejectedAuthorOpenTargets}
         mangaTargetsByCandidateKey={rejectedAuthorMangaTargets}
+        onAccept={(candidate) => void forceValidateRejectedAuthor(candidate)}
         onOpenEvidenceManga={(_candidate, target, inWorkspace) => {
           if (inWorkspace) {
             openMangaInWorkspace(
@@ -562,7 +588,6 @@ export default function AuthorCorrespondenceView({
             target.title,
           );
         }}
-        onAccept={(candidate) => void forceValidateRejectedAuthor(candidate)}
         onOpenReferenceSource={(candidate, source, inWorkspace) => {
           if (inWorkspace) {
             openAuthorInWorkspace(

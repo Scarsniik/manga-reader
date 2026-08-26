@@ -425,6 +425,9 @@ export const sanitizeScraperBookmarkRecord = (
   const pageCount = String(record.pageCount ?? "").trim();
   const languageCodes = sanitizeStringList(record.languageCodes)
     .map((languageCode) => languageCode.toLowerCase());
+  const authorUrls = sanitizeStringList(record.authorUrls)
+    .map(normalizeScraperBookmarkUrl)
+    .filter(Boolean);
 
   return {
     scraperId,
@@ -434,6 +437,7 @@ export const sanitizeScraperBookmarkRecord = (
     summary: summary || undefined,
     description: description || undefined,
     authors: sanitizeStringList(record.authors),
+    authorUrls: authorUrls.length ? authorUrls : undefined,
     tags: sanitizeStringList(record.tags),
     mangaStatus: mangaStatus || undefined,
     pageCount: pageCount || undefined,

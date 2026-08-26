@@ -67,7 +67,7 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
   }
 
   if (target.kind === "scraper.bookmarkTags") {
-    return "Tags bookmarks";
+    return target.statsKind === "authors" ? "Auteurs fréquents" : "Tags fréquents";
   }
 
   if (target.kind === "reading-list") {

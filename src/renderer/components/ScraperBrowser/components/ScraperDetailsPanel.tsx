@@ -361,6 +361,7 @@ export default function ScraperDetailsPanel({
                 cover={detailsResult.cover}
                 description={detailsResult.description}
                 authors={detailsResult.authors}
+                authorUrls={detailsResult.authorUrls}
                 tags={detailsResult.tags}
                 mangaStatus={detailsResult.mangaStatus}
                 pageCount={detailsResult.pageCount}

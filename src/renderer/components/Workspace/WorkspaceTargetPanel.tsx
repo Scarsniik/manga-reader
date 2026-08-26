@@ -8,12 +8,17 @@ import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser"
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
 import WorkspaceScraperAuthorPanel from "@/renderer/components/Workspace/WorkspaceScraperAuthorPanel";
 import WorkspaceScraperTagPanel from "@/renderer/components/Workspace/WorkspaceScraperTagPanel";
-import { ScraperBookmarkTagStatsPanel } from "@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog";
+import { ScraperBookmarkFrequentStatsPanel } from "@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog";
 import {
   readWorkspaceBrowserTabCache,
   writeWorkspaceBrowserTabCache,
 } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
-import type { ReaderWorkspaceTarget, WorkspaceTarget } from "@/renderer/types/workspace";
+import type {
+  ReaderWorkspaceTarget,
+  WorkspaceTarget,
+} from "@/renderer/types/workspace";
+import type { BackgroundSearchJob } from "@/shared/backgroundSearch";
+import { buildBackgroundSearchWorkspaceTarget } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
 import { hasScraperFieldSelectorValue, type ScraperRecord } from "@/shared/scraper";
 import {
   extractScraperDetailsFromDocumentWithImageFallbacks,
@@ -496,28 +501,44 @@ export default function WorkspaceTargetPanel({
   }
 
   if (target.kind === "scraper.bookmarkTags") {
-    const buildBookmarkTagSearchTarget = (tag: string): WorkspaceTarget => ({
+    const buildBookmarkSearchTarget = (query: string): WorkspaceTarget => ({
       kind: "manga-manager.view",
       viewId: "bookmarks",
-      title: `Bookmarks - ${tag}`,
+      title: `Bookmarks - ${query}`,
       locationState: {
         bookmarksFilterScraperId: target.filterScraperId ?? null,
         bookmarkFilters: {
           ...(target.filters ?? {}),
-          query: tag,
+          query,
         },
       },
     });
+    const buildCombinedAuthorTarget = (job: BackgroundSearchJob): WorkspaceTarget => (
+      buildBackgroundSearchWorkspaceTarget(job, {
+        authorCorrespondenceCombined: true,
+      })
+    );
 
     return (
-      <ScraperBookmarkTagStatsPanel
+      <ScraperBookmarkFrequentStatsPanel
         filterScraperId={target.filterScraperId ?? null}
         filters={target.filters ?? null}
-        onOpenTag={(tag) => {
-          onReplaceTarget(tabId, buildBookmarkTagSearchTarget(tag));
+        kind={target.statsKind ?? "tags"}
+        onFilterValue={(value) => {
+          onReplaceTarget(tabId, buildBookmarkSearchTarget(value));
         }}
-        onOpenTagInWorkspace={(tag) => {
-          void openWorkspaceTargetInNewTab(buildBookmarkTagSearchTarget(tag));
+        onFilterValueInWorkspace={(value) => {
+          void openWorkspaceTargetInNewTab(buildBookmarkSearchTarget(value));
+        }}
+        onOpenAuthorCombined={(job) => {
+          onReplaceTarget(
+            tabId,
+            buildCombinedAuthorTarget(job),
+            { returnTarget: target },
+          );
+        }}
+        onOpenAuthorCombinedInWorkspace={(job) => {
+          void openWorkspaceTargetInNewTab(buildCombinedAuthorTarget(job));
         }}
       />
     );

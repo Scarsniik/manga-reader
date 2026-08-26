@@ -469,7 +469,10 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         ? forcedLocationState.bookmarksFilterScraperId
         : null;
     const locationState = location.state && typeof location.state === 'object'
-        ? location.state as { backgroundSearchJobId?: string }
+        ? location.state as {
+            authorCorrespondenceCombined?: boolean;
+            backgroundSearchJobId?: string;
+        }
         : null;
     const backgroundSearchJobId = typeof forcedLocationState?.backgroundSearchJobId === 'string'
         ? forcedLocationState.backgroundSearchJobId
@@ -478,6 +481,8 @@ const MangaManager: React.FC<MangaManagerProps> = ({
             : typeof locationState?.backgroundSearchJobId === 'string'
                 ? locationState.backgroundSearchJobId
                 : undefined;
+    const authorCorrespondenceCombined = forcedLocationState?.authorCorrespondenceCombined === true
+        || locationState?.authorCorrespondenceCombined === true;
     const viewOptions = useMemo<MangaManagerViewOption[]>(() => [
         { id: 'library', label: 'Bibliotheque', group: 'navigation', icon: 'library' },
         ...(isBackgroundSearchResultView ? [{ id: BACKGROUND_SEARCH_RESULTS_VIEW_ID, label: 'Résultat enregistré', group: 'navigation' as const, icon: 'search' as const }] : []),
@@ -798,7 +803,10 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         });
     }, [viewOptions]);
 
-    const openBackgroundSearchJob = useCallback((job: BackgroundSearchJob) => {
+    const openBackgroundSearchJob = useCallback((
+        job: BackgroundSearchJob,
+        options: { authorCorrespondenceCombined?: boolean } = {},
+    ) => {
         const nextViewId = getBackgroundSearchViewId(job);
         const nextSearch = writeScraperRouteState(location.search, {
             scraperId: nextViewId,
@@ -818,16 +826,31 @@ const MangaManager: React.FC<MangaManagerProps> = ({
         });
         navigate(
             { pathname: location.pathname, search: nextSearch },
-            { replace: true, state: { backgroundSearchJobId: job.metadata.id } },
+            {
+                replace: true,
+                state: {
+                    backgroundSearchJobId: job.metadata.id,
+                    ...(options.authorCorrespondenceCombined
+                        ? { authorCorrespondenceCombined: true }
+                        : {}),
+                },
+            },
         );
     }, [location.pathname, location.search, navigate]);
 
     useEffect(() => {
         const handleOpenEvent = (event: Event) => {
-            const job = event instanceof CustomEvent
-                ? (event.detail as { job?: BackgroundSearchJob } | undefined)?.job
+            const detail = event instanceof CustomEvent
+                ? event.detail as {
+                    authorCorrespondenceCombined?: boolean;
+                    job?: BackgroundSearchJob;
+                } | undefined
                 : undefined;
-            if (job) openBackgroundSearchJob(job);
+            if (detail?.job) {
+                openBackgroundSearchJob(detail.job, {
+                    authorCorrespondenceCombined: detail.authorCorrespondenceCombined,
+                });
+            }
         };
         window.addEventListener(BACKGROUND_SEARCH_OPEN_EVENT, handleOpenEvent);
         const pendingJobId = consumePendingBackgroundSearchOpen();
@@ -961,6 +984,7 @@ const MangaManager: React.FC<MangaManagerProps> = ({
                             <div className="app-route-loading" aria-label={isBookmarksView || isHistoryView || isLatestView ? 'Chargement des donnees' : 'Chargement du scrapper'} aria-busy="true" />
                         ) : isBackgroundSearchResultView ? (
                             <BackgroundSearchResultView
+                                authorCorrespondenceCombined={authorCorrespondenceCombined}
                                 backgroundSearchJobId={backgroundSearchJobId}
                                 onOpenAuthorTarget={onOpenAuthorTarget}
                                 scrapers={sortedScrapers}

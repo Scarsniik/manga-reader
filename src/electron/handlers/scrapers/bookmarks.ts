@@ -26,6 +26,9 @@ const applyExcludedBookmarkFields = <T extends Partial<ScraperBookmarkRecord>>(
   excludedFields.forEach((field) => {
     if (field === "authors" || field === "tags" || field === "languageCodes") {
       nextRecord[field] = [];
+      if (field === "authors") {
+        nextRecord.authorUrls = [];
+      }
       return;
     }
 
@@ -64,6 +67,9 @@ const mergeScraperBookmarkRecord = (
     summary: normalizedRequest.summary || existing.summary,
     description: normalizedRequest.description || existing.description,
     authors: normalizedRequest.authors.length ? normalizedRequest.authors : existing.authors,
+    authorUrls: normalizedRequest.authorUrls?.length
+      ? normalizedRequest.authorUrls
+      : existing.authorUrls,
     tags: normalizedRequest.tags.length ? normalizedRequest.tags : existing.tags,
     mangaStatus: normalizedRequest.mangaStatus || existing.mangaStatus,
     pageCount: normalizedRequest.pageCount || existing.pageCount,

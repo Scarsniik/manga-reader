@@ -144,6 +144,9 @@ const bookmarkHasExcludedFieldData = (
   field: ScraperBookmarkMetadataField,
 ): boolean => {
   if (field === "authors" || field === "tags" || field === "languageCodes") {
+    if (field === "authors") {
+      return bookmark.authors.length > 0 || (bookmark.authorUrls ?? []).length > 0;
+    }
     return (bookmark[field] ?? []).length > 0;
   }
 
@@ -199,6 +202,15 @@ export const shouldSyncBookmarkMetadata = (
     return true;
   }
 
+  const nextAuthorUrls = normalizeBookmarkStringList(request.authorUrls);
+  if (
+    !excludedFields.has("authors")
+    && nextAuthorUrls.length
+    && !areSameStringLists(nextAuthorUrls, bookmark.authorUrls ?? [])
+  ) {
+    return true;
+  }
+
   const nextTags = normalizeBookmarkStringList(request.tags);
   if (!excludedFields.has("tags") && nextTags.length && !areSameStringLists(nextTags, bookmark.tags)) {
     return true;
@@ -227,6 +239,7 @@ export const buildScraperBookmarkRequestFromRecord = (
   summary: bookmark.summary,
   description: bookmark.description,
   authors: bookmark.authors,
+  authorUrls: bookmark.authorUrls,
   tags: bookmark.tags,
   mangaStatus: bookmark.mangaStatus,
   pageCount: bookmark.pageCount,
@@ -315,6 +328,7 @@ export const enrichScraperBookmarkRequestFromDetails = async (
 
     collectScraperDetailsTagsForTagListCacheSafe(scraper, extractedDetails);
     const authors = normalizeBookmarkStringList(extractedDetails.authors);
+    const authorUrls = normalizeBookmarkStringList(extractedDetails.authorUrls);
     const tags = normalizeBookmarkStringList(extractedDetails.tags);
     const languageCodes = normalizeBookmarkLanguageCodes(extractedDetails.languageCodes);
 
@@ -324,6 +338,7 @@ export const enrichScraperBookmarkRequestFromDetails = async (
       cover: normalizeBookmarkOptionalText(extractedDetails.cover) || requestWithLanguageFallback.cover,
       description: normalizeBookmarkOptionalText(extractedDetails.description) || requestWithLanguageFallback.description,
       authors: authors.length ? authors : requestWithLanguageFallback.authors,
+      authorUrls: authorUrls.length ? authorUrls : requestWithLanguageFallback.authorUrls,
       tags: tags.length ? tags : requestWithLanguageFallback.tags,
       mangaStatus: normalizeBookmarkOptionalText(extractedDetails.mangaStatus) || requestWithLanguageFallback.mangaStatus,
       pageCount: normalizeBookmarkOptionalText(extractedDetails.pageCount) || requestWithLanguageFallback.pageCount,

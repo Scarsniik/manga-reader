@@ -19,6 +19,7 @@ type MangaManagerViewWorkspaceTarget = {
         bookmarkFilters?: Record<string, unknown>;
         bookmarksFilterScraperId?: string | null;
         backgroundSearchJobId?: string;
+        authorCorrespondenceCombined?: boolean;
     };
     title?: string;
 };
@@ -63,6 +64,7 @@ type ScraperBookmarkTagsWorkspaceTarget = {
     kind: "scraper.bookmarkTags";
     filterScraperId?: string | null;
     filters?: Record<string, unknown> | null;
+    statsKind?: "tags" | "authors";
     title?: string;
 };
 
@@ -170,6 +172,7 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
         librarySearchQuery?: unknown;
         multiSearchPrefillQuery?: unknown;
         backgroundSearchJobId?: unknown;
+        authorCorrespondenceCombined?: unknown;
     };
     return (
         candidate.authorFavoriteId === undefined
@@ -186,6 +189,10 @@ const isMangaManagerLocationState = (value: unknown): boolean => {
     && (
         candidate.backgroundSearchJobId === undefined
         || typeof candidate.backgroundSearchJobId === "string"
+    )
+    && (
+        candidate.authorCorrespondenceCombined === undefined
+        || typeof candidate.authorCorrespondenceCombined === "boolean"
     )
     && isOptionalObject(candidate.bookmarkFilters)
     && isOptionalStringOrNull(candidate.bookmarksFilterScraperId);
@@ -316,6 +323,11 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
         return (
             isOptionalStringOrNull(bookmarkTagsTarget.filterScraperId)
             && isOptionalObject(bookmarkTagsTarget.filters)
+            && (
+                bookmarkTagsTarget.statsKind === undefined
+                || bookmarkTagsTarget.statsKind === "tags"
+                || bookmarkTagsTarget.statsKind === "authors"
+            )
         );
     }
 

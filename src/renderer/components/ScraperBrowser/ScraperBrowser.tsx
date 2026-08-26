@@ -2367,6 +2367,8 @@ export default function ScraperBrowser({
           title={result.title}
           cover={result.thumbnailUrl}
           summary={result.summary}
+          authors={result.authorNames}
+          authorUrls={result.authorUrls}
           pageCount={result.pageCount}
           languageCodes={getSearchResultLanguageCodes(result)}
           excludedFields={scraper.globalConfig.bookmark.excludedFields}

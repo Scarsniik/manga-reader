@@ -84,6 +84,7 @@ type MangaManagerViewWorkspaceTarget = {
         bookmarkFilters?: Partial<ScraperBookmarkFilterState>;
         bookmarksFilterScraperId?: string | null;
         backgroundSearchJobId?: string;
+        authorCorrespondenceCombined?: boolean;
     };
     title?: string;
 };
@@ -128,6 +129,7 @@ type ScraperBookmarkTagsWorkspaceTarget = {
     kind: "scraper.bookmarkTags";
     filterScraperId?: string | null;
     filters?: Partial<ScraperBookmarkFilterState> | null;
+    statsKind?: "tags" | "authors";
     title?: string;
 };
 
