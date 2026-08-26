@@ -14,6 +14,7 @@ export type AuthorCorrespondenceSessionCacheSnapshot = {
   mangaEnrichments: AuthorCorrespondenceMangaEnrichment[];
   processedMangaKeys: string[];
   discoveredAuthorMatchKeys: string[];
+  newAuthorMatchKeys: string[];
 };
 
 const EMPTY_SNAPSHOT: AuthorCorrespondenceSessionCacheSnapshot = {
@@ -22,6 +23,7 @@ const EMPTY_SNAPSHOT: AuthorCorrespondenceSessionCacheSnapshot = {
   mangaEnrichments: [],
   processedMangaKeys: [],
   discoveredAuthorMatchKeys: [],
+  newAuthorMatchKeys: [],
 };
 
 const snapshots = new Map<string, AuthorCorrespondenceSessionCacheSnapshot>();
@@ -40,7 +42,11 @@ const isSessionCacheSnapshot = (
   && Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).runs)
   && Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).mangaEnrichments)
   && Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).processedMangaKeys)
-  && Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).discoveredAuthorMatchKeys),
+  && Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).discoveredAuthorMatchKeys)
+  && (
+    (value as Partial<AuthorCorrespondenceSessionCacheSnapshot>).newAuthorMatchKeys === undefined
+    || Array.isArray((value as AuthorCorrespondenceSessionCacheSnapshot).newAuthorMatchKeys)
+  ),
 );
 
 const pruneSnapshots = (): void => {
@@ -60,6 +66,34 @@ export const createAuthorCorrespondenceSessionCacheSnapshot = (
   mangaEnrichments: snapshot.mangaEnrichments ?? [],
   processedMangaKeys: snapshot.processedMangaKeys ?? [],
   discoveredAuthorMatchKeys: snapshot.discoveredAuthorMatchKeys ?? [],
+  newAuthorMatchKeys: snapshot.newAuthorMatchKeys ?? [],
+});
+
+export const startAuthorCorrespondenceAdvancedDiscoveryBatch = (
+  snapshot: AuthorCorrespondenceSessionCacheSnapshot,
+  historicalMatchKeys: string[] = [],
+): AuthorCorrespondenceSessionCacheSnapshot => ({
+  ...snapshot,
+  discoveredAuthorMatchKeys: Array.from(new Set([
+    ...snapshot.discoveredAuthorMatchKeys,
+    ...historicalMatchKeys,
+  ])),
+  newAuthorMatchKeys: [],
+});
+
+export const recordAuthorCorrespondenceAdvancedDiscoveries = (
+  snapshot: AuthorCorrespondenceSessionCacheSnapshot,
+  matchKeys: string[],
+): AuthorCorrespondenceSessionCacheSnapshot => ({
+  ...snapshot,
+  discoveredAuthorMatchKeys: Array.from(new Set([
+    ...snapshot.discoveredAuthorMatchKeys,
+    ...matchKeys,
+  ])),
+  newAuthorMatchKeys: Array.from(new Set([
+    ...snapshot.newAuthorMatchKeys,
+    ...matchKeys,
+  ])),
 });
 
 export const getAuthorCorrespondenceSessionCacheSnapshot = (

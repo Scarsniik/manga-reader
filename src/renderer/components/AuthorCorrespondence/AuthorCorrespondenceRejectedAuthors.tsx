@@ -1,7 +1,11 @@
 import React from "react";
 import type { AuthorCorrespondenceRejectedAuthorCandidate } from "@/renderer/backgroundSearch/types";
-import { OpenBookIcon } from "@/renderer/components/icons";
-import type { AuthorCorrespondenceRejectedOpenTarget } from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
+import AdaptiveDropdown from "@/renderer/components/AdaptiveDropdown/AdaptiveDropdown";
+import { ChevronDownIcon, DetailsCardIcon, OpenBookIcon } from "@/renderer/components/icons";
+import type {
+  AuthorCorrespondenceRejectedMangaTarget,
+  AuthorCorrespondenceRejectedOpenTarget,
+} from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
 
 type Props = {
   candidates: AuthorCorrespondenceRejectedAuthorCandidate[];
@@ -9,13 +13,93 @@ type Props = {
   pendingCandidateName?: string | null;
   error?: string | null;
   openTargetsByCandidateKey: ReadonlyMap<string, AuthorCorrespondenceRejectedOpenTarget[]>;
+  mangaTargetsByCandidateKey: ReadonlyMap<string, AuthorCorrespondenceRejectedMangaTarget[]>;
   onAccept: (candidate: AuthorCorrespondenceRejectedAuthorCandidate) => void;
   onOpenReferenceSource: (
     candidate: AuthorCorrespondenceRejectedAuthorCandidate,
     source: AuthorCorrespondenceRejectedOpenTarget,
     inWorkspace: boolean,
   ) => void;
+  onOpenEvidenceManga: (
+    candidate: AuthorCorrespondenceRejectedAuthorCandidate,
+    target: AuthorCorrespondenceRejectedMangaTarget,
+    inWorkspace: boolean,
+  ) => void;
 };
+
+type RejectedMangaDropdownProps = {
+  candidate: AuthorCorrespondenceRejectedAuthorCandidate;
+  targets: AuthorCorrespondenceRejectedMangaTarget[];
+  onOpen: Props["onOpenEvidenceManga"];
+};
+
+function RejectedMangaDropdown({
+  candidate,
+  targets,
+  onOpen,
+}: RejectedMangaDropdownProps) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <AdaptiveDropdown
+      open={open}
+      onOpenChange={setOpen}
+      className="author-correspondence-view__rejected-manga-dropdown"
+      contentClassName="author-correspondence-view__rejected-manga-menu"
+      contentRole="menu"
+      gap={6}
+      maxHeight={320}
+      portal
+      renderTrigger={({ contentId, isOpen, setTriggerRef, toggle }) => (
+        <button
+          ref={setTriggerRef}
+          type="button"
+          className="author-correspondence-view__rejected-open"
+          aria-controls={contentId}
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+          onClick={toggle}
+        >
+          <DetailsCardIcon aria-hidden="true" focusable="false" />
+          <span>{targets.length === 1 ? "Voir le manga" : `Voir les mangas · ${targets.length}`}</span>
+          <ChevronDownIcon aria-hidden="true" focusable="false" />
+        </button>
+      )}
+    >
+      <div className="author-correspondence-view__rejected-manga-list" role="none">
+        {targets.map((target) => (
+          <button
+            key={`${target.scraperId}::${target.sourceUrl}`}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpen(candidate, target, false);
+            }}
+            onMouseDown={(event) => {
+              if (event.button === 1) event.preventDefault();
+            }}
+            onAuxClick={(event) => {
+              if (event.button !== 1) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+              onOpen(candidate, target, true);
+            }}
+            title={target.title}
+            data-prevent-middle-click-autoscroll="true"
+          >
+            <DetailsCardIcon aria-hidden="true" focusable="false" />
+            <span>
+              <strong>{target.title}</strong>
+              <small>{target.scraperName}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </AdaptiveDropdown>
+  );
+}
 
 const describeReason = (candidate: AuthorCorrespondenceRejectedAuthorCandidate): string => {
   if (candidate.reason === "implausibleName") {
@@ -38,7 +122,9 @@ export default function AuthorCorrespondenceRejectedAuthors({
   pendingCandidateName,
   error,
   openTargetsByCandidateKey,
+  mangaTargetsByCandidateKey,
   onAccept,
+  onOpenEvidenceManga,
   onOpenReferenceSource,
 }: Props) {
   if (!candidates.length) return null;
@@ -56,7 +142,7 @@ export default function AuthorCorrespondenceRejectedAuthors({
         <p>
           Ces noms ont été vus pendant la recherche, mais n’étaient pas assez fiables pour être
           propagés automatiquement. Une validation forcée relance uniquement leur recherche de
-          pages auteur.
+          pages auteur. Sans page auteur confirmée, les mangas à l’origine de la piste sont proposés.
         </p>
         {error ? (
           <p className="author-correspondence-view__rejected-error" role="alert">{error}</p>
@@ -65,6 +151,11 @@ export default function AuthorCorrespondenceRejectedAuthors({
           {candidates.map((candidate) => {
             const pending = pendingCandidateName === candidate.name;
             const openTargets = openTargetsByCandidateKey.get(candidate.key) ?? [];
+            const evidenceMangaTargets = mangaTargetsByCandidateKey.get(candidate.key) ?? [];
+            const mangaTargets = openTargets.length
+              ? []
+              : evidenceMangaTargets;
+            const sampleTitle = evidenceMangaTargets[0]?.title ?? candidate.sampleTitles[0];
             return (
               <article key={candidate.key}>
                 <div>
@@ -76,8 +167,8 @@ export default function AuthorCorrespondenceRejectedAuthors({
                       ? ` · ${candidate.scraperNames.join(", ")}`
                       : ""}
                   </small>
-                  {candidate.sampleTitles.length ? (
-                    <em title={candidate.sampleTitles.join("\n")}>{candidate.sampleTitles[0]}</em>
+                  {sampleTitle ? (
+                    <em title={sampleTitle}>{sampleTitle}</em>
                   ) : null}
                 </div>
                 <div className="author-correspondence-view__rejected-actions">
@@ -103,6 +194,13 @@ export default function AuthorCorrespondenceRejectedAuthors({
                       <span>Ouvrir · {source.scraperName}</span>
                     </button>
                   ))}
+                  {mangaTargets.length ? (
+                    <RejectedMangaDropdown
+                      candidate={candidate}
+                      targets={mangaTargets}
+                      onOpen={onOpenEvidenceManga}
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="author-correspondence-view__rejected-accept"

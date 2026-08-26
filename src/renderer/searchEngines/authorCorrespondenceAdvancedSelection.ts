@@ -11,13 +11,21 @@ export type AuthorCorrespondenceAdvancedSeed = {
   referenceSource: MultiSearchSourceResult;
 };
 
+const normalizeAdvancedBatchSize = (batchSize: number): number => {
+  if (!Number.isFinite(batchSize)) return 1;
+  const flooredBatchSize = Math.floor(batchSize);
+  if (flooredBatchSize === 0) return Number.MAX_SAFE_INTEGER;
+  return Math.max(1, flooredBatchSize);
+};
+
 export const resolveAuthorCorrespondenceAdvancedBatchSize = (options: {
   batchSize: number;
   cachedMangaCount: number;
   requestedBatchCount: number;
   requestedProcessedMangaCount?: number;
 }): number => {
-  const batchSize = Math.max(1, Math.floor(options.batchSize));
+  const batchSize = normalizeAdvancedBatchSize(options.batchSize);
+  if (batchSize === Number.MAX_SAFE_INTEGER) return batchSize;
   const legacyRequestedMangaCount = Math.max(
     1,
     Math.floor(options.requestedBatchCount),
@@ -50,4 +58,4 @@ export const selectAuthorCorrespondenceAdvancedSeeds = (
   return key && referenceSource && !alreadyProcessed
     ? [{ key, anchorSourceKeys, result, referenceSource }]
     : [];
-}).slice(0, Math.max(1, Math.floor(batchSize)));
+}).slice(0, normalizeAdvancedBatchSize(batchSize));

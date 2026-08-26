@@ -64,6 +64,10 @@ import {
   buildLatestSourceListingSources,
   buildLatestSourceSearchInput,
 } from "@/renderer/searchEngines/latestSourceSearchInput";
+import {
+  canContinueScraperLatestSearch,
+  resolveScraperLatestSearchMode,
+} from "@/renderer/components/ScraperLatest/scraperLatestContinuation";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -275,6 +279,11 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const { params, setParams } = useParams();
   const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
+  const [foregroundContinuationStarted, setForegroundContinuationStarted] = React.useState(false);
+  React.useEffect(() => {
+    setForegroundContinuationStarted(false);
+  }, [backgroundSearchJobId]);
+  const showingAttachedSearch = attachedSearch.attached && !foregroundContinuationStarted;
   const hasStoredBlacklistDecision = attachedSearch.job?.metadata.kind === "latestSources"
     && typeof attachedInput?.excludeBlacklistedTagCards === "boolean";
   const { openModal } = useModal();
@@ -479,7 +488,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     () => attachedResult?.runs.flatMap((run) => run.results) ?? [],
     [attachedResult?.runs],
   );
-  const baseActiveSources: MultiSearchSourceResult[] = attachedSearch.attached
+  const baseActiveSources: MultiSearchSourceResult[] = showingAttachedSearch
     ? attachedSources
     : activeTab === "authors" ? authorSources : scraperSources;
   const [blacklistEnrichedSourcesByKey, setBlacklistEnrichedSourcesByKey] = React.useState<
@@ -756,12 +765,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   }, []);
 
   const statusItems = React.useMemo(() => (
-    attachedSearch.attached
+    showingAttachedSearch
       ? (attachedResult?.runs ?? []).map((run) => ({
         key: run.key,
         name: `${run.name} - ${run.scraper.name}`,
         status: run.status,
-        state: getStatusState(run.status === "cancelled" ? "done" : run.status),
+        state: getStatusState(
+          run.status === "cancelled" ? "done" : run.status,
+          attachedInput?.searchMode !== "continuous" && run.hasNextPage,
+        ),
         detail: [
           `${run.results.length} résultat(s)`,
           (run.excludedByBlacklistedTagCount ?? 0) > 0
@@ -817,7 +829,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           error: run.error,
         };
       })
-  ), [activeTab, attachedResult?.runs, attachedSearch.attached, authorRuns.runs, getStatusState, scraperResultLimit, scraperResultLimitMode, scraperRuns.runs, tagResultLimit]);
+  ), [activeTab, attachedInput?.searchMode, attachedResult?.runs, authorRuns.runs, getStatusState, scraperResultLimit, scraperResultLimitMode, scraperRuns.runs, showingAttachedSearch, tagResultLimit]);
 
   const handleAuthorIncludedFavoriteIdsChange = React.useCallback((nextFavoriteIds: string[]) => {
     setParams({
@@ -1253,7 +1265,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   ]);
 
   const handleReplaceContinueScan = React.useCallback(async () => {
-    if (activeTab !== "scrapers" || scraperActionsDisabled) {
+    if (activeTab !== "scrapers") {
       return;
     }
 
@@ -1264,6 +1276,33 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     sourceResults.setLanguageFilterModes({});
     sourceResults.setOpenError(null);
     await refreshViewHistorySnapshot();
+    if (
+      attachedSearch.job?.metadata.kind === "latestSources"
+      && attachedInput
+      && (showingAttachedSearch ? Boolean(attachedResult) : scraperRuns.runs.length > 0)
+    ) {
+      const storedSearchMode = resolveScraperLatestSearchMode(attachedInput.searchMode);
+      setScraperSearchMode(storedSearchMode);
+      setForegroundContinuationStarted(true);
+      await scraperRuns.start(
+        scrapers,
+        attachedInput.resultLimit ?? scraperResultLimit,
+        new Map(viewHistoryRecordsByIdRef.current),
+        attachedInput.includedLanguageCodes,
+        {
+          storedContinuation: {
+            input: attachedInput,
+            ...(showingAttachedSearch && attachedResult
+              ? { runs: attachedResult.runs }
+              : {}),
+          },
+        },
+      );
+      return;
+    }
+    if (scraperActionsDisabled) {
+      return;
+    }
     await startScraperScan({
       searchMode: scraperSearchMode,
       continueFromQuickScan: scraperSearchMode === "quick",
@@ -1271,34 +1310,57 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     });
   }, [
     activeTab,
+    attachedInput,
+    attachedResult,
+    attachedSearch.job?.metadata.kind,
     refreshViewHistorySnapshot,
     scraperActionsDisabled,
+    scraperResultLimit,
+    scraperRuns.runs.length,
+    scraperRuns.start,
     scraperSearchMode,
+    scrapers,
+    showingAttachedSearch,
     sourceResults,
     startScraperScan,
   ]);
 
   const hasIncludedTagFavoriteSelection = scraperIncludedTagFavoriteIds.length > 0;
-  const loading = attachedSearch.attached
+  const loading = showingAttachedSearch
     ? attachedSearch.status === "queued" || attachedSearch.status === "running"
     : activeTab === "authors"
     ? authorFavoritesLoading || authorRuns.loading
     : scraperRuns.loading || (hasIncludedTagFavoriteSelection && tagFavoritesLoading && scraperRefreshKey > 0);
-  const message = attachedSearch.attached
+  const message = showingAttachedSearch
     ? attachedSearch.status === "queued" || attachedSearch.status === "running"
       ? "Recherche en arrière-plan en cours. Les résultats sont actualisés automatiquement."
       : "Résultats de la recherche en arrière-plan chargés."
     : activeTab === "authors"
     ? authorRuns.message
     : scraperRuns.message;
-  const error = attachedSearch.error || attachedSearch.job?.metadata.error || (activeTab === "authors"
-    ? authorSelectionError || authorFavoritesError || authorRuns.error
-    : scraperSelectionError || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null) || scraperRuns.error);
-  const activeTabHasStarted = attachedSearch.attached || (activeTab === "authors"
+  const error = showingAttachedSearch
+    ? attachedSearch.error || attachedSearch.job?.metadata.error || null
+    : activeTab === "authors"
+      ? authorSelectionError || authorFavoritesError || authorRuns.error
+      : attachedSearch.job?.metadata.kind === "latestSources"
+        ? scraperRuns.error
+      : scraperSelectionError
+        || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null)
+        || scraperRuns.error;
+  const activeTabHasStarted = attachedSearch.attached || foregroundContinuationStarted || (activeTab === "authors"
     ? authorRefreshKey > 0
     : scraperRefreshKey > 0);
+  const displayedScraperSearchMode = attachedSearch.job?.metadata.kind === "latestSources"
+    ? resolveScraperLatestSearchMode(attachedInput?.searchMode)
+    : scraperSearchMode;
+  const displayedScraperRuns = showingAttachedSearch
+    ? attachedResult?.runs ?? []
+    : scraperRuns.runs;
   const canContinueScraperScan = activeTab === "scrapers"
-    && scraperRuns.runs.some((run) => run.canContinue === true);
+    && canContinueScraperLatestSearch(displayedScraperSearchMode, displayedScraperRuns);
+  const scraperResultActionsDisabled = attachedSearch.job?.metadata.kind === "latestSources"
+    ? false
+    : scraperActionsDisabled;
   const hiddenBlacklistedLatestCardCount = React.useMemo(
     () => activeTab === "scrapers"
       ? scraperRuns.runs.reduce((count, run) => count + run.excludedByBlacklistedTagCount, 0)
@@ -1399,12 +1461,12 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         actionLabel={activeTab === "scrapers" ? "Scan rapide" : activeTabHasStarted ? "Recharger" : "Charger"}
         secondaryActionLabel={activeTab === "scrapers" ? "Scan profond" : undefined}
         continuousActionLabel={activeTab === "scrapers" ? "Scanner sans quota" : undefined}
-        showContinueAction={activeTab === "scrapers"}
+        showContinueAction={canContinueScraperScan}
         continueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
         continueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
           ? "Aucune source n'a atteint son quota avec une suite disponible."
           : undefined}
-        replaceContinueActionLabel={activeTab === "scrapers" ? "Continuer" : undefined}
+        replaceContinueActionLabel={canContinueScraperScan ? "Continuer" : undefined}
         replaceContinueActionDisabled={activeTab === "scrapers" ? !canContinueScraperScan : false}
         replaceContinueActionTitle={activeTab === "scrapers" && !canContinueScraperScan
           ? "Aucune source n'a atteint son quota avec une suite disponible."
@@ -1414,14 +1476,14 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         actionsDisabled={activeTab === "authors"
           ? authorActionsDisabled
           : activeTab === "scrapers"
-            ? scraperActionsDisabled
+            ? scraperResultActionsDisabled
             : false}
         libraryMangas={sourceResults.libraryMangas}
         bookmarkedSourceKeys={sourceResults.bookmarkedSourceKeys}
         sourceProgressIndex={sourceResults.sourceProgressIndex}
         viewHistoryRecordsById={sourceResults.viewHistoryRecordsById}
         newViewHistoryIds={sourceResults.newSourceHistoryIds}
-        preserveStoredResults={attachedSearch.attached}
+        preserveStoredResults={showingAttachedSearch}
         tagBlacklistByScraper={params?.scraperBlacklistedTagsByScraper}
         tagFavorites={tagFavorites}
         hideBlacklistedCards={activeTab === "scrapers" && !hasStoredBlacklistDecision

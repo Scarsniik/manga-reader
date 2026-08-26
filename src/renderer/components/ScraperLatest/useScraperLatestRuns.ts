@@ -13,6 +13,7 @@ import {
 } from "@/shared/scraperLatestSettings";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
+import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
 import { runScraperLatestSearch } from "@/renderer/searchEngines/listingSearchEngine";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import {
@@ -22,6 +23,7 @@ import {
   buildLatestSourceListingSources,
   buildLatestSourceSearchInput,
 } from "@/renderer/searchEngines/latestSourceSearchInput";
+import { buildStoredScraperLatestContinuationRuns } from "@/renderer/components/ScraperLatest/scraperLatestContinuation";
 
 export type ScraperLatestRunStatus = "waiting" | "loading" | "done" | "error";
 export type ScraperLatestRunModule = ScraperLatestCheckpointModule;
@@ -79,6 +81,10 @@ type StartOptions = {
   excludeBlacklistedTagCards?: boolean;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   performanceReportsEnabled?: boolean;
+  storedContinuation?: {
+    input: ListingBackgroundInput;
+    runs?: BackgroundListingRun[];
+  };
 };
 
 const normalizePositiveInteger = (value: unknown, fallback: number): number => {
@@ -149,32 +155,48 @@ const toForegroundRun = (
 });
 
 const toInitialBackgroundRun = (
-  run: ScraperLatestRun,
+  run: ScraperLatestRun | BackgroundListingRun,
   preserveCurrentResults: boolean,
 ): BackgroundListingRun => ({
   key: run.key,
-  name: run.sourceKind === "tagFavorite"
-    ? `${run.favorite?.name ?? "Tag favori"} · ${run.favoriteSource?.name ?? run.scraper.name}`
-    : run.scraper.name,
+  name: "name" in run
+    ? run.name
+    : run.sourceKind === "tagFavorite"
+      ? `${run.favorite?.name ?? "Tag favori"} · ${run.favoriteSource?.name ?? run.scraper.name}`
+      : run.scraper.name,
   scraper: run.scraper,
   query: run.query,
   status: "waiting",
   results: preserveCurrentResults ? run.results : [],
-  pendingResults: run.pendingResults,
-  pendingCandidates: run.pendingCandidates,
+  pendingResults: run.pendingResults ?? [],
+  pendingCandidates: run.pendingCandidates ?? [],
   loadedPages: run.loadedPages,
   checkedPages: 0,
-  hasNextPage: run.hasNextPage || run.canContinue,
+  hasNextPage: run.hasNextPage || ("canContinue" in run && run.canContinue),
   currentPageUrl: run.currentPageUrl,
   nextPageUrl: run.nextPageUrl,
   checkpoint: run.checkpoint,
   checkpointUsed: false,
   sourceExhausted: run.sourceExhausted,
-  quickConsecutiveSeenResultCount: run.quickConsecutiveSeenResultCount,
-  excludedByLanguageCount: preserveCurrentResults ? run.excludedByLanguageCount : 0,
-  includedByLanguageCount: preserveCurrentResults ? run.includedByLanguageCount : 0,
-  excludedByBlacklistedTagCount: preserveCurrentResults ? run.excludedByBlacklistedTagCount : 0,
+  quickConsecutiveSeenResultCount: run.quickConsecutiveSeenResultCount ?? 0,
+  excludedByLanguageCount: preserveCurrentResults ? run.excludedByLanguageCount ?? 0 : 0,
+  includedByLanguageCount: preserveCurrentResults ? run.includedByLanguageCount ?? 0 : 0,
+  excludedByBlacklistedTagCount: preserveCurrentResults
+    ? run.excludedByBlacklistedTagCount ?? 0
+    : 0,
 });
+
+const buildStoredRunMetadata = (
+  input: ListingBackgroundInput,
+): Map<string, RunMetadata> => new Map(input.sources.map((source) => [
+  source.id,
+  {
+    sourceKind: source.mode === "tag" ? "tagFavorite" : "scraper",
+    module: source.mode === "tag"
+      ? "tag"
+      : source.mode === "search" ? "search" : "homepage",
+  },
+]));
 
 export default function useScraperLatestRuns() {
   const [runs, setRuns] = useState<ScraperLatestRun[]>([]);
@@ -204,14 +226,24 @@ export default function useScraperLatestRuns() {
     const executionToken = executionTokenRef.current + 1;
     executionTokenRef.current = executionToken;
 
-    const searchMode: ScraperLatestSearchMode = options.searchMode === "deep"
+    const storedContinuation = options.storedContinuation;
+    const requestedSearchMode = storedContinuation?.input.searchMode ?? options.searchMode;
+    const searchMode: ScraperLatestSearchMode = requestedSearchMode === "deep"
       ? "deep"
-      : options.searchMode === "continuous"
+      : requestedSearchMode === "continuous"
         ? "continuous"
         : "quick";
-    const resultLimit = normalizePositiveInteger(resultLimitValue, 20);
-    const tagResultLimit = normalizePositiveInteger(options.tagResultLimit, resultLimit);
-    const resultLimitMode: ScraperLatestResultLimitMode = options.resultLimitMode === "perSource"
+    const resultLimit = normalizePositiveInteger(
+      storedContinuation?.input.resultLimit ?? resultLimitValue,
+      20,
+    );
+    const tagResultLimit = normalizePositiveInteger(
+      storedContinuation?.input.tagResultLimit ?? options.tagResultLimit,
+      resultLimit,
+    );
+    const requestedResultLimitMode = storedContinuation?.input.resultLimitMode
+      ?? options.resultLimitMode;
+    const resultLimitMode: ScraperLatestResultLimitMode = requestedResultLimitMode === "perSource"
       ? "perSource"
       : "total";
     const includedScrapers = getIncludedLatestScrapers(scrapers, options.includedScraperIds ?? []);
@@ -222,25 +254,27 @@ export default function useScraperLatestRuns() {
         return scraper ? [{ favorite, favoriteSource, scraper }] : [];
       })
     ));
-    const sources = buildLatestSourceListingSources(
+    const sources = storedContinuation?.input.sources ?? buildLatestSourceListingSources(
       includedScrapers,
       options.tagFavorites ?? [],
       scrapersById,
       { searchMode, resultLimit, tagResultLimit },
     );
-    const metadataByKey = new Map<string, RunMetadata>([
-      ...includedScrapers.map((scraper): [string, RunMetadata] => [
-        `scraper:${scraper.id}`,
-        {
-          sourceKind: "scraper",
-          module: scraper.globalConfig.latest?.module === "search" ? "search" : "homepage",
-        },
-      ]),
-      ...tagSources.map(({ favorite, favoriteSource }): [string, RunMetadata] => [
-        `tag:${favorite.id}:${favoriteSource.scraperId}:${favoriteSource.tagUrl}`,
-        { sourceKind: "tagFavorite", module: "tag", favorite, favoriteSource },
-      ]),
-    ]);
+    const metadataByKey = storedContinuation
+      ? buildStoredRunMetadata(storedContinuation.input)
+      : new Map<string, RunMetadata>([
+        ...includedScrapers.map((scraper): [string, RunMetadata] => [
+          `scraper:${scraper.id}`,
+          {
+            sourceKind: "scraper",
+            module: scraper.globalConfig.latest?.module === "search" ? "search" : "homepage",
+          },
+        ]),
+        ...tagSources.map(({ favorite, favoriteSource }): [string, RunMetadata] => [
+          `tag:${favorite.id}:${favoriteSource.scraperId}:${favoriteSource.tagUrl}`,
+          { sourceKind: "tagFavorite", module: "tag", favorite, favoriteSource },
+        ]),
+      ]);
 
     if (!sources.length) {
       setRuns([]);
@@ -251,15 +285,21 @@ export default function useScraperLatestRuns() {
     }
 
     const preserveCurrentResults = options.preserveCurrentResults === true;
-    const shouldContinueCurrentRuns = preserveCurrentResults
+    const shouldContinueCurrentRuns = Boolean(storedContinuation)
+      || preserveCurrentResults
       || (searchMode === "quick" && options.continueFromQuickScan === true);
     const currentRunsByKey = new Map(runsRef.current.map((run) => [run.key, run]));
-    const initialRuns = shouldContinueCurrentRuns
-      ? sources.flatMap((source) => {
-        const currentRun = currentRunsByKey.get(source.id);
-        return currentRun ? [toInitialBackgroundRun(currentRun, preserveCurrentResults)] : [];
-      })
-      : undefined;
+    const initialRuns = storedContinuation?.runs
+      ? buildStoredScraperLatestContinuationRuns(
+        storedContinuation.input,
+        storedContinuation.runs,
+      )
+      : shouldContinueCurrentRuns
+        ? sources.flatMap((source) => {
+          const currentRun = currentRunsByKey.get(source.id);
+          return currentRun ? [toInitialBackgroundRun(currentRun, preserveCurrentResults)] : [];
+        })
+        : undefined;
     const deepPageLimit = normalizePositiveInteger(
       options.deepPageLimit,
       DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
@@ -269,7 +309,7 @@ export default function useScraperLatestRuns() {
       DEFAULT_SCRAPER_LATEST_CONTINUOUS_PAGE_SAFETY_LIMIT,
     );
     const concurrency = normalizePositiveInteger(options.concurrency, 2);
-    const input = buildLatestSourceSearchInput(sources, {
+    const input = storedContinuation?.input ?? buildLatestSourceSearchInput(sources, {
       maxPages: searchMode === "quick"
         ? 1
         : searchMode === "continuous"
@@ -323,7 +363,9 @@ export default function useScraperLatestRuns() {
         metadataByKey.get(run.key) ?? { sourceKind: "scraper", module: "homepage" },
         searchMode,
       )));
-      setMessage(searchMode === "continuous"
+      setMessage(storedContinuation
+        ? "La même recherche a été poursuivie dans cette vue."
+        : searchMode === "continuous"
         ? `Toutes les nouveautés ont été recherchées avec un garde-fou de ${continuousPageSafetyLimit} pages par source.`
         : resultLimitMode === "total"
           ? `${resultLimit} résultat(s) demandés au total pour les scrappers et ${tagResultLimit} par tag favori.`

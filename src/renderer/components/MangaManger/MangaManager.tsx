@@ -33,6 +33,7 @@ import { openWorkspaceTarget } from '@/renderer/utils/workspaceTargets';
 import type {
     MangaManagerViewWorkspaceTarget,
     ScraperAuthorWorkspaceTarget,
+    ScraperDetailsWorkspaceTarget,
 } from '@/renderer/types/workspace';
 import type {
     BackgroundSearchChangeEvent,
@@ -94,7 +95,9 @@ const getInitialScraperRouteMode = (scraper: ScraperRecord | null | undefined): 
 type MangaManagerProps = {
     forcedViewId?: string;
     forcedLocationState?: MangaManagerViewWorkspaceTarget['locationState'] | null;
-    onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
+    onOpenAuthorTarget?: (
+        target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget
+    ) => void;
     showHeader?: boolean;
 };
 

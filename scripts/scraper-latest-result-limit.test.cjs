@@ -17,6 +17,11 @@ const source = `
     DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
     normalizeScraperLatestDeepPageLimit,
   } from "@/shared/scraperLatestSettings";
+  export {
+    buildStoredScraperLatestContinuationRuns,
+    canContinueScraperLatestSearch,
+    resolveScraperLatestSearchMode,
+  } from "@/renderer/components/ScraperLatest/scraperLatestContinuation";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "scraper-latest-result-limit-test.ts" },
@@ -43,6 +48,9 @@ const {
   selectScraperLatestRoundRobinIndexes,
   DEFAULT_SCRAPER_LATEST_DEEP_PAGE_LIMIT,
   normalizeScraperLatestDeepPageLimit,
+  buildStoredScraperLatestContinuationRuns,
+  canContinueScraperLatestSearch,
+  resolveScraperLatestSearchMode,
 } = bundledModule.exports;
 
 test("legacy unlimited deep scans migrate to the finite default", () => {
@@ -52,6 +60,56 @@ test("legacy unlimited deep scans migrate to the finite default", () => {
   assert.equal(normalizeScraperLatestDeepPageLimit(undefined), 50);
   assert.equal(normalizeScraperLatestDeepPageLimit(1), 1);
   assert.equal(normalizeScraperLatestDeepPageLimit(12.9), 12);
+});
+
+test("latest continuation is only shown for resumable quick and deep scans", () => {
+  const remainingRuns = [{ hasNextPage: false }, { hasNextPage: true }];
+  const exhaustedRuns = [{ hasNextPage: false }];
+
+  assert.equal(resolveScraperLatestSearchMode(undefined), "quick");
+  assert.equal(resolveScraperLatestSearchMode("continuous"), "continuous");
+  assert.equal(resolveScraperLatestSearchMode("deep"), "deep");
+  assert.equal(canContinueScraperLatestSearch("quick", remainingRuns), true);
+  assert.equal(canContinueScraperLatestSearch("quick", exhaustedRuns), false);
+  assert.equal(canContinueScraperLatestSearch("continuous", remainingRuns), false);
+  assert.equal(canContinueScraperLatestSearch("deep", remainingRuns), true);
+  assert.equal(canContinueScraperLatestSearch("deep", exhaustedRuns), false);
+});
+
+test("foreground continuation keeps the stored cursor but replaces the previous cards", () => {
+  const input = {
+    sources: [{ id: "source-a" }, { id: "source-b" }],
+  };
+  const run = {
+    key: "source-a",
+    name: "Source A",
+    scraper: { id: "source-a" },
+    query: "",
+    status: "done",
+    results: [{ id: "old-card" }],
+    pendingResults: [{ id: "pending-card" }],
+    pendingCandidates: [{ id: "pending-candidate" }],
+    loadedPages: 4,
+    checkedPages: 4,
+    hasNextPage: true,
+    currentPageUrl: "https://example.test/page/4",
+    nextPageUrl: "https://example.test/page/5",
+    checkpointUsed: true,
+    excludedByLanguageCount: 3,
+    includedByLanguageCount: 2,
+    excludedByBlacklistedTagCount: 1,
+  };
+
+  assert.deepEqual(buildStoredScraperLatestContinuationRuns(input, [run]), [{
+    ...run,
+    status: "waiting",
+    results: [],
+    checkedPages: 0,
+    checkpointUsed: false,
+    excludedByLanguageCount: 0,
+    includedByLanguageCount: 0,
+    excludedByBlacklistedTagCount: 0,
+  }]);
 });
 
 test("total latest quotas keep every favorite tag in its own group", () => {

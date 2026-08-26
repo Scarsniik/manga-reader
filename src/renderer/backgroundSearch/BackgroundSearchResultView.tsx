@@ -5,7 +5,10 @@ import type {
   ListingBackgroundInput,
 } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
-import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
+import type {
+  ScraperAuthorWorkspaceTarget,
+  ScraperDetailsWorkspaceTarget,
+} from "@/renderer/types/workspace";
 import useBackgroundSearchJob from "@/renderer/backgroundSearch/useBackgroundSearchJob";
 import useParams from "@/renderer/hooks/useParams";
 import { normalizeMangaCorrespondenceSafetyParams } from "@/shared/mangaCorrespondenceSafetySettings";
@@ -19,7 +22,9 @@ import "./resultView.scss";
 
 type Props = {
   backgroundSearchJobId?: string;
-  onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
+  onOpenAuthorTarget?: (
+    target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget,
+  ) => void;
   scrapers: ScraperRecord[];
 };
 

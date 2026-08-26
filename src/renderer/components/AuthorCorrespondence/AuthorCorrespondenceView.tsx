@@ -12,11 +12,17 @@ import AuthorCorrespondenceRevisionButton from "@/renderer/components/AuthorCorr
 import AuthorCorrespondenceAdvancedButton from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedButton";
 import AuthorCorrespondenceAdvancedStatus from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceAdvancedStatus";
 import AuthorCorrespondenceRejectedAuthors from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceRejectedAuthors";
-import { buildAuthorCorrespondenceRejectedOpenTargets } from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
+import {
+  buildAuthorCorrespondenceRejectedMangaTargets,
+  buildAuthorCorrespondenceRejectedOpenTargets,
+} from "@/renderer/components/AuthorCorrespondence/authorCorrespondenceRejectedOpenTargets";
 import useAuthorCorrespondenceNavigation from "@/renderer/components/AuthorCorrespondence/useAuthorCorrespondenceNavigation";
 import useAuthorCorrespondenceSessionCache from "@/renderer/backgroundSearch/useAuthorCorrespondenceSessionCache";
 import { OpenBookIcon } from "@/renderer/components/icons";
-import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
+import type {
+  ScraperAuthorWorkspaceTarget,
+  ScraperDetailsWorkspaceTarget,
+} from "@/renderer/types/workspace";
 import {
   buildAuthorCorrespondenceMatchKey,
   dedupeAuthorCorrespondenceReferenceSources,
@@ -47,7 +53,9 @@ import "./style.scss";
 
 type Props = {
   backgroundSearchJobId?: string;
-  onOpenAuthorTarget?: (target: ScraperAuthorWorkspaceTarget) => void;
+  onOpenAuthorTarget?: (
+    target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget,
+  ) => void;
   resultOnly?: boolean;
 };
 
@@ -57,7 +65,12 @@ export default function AuthorCorrespondenceView({
   resultOnly = false,
 }: Props) {
   const { job, loading, error, cancel, reload } = useBackgroundSearchJob(backgroundSearchJobId);
-  const { openAuthor, openAuthorInWorkspace } = useAuthorCorrespondenceNavigation(onOpenAuthorTarget);
+  const {
+    openAuthor,
+    openAuthorInWorkspace,
+    openManga,
+    openMangaInWorkspace,
+  } = useAuthorCorrespondenceNavigation(onOpenAuthorTarget);
   const result = job?.result as AuthorCorrespondenceBackgroundResult | undefined;
   const input = job?.input as AuthorCorrespondenceBackgroundInput | undefined;
   const active = job?.metadata.status === "queued" || job?.metadata.status === "running";
@@ -82,8 +95,8 @@ export default function AuthorCorrespondenceView({
   );
   const advancedDiscoveredMatchKeys = React.useMemo(() => new Set([
     ...(result?.advancedSearch?.discoveredAuthorMatchKeys ?? []),
-    ...sessionCache.discoveredAuthorMatchKeys,
-  ]), [result?.advancedSearch?.discoveredAuthorMatchKeys, sessionCache.discoveredAuthorMatchKeys]);
+    ...sessionCache.newAuthorMatchKeys,
+  ]), [result?.advancedSearch?.discoveredAuthorMatchKeys, sessionCache.newAuthorMatchKeys]);
   const newAuthorPageCount = React.useMemo(() => validMatches.filter((match) => (
     advancedDiscoveredMatchKeys.has(match.key)
   )).length, [advancedDiscoveredMatchKeys, validMatches]);
@@ -138,6 +151,19 @@ export default function AuthorCorrespondenceView({
       buildAuthorCorrespondenceRejectedOpenTargets({ candidate, input }),
     ]) : [],
   ), [input, rejectedAuthorCandidates]);
+  const rejectedAuthorMangaTargets = React.useMemo(() => new Map(
+    rejectedAuthorCandidates.map((candidate) => [
+      candidate.key,
+      buildAuthorCorrespondenceRejectedMangaTargets({
+        candidate,
+        cache: sessionCache,
+      }),
+    ]),
+  ), [
+    rejectedAuthorCandidates,
+    sessionCache.mangaEnrichments,
+    sessionCache.runs,
+  ]);
 
   React.useEffect(() => {
     if (!job?.metadata.id) {
@@ -520,6 +546,22 @@ export default function AuthorCorrespondenceView({
         pendingCandidateName={pendingRejectedAuthorName}
         error={rejectedAuthorError}
         openTargetsByCandidateKey={rejectedAuthorOpenTargets}
+        mangaTargetsByCandidateKey={rejectedAuthorMangaTargets}
+        onOpenEvidenceManga={(_candidate, target, inWorkspace) => {
+          if (inWorkspace) {
+            openMangaInWorkspace(
+              target.scraperId,
+              target.sourceUrl,
+              target.title,
+            );
+            return;
+          }
+          openManga(
+            target.scraperId,
+            target.sourceUrl,
+            target.title,
+          );
+        }}
         onAccept={(candidate) => void forceValidateRejectedAuthor(candidate)}
         onOpenReferenceSource={(candidate, source, inWorkspace) => {
           if (inWorkspace) {

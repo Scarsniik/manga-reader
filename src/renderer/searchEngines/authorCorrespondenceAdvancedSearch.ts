@@ -13,6 +13,8 @@ import {
   createAuthorCorrespondenceSessionCacheSnapshot,
   hydrateAuthorCorrespondenceSessionCache,
   publishAuthorCorrespondenceSessionCache,
+  recordAuthorCorrespondenceAdvancedDiscoveries,
+  startAuthorCorrespondenceAdvancedDiscoveryBatch,
   type AuthorCorrespondenceMangaEnrichment,
   type AuthorCorrespondenceSessionCacheSnapshot,
 } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
@@ -361,16 +363,15 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     ...inputReferenceNames,
     ...cachedAliases.map((alias) => alias.name),
   ]);
+  const historicalDiscoveredMatchKeys = Array.from(new Set([
+    ...cache.discoveredAuthorMatchKeys,
+    ...(initialResult.advancedSearch?.discoveredAuthorMatchKeys ?? []),
+  ]));
   const retainedMatches = filterIncompatibleAdvancedAuthorMatches({
     matches: initialResult.matches,
-    discoveredMatchKeys: initialResult.advancedSearch?.discoveredAuthorMatchKeys ?? [],
+    discoveredMatchKeys: historicalDiscoveredMatchKeys,
     referenceNames,
   });
-  const retainedMatchKeys = new Set(retainedMatches.map((match) => (
-    buildAuthorCorrespondenceMatchKey(match.scraperId, match.authorUrl)
-  )));
-  const retainedDiscoveredMatchKeys = (initialResult.advancedSearch?.discoveredAuthorMatchKeys ?? [])
-    .filter((matchKey) => retainedMatchKeys.has(matchKey));
   const isCompatibleReferenceName = (authorName: string): boolean => Boolean(
     resolveCompatibleMangaAuthorName(authorName, referenceNames),
   );
@@ -391,10 +392,22 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     )),
     advancedSearch: initialResult.advancedSearch ? {
       ...initialResult.advancedSearch,
-      discoveredAuthorPageCount: retainedDiscoveredMatchKeys.length,
-      discoveredAuthorMatchKeys: retainedDiscoveredMatchKeys,
+      discoveredAuthorPageCount: 0,
+      discoveredAuthorMatchKeys: [],
     } : undefined,
   };
+  cache = await cacheController.publish((current) => (
+    startAuthorCorrespondenceAdvancedDiscoveryBatch(
+      current,
+      historicalDiscoveredMatchKeys,
+    )
+  ));
+  await onSnapshot(result, {
+    completedUnits: 0,
+    totalUnits: 0,
+    resultCount: result.matches.length,
+    currentLabel: "Préparation · nouvelle vague d’approfondissement",
+  });
   const requestedBatchCount = Math.max(1, Math.floor(request.requestedBatchCount));
   const completedBatchCount = result.advancedSearch?.completedBatchCount ?? 0;
   const existingAuthorNameKeys = new Set([
@@ -505,7 +518,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       .filter((match) => !liveInvalidatedMatchKeys.has(match.key))
       .map((match) => buildAuthorCorrespondenceMatchKey(match.scraperId, match.authorUrl)));
     const discoveredAuthorMatchKeys = Array.from(new Set([
-      ...cache.discoveredAuthorMatchKeys,
+      ...cache.newAuthorMatchKeys,
       ...(result.advancedSearch?.discoveredAuthorMatchKeys ?? []),
     ])).filter((matchKey) => resultMatchKeys.has(matchKey));
     return {
@@ -524,6 +537,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       }),
     };
   };
+  const unlimitedBatch = Math.floor(request.batchSize) === 0;
   const seeds = remainingBatchSize
     ? selectAuthorCorrespondenceAdvancedSeeds(
       mergedResults,
@@ -532,6 +546,37 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       remainingBatchSize,
     )
     : [];
+  const scheduledMangaSourceKeys = new Set(seeds.flatMap((seed) => seed.anchorSourceKeys));
+  const appendNewUnlimitedSeeds = () => {
+    if (!unlimitedBatch) return;
+    const liveInvalidatedMatchKeys = readLiveInvalidatedMatchKeys();
+    const refreshedAuthorSources = collectActiveAuthorSources(
+      cache,
+      input,
+      result,
+      liveInvalidatedMatchKeys,
+    );
+    const refreshedAuthorSourceKeys = new Set(
+      refreshedAuthorSources.map(buildMultiSearchSourceIdentityKey),
+    );
+    const refreshedResults = mergeAuthorCorrespondenceSessionResults(
+      refreshedAuthorSources,
+      cache.mangaEnrichments,
+      mergeOptions,
+    );
+    selectAuthorCorrespondenceAdvancedSeeds(
+      refreshedResults,
+      refreshedAuthorSourceKeys,
+      new Set(cache.processedMangaKeys),
+      0,
+    ).forEach((seed) => {
+      if (seed.anchorSourceKeys.some((sourceKey) => scheduledMangaSourceKeys.has(sourceKey))) {
+        return;
+      }
+      seed.anchorSourceKeys.forEach((sourceKey) => scheduledMangaSourceKeys.add(sourceKey));
+      seeds.push(seed);
+    });
+  };
   const attemptedReferenceSourceKeys = new Set<string>();
   const collectPendingAuthorNames = (): string[] => {
     const searchedNameKeys = new Set(result.searchedNames.map(normalizeFuzzyText));
@@ -666,13 +711,9 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
         incrementalResult.nameSearchSources,
       ),
     };
-    cache = await cacheController.publish((current) => ({
-      ...current,
-      discoveredAuthorMatchKeys: Array.from(new Set([
-        ...current.discoveredAuthorMatchKeys,
-        ...newMatchKeys,
-      ])),
-    }));
+    cache = await cacheController.publish((current) => (
+      recordAuthorCorrespondenceAdvancedDiscoveries(current, newMatchKeys)
+    ));
     result = {
       ...result,
       discoveries: buildInitialAuthorCorrespondenceDiscoveries({
@@ -719,6 +760,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
         seedIndex + 1,
         seeds.length,
       );
+      appendNewUnlimitedSeeds();
       continue;
     }
     const mangaResult = await runMangaCorrespondenceSearch(
@@ -757,7 +799,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
               evidenceMangaKeys: [seed.key],
               scraperIds: hasConcreteScraper ? [author.scraperId] : [],
               scraperNames: hasConcreteScraper ? [author.scraperName] : [],
-              sampleTitles: [seed.result.title],
+              sampleTitles: [author.sourceTitle?.trim() || seed.result.title],
               referenceSources: author.authorUrl && hasConcreteScraper
                 ? [{
                   scraperId: author.scraperId,
@@ -786,6 +828,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       `Manga ${seedIndex + 1}/${seeds.length}`,
       seedIndex + 1,
     );
+    appendNewUnlimitedSeeds();
     await emitProgress(`Manga approfondi · ${seed.result.title}`, seedIndex + 1, seeds.length);
   }
   await flushAuthorDiscoveries("Finalisation", seeds.length);

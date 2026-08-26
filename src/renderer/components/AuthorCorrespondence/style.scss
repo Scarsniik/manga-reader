@@ -449,6 +449,72 @@
   width: 16px;
 }
 
+.author-correspondence-view__rejected-manga-dropdown,
+.author-correspondence-view__rejected-manga-dropdown > button {
+  width: 100%;
+}
+
+.author-correspondence-view__rejected-manga-menu {
+  background: #202631;
+  border: 1px solid rgba(146, 180, 230, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+  min-width: min(28rem, calc(100vw - 1rem));
+  padding: 0.35rem;
+}
+
+.author-correspondence-view__rejected-manga-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.author-correspondence-view__rejected-manga-list button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: inherit;
+  display: flex;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  width: 100%;
+}
+
+.author-correspondence-view__rejected-manga-list button:hover,
+.author-correspondence-view__rejected-manga-list button:focus-visible {
+  background: rgba(93, 156, 255, 0.16);
+}
+
+.author-correspondence-view__rejected-manga-list button > svg {
+  flex: 0 0 auto;
+  height: 17px;
+  width: 17px;
+}
+
+.author-correspondence-view__rejected-manga-list button > span {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.author-correspondence-view__rejected-manga-list strong,
+.author-correspondence-view__rejected-manga-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author-correspondence-view__rejected-manga-list strong {
+  font-size: 0.8rem;
+}
+
+.author-correspondence-view__rejected-manga-list small {
+  color: rgba(232, 237, 246, 0.62);
+  font-size: 0.72rem;
+}
+
 .author-correspondence-view__rejected-accept {
   background: rgba(77, 190, 133, 0.12);
   border: 1px solid rgba(77, 190, 133, 0.38);

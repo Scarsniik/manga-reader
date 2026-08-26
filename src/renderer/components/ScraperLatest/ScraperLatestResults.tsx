@@ -504,7 +504,7 @@ export default function ScraperLatestResults({
         </div>
       ) : null}
 
-      {displayedResults.length > 0 && replaceContinueActionLabel && onReplaceContinue ? (
+      {replaceContinueActionLabel && onReplaceContinue ? (
         <div className="scraper-latest-results__continue">
           <button
             type="button"

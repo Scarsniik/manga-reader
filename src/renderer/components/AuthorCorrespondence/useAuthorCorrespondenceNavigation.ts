@@ -1,10 +1,15 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
+import type {
+  ScraperAuthorWorkspaceTarget,
+  ScraperDetailsWorkspaceTarget,
+} from "@/renderer/types/workspace";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 
-type OpenAuthorTarget = (target: ScraperAuthorWorkspaceTarget) => void;
+type OpenCorrespondenceTarget = (
+  target: ScraperAuthorWorkspaceTarget | ScraperDetailsWorkspaceTarget,
+) => void;
 
 const buildAuthorTarget = (
   scraperId: string,
@@ -19,7 +24,18 @@ const buildAuthorTarget = (
   templateContext: templateContext ?? undefined,
 });
 
-export default function useAuthorCorrespondenceNavigation(onOpenAuthorTarget?: OpenAuthorTarget) {
+const buildMangaTarget = (
+  scraperId: string,
+  sourceUrl: string,
+  title: string,
+): ScraperDetailsWorkspaceTarget => ({
+  kind: "scraper.details",
+  scraperId,
+  sourceUrl,
+  title,
+});
+
+export default function useAuthorCorrespondenceNavigation(onOpenTarget?: OpenCorrespondenceTarget) {
   const location = useLocation();
   const navigate = useNavigate();
   const openAuthor = React.useCallback((
@@ -29,8 +45,8 @@ export default function useAuthorCorrespondenceNavigation(onOpenAuthorTarget?: O
     templateContext?: Record<string, string | undefined> | null,
   ) => {
     const target = buildAuthorTarget(scraperId, authorUrl, authorName, templateContext);
-    if (onOpenAuthorTarget) {
-      onOpenAuthorTarget(target);
+    if (onOpenTarget) {
+      onOpenTarget(target);
       return;
     }
     navigate({
@@ -53,7 +69,7 @@ export default function useAuthorCorrespondenceNavigation(onOpenAuthorTarget?: O
     }, {
       state: { scraperBrowserAuthorTemplateContext: templateContext ?? null },
     });
-  }, [location.pathname, location.search, navigate, onOpenAuthorTarget]);
+  }, [location.pathname, location.search, navigate, onOpenTarget]);
   const openAuthorInWorkspace = React.useCallback((
     scraperId: string,
     authorUrl: string,
@@ -67,5 +83,46 @@ export default function useAuthorCorrespondenceNavigation(onOpenAuthorTarget?: O
       templateContext,
     ));
   }, []);
-  return { openAuthor, openAuthorInWorkspace };
+  const openManga = React.useCallback((
+    scraperId: string,
+    sourceUrl: string,
+    title: string,
+  ) => {
+    const target = buildMangaTarget(scraperId, sourceUrl, title);
+    if (onOpenTarget) {
+      onOpenTarget(target);
+      return;
+    }
+    navigate({
+      pathname: location.pathname,
+      search: writeScraperRouteState(location.search, {
+        scraperId,
+        mode: "manga",
+        homepageActive: false,
+        homepagePage: 1,
+        searchActive: false,
+        searchQuery: "",
+        searchPage: 1,
+        authorActive: false,
+        authorQuery: "",
+        authorPage: 1,
+        mangaQuery: title,
+        mangaUrl: sourceUrl,
+        bookmarksFilterScraperId: null,
+      }),
+    });
+  }, [location.pathname, location.search, navigate, onOpenTarget]);
+  const openMangaInWorkspace = React.useCallback((
+    scraperId: string,
+    sourceUrl: string,
+    title: string,
+  ) => {
+    void openWorkspaceTarget(buildMangaTarget(scraperId, sourceUrl, title));
+  }, []);
+  return {
+    openAuthor,
+    openAuthorInWorkspace,
+    openManga,
+    openMangaInWorkspace,
+  };
 }

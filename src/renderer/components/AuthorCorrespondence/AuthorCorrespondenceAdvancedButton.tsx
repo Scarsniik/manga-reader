@@ -30,13 +30,11 @@ export default function AuthorCorrespondenceAdvancedButton({
     completedBatchCount
     && result?.advancedSearch?.remainingCandidateCount === 0,
   );
-  const batchSize = Math.max(
-    1,
-    Math.floor(
-      input?.advancedSearch?.batchSize
-      ?? DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE,
-    ),
-  );
+  const configuredBatchSize = input?.advancedSearch?.batchSize
+    ?? DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE;
+  const batchSize = Number.isFinite(configuredBatchSize)
+    ? Math.max(0, Math.floor(configuredBatchSize))
+    : DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE;
 
   const startAdvancedSearch = async (requestedMangaCount: number) => {
     if (!backgroundSearchJobId || !input || !result || active || pending) return;
@@ -93,14 +91,16 @@ export default function AuthorCorrespondenceAdvancedButton({
         unitSingular="manga"
         unitPlural="mangas"
         formAriaLabel="Choisir le nombre de mangas à analyser en recherche poussée"
-        inputAriaLabel="Nombre de mangas à analyser"
+        inputAriaLabel="Nombre de mangas à analyser, zéro pour tous les mangas restants"
+        allowZero
+        zeroUnitLabel="= tous"
         submitLabel={hasNoRemainingCandidate
             ? "Aucun manga suivant"
           : completedBatchCount || processedMangaCount
             ? "Approfondir les suivants"
             : "Lancer la recherche poussée"}
         loadingLabel="Recherche en cours…"
-        submitTitle="Analyser les prochains mangas les plus présents"
+        submitTitle="Analyser les prochains mangas les plus présents ; zéro analyse tous les mangas restants"
         submitIcon={<MagnifyingGlassIcon aria-hidden="true" focusable="false" />}
         onAppendPages={(mangaCount) => void startAdvancedSearch(mangaCount)}
       />

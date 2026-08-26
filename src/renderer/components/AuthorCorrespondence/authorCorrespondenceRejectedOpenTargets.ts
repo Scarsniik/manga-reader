@@ -1,6 +1,8 @@
 import type { AuthorCorrespondenceRejectedAuthorCandidate } from "@/renderer/backgroundSearch/types";
+import type { AuthorCorrespondenceSessionCacheSnapshot } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
 import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
-import { buildAuthorModuleSearchValues } from "@/renderer/utils/authorSearchNames";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import {
   getScraperAuthorFeatureConfig,
   getScraperFeature,
@@ -15,67 +17,80 @@ export type AuthorCorrespondenceRejectedOpenTarget = AuthorCorrespondenceReferen
   scraperName: string;
 };
 
-const STANDARD_AUTHOR_TEMPLATE_KEYS = new Set([
-  "page",
-  "pageindex",
-  "pagenumber",
-  "query",
-  "rawquery",
-  "rawvalue",
-  "search",
-  "value",
-]);
-
-const buildNameOnlyTemplateContext = (
-  urlTemplate: string | undefined,
-  authorQuery: string,
-): Record<string, string> | undefined => {
-  const entries = Array.from(urlTemplate?.matchAll(/{{\s*(?:raw:)?([^}]+?)\s*}}/g) ?? [])
-    .map((match) => match[1].trim())
-    .filter((key) => !STANDARD_AUTHOR_TEMPLATE_KEYS.has(key.toLocaleLowerCase()))
-    .map((key) => [key, authorQuery] as const);
-  return entries.length ? Object.fromEntries(entries) : undefined;
+export type AuthorCorrespondenceRejectedMangaTarget = {
+  scraperId: string;
+  scraperName: string;
+  sourceUrl: string;
+  title: string;
 };
+
+const findOpenableMangaSource = (
+  sources: Array<MultiSearchSourceResult | undefined>,
+): MultiSearchSourceResult | undefined => sources.find((source) => (
+  source?.canOpenDetails && Boolean(source.result.detailUrl?.trim())
+));
 
 export const buildAuthorCorrespondenceRejectedOpenTargets = (options: {
   candidate: AuthorCorrespondenceRejectedAuthorCandidate;
   input: AuthorCorrespondenceBackgroundInput;
 }): AuthorCorrespondenceRejectedOpenTarget[] => {
   const filter = splitIncludeFilterValues(options.input.scraperFilterValues);
-  const directSourcesByScraper = new Map(options.candidate.referenceSources.map((source) => (
-    [source.scraperId, source] as const
-  )));
   const enabledScrapers = options.input.scrapers.filter((scraper) => !(
       filter.excludedValues.includes(scraper.id)
       || (filter.includedValues.length && !filter.includedValues.includes(scraper.id))
   ));
   const enabledScrapersById = new Map(enabledScrapers.map((scraper) => [scraper.id, scraper]));
-  const evidenceScrapers = options.candidate.scraperIds.flatMap((scraperId) => {
-    const scraper = enabledScrapersById.get(scraperId);
-    return scraper ? [scraper] : [];
-  });
-  const buildTargets = (scrapers: typeof enabledScrapers) => scrapers.flatMap((scraper) => {
+  return options.candidate.referenceSources.flatMap((source) => {
+    const scraper = enabledScrapersById.get(source.scraperId);
+    if (!scraper) return [];
+
     const feature = getScraperFeature(scraper, "author");
     const config = getScraperAuthorFeatureConfig(feature);
     if (!isScraperFeatureConfigured(feature) || !config) return [];
 
-    const directSource = directSourcesByScraper.get(scraper.id);
-    if (directSource) {
-      return [{ ...directSource, scraperName: scraper.name }];
-    }
-    if (config.urlStrategy !== "template") return [];
+    return [{ ...source, scraperName: scraper.name }];
+  });
+};
 
-    const authorQuery = buildAuthorModuleSearchValues(config, options.candidate.name)[0];
-    if (!authorQuery) return [];
-    return [{
-      scraperId: scraper.id,
-      scraperName: scraper.name,
-      authorUrl: authorQuery,
-      name: options.candidate.name,
-      templateContext: buildNameOnlyTemplateContext(config.urlTemplate, authorQuery),
-    }];
+export const buildAuthorCorrespondenceRejectedMangaTargets = (options: {
+  candidate: AuthorCorrespondenceRejectedAuthorCandidate;
+  cache: AuthorCorrespondenceSessionCacheSnapshot;
+}): AuthorCorrespondenceRejectedMangaTarget[] => {
+  const sourcesByKey = new Map<string, MultiSearchSourceResult>();
+  options.cache.runs.flatMap((run) => run.results).forEach((source) => {
+    sourcesByKey.set(buildMultiSearchSourceIdentityKey(source), source);
+  });
+  options.cache.mangaEnrichments.flatMap((enrichment) => enrichment.sources).forEach((source) => {
+    sourcesByKey.set(buildMultiSearchSourceIdentityKey(source), source);
+  });
+  const enrichmentsBySeedKey = new Map(options.cache.mangaEnrichments.map((enrichment) => (
+    [enrichment.seedKey, enrichment] as const
+  )));
+  const targetsBySourceKey = new Map<string, AuthorCorrespondenceRejectedMangaTarget>();
+
+  options.candidate.evidenceMangaKeys.forEach((evidenceKey) => {
+    const enrichment = enrichmentsBySeedKey.get(evidenceKey);
+    const evidenceSources = [
+      sourcesByKey.get(evidenceKey),
+      ...(enrichment?.anchorSourceKeys.map((sourceKey) => sourcesByKey.get(sourceKey)) ?? []),
+      ...(enrichment?.sources ?? []),
+    ];
+    const candidateScraperIds = new Set(options.candidate.scraperIds);
+    const source = findOpenableMangaSource(evidenceSources.filter((candidate) => (
+      candidate && candidateScraperIds.has(candidate.scraper.id)
+    ))) ?? findOpenableMangaSource(evidenceSources);
+    const sourceUrl = source?.result.detailUrl?.trim();
+    if (!source || !sourceUrl) return;
+
+    const sourceKey = buildMultiSearchSourceIdentityKey(source);
+    if (targetsBySourceKey.has(sourceKey)) return;
+    targetsBySourceKey.set(sourceKey, {
+      scraperId: source.scraper.id,
+      scraperName: source.scraper.name,
+      sourceUrl,
+      title: source.result.title.trim() || options.candidate.name,
+    });
   });
 
-  const evidenceTargets = buildTargets(evidenceScrapers);
-  return evidenceTargets.length ? evidenceTargets : buildTargets(enabledScrapers);
+  return Array.from(targetsBySourceKey.values());
 };

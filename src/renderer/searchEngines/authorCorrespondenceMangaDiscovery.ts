@@ -17,6 +17,7 @@ export type RejectedMangaCorrespondenceAuthor = {
   name: string;
   scraperId: string;
   scraperName: string;
+  sourceTitle?: string;
   authorUrl?: string;
   templateContext?: Record<string, string | undefined> | null;
 };
@@ -33,11 +34,20 @@ export const collectMangaCorrespondenceAuthors = (
   const activeDiscoveries = (result.discoveries ?? []).filter((discovery) => (
     discovery.kind === "author" && discovery.status === "active"
   ));
+  const findDiscoverySourceTitle = (scraperId: string, authorName: string): string | undefined => (
+    result.matches.find((match) => (
+      match.source.scraper.id === scraperId
+      && match.authors.some((candidate) => (
+        candidate.trim().toLocaleLowerCase() === authorName.trim().toLocaleLowerCase()
+      ))
+    ))?.source.result.title
+  );
   const candidates: RejectedMangaCorrespondenceAuthor[] = [
     ...activeDiscoveries.map((discovery) => ({
       name: discovery.value,
       scraperId: discovery.scraperId,
       scraperName: discovery.scraperName,
+      sourceTitle: findDiscoverySourceTitle(discovery.scraperId, discovery.value),
       authorUrl: discovery.authorPageUrl,
       templateContext: discovery.authorTemplateContext,
     })),
@@ -53,6 +63,7 @@ export const collectMangaCorrespondenceAuthors = (
         name,
         scraperId: match.source.scraper.id,
         scraperName: match.source.scraper.name,
+        sourceTitle: match.source.result.title,
         authorUrl: urls[index]
           ?? (urls.length === 1 && match.authors.length === 1 ? urls[0] : undefined),
       }));
@@ -83,6 +94,7 @@ export const collectMangaCorrespondenceAuthors = (
         name: candidate.name.trim(),
         scraperId: candidate.scraperId,
         scraperName: candidate.scraperName,
+        sourceTitle: candidate.sourceTitle,
         authorUrl: candidate.authorUrl,
         templateContext: candidate.templateContext,
       },
