@@ -54,6 +54,8 @@ export type ScraperLatestRun = {
   canContinue: boolean;
   checkpoint?: ScraperLatestCheckpointRecord | null;
   checkpointUsed: boolean;
+  deepScanPhaseStarted: boolean;
+  deepScanCheckpointPending: boolean;
   deepSearch: boolean;
   continuousScan: boolean;
   sourceExhausted?: boolean;
@@ -144,6 +146,9 @@ const toForegroundRun = (
   canContinue: run.hasNextPage,
   checkpoint: run.checkpoint,
   checkpointUsed: run.checkpointUsed === true,
+  deepScanPhaseStarted: run.deepScanPhaseStarted === true
+    || (searchMode === "deep" && run.checkpointUsed === true),
+  deepScanCheckpointPending: run.deepScanCheckpointPending === true,
   deepSearch: searchMode === "deep",
   continuousScan: searchMode === "continuous",
   sourceExhausted: run.sourceExhausted,
@@ -177,6 +182,9 @@ const toInitialBackgroundRun = (
   nextPageUrl: run.nextPageUrl,
   checkpoint: run.checkpoint,
   checkpointUsed: false,
+  deepScanPhaseStarted: run.deepScanPhaseStarted === true
+    || ("deepSearch" in run && run.deepSearch && run.checkpointUsed === true),
+  deepScanCheckpointPending: run.deepScanCheckpointPending === true,
   sourceExhausted: run.sourceExhausted,
   quickConsecutiveSeenResultCount: run.quickConsecutiveSeenResultCount ?? 0,
   excludedByLanguageCount: preserveCurrentResults ? run.excludedByLanguageCount ?? 0 : 0,

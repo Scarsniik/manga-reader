@@ -279,11 +279,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   const { params, setParams } = useParams();
   const attachedSearch = useBackgroundSearchJob(backgroundSearchJobId);
   const attachedInput = attachedSearch.job?.input as ListingBackgroundInput | undefined;
-  const [foregroundContinuationStarted, setForegroundContinuationStarted] = React.useState(false);
-  React.useEffect(() => {
-    setForegroundContinuationStarted(false);
-  }, [backgroundSearchJobId]);
-  const showingAttachedSearch = attachedSearch.attached && !foregroundContinuationStarted;
+  const showingAttachedSearch = attachedSearch.attached;
   const hasStoredBlacklistDecision = attachedSearch.job?.metadata.kind === "latestSources"
     && typeof attachedInput?.excludeBlacklistedTagCards === "boolean";
   const { openModal } = useModal();
@@ -1279,25 +1275,24 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     if (
       attachedSearch.job?.metadata.kind === "latestSources"
       && attachedInput
-      && (showingAttachedSearch ? Boolean(attachedResult) : scraperRuns.runs.length > 0)
+      && attachedResult
     ) {
-      const storedSearchMode = resolveScraperLatestSearchMode(attachedInput.searchMode);
-      setScraperSearchMode(storedSearchMode);
-      setForegroundContinuationStarted(true);
-      await scraperRuns.start(
-        scrapers,
-        attachedInput.resultLimit ?? scraperResultLimit,
-        new Map(viewHistoryRecordsByIdRef.current),
-        attachedInput.includedLanguageCodes,
-        {
-          storedContinuation: {
-            input: attachedInput,
-            ...(showingAttachedSearch && attachedResult
-              ? { runs: attachedResult.runs }
-              : {}),
-          },
-        },
-      );
+      try {
+        const continued = await window.api?.continueBackgroundSearch?.({
+          jobId: attachedSearch.job.metadata.id,
+          input: attachedInput,
+        });
+        if (!continued) {
+          throw new Error("La continuation n'a pas pu être lancée en arrière-plan.");
+        }
+        await attachedSearch.reload();
+      } catch (continuationError) {
+        sourceResults.setOpenError(
+          continuationError instanceof Error
+            ? continuationError.message
+            : "La continuation n'a pas pu être lancée en arrière-plan.",
+        );
+      }
       return;
     }
     if (scraperActionsDisabled) {
@@ -1313,14 +1308,10 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     attachedInput,
     attachedResult,
     attachedSearch.job?.metadata.kind,
+    attachedSearch.reload,
     refreshViewHistorySnapshot,
     scraperActionsDisabled,
-    scraperResultLimit,
-    scraperRuns.runs.length,
-    scraperRuns.start,
     scraperSearchMode,
-    scrapers,
-    showingAttachedSearch,
     sourceResults,
     startScraperScan,
   ]);
@@ -1347,7 +1338,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
       : scraperSelectionError
         || (hasIncludedTagFavoriteSelection ? tagFavoritesError : null)
         || scraperRuns.error;
-  const activeTabHasStarted = attachedSearch.attached || foregroundContinuationStarted || (activeTab === "authors"
+  const activeTabHasStarted = attachedSearch.attached || (activeTab === "authors"
     ? authorRefreshKey > 0
     : scraperRefreshKey > 0);
   const displayedScraperSearchMode = attachedSearch.job?.metadata.kind === "latestSources"

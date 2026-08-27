@@ -73,6 +73,8 @@ export type BackgroundListingRun = {
   nextPageUrl?: string;
   checkpoint?: ScraperLatestCheckpointRecord | null;
   checkpointUsed?: boolean;
+  deepScanPhaseStarted?: boolean;
+  deepScanCheckpointPending?: boolean;
   sourceExhausted?: boolean;
   quickConsecutiveSeenResultCount?: number;
   safetyLimitReached?: boolean;

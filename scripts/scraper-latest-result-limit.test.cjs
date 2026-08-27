@@ -112,6 +112,29 @@ test("foreground continuation keeps the stored cursor but replaces the previous 
   }]);
 });
 
+test("deep continuation remembers that its checkpoint phase already started", () => {
+  const input = {
+    searchMode: "deep",
+    sources: [{ id: "source-a" }],
+  };
+  const run = {
+    key: "source-a",
+    name: "Source A",
+    scraper: { id: "source-a" },
+    query: "",
+    status: "done",
+    results: [],
+    loadedPages: 10,
+    hasNextPage: true,
+    checkpointUsed: true,
+  };
+
+  const [continuation] = buildStoredScraperLatestContinuationRuns(input, [run]);
+
+  assert.equal(continuation.checkpointUsed, false);
+  assert.equal(continuation.deepScanPhaseStarted, true);
+});
+
 test("total latest quotas keep every favorite tag in its own group", () => {
   assert.equal(resolveScraperLatestTotalGroupKey({
     key: "source-a",

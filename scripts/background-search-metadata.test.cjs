@@ -7,6 +7,7 @@ const authorCacheDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "scaramanga-a
 process.env.SCARAMANGA_AUTHOR_CORRESPONDENCE_CACHE_DIR = authorCacheDirectory;
 const {
   buildBackgroundSearchQueueSummary,
+  canContinueBackgroundSearch,
   canReplayBackgroundSearch,
   hasBackgroundSearchExpired,
   isBackgroundSearchActive,
@@ -21,6 +22,9 @@ const {
   removeAuthorCorrespondenceSessionCache,
   setAuthorCorrespondenceSessionCache,
 } = require("../dist/electron/handlers/authorCorrespondenceSessionCache.js");
+const {
+  buildStoredScraperLatestContinuationResult,
+} = require("../dist/shared/scraperLatestContinuation.js");
 
 test.after(() => {
   fs.rmSync(authorCacheDirectory, { recursive: true, force: true });
@@ -71,6 +75,50 @@ test("completed and cancelled results can be edited before a replay", () => {
     ...makeJob("other", "cancelled", "2026-01-01T00:00:00.000Z"),
     kind: "multiSearch",
   }), false);
+});
+
+test("completed latest-source scans can be continued as background jobs", () => {
+  assert.equal(canContinueBackgroundSearch({
+    ...makeJob("latest", "completed", "2026-01-01T00:00:00.000Z"),
+    kind: "latestSources",
+  }), true);
+  assert.equal(canContinueBackgroundSearch({
+    ...makeJob("running", "running", "2026-01-01T00:00:00.000Z"),
+    kind: "latestSources",
+  }), false);
+  assert.equal(canContinueBackgroundSearch({
+    ...makeJob("other", "completed", "2026-01-01T00:00:00.000Z"),
+    kind: "multiSearch",
+  }), false);
+});
+
+test("latest-source background continuation keeps cursors and replaces stored cards", () => {
+  const result = {
+    executionFingerprint: "same-input",
+    runs: [{
+      key: "source-a",
+      status: "done",
+      results: [{ id: "old-card" }],
+      pendingResults: [{ id: "pending-card" }],
+      checkedPages: 4,
+      loadedPages: 4,
+      nextPageUrl: "https://example.test/page/5",
+      checkpointUsed: true,
+    }],
+  };
+
+  const continuation = buildStoredScraperLatestContinuationResult({
+    searchMode: "deep",
+    sources: [{ id: "source-a" }],
+  }, result);
+
+  assert.equal(continuation.executionFingerprint, "same-input");
+  assert.deepEqual(continuation.runs[0].results, []);
+  assert.deepEqual(continuation.runs[0].pendingResults, [{ id: "pending-card" }]);
+  assert.equal(continuation.runs[0].loadedPages, 4);
+  assert.equal(continuation.runs[0].nextPageUrl, "https://example.test/page/5");
+  assert.equal(continuation.runs[0].checkpointUsed, false);
+  assert.equal(continuation.runs[0].deepScanPhaseStarted, true);
 });
 
 test("only new jobs explicitly marked as unopened show the visual state", () => {

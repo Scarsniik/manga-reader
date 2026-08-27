@@ -12,10 +12,16 @@ import type {
   SaveBackgroundSearchResultRequest,
   ReplayBackgroundSearchRequest,
   UpdateBackgroundSearchRequest,
+  ListingBackgroundInput,
 } from "../../../shared/backgroundSearch";
 import { BACKGROUND_SEARCH_SCHEMA_VERSION } from "../../../shared/backgroundSearch";
 import {
+  buildStoredScraperLatestContinuationResult,
+  type ScraperLatestContinuationResult,
+} from "../../../shared/scraperLatestContinuation";
+import {
   buildBackgroundSearchQueueSummary,
+  canContinueBackgroundSearch,
   canReplayBackgroundSearch,
   hasBackgroundSearchExpired,
   isBackgroundSearchActive,
@@ -52,6 +58,37 @@ const normalizeRetentionHours = (value: number): number => (
 const getExpiresAt = (retentionHours: number): string => (
   new Date(Date.now() + normalizeRetentionHours(retentionHours) * 60 * 60 * 1000).toISOString()
 );
+
+const buildLatestSourcesContinuationResult = (
+  input: unknown,
+  result: unknown,
+): ScraperLatestContinuationResult | null => {
+  if (
+    !input
+    || typeof input !== "object"
+    || !Array.isArray((input as ListingBackgroundInput).sources)
+    || !result
+    || typeof result !== "object"
+    || !Array.isArray((result as ScraperLatestContinuationResult).runs)
+  ) {
+    return null;
+  }
+
+  const runs = (result as ScraperLatestContinuationResult).runs;
+  if (runs.some((run) => (
+    !run
+    || typeof run !== "object"
+    || typeof run.key !== "string"
+    || !Array.isArray(run.results)
+  ))) {
+    return null;
+  }
+
+  return buildStoredScraperLatestContinuationResult(
+    input as ListingBackgroundInput,
+    result as ScraperLatestContinuationResult,
+  );
+};
 
 const serializeMutation = async <T>(mutation: () => Promise<T>): Promise<T> => {
   const previous = mutationChain;
@@ -403,13 +440,13 @@ export const continueBackgroundSearch = async (
 ): Promise<BackgroundSearchJobMetadata | null> => serializeMutation(async () => {
   await initialize();
   const current = findMetadata(request.jobId);
-  if (
-    !current
-    || current.kind !== "mangaCorrespondence"
-    || current.status !== "completed"
-  ) return null;
+  if (!current || !canContinueBackgroundSearch(current)) return null;
   const job = await loadJob(request.jobId);
   if (!job?.result) return null;
+  const continuedResult = current.kind === "latestSources"
+    ? buildLatestSourcesContinuationResult(request.input, job.result)
+    : job.result;
+  if (!continuedResult) return null;
   const timestamp = nowIso();
   const next: BackgroundSearchJobMetadata = {
     ...current,
@@ -422,8 +459,10 @@ export const continueBackgroundSearch = async (
     progress: {
       completedUnits: 0,
       totalUnits: 0,
-      resultCount: current.progress.resultCount,
-      currentLabel: "Préparation de la passe suivante",
+      resultCount: current.kind === "latestSources" ? 0 : current.progress.resultCount,
+      currentLabel: current.kind === "latestSources"
+        ? "Préparation de la continuation"
+        : "Préparation de la passe suivante",
     },
     error: undefined,
     inputAvailable: true,
@@ -433,7 +472,7 @@ export const continueBackgroundSearch = async (
   await persistJobPayload({
     metadata: next,
     input: request.input,
-    result: job.result,
+    result: continuedResult,
   });
   await writeBackgroundSearchInput(next.id, request.input);
   await persistMetadata();

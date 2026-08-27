@@ -219,6 +219,8 @@ type ListingSourceExecutionState = {
   acceptedResultTarget: number;
   consecutiveStagnantBackfillPages: number;
   consecutiveSeenResultCount: number;
+  deepScanPhaseStarted: boolean;
+  deepScanCheckpointPending: boolean;
   sourceHasNextPage: boolean;
   sourceExhausted: boolean;
 };
@@ -301,21 +303,16 @@ export const runListingSearchEngine = async (
   const runs: BackgroundListingRun[] = input.sources.map((source) => {
     const initialRun = initialRunsByKey.get(source.id);
     const module = source.mode === "tag" ? "tag" : source.mode === "search" ? "search" : "homepage";
-    const checkpoint = !initialRun && checkpoints.length
+    const checkpoint = initialRun?.checkpoint ?? (checkpoints.length
       ? getScraperLatestCheckpointForKey(checkpoints, {
         scraperId: source.scraper.id,
         module,
         query: module === "homepage" ? "" : source.query,
         includedLanguageCodes: input.includedLanguageCodes,
       }, source.scraper.updatedAt)
-      : null;
-    const checkpointCursor = resolveScraperLatestCheckpointCursor(checkpoint);
-    const checkpointQuotaUnavailableReason = !initialRun
-      ? resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint)
-      : null;
-    const loadedPages = initialRun?.loadedPages
-      ?? checkpointCursor?.loadedPages
-      ?? 0;
+      : null);
+    const deepScanPhaseStarted = input.searchMode === "deep"
+      && (initialRun?.deepScanPhaseStarted === true || initialRun?.checkpointUsed === true);
     return {
       key: source.id,
       name: source.name,
@@ -325,18 +322,18 @@ export const runListingSearchEngine = async (
       results: initialRun?.results ?? [],
       pendingResults: initialRun?.pendingResults ?? [],
       pendingCandidates: initialRun?.pendingCandidates ?? [],
-      loadedPages,
+      loadedPages: initialRun?.loadedPages ?? 0,
       checkedPages: 0,
-      hasNextPage: initialRun?.hasNextPage ?? checkpointQuotaUnavailableReason === null,
-      currentPageUrl: initialRun?.currentPageUrl ?? checkpoint?.currentPageUrl,
-      nextPageUrl: initialRun?.nextPageUrl ?? checkpointCursor?.nextPageUrl,
+      hasNextPage: initialRun?.hasNextPage ?? true,
+      currentPageUrl: initialRun?.currentPageUrl,
+      nextPageUrl: initialRun?.nextPageUrl,
       checkpoint,
-      checkpointUsed: Boolean(checkpoint),
+      checkpointUsed: initialRun?.checkpointUsed === true,
+      deepScanPhaseStarted,
+      deepScanCheckpointPending: initialRun?.deepScanCheckpointPending === true,
       sourceExhausted: initialRun?.sourceExhausted === true,
-      safetyLimitReached: initialRun?.safetyLimitReached === true
-        || checkpointQuotaUnavailableReason === "pageLimitWithoutResults",
-      languageRejectLimitReached: initialRun?.languageRejectLimitReached === true
-        || checkpointQuotaUnavailableReason === "languageRejectLimit",
+      safetyLimitReached: initialRun?.safetyLimitReached === true,
+      languageRejectLimitReached: initialRun?.languageRejectLimitReached === true,
       quickConsecutiveSeenResultCount: initialRun?.quickConsecutiveSeenResultCount ?? 0,
       excludedByLanguageCount: initialRun?.excludedByLanguageCount,
       includedByLanguageCount: initialRun?.includedByLanguageCount,
@@ -362,6 +359,8 @@ export const runListingSearchEngine = async (
       acceptedResultTarget: 0,
       consecutiveStagnantBackfillPages: 0,
       consecutiveSeenResultCount: initialRun.quickConsecutiveSeenResultCount ?? 0,
+      deepScanPhaseStarted: initialRun.deepScanPhaseStarted === true,
+      deepScanCheckpointPending: initialRun.deepScanCheckpointPending === true,
       sourceHasNextPage: initialRun.hasNextPage,
       sourceExhausted: initialRun.sourceExhausted === true,
     };
@@ -710,6 +709,19 @@ export const runListingSearchEngine = async (
         && (resultLimit === 0 || run.results.length < resultLimit);
       while (run.loadedPages < executionPageLimits[runIndex] && shouldLoadAnotherPage) {
         throwIfSearchAborted(signal);
+        if (state.deepScanCheckpointPending) {
+          state.deepScanCheckpointPending = false;
+          run = {
+            ...run,
+            checkpointUsed: true,
+            deepScanCheckpointPending: false,
+          };
+          runs[runIndex] = run;
+          appendScraperLatestDiagnosticEvent(diagnosticSession, "checkpoint.resumed", {
+            loadedPages: run.loadedPages,
+            remainingPageBudget: Math.max(0, executionPageLimits[runIndex] - run.loadedPages),
+          }, source.id);
+        }
         const pageIndex = run.loadedPages;
         const sourceMode = source.mode ?? (kind === "latestSources" ? "homepage" : "author");
         const requestedPageUrl = run.nextPageUrl;
@@ -763,10 +775,21 @@ export const runListingSearchEngine = async (
           && (input.searchMode === "quick" || input.searchMode === "continuous")
           && quickSeenProgress.boundaryReached
           && !(pageIndex === 0 && rawUnseenSources.length > 0);
+        const deepRecentHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
+          && input.searchMode === "deep"
+          && !state.deepScanPhaseStarted
+          && (
+            rawUnseenSources.length === 0
+            || (
+              quickSeenProgress.boundaryReached
+              && !(pageIndex === 0 && rawUnseenSources.length > 0)
+            )
+          );
         const canPreloadFollowingPage = sourceHasNextPage
           && !paginationStalled
           && !duplicatePage
           && !quickHistoryBoundaryReached
+          && !deepRecentHistoryBoundaryReached
           && pageIndex + 1 < executionPageLimits[runIndex];
         const preloadFollowingPage = () => {
           if (canPreloadFollowingPage) {
@@ -865,6 +888,17 @@ export const runListingSearchEngine = async (
         const backfillStalled = backfillBlacklistedResults
           && isBackfillPage
           && state.consecutiveStagnantBackfillPages >= BACKGROUND_LISTING_MAX_STAGNANT_BACKFILL_PAGES;
+        const deepRecentBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
+          && input.searchMode === "deep"
+          && !state.deepScanPhaseStarted
+          && (
+            deepRecentHistoryBoundaryReached
+            || (
+              newEligibleSources.length === 0
+              && state.pendingResults.length === 0
+              && state.pendingCandidates.length === 0
+            )
+          );
         state.sourceHasNextPage = sourceHasNextPage
           && !paginationStalled
           && !duplicatePage
@@ -875,16 +909,6 @@ export const runListingSearchEngine = async (
           || !sourceHasNextPage
           || paginationStalled
           || duplicatePage;
-        shouldLoadAnotherPage = backfillBlacklistedResults
-          ? shouldContinueBackgroundBlacklistBackfill({
-            sourceHasNextPage: state.sourceHasNextPage,
-            nextPageIndex: pageIndex + 1,
-            configuredMaxPages: executionPageLimits[runIndex],
-            resultLimit,
-            acceptedResultTarget: state.acceptedResultTarget,
-            storedResultCount: run.results.length,
-          })
-          : state.sourceHasNextPage && (resultLimit === 0 || run.results.length < resultLimit);
         run = {
           ...run,
           cacheResults: nextCacheResults,
@@ -901,9 +925,71 @@ export const runListingSearchEngine = async (
           pendingResults: state.pendingResults,
           pendingCandidates: state.pendingCandidates,
           quickConsecutiveSeenResultCount: state.consecutiveSeenResultCount,
+          deepScanPhaseStarted: state.deepScanPhaseStarted,
+          deepScanCheckpointPending: state.deepScanCheckpointPending,
           sourceExhausted: state.sourceExhausted,
         };
         lastProcessedPage = { pageIndex, page };
+        if (deepRecentBoundaryReached) {
+          state.deepScanPhaseStarted = true;
+          state.consecutiveSeenResultCount = 0;
+          const checkpointUnavailableReason = resolveScraperLatestCheckpointQuotaUnavailableReason(
+            run.checkpoint,
+          );
+          const checkpointCursor = checkpointUnavailableReason === null
+            ? resolveScraperLatestCheckpointCursor(run.checkpoint)
+            : null;
+          const canResumeCheckpoint = checkpointCursor !== null
+            && checkpointCursor.loadedPages > run.loadedPages;
+
+          run = {
+            ...run,
+            deepScanPhaseStarted: true,
+            quickConsecutiveSeenResultCount: 0,
+          };
+          if (languageProgress.boundaryReached) {
+            state.sourceHasNextPage = false;
+            run = { ...run, hasNextPage: false };
+          } else if (checkpointUnavailableReason !== null) {
+            state.sourceHasNextPage = false;
+            run = {
+              ...run,
+              hasNextPage: false,
+              safetyLimitReached: checkpointUnavailableReason === "pageLimitWithoutResults",
+              languageRejectLimitReached: checkpointUnavailableReason === "languageRejectLimit",
+            };
+          } else if (canResumeCheckpoint) {
+            const remainingPageBudget = Math.max(
+              0,
+              configuredMaxPages - (run.checkedPages ?? 0),
+            );
+            executionPageLimits[runIndex] = checkpointCursor.loadedPages + remainingPageBudget;
+            executionStartPageIndexes[runIndex] = checkpointCursor.loadedPages;
+            state.sourceHasNextPage = true;
+            state.sourceExhausted = false;
+            state.deepScanCheckpointPending = true;
+            listingPagePrefetchCache.clear(source.id);
+            run = {
+              ...run,
+              loadedPages: checkpointCursor.loadedPages,
+              currentPageUrl: checkpointCursor.currentPageUrl,
+              nextPageUrl: checkpointCursor.nextPageUrl,
+              hasNextPage: true,
+              deepScanCheckpointPending: true,
+              sourceExhausted: false,
+            };
+          }
+        }
+        shouldLoadAnotherPage = backfillBlacklistedResults
+          ? shouldContinueBackgroundBlacklistBackfill({
+            sourceHasNextPage: state.sourceHasNextPage,
+            nextPageIndex: run.loadedPages,
+            configuredMaxPages: executionPageLimits[runIndex],
+            resultLimit,
+            acceptedResultTarget: state.acceptedResultTarget,
+            storedResultCount: run.results.length,
+          })
+          : state.sourceHasNextPage && (resultLimit === 0 || run.results.length < resultLimit);
         runs[runIndex] = run;
         if (keepOpenForSharedQuota) {
           run = { ...run, hasNextPage: canSourceProduceMoreResults(runIndex) };

@@ -51,13 +51,16 @@ en arriere-plan est activee. Le retrait du quota de resultats ne desactive pas l
 par langue : un scraper qui ne retourne aucun resultat dans une langue incluse est toujours arrete
 au seuil `scraperLatestLanguageRejectLimit`, y compris pendant une collecte en arriere-plan.
 
-Le scan profond utilise le checkpoint quand il existe et peut continuer au-dela du budget rapide pour retrouver
-d'anciennes cards jamais vues. Si aucun checkpoint exact n'existe pour la requete et les langues
-incluses, il continue la pagination normale au lieu de s'arreter a la premiere page deja connue ou
-ignoree par langue. Le checkpoint version 2 memorise la prochaine page non traitee meme lorsqu'aucune
-card de la page precedente n'a ete acceptee. Les anciens checkpoints ancres sur une card restent lus :
-leur page est rejouee une fois pour ne rien sauter. Le parametre `scraperLatestDeepPageLimit` limite le
-nombre de pages consultees par source et par lancement. Sa valeur par defaut est 50 et son minimum est 1.
+Le scan profond commence toujours par la zone recente, avec la meme detection de zone deja vue que le
+scan rapide. Tant que cette premiere phase trouve assez de nouveautes pour remplir le quota, le
+checkpoint n'est pas consulte. Si la zone deja vue est atteinte avant que le quota soit rempli, le scan
+reprend alors depuis le checkpoint compatible pour rechercher d'anciennes cards jamais vues. Si aucun
+checkpoint exact n'existe pour la requete et les langues incluses, il continue la pagination normale au
+lieu de s'arreter a la premiere page deja connue ou ignoree par langue. Le checkpoint version 2 memorise
+la prochaine page non traitee meme lorsqu'aucune card de la page precedente n'a ete acceptee. Les anciens
+checkpoints ancres sur une card restent lus : leur page est rejouee une fois pour ne rien sauter. Le
+parametre `scraperLatestDeepPageLimit` limite le nombre total de pages consultees par source et par
+lancement, phase recente comprise. Sa valeur par defaut est 50 et son minimum est 1.
 
 Sous les trois modes de scan, une barre `Reglages et reprise` regroupe `Parametres session` et le
 controle partage `Scraper et ajouter`. Son champ numerique accepte au minimum une page et remplace

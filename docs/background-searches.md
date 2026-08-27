@@ -46,7 +46,7 @@ All foreground and background scraper searches use the same optional performance
 
 An advanced author-pass depth of zero processes every remaining manga. The same pass also absorbs manga loaded from newly discovered author pages and stops only when no candidate remains.
 
-Stored latest-source results only offer foreground continuation when at least one source still has a next page. Quick and deep scans can resume from their persisted cursors with the exact captured input, replacing the displayed batch in the same view. Continuous scans never expose this action because they already run until exhaustion or their safety boundary.
+Stored latest-source results only offer continuation when at least one source still has a next page. Quick and deep scans resume from their persisted cursors with the exact captured input, replace the displayed batch, and requeue the same job in the background. The attached result view follows that job live, while leaving the view no longer interrupts it. Continuous scans never expose this action because they already run until exhaustion or their safety boundary.
 
 Status transitions are:
 

@@ -19,6 +19,13 @@ export const canReplayBackgroundSearch = (
   && isBackgroundSearchResultEditable(job.status)
 );
 
+export const canContinueBackgroundSearch = (
+  job: Pick<BackgroundSearchJobMetadata, "kind" | "status">,
+): boolean => (
+  job.status === "completed"
+  && (job.kind === "mangaCorrespondence" || job.kind === "latestSources")
+);
+
 export const isBackgroundSearchUnopened = (
   job: Pick<BackgroundSearchJobMetadata, "openedAt">,
 ): boolean => job.openedAt === null;

@@ -90,7 +90,7 @@ export default function ScraperLatestScanActions({
           className="is-deep"
           eyebrow="Historique"
           title="Explorer plus loin"
-          description="Utilise les checkpoints pour rechercher d’anciennes cards qui n’ont jamais été vues."
+          description="Cherche d’abord les sorties récentes, puis utilise les checkpoints si le quota n’est pas rempli."
           buttonLabel={deepLabel}
           loading={loading}
           disabled={disabled}
