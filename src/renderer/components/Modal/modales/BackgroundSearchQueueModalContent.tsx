@@ -194,6 +194,9 @@ export default function BackgroundSearchQueueModalContent() {
             <p>Active « En arrière-plan » dans un écran de recherche puis lance-la.</p>
           </div>
         ) : queue.jobs.map((job) => {
+          const parentJob = job.relation
+            ? queue.jobs.find((candidate) => candidate.id === job.relation?.parentJobId)
+            : undefined;
           const progressPercent = getProgressPercent(job);
           const progressUnits = formatProgressUnits(job);
           const canCancel = !TERMINAL_STATUSES.has(job.status);
@@ -223,7 +226,10 @@ export default function BackgroundSearchQueueModalContent() {
                 </span>
                 <span className="background-search-card__copy">
                   <strong>{job.primaryTerm}</strong>
-                  <small>{formatKind(job.kind)} · {formatDate(job.createdAt)}</small>
+                  <small>
+                    {formatKind(job.kind)} · {formatDate(job.createdAt)}
+                    {job.relation ? ` · Issue de « ${parentJob?.primaryTerm ?? "recherche supprimée"} »` : ""}
+                  </small>
                   <span className="background-search-card__meta">
                     <span>{formatResultCount(job)}</span>
                     {progressUnits ? <span>{progressUnits}</span> : null}
@@ -238,6 +244,11 @@ export default function BackgroundSearchQueueModalContent() {
               ) : null}
               {job.error ? <div className="background-search-feedback is-error">{job.error}</div> : null}
               <div className="background-search-card__actions">
+                {parentJob ? (
+                  <button type="button" onClick={() => { void openJob(parentJob.id, false); }}>
+                    Recherche d’origine
+                  </button>
+                ) : null}
                 {canCancel ? (
                   <button type="button" onClick={() => { void cancelJob(job.id); }}><CloseXIcon /> Arrêter</button>
                 ) : null}

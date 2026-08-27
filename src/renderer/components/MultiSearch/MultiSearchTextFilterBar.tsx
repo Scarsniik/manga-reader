@@ -7,6 +7,8 @@ import {
 type Props = {
   value: string;
   baseQuery: string;
+  placeholder?: string;
+  ariaLabel?: string;
   onChange: (value: string) => void;
   onFillFromBaseQuery: () => void;
   onClear: () => void;
@@ -15,6 +17,8 @@ type Props = {
 export default function MultiSearchTextFilterBar({
   value,
   baseQuery,
+  placeholder = "Filtrer les titres charges...",
+  ariaLabel = "Texte a rechercher dans les titres charges",
   onChange,
   onFillFromBaseQuery,
   onClear,
@@ -23,7 +27,7 @@ export default function MultiSearchTextFilterBar({
   const hasValue = Boolean(value.trim());
 
   return (
-    <div className="multi-search__text-filter-bar" aria-label="Filtre texte des resultats">
+    <div className="multi-search__text-filter-bar" aria-label={ariaLabel}>
       <button
         type="button"
         className="multi-search__text-filter-button"
@@ -38,8 +42,8 @@ export default function MultiSearchTextFilterBar({
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Filtrer les titres charges..."
-        aria-label="Texte a rechercher dans les titres charges"
+        placeholder={placeholder}
+        aria-label={ariaLabel}
       />
       <button
         type="button"

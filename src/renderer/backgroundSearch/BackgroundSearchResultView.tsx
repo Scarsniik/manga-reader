@@ -19,6 +19,7 @@ import ScraperAuthorFavoritesView from "@/renderer/components/ScraperAuthorFavor
 import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser";
 import ScraperLatestView from "@/renderer/components/ScraperLatest/ScraperLatestView";
 import "./resultView.scss";
+import { requestBackgroundSearchOpenInCurrentView } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
 
 type Props = {
   authorCorrespondenceCombined?: boolean;
@@ -84,6 +85,7 @@ export default function BackgroundSearchResultView({
     stalledForMs,
     resultStalledForMs,
   } = useBackgroundSearchJob(backgroundSearchJobId);
+  const parentSearch = useBackgroundSearchJob(job?.metadata.relation?.parentJobId);
   const { params } = useParams();
 
   if (loading) return <div className="app-route-loading" aria-label="Chargement de la recherche" aria-busy="true" />;
@@ -146,6 +148,18 @@ export default function BackgroundSearchResultView({
           <span>Résultat enregistré</span>
           <h2>{metadata.title}</h2>
           <p>{KIND_LABELS[metadata.kind]} · terme principal : {metadata.primaryTerm || "—"}</p>
+          {metadata.relation ? (
+            <button
+              type="button"
+              className="background-search-result-view__origin"
+              disabled={!parentSearch.job}
+              onClick={() => {
+                if (parentSearch.job) requestBackgroundSearchOpenInCurrentView(parentSearch.job);
+              }}
+            >
+              Issue de : {parentSearch.job?.metadata.title ?? "recherche d’origine indisponible"}
+            </button>
+          ) : null}
         </div>
         <div className="background-search-result-view__status">
           <span className={`is-${metadata.status}`}>{STATUS_LABELS[metadata.status]}</span>

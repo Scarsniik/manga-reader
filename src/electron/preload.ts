@@ -40,6 +40,7 @@ import type {
     CreateBackgroundSearchRequest,
     ReplayBackgroundSearchRequest,
     SaveBackgroundSearchResultRequest,
+    UpdateBackgroundSearchRelationRequest,
     UpdateBackgroundSearchRequest,
 } from "../shared/backgroundSearch";
 import type {
@@ -361,6 +362,9 @@ contextBridge.exposeInMainWorld('api', {
     retryBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-retry", jobId),
     markBackgroundSearchOpened: (jobId: string) => ipcRenderer.invoke("background-search-mark-opened", jobId),
     deleteBackgroundSearch: (jobId: string) => ipcRenderer.invoke("background-search-delete", jobId),
+    updateBackgroundSearchRelation: (request: UpdateBackgroundSearchRelationRequest) => (
+        ipcRenderer.invoke("background-search-update-relation", request)
+    ),
     onBackgroundSearchChanged: (callback: (event: BackgroundSearchChangeEvent) => void) => (
         createIpcSubscription("background-search-changed", callback)
     ),

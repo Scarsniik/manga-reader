@@ -87,6 +87,8 @@ import {
 import { buildScraperListingPageRequestKey } from "@/renderer/utils/scraperLatestExecutionPlanning";
 import { appendScraperLatestDiagnosticEvent } from "@/renderer/utils/scraperLatestDiagnostics";
 import { normalizeMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
+import { hydrateAuthorCorrespondenceSessionCache } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
+import { collectAuthorCorrespondenceSessionSources } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
 import {
   advanceSearchProductivity,
   EMPTY_SEARCH_PRODUCTIVITY_STATE,
@@ -333,6 +335,31 @@ export const runMangaCorrespondenceSearch = async (
   const executionContext = getOrCreateSearchExecutionContext(executionContextInput, {
     kind: "mangaCorrespondence",
   });
+  const linkedAuthorReferenceSources = input.linkedAuthorImports?.flatMap((entry) => (
+    entry.referenceSources
+  )) ?? [];
+  const linkedAuthorNames = uniqueText(input.linkedAuthorImports?.flatMap((entry) => (
+    [...entry.names, ...entry.referenceSources.map((source) => source.name)]
+  )) ?? []);
+  const linkedAuthorCache = input.linkedAuthorImports?.length && executionContext.backgroundJobId
+    ? await hydrateAuthorCorrespondenceSessionCache(executionContext.backgroundJobId)
+    : null;
+  const activeLinkedRunKeys = new Set(linkedAuthorReferenceSources.map((source) => (
+    `${source.scraperId}::${source.authorUrl}`
+  )));
+  const linkedAuthorRuns = linkedAuthorCache?.runs.filter((run) => activeLinkedRunKeys.has(run.key)) ?? [];
+  const linkedAuthorSourceKeys = new Set(linkedAuthorRuns.flatMap((run) => (
+    run.results.map(buildMultiSearchSourceIdentityKey)
+  )));
+  const linkedAuthorEnrichments = linkedAuthorCache?.mangaEnrichments.filter((enrichment) => (
+    enrichment.anchorSourceKeys.some((sourceKey) => linkedAuthorSourceKeys.has(sourceKey))
+  )) ?? [];
+  const linkedAuthorCorpusSources = linkedAuthorCache
+    ? collectAuthorCorrespondenceSessionSources(
+      linkedAuthorRuns.flatMap((run) => run.results),
+      linkedAuthorEnrichments,
+    )
+    : [];
   const detailsCache = executionContext.detailsCache;
   const recordDiagnostic = (event: string, data?: Record<string, unknown>, sourceKey?: string): void => {
     appendScraperLatestDiagnosticEvent(
@@ -386,6 +413,11 @@ export const runMangaCorrespondenceSearch = async (
     scrapeDetailsWithCards: input.scrapeDetailsWithCards,
     enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge,
     purpose: input.purpose ?? "correspondence",
+    linkedAuthorImports: input.linkedAuthorImports?.map((entry) => ({
+      authorJobId: entry.authorJobId,
+      sourceCacheRevision: entry.sourceCacheRevision,
+      importedCacheRevision: entry.importedCacheRevision,
+    })),
     safety,
   };
   const inputFingerprint = executionContext.checkpointAdapter.fingerprint(checkpointInput);
@@ -488,6 +520,24 @@ export const runMangaCorrespondenceSearch = async (
       sourceUrl: input.reference.sourceUrl,
       ...(authorPageUrl ? { authorPageUrl } : {}),
       parentStepIds: [],
+    });
+  });
+  linkedAuthorReferenceSources.forEach((source) => {
+    const scraper = scrapers.find((candidate) => candidate.id === source.scraperId);
+    if (!scraper) return;
+    const propagatedAuthor = resolvePropagatedAuthorName(source.name);
+    if (!propagatedAuthor) return;
+    addDiscovery({
+      kind: "author",
+      value: propagatedAuthor,
+      scraperId: scraper.id,
+      scraperName: scraper.name,
+      origin: "linkedAuthorSearch",
+      sourceUrl: source.authorUrl,
+      authorPageUrl: source.authorUrl,
+      authorTemplateContext: source.templateContext ?? undefined,
+      parentStepIds: [],
+      propagationConfidence: "manual",
     });
   });
   acceptedSearchSeeds.forEach((candidate) => {
@@ -1672,6 +1722,29 @@ export const runMangaCorrespondenceSearch = async (
     })).sources;
   };
 
+  if (linkedAuthorCorpusSources.length) {
+    const linkedCorpusStep = addTrace(
+      "authorSearch",
+      "Corpus de la recherche auteur liée importé",
+      `${linkedAuthorRuns.length} page(s) auteur · ${linkedAuthorCorpusSources.length} source(s)`,
+    );
+    await emit("Analyse du corpus auteur déjà collecté");
+    await discoverFromSources(linkedAuthorCorpusSources, linkedCorpusStep);
+    const importedAuthorTermKeys = new Set(linkedAuthorNames.map(normalizeKey));
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const task = queue[index];
+      if (task.kind !== "author" || !importedAuthorTermKeys.has(normalizeKey(task.term))) continue;
+      queue.splice(index, 1);
+      queuedTasksByKey.delete(task.directOnly ? `${buildTaskKey(task)}:direct` : buildTaskKey(task));
+      processedTaskKeys.add(buildTaskKey(task));
+      if (!searchedAuthors.some((term) => normalizeKey(term) === normalizeKey(task.term))) {
+        searchedAuthors.push(task.term);
+      }
+      (task.directTargets ?? []).forEach((target) => (
+        processedDirectTargetKeys.add(buildDirectTargetKey(target))
+      ));
+    }
+  }
   await emit();
   while (queue.length) {
     if (signal.aborted) throw new DOMException("Recherche annulée", "AbortError");

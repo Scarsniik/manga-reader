@@ -21,6 +21,8 @@ type Props = {
   initialNames: string[];
   referenceSources: AuthorCorrespondenceReferenceSource[];
   mangaSeed?: AuthorCorrespondenceBackgroundInput["mangaSeed"];
+  linkedMangaJobId?: string;
+  initialAdvancedSearchEnabled?: boolean;
   onCancel: () => void;
   onQueued: (message: string) => void;
 };
@@ -34,6 +36,8 @@ export default function AuthorCorrespondenceDialog({
   initialNames,
   referenceSources,
   mangaSeed,
+  linkedMangaJobId,
+  initialAdvancedSearchEnabled = false,
   onCancel,
   onQueued,
 }: Props) {
@@ -41,7 +45,12 @@ export default function AuthorCorrespondenceDialog({
   const [name, setName] = useState(initialName);
   const [otherNames, setOtherNames] = useState(initialNames.filter((entry) => entry !== initialName).join(", "));
   const [scrapers, setScrapers] = useState<ScraperRecord[]>([]);
-  const [advancedSearchEnabled, setAdvancedSearchEnabled] = useState(false);
+  const [advancedSearchEnabled, setAdvancedSearchEnabled] = useState(initialAdvancedSearchEnabled);
+  const [advancedMangaCount, setAdvancedMangaCount] = useState(
+    DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE,
+  );
+  const [autoImportOnCompletion, setAutoImportOnCompletion] = useState(Boolean(linkedMangaJobId));
+  const [blockAutomaticImportOnSafetyWarning, setBlockAutomaticImportOnSafetyWarning] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +91,7 @@ export default function AuthorCorrespondenceDialog({
         scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
         advancedSearch: advancedSearchEnabled ? {
           enabled: true,
-          batchSize: DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE,
+          batchSize: Math.max(0, Math.floor(advancedMangaCount)),
           requestedBatchCount: 1,
           enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
         } : undefined,
@@ -96,6 +105,14 @@ export default function AuthorCorrespondenceDialog({
         params,
         primaryTerm,
         title: `Correspondances auteur · ${primaryTerm}`,
+        ...(linkedMangaJobId ? {
+          relation: {
+            kind: "authorExpansion",
+            parentJobId: linkedMangaJobId,
+            autoImportOnCompletion,
+            blockAutomaticImportOnSafetyWarning,
+          },
+        } : {}),
       });
       onQueued(name.trim()
         ? `Recherche de correspondances auteur lancée pour « ${name.trim()} ».`
@@ -126,10 +143,50 @@ export default function AuthorCorrespondenceDialog({
         <span>
           <strong>Recherche poussée</strong>
           <small>
-            Analyse les {DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE} mangas les plus présents pour découvrir d’autres pages auteur.
+            Analyse les mangas les plus présents pour découvrir d’autres pages auteur.
           </small>
         </span>
       </label>
+      {advancedSearchEnabled ? (
+        <label className="manga-correspondence-dialog__advanced-count">
+          <span>Mangas à approfondir</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={advancedMangaCount}
+            onChange={(event) => setAdvancedMangaCount(Math.max(0, Math.floor(Number(event.target.value) || 0)))}
+          />
+          <small>0 analyse tous les mangas disponibles.</small>
+        </label>
+      ) : null}
+      {linkedMangaJobId ? (
+        <div className="manga-correspondence-dialog__linked-options">
+          <label>
+            <input
+              type="checkbox"
+              checked={autoImportOnCompletion}
+              onChange={(event) => setAutoImportOnCompletion(event.target.checked)}
+            />
+            <span>
+              <strong>Mettre à jour automatiquement la recherche manga</strong>
+              <small>À la fin, importe le corpus collecté puis relance la recherche manga liée.</small>
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={blockAutomaticImportOnSafetyWarning}
+              disabled={!autoImportOnCompletion}
+              onChange={(event) => setBlockAutomaticImportOnSafetyWarning(event.target.checked)}
+            />
+            <span>
+              <strong>Bloquer en cas d’alerte anti-emballement</strong>
+              <small>L’import manuel restera disponible depuis la recherche manga.</small>
+            </span>
+          </label>
+        </div>
+      ) : null}
       {error ? <p className="manga-correspondence-dialog__error">{error}</p> : null}
       <div className="manga-correspondence-dialog__actions">
         <button type="button" className="secondary" onClick={onCancel}>Annuler</button>

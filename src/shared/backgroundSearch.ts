@@ -23,6 +23,25 @@ export type BackgroundSearchStatus =
 
 export type BackgroundSearchStorageMode = "memory" | "temporaryFile";
 
+export type BackgroundSearchRelationAutomationStatus =
+  | "waiting"
+  | "manualReady"
+  | "pending"
+  | "processing"
+  | "completed"
+  | "blocked"
+  | "error";
+
+export type BackgroundSearchRelation = {
+  kind: "authorExpansion";
+  parentJobId: string;
+  autoImportOnCompletion: boolean;
+  blockAutomaticImportOnSafetyWarning: boolean;
+  automationStatus: BackgroundSearchRelationAutomationStatus;
+  importedCacheRevision?: number;
+  automationError?: string;
+};
+
 export type BackgroundSearchProgress = {
   completedUnits: number;
   currentLabel?: string;
@@ -51,6 +70,7 @@ export type BackgroundSearchJobMetadata = {
   error?: string;
   inputAvailable: boolean;
   resultAvailable: boolean;
+  relation?: BackgroundSearchRelation;
 };
 
 export type BackgroundSearchJob<TInput = unknown, TResult = unknown> = {
@@ -79,6 +99,14 @@ export type CreateBackgroundSearchRequest<TInput = unknown> = {
   storageMode: BackgroundSearchStorageMode;
   retentionHours: number;
   input: TInput;
+  relation?: Omit<BackgroundSearchRelation, "automationStatus">;
+};
+
+export type UpdateBackgroundSearchRelationRequest = {
+  jobId: string;
+  automationStatus: BackgroundSearchRelationAutomationStatus;
+  importedCacheRevision?: number;
+  automationError?: string;
 };
 
 export type UpdateBackgroundSearchRequest<TResult = unknown> = {
@@ -127,7 +155,13 @@ export type MangaCorrespondenceRequest = "sameManga" | "otherChapters";
 export type MangaCorrespondenceStrategy = "balanced" | "titleFirst" | "authorFirst";
 export type MangaCorrespondenceDiscoveryKind = "title" | "author";
 export type MangaCorrespondenceDiscoveryStatus = "active" | "invalidated";
-export type MangaCorrespondenceDiscoveryOrigin = "reference" | "card" | "details" | "authorPage" | "manual";
+export type MangaCorrespondenceDiscoveryOrigin =
+  | "reference"
+  | "card"
+  | "details"
+  | "authorPage"
+  | "manual"
+  | "linkedAuthorSearch";
 
 export type MangaCorrespondenceDiscoveryDecision = {
   key: string;
@@ -171,6 +205,7 @@ export type MangaCorrespondenceBackgroundInput = {
   scrapeDetailsWithCards: boolean;
   enableRomajiPhoneticMerge: boolean;
   safety?: MangaCorrespondenceSafetySettings;
+  linkedAuthorImports?: LinkedAuthorCorpusImport[];
   purpose?: "correspondence" | "authorDiscovery";
   continuation?: {
     passNumber: number;
@@ -207,6 +242,17 @@ export type AuthorCorrespondenceReferenceSource = {
   authorUrl: string;
   name: string;
   templateContext?: Record<string, string | undefined> | null;
+};
+
+export type LinkedAuthorCorpusImport = {
+  authorJobId: string;
+  sourceCacheRevision: number;
+  importedCacheRevision: number;
+  importedAt: string;
+  names: string[];
+  referenceSources: AuthorCorrespondenceReferenceSource[];
+  autoRefreshOnCompletion?: boolean;
+  blockAutomaticImportOnSafetyWarning?: boolean;
 };
 
 export const DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE = 3;

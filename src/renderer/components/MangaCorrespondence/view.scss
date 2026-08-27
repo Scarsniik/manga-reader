@@ -51,6 +51,79 @@
 .manga-correspondence-view__warnings ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; }
 .manga-correspondence-view__warnings small { color: #ad9a72; }
 
+.manga-correspondence-view__linked-authors {
+  display: grid;
+  gap: 10px;
+  padding: 13px 16px;
+  border: 1px solid #292929;
+  border-radius: 12px;
+  background: #101010;
+}
+
+.manga-correspondence-view__linked-authors > header,
+.manga-correspondence-view__linked-authors article,
+.manga-correspondence-view__linked-author-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manga-correspondence-view__linked-authors > header > div,
+.manga-correspondence-view__linked-authors article > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.manga-correspondence-view__linked-authors span,
+.manga-correspondence-view__linked-authors small {
+  color: #999;
+  font-size: 12px;
+}
+
+.manga-correspondence-view__linked-authors article {
+  padding: 10px 12px;
+  border: 1px solid #2d2d2d;
+  border-radius: 9px;
+  background: #151515;
+}
+
+.manga-correspondence-view__linked-authors article.is-blocked {
+  border-color: rgba(221, 166, 65, .48);
+  background: rgba(221, 166, 65, .07);
+}
+
+.manga-correspondence-view__linked-authors button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  background: #1b1b1b;
+  color: #dedede;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.manga-correspondence-view__linked-authors button:hover:not(:disabled) {
+  border-color: rgba(93, 156, 255, .58);
+  background: rgba(93, 156, 255, .12);
+}
+
+.manga-correspondence-view__linked-authors button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.manga-correspondence-view__linked-authors .is-error {
+  color: #ff9b9b;
+}
+
+.manga-correspondence-view__linked-authors > header > .manga-correspondence-view__linked-author-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .manga-correspondence-view__eyebrow {
   color: #82b1ff;
   font-size: 11px;
@@ -1002,6 +1075,52 @@
   color: #ffe8bd;
 }
 
+.manga-correspondence-view__rejected-text-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #302e2a;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.manga-correspondence-view__rejected-text-filter > .multi-search__text-filter-bar {
+  flex: 1 1 560px;
+  grid-template-columns: auto minmax(160px, 1fr) auto;
+}
+
+.manga-correspondence-view__rejected-text-filter .multi-search__text-filter-button {
+  display: inline-flex;
+  width: 38px;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #3a3a38;
+  border-radius: 8px;
+  background: #191918;
+  color: #d6d6d6;
+  cursor: pointer;
+}
+
+.manga-correspondence-view__rejected-text-filter .multi-search__text-filter-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.manga-correspondence-view__rejected-text-filter .multi-search__text-filter-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.manga-correspondence-view__rejected-text-filter > span {
+  flex: 0 0 auto;
+  color: #99958d;
+  font-size: 12px;
+}
+
 .manga-correspondence-view__rejected-hint,
 .manga-correspondence-view__rejected-error {
   margin: 0;
@@ -1259,6 +1378,8 @@
   }
   .manga-correspondence-view__rejected > summary { grid-template-columns: 1fr auto; }
   .manga-correspondence-view__rejected > summary small { grid-column: 1 / -1; justify-self: start; }
+  .manga-correspondence-view__rejected-text-filter { align-items: stretch; flex-direction: column; }
+  .manga-correspondence-view__rejected-text-filter > .multi-search__text-filter-bar { flex-basis: auto; width: 100%; }
   .manga-correspondence-view__second-pass { align-items: stretch; flex-direction: column; }
   .manga-correspondence-rejected-dialog__sources button { grid-template-columns: 1fr; }
   .manga-correspondence-reading-list-dialog__source-control { grid-template-columns: 1fr; }

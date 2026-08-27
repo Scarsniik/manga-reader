@@ -11,6 +11,7 @@ import type {
   CreateBackgroundSearchRequest,
   SaveBackgroundSearchResultRequest,
   ReplayBackgroundSearchRequest,
+  UpdateBackgroundSearchRelationRequest,
   UpdateBackgroundSearchRequest,
   ListingBackgroundInput,
 } from "../../../shared/backgroundSearch";
@@ -26,6 +27,7 @@ import {
   hasBackgroundSearchExpired,
   isBackgroundSearchActive,
   isBackgroundSearchResultEditable,
+  resolveCompletedBackgroundSearchRelation,
 } from "./metadata";
 import {
   readBackgroundSearchMetadata,
@@ -279,6 +281,12 @@ export const createBackgroundSearch = async (
     progress: { completedUnits: 0, resultCount: 0 },
     inputAvailable: true,
     resultAvailable: false,
+    ...(request.relation ? {
+      relation: {
+        ...request.relation,
+        automationStatus: "waiting" as const,
+      },
+    } : {}),
   };
   const job: BackgroundSearchJob = { metadata: jobMetadata, input: request.input };
   metadata = [jobMetadata, ...metadata];
@@ -389,6 +397,7 @@ export const completeBackgroundSearch = async (
   const job = await loadJob(request.jobId);
   if (!job) return false;
   const completedAt = nowIso();
+  const relation = resolveCompletedBackgroundSearchRelation(current.relation, request.result);
   const next = {
     ...current,
     status: "completed" as const,
@@ -398,6 +407,7 @@ export const completeBackgroundSearch = async (
     revision: current.revision + 1,
     progress: request.progress,
     resultAvailable: true,
+    ...(relation ? { relation } : {}),
   };
   replaceMetadata(next);
   await persistJobPayload({ ...job, metadata: next, result: request.result });
@@ -467,6 +477,13 @@ export const continueBackgroundSearch = async (
     error: undefined,
     inputAvailable: true,
     resultAvailable: true,
+    ...(current.relation ? {
+      relation: {
+        ...current.relation,
+        automationStatus: "waiting",
+        automationError: undefined,
+      },
+    } : {}),
   };
   replaceMetadata(next);
   await persistJobPayload({
@@ -506,6 +523,13 @@ export const replayBackgroundSearch = async (
     error: undefined,
     inputAvailable: true,
     resultAvailable: true,
+    ...(current.relation ? {
+      relation: {
+        ...current.relation,
+        automationStatus: "waiting",
+        automationError: undefined,
+      },
+    } : {}),
   };
   replaceMetadata(next);
   await persistJobPayload({ metadata: next, input: request.input, result: job.result });
@@ -538,6 +562,13 @@ export const requeueRunningBackgroundSearches = async (): Promise<number> => ser
     progress: { completedUnits: 0, resultCount: job.progress.resultCount },
     resultAvailable: job.resultAvailable,
     error: undefined,
+    ...(job.relation ? {
+      relation: {
+        ...job.relation,
+        automationStatus: "waiting" as const,
+        automationError: undefined,
+      },
+    } : {}),
   }));
   const nextById = new Map(nextJobs.map((job) => [job.id, job]));
   metadata = metadata.map((job) => nextById.get(job.id) ?? job);
@@ -573,6 +604,15 @@ const finishWithStatus = async (
     expiresAt: current.storageMode === "temporaryFile" ? getExpiresAt(current.retentionHours) : undefined,
     updatedAt: timestamp,
     revision: current.revision + 1,
+    ...(current.relation ? {
+      relation: {
+        ...current.relation,
+        automationStatus: status === "cancelled" || current.resultAvailable
+          ? "manualReady" as const
+          : "error" as const,
+        automationError: error,
+      },
+    } : {}),
   };
   replaceMetadata(next);
   await persistMetadata();
@@ -591,8 +631,45 @@ export const retryBackgroundSearch = async (jobId: string): Promise<BackgroundSe
     storageMode: job.metadata.storageMode,
     retentionHours: job.metadata.retentionHours,
     input: job.input,
+    ...(job.metadata.relation ? {
+      relation: {
+        kind: job.metadata.relation.kind,
+        parentJobId: job.metadata.relation.parentJobId,
+        autoImportOnCompletion: job.metadata.relation.autoImportOnCompletion,
+        blockAutomaticImportOnSafetyWarning: job.metadata.relation.blockAutomaticImportOnSafetyWarning,
+      },
+    } : {}),
   });
 };
+
+export const updateBackgroundSearchRelation = async (
+  request: UpdateBackgroundSearchRelationRequest,
+): Promise<BackgroundSearchJobMetadata | null> => serializeMutation(async () => {
+  await initialize();
+  const current = findMetadata(request.jobId);
+  if (!current?.relation) return null;
+  const next: BackgroundSearchJobMetadata = {
+    ...current,
+    relation: {
+      ...current.relation,
+      automationStatus: request.automationStatus,
+      ...(typeof request.importedCacheRevision === "number"
+        ? { importedCacheRevision: Math.max(0, Math.floor(request.importedCacheRevision)) }
+        : {}),
+      ...(request.automationError
+        ? { automationError: request.automationError }
+        : { automationError: undefined }),
+    },
+    updatedAt: nowIso(),
+    revision: current.revision + 1,
+  };
+  replaceMetadata(next);
+  const job = await loadJob(request.jobId);
+  if (job) await persistJobPayload({ ...job, metadata: next });
+  await persistMetadata();
+  broadcastChange(next);
+  return next;
+});
 
 export const markBackgroundSearchOpened = async (jobId: string): Promise<boolean> => serializeMutation(async () => {
   await initialize();

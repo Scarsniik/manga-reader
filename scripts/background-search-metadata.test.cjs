@@ -13,6 +13,7 @@ const {
   isBackgroundSearchActive,
   isBackgroundSearchResultEditable,
   isBackgroundSearchUnopened,
+  resolveCompletedBackgroundSearchRelation,
 } = require("../dist/electron/handlers/backgroundSearch/metadata.js");
 const {
   getAuthorCorrespondenceSessionCache,
@@ -75,6 +76,29 @@ test("completed and cancelled results can be edited before a replay", () => {
     ...makeJob("other", "cancelled", "2026-01-01T00:00:00.000Z"),
     kind: "multiSearch",
   }), false);
+});
+
+test("linked author completion respects automatic replay safety choices", () => {
+  const relation = {
+    kind: "authorExpansion",
+    parentJobId: "manga-job",
+    autoImportOnCompletion: true,
+    blockAutomaticImportOnSafetyWarning: true,
+    automationStatus: "waiting",
+  };
+  assert.equal(resolveCompletedBackgroundSearchRelation(relation, {
+    advancedSearch: { automaticMangaReplayBlocked: true },
+  }).automationStatus, "blocked");
+  assert.equal(resolveCompletedBackgroundSearchRelation({
+    ...relation,
+    blockAutomaticImportOnSafetyWarning: false,
+  }, {
+    advancedSearch: { automaticMangaReplayBlocked: true },
+  }).automationStatus, "pending");
+  assert.equal(resolveCompletedBackgroundSearchRelation({
+    ...relation,
+    autoImportOnCompletion: false,
+  }, {}).automationStatus, "manualReady");
 });
 
 test("completed latest-source scans can be continued as background jobs", () => {

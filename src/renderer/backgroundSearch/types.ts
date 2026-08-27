@@ -229,6 +229,13 @@ export type AuthorCorrespondenceBackgroundResult = {
     remainingCandidateCount: number;
     pendingAuthorNames?: string[];
     pendingAuthorReferenceSources?: AuthorCorrespondenceReferenceSource[];
+    safetyWarnings?: Array<{
+      seedKey: string;
+      seedTitle: string;
+      code: MangaCorrespondenceWarning["code"];
+      message: string;
+    }>;
+    automaticMangaReplayBlocked?: boolean;
   };
   checkpoint?: {
     version: 1;

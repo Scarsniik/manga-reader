@@ -34,6 +34,23 @@
   margin: 0;
 }
 
+.background-search-result-view__origin {
+  justify-self: flex-start;
+  padding: 4px 8px;
+  border: 1px solid rgba(139, 105, 210, .3);
+  border-radius: 7px;
+  background: rgba(139, 105, 210, .1);
+  color: #cdb8ed;
+  cursor: pointer;
+  font: inherit;
+  font-size: .7rem;
+}
+
+.background-search-result-view__origin:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
 .background-search-result-view__title h2 {
   overflow: hidden;
   color: #f4f6f8;

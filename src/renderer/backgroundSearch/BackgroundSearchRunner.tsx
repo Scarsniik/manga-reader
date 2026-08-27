@@ -14,6 +14,11 @@ import {
   buildLatestAuthorCacheUpdates,
   mergeAuthorFavoriteCacheUpdate,
 } from "@/renderer/utils/scraperAuthorFavoriteCache";
+import {
+  automaticallyReuseExistingAuthorSearch,
+  importLinkedAuthorSearchIntoManga,
+  refreshMangaSearchesUsingAuthor,
+} from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
 const PROGRESS_UPDATE_THROTTLE_MS = 1000;
 const RESULT_CHECKPOINT_THROTTLE_MS = 5000;
 
@@ -105,6 +110,8 @@ export default function BackgroundSearchRunner() {
   const lastResultCheckpointAtRef = React.useRef(new Map<string, number>());
   const lastAuthorResultSignatureRef = React.useRef(new Map<string, string>());
   const maxConcurrentRef = React.useRef(3);
+  const processingRelationsRef = React.useRef(new Set<string>());
+  const processingCompletedAutomationsRef = React.useRef(new Set<string>());
 
   const flushSnapshot = React.useCallback(async (jobId: string, forceLatestResult = false) => {
     const snapshot = pendingSnapshotsRef.current.get(jobId);
@@ -198,9 +205,32 @@ export default function BackgroundSearchRunner() {
       1,
       Math.floor(settings?.backgroundSearchMaxConcurrent ?? maxConcurrentRef.current),
     ));
+    let queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
+    const pendingRelations = queue.jobs.filter((job) => (
+      job.kind === "authorCorrespondence"
+      && job.status === "completed"
+      && job.relation?.autoImportOnCompletion === true
+      && (job.relation.automationStatus === "pending" || job.relation.automationStatus === "processing")
+      && !processingRelationsRef.current.has(job.id)
+    ));
+    for (const linkedJob of pendingRelations) {
+      processingRelationsRef.current.add(linkedJob.id);
+      try {
+        await importLinkedAuthorSearchIntoManga({
+          authorJobId: linkedJob.id,
+          automatic: true,
+        });
+      } catch (error) {
+        console.warn("Failed to import a linked author search", error);
+      } finally {
+        processingRelationsRef.current.delete(linkedJob.id);
+      }
+    }
+    if (pendingRelations.length) {
+      queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
+    }
     const availableSlots = Math.max(0, maxConcurrentRef.current - runningRef.current.size);
     if (availableSlots === 0) return;
-    const queue = await window.api.getBackgroundSearchQueue() as BackgroundSearchQueueSummary;
     const candidates = queue.jobs
       .filter((job) => job.status === "queued")
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
@@ -210,6 +240,29 @@ export default function BackgroundSearchRunner() {
       if (claimed) void runClaimedJob(claimed);
     }));
   }, [runClaimedJob]);
+
+  const processCompletedJobAutomations = React.useCallback(async (jobId: string) => {
+    if (
+      processingCompletedAutomationsRef.current.has(jobId)
+      || typeof window.api?.getBackgroundSearchJob !== "function"
+    ) {
+      return;
+    }
+    processingCompletedAutomationsRef.current.add(jobId);
+    try {
+      const job = await window.api.getBackgroundSearchJob(jobId) as BackgroundSearchJob | null;
+      if (!job || job.metadata.status !== "completed") return;
+      if (job.metadata.kind === "mangaCorrespondence") {
+        await automaticallyReuseExistingAuthorSearch(jobId);
+      } else if (job.metadata.kind === "authorCorrespondence") {
+        await refreshMangaSearchesUsingAuthor(jobId);
+      }
+    } catch (error) {
+      console.warn("Failed to process reusable correspondence search automation", error);
+    } finally {
+      processingCompletedAutomationsRef.current.delete(jobId);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!isBackgroundSearchRunnerWindow()) return undefined;
@@ -231,6 +284,9 @@ export default function BackgroundSearchRunner() {
         controllersRef.current.get(event.jobId)?.abort();
       }
       if (event.status === "queued") void claimAvailableJobs();
+      if (event.status === "completed") {
+        void processCompletedJobAutomations(event.jobId).finally(() => claimAvailableJobs());
+      }
     };
     const unsubscribe = window.api?.onBackgroundSearchChanged?.(handleChange);
     const handleSlot = () => { void claimAvailableJobs(); };
@@ -251,7 +307,7 @@ export default function BackgroundSearchRunner() {
       window.removeEventListener("background-search-runner-slot-available", handleSlot);
       window.removeEventListener("settings-updated", handleSettingsUpdated);
     };
-  }, [claimAvailableJobs]);
+  }, [claimAvailableJobs, processCompletedJobAutomations]);
 
   return null;
 }

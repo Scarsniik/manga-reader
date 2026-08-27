@@ -8,11 +8,13 @@ import type {
   MangaCorrespondenceRejectedCandidate,
 } from "@/renderer/backgroundSearch/types";
 import type {
+  BackgroundSearchJob,
   MangaCorrespondenceBackgroundInput,
   MangaCorrespondenceResultDecision,
 } from "@/shared/backgroundSearch";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
@@ -89,6 +91,13 @@ import {
 } from "@/renderer/backgroundSearch/mangaCorrespondenceResultDecisions";
 import { resolveMangaCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
 import { buildMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
+import AuthorCorrespondenceDialog from "@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceDialog";
+import ExistingAuthorSearchDialog from "@/renderer/components/MangaCorrespondence/ExistingAuthorSearchDialog";
+import { filterMangaCorrespondenceRejectedCandidatesByText } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedFilters";
+import { collectMangaCorrespondenceAuthors } from "@/renderer/searchEngines/authorCorrespondenceMangaDiscovery";
+import useRelatedBackgroundSearchJobs from "@/renderer/backgroundSearch/useRelatedBackgroundSearchJobs";
+import { importLinkedAuthorSearchIntoManga } from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
+import { requestBackgroundSearchOpenInCurrentView } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -124,6 +133,16 @@ const EMPTY_PROGRESS_INDEX: MultiSearchProgressIndex = {
 const EMPTY_SOURCE_KEYS = new Set<string>();
 const EMPTY_HISTORY = new Map();
 const EMPTY_NEW_HISTORY_IDS = new Set<string>();
+
+const LINKED_AUTHOR_STATUS_LABELS: Record<string, string> = {
+  waiting: "En cours",
+  manualReady: "Prête à importer",
+  pending: "Import automatique en attente",
+  processing: "Import du corpus en cours",
+  completed: "À jour",
+  blocked: "Relance automatique bloquée",
+  error: "Échec de l’import automatique",
+};
 
 const buildChapterCard = (
   chapter: string,
@@ -170,13 +189,19 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const [excludedSourceKeys, setExcludedSourceKeys] = useState<Set<string>>(() => new Set());
   const [showExcludedSources, setShowExcludedSources] = useState(false);
   const [rejectedFilter, setRejectedFilter] = useState<RejectedFilter>("all");
+  const [rejectedTextFilter, setRejectedTextFilter] = useState("");
   const [rejectedVisibleLimit, setRejectedVisibleLimit] = useState(REJECTED_RESULTS_PAGE_SIZE);
   const [continuing, setContinuing] = useState(false);
   const [rejectedActionError, setRejectedActionError] = useState<string | null>(null);
+  const [linkedAuthorActionJobId, setLinkedAuthorActionJobId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const result = job?.result as MangaCorrespondenceBackgroundResult | undefined;
   const input = job?.input as MangaCorrespondenceBackgroundInput | undefined;
+  const linkedAuthorSearches = useRelatedBackgroundSearchJobs(
+    backgroundSearchJobId,
+    input?.linkedAuthorImports?.map((entry) => entry.authorJobId) ?? [],
+  );
   const editableDiscoveries = useMemo(() => {
     const baseDiscoveries = result?.discoveries?.length
       ? result.discoveries
@@ -392,13 +417,20 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     accepted: rejectedCandidates.filter((candidate) => candidate.decision === "accepted").length,
     dismissed: rejectedCandidates.filter((candidate) => candidate.decision === "dismissed").length,
   }), [rejectedCandidates]);
-  const filteredRejectedCandidates = useMemo(() => rejectedCandidates.filter((candidate) => {
+  const categoryFilteredRejectedCandidates = useMemo(() => rejectedCandidates.filter((candidate) => {
     if (rejectedFilter === "accepted") return candidate.decision === "accepted";
     if (rejectedFilter === "dismissed") return candidate.decision === "dismissed";
     if (candidate.decision !== "pending") return false;
     if (rejectedFilter === "all") return true;
     return getMangaCorrespondenceScoreBand(candidate.score) === rejectedFilter;
   }), [rejectedCandidates, rejectedFilter]);
+  const filteredRejectedCandidates = useMemo(
+    () => filterMangaCorrespondenceRejectedCandidatesByText(
+      categoryFilteredRejectedCandidates,
+      rejectedTextFilter,
+    ),
+    [categoryFilteredRejectedCandidates, rejectedTextFilter],
+  );
   const rejectedCardGroups = useMemo<RejectedCardGroup[]>(() => {
     const candidatesBySourceKey = new Map(filteredRejectedCandidates.map((candidate) => (
       [buildMultiSearchSourceIdentityKey(candidate.source), candidate]
@@ -435,6 +467,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     setExcludedSourceKeys(new Set());
     setShowExcludedSources(false);
     setRejectedFilter("all");
+    setRejectedTextFilter("");
     setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
     setRejectedActionError(null);
     setContinuing(false);
@@ -448,7 +481,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
 
   useEffect(() => {
     setRejectedVisibleLimit(REJECTED_RESULTS_PAGE_SIZE);
-  }, [rejectedFilter]);
+  }, [rejectedFilter, rejectedTextFilter]);
 
   const toggleReadingListChapter = (chapter: string) => {
     setExcludedReadingListChapters((current) => (
@@ -747,6 +780,86 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         />
       ),
     });
+  };
+  const openAuthorExpansionDialog = () => {
+    if (!backgroundSearchJobId || !input || !result) return;
+    const discoveredAuthors = collectMangaCorrespondenceAuthors(result, {
+      referenceNames: input.reference.authors,
+    });
+    const initialNames = discoveredAuthors.names.length
+      ? discoveredAuthors.names
+      : input.reference.authors;
+    openModal({
+      title: "Approfondir les auteurs de la correspondance",
+      className: "manga-correspondence-modal-shell",
+      content: (
+        <AuthorCorrespondenceDialog
+          initialName={initialNames[0] ?? ""}
+          initialNames={initialNames}
+          referenceSources={discoveredAuthors.referenceSources}
+          mangaSeed={{
+            reference: input.reference,
+            enableRomajiPhoneticMerge: input.enableRomajiPhoneticMerge,
+          }}
+          linkedMangaJobId={backgroundSearchJobId}
+          initialAdvancedSearchEnabled
+          onCancel={closeModal}
+          onQueued={() => {
+            closeModal();
+            void linkedAuthorSearches.reload();
+          }}
+        />
+      ),
+    });
+  };
+  const openExistingAuthorSearchDialog = () => {
+    if (!backgroundSearchJobId || !input || !result || !job) return;
+    openModal({
+      title: "Lier une recherche auteur existante",
+      className: "manga-correspondence-modal-shell existing-author-search-modal",
+      content: (
+        <ExistingAuthorSearchDialog
+          mangaJob={job as BackgroundSearchJob<
+            MangaCorrespondenceBackgroundInput,
+            MangaCorrespondenceBackgroundResult
+          > & { result: MangaCorrespondenceBackgroundResult }}
+          onCancel={closeModal}
+          onImported={async () => {
+            closeModal();
+            await Promise.all([reload(), linkedAuthorSearches.reload()]);
+          }}
+        />
+      ),
+    });
+  };
+  const openLinkedAuthorSearch = async (jobId: string) => {
+    const linkedJob = await window.api?.getBackgroundSearchJob?.(jobId) as BackgroundSearchJob | null;
+    if (!linkedJob) {
+      setRejectedActionError("La recherche auteur liée n’est plus disponible.");
+      return;
+    }
+    requestBackgroundSearchOpenInCurrentView(linkedJob);
+  };
+  const importLinkedAuthorSearch = async (jobId: string) => {
+    setLinkedAuthorActionJobId(jobId);
+    setRejectedActionError(null);
+    try {
+      const outcome = await importLinkedAuthorSearchIntoManga({
+        authorJobId: jobId,
+        mangaJobId: backgroundSearchJobId,
+        automatic: false,
+      });
+      if (outcome === "deferred") {
+        throw new Error("Attends la fin de la passe manga actuelle avant d’importer le corpus auteur.");
+      }
+      await Promise.all([reload(), linkedAuthorSearches.reload()]);
+    } catch (importError) {
+      setRejectedActionError(importError instanceof Error
+        ? importError.message
+        : "Le corpus auteur n’a pas pu être importé.");
+    } finally {
+      setLinkedAuthorActionJobId(null);
+    }
   };
   const createReadingList = async (
     items: ReadingListItem[],
@@ -1050,6 +1163,96 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           {result.warnings.length > 8 ? <small>{result.warnings.length - 8} autre(s) alerte(s) dans cette recherche.</small> : null}
         </div>
       ) : null}
+      <section className="manga-correspondence-view__linked-authors">
+        <header>
+          <div>
+            <strong>Approfondissement des auteurs</strong>
+            <span>
+              {linkedAuthorSearches.jobs.length
+                ? `${linkedAuthorSearches.jobs.length} recherche(s) liée(s)`
+                : "Aucune recherche auteur liée"}
+            </span>
+          </div>
+          <div className="manga-correspondence-view__linked-author-header-actions">
+            <button type="button" disabled={active} onClick={openExistingAuthorSearchDialog}>
+              Lier une recherche existante
+            </button>
+            <button type="button" disabled={active} onClick={openAuthorExpansionDialog}>
+              {linkedAuthorSearches.jobs.length ? "Nouvelle recherche auteur" : "Approfondir les auteurs"}
+            </button>
+          </div>
+        </header>
+        {linkedAuthorSearches.error ? (
+          <small className="is-error">{linkedAuthorSearches.error}</small>
+        ) : null}
+        {!linkedAuthorSearches.jobs.length ? (
+          <small>
+            À la fin de la recherche manga, le meilleur corpus portant exactement sur le même auteur
+            est lié automatiquement. Le sélecteur manuel reste disponible si aucun corpus sûr n’est trouvé.
+          </small>
+        ) : null}
+        {linkedAuthorSearches.jobs.map((linkedJob) => {
+          const importedLink = input?.linkedAuthorImports?.find((entry) => (
+            entry.authorJobId === linkedJob.id
+          ));
+          const localRelation = linkedJob.relation?.parentJobId === backgroundSearchJobId
+            ? linkedJob.relation
+            : undefined;
+          const relationStatus = localRelation?.automationStatus
+            ?? (importedLink ? "completed" : "waiting");
+          const running = linkedJob.status === "queued" || linkedJob.status === "running";
+          const canImport = !active
+            && linkedJob.resultAvailable
+            && !running
+            && relationStatus !== "pending"
+            && relationStatus !== "processing";
+          const statusLabel = running
+            ? linkedJob.status === "queued" ? "En attente" : "En cours"
+            : LINKED_AUTHOR_STATUS_LABELS[relationStatus] ?? linkedJob.status;
+          return (
+            <article key={linkedJob.id} className={`is-${relationStatus}`}>
+              <div>
+                <strong>{linkedJob.primaryTerm}</strong>
+                <span>{statusLabel} · {linkedJob.progress.resultCount} page(s) auteur</span>
+                {localRelation?.automationError ? (
+                  <small>{localRelation.automationError}</small>
+                ) : null}
+                {importedLink ? (
+                  <small>
+                    Corpus réutilisé
+                    {importedLink.autoRefreshOnCompletion ? " · actualisation automatique" : ""}
+                  </small>
+                ) : null}
+                {relationStatus === "blocked" ? (
+                  <small>
+                    Une protection anti-emballement s’est déclenchée. Le corpus reste importable manuellement.
+                  </small>
+                ) : null}
+              </div>
+              <div className="manga-correspondence-view__linked-author-actions">
+                <button type="button" onClick={() => void openLinkedAuthorSearch(linkedJob.id)}>
+                  Voir
+                </button>
+                {canImport ? (
+                  <button
+                    type="button"
+                    disabled={linkedAuthorActionJobId === linkedJob.id}
+                    onClick={() => void importLinkedAuthorSearch(linkedJob.id)}
+                  >
+                    {linkedAuthorActionJobId === linkedJob.id
+                      ? "Import…"
+                      : relationStatus === "blocked"
+                        ? "Importer et relancer malgré l’alerte"
+                        : relationStatus === "completed"
+                          ? "Réimporter et relancer"
+                        : "Importer et relancer"}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </section>
       <details className="manga-correspondence-view__trace">
         <summary>
           Déroulé de la recherche ({result?.trace.length ?? 0} événements · {traceSearchCount} recherches · {traceDiscoveryCount} découvertes)
@@ -1182,8 +1385,29 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                 Les propositions continuent d’être classées. Leur examen sera disponible à la fin de la passe.
               </p>
             ) : null}
+            <div className="manga-correspondence-view__rejected-text-filter">
+              <MultiSearchTextFilterBar
+                value={rejectedTextFilter}
+                baseQuery={input?.reference.title ?? ""}
+                placeholder="Titre, auteur, source, motif, chapitre ou score…"
+                ariaLabel="Filtrer les propositions écartées"
+                onChange={setRejectedTextFilter}
+                onFillFromBaseQuery={() => setRejectedTextFilter(input?.reference.title ?? "")}
+                onClear={() => setRejectedTextFilter("")}
+              />
+              <span>
+                {rejectedCardGroups.length} card(s) affichée(s)
+                {rejectedTextFilter.trim()
+                  ? ` sur ${categoryFilteredRejectedCandidates.length} proposition(s)`
+                  : ""}
+              </span>
+            </div>
             {visibleRejectedCardGroups.length ? renderRejectedCards(visibleRejectedCardGroups) : (
-              <div className="empty">Aucune proposition dans cette catégorie.</div>
+              <div className="empty">
+                {rejectedTextFilter.trim()
+                  ? "Aucune proposition ne correspond à ce filtre."
+                  : "Aucune proposition dans cette catégorie."}
+              </div>
             )}
             {visibleRejectedCardGroups.length < rejectedCardGroups.length ? (
               <button

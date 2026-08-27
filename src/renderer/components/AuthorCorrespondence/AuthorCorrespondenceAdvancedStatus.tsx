@@ -48,6 +48,11 @@ export default function AuthorCorrespondenceAdvancedStatus({
           ) : null}
         </div>
         <span>{progress?.currentLabel || "Préparation de la prochaine étape…"}</span>
+        {summary?.automaticMangaReplayBlocked ? (
+          <small className="author-correspondence-view__advanced-safety-warning">
+            Une protection anti-emballement s’est déclenchée. Une recherche manga liée ne sera pas relancée automatiquement si son option de blocage est active.
+          </small>
+        ) : null}
         {totalUnits > 0 ? (
           <div className="author-correspondence-view__advanced-progress-row">
             <div
@@ -88,6 +93,11 @@ export default function AuthorCorrespondenceAdvancedStatus({
         {" · "}{formatCount(summary?.discoveredMangaSourceCount ?? 0, "source ajoutée", "sources ajoutées")}
         {" · "}{formatCount(summary?.remainingCandidateCount ?? 0, "candidat restant", "candidats restants")}
       </span>
+      {summary?.automaticMangaReplayBlocked ? (
+        <small className="author-correspondence-view__advanced-safety-warning">
+          {formatCount(summary.safetyWarnings?.length ?? 0, "alerte de sécurité", "alertes de sécurité")} · import manuel disponible depuis la recherche manga liée.
+        </small>
+      ) : null}
     </section>
   );
 }

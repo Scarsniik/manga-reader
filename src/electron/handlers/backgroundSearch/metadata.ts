@@ -2,7 +2,31 @@ import type {
   BackgroundSearchJobMetadata,
   BackgroundSearchQueueSummary,
   BackgroundSearchStatus,
+  BackgroundSearchRelation,
 } from "../../../shared/backgroundSearch";
+
+export const resolveCompletedBackgroundSearchRelation = (
+  relation: BackgroundSearchRelation | undefined,
+  result: unknown,
+): BackgroundSearchRelation | undefined => {
+  if (!relation) return undefined;
+  const safetyBlocked = Boolean(
+    result
+    && typeof result === "object"
+    && (result as {
+      advancedSearch?: { automaticMangaReplayBlocked?: boolean };
+    }).advancedSearch?.automaticMangaReplayBlocked === true
+  );
+  return {
+    ...relation,
+    automationStatus: relation.autoImportOnCompletion
+      ? relation.blockAutomaticImportOnSafetyWarning && safetyBlocked
+        ? "blocked"
+        : "pending"
+      : "manualReady",
+    automationError: undefined,
+  };
+};
 
 export const isBackgroundSearchActive = (status: BackgroundSearchStatus | string): boolean => (
   status === "queued" || status === "running"

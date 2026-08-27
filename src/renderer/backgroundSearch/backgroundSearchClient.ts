@@ -1,4 +1,5 @@
 import type {
+  BackgroundSearchRelation,
   BackgroundSearchJobMetadata,
   BackgroundSearchKind,
   BackgroundSearchStorageMode,
@@ -20,12 +21,14 @@ export const enqueueBackgroundSearch = async <TInput>({
   params,
   primaryTerm,
   title,
+  relation,
 }: {
   input: TInput;
   kind: BackgroundSearchKind;
   params: AppParams | null | undefined;
   primaryTerm: string;
   title: string;
+  relation?: Omit<BackgroundSearchRelation, "automationStatus">;
 }): Promise<BackgroundSearchJobMetadata> => {
   const api = window.api ?? {};
   if (typeof api.createBackgroundSearch !== "function") {
@@ -38,7 +41,7 @@ export const enqueueBackgroundSearch = async <TInput>({
     title,
     primaryTerm,
     ...storage,
+    ...(relation ? { relation } : {}),
   };
   return api.createBackgroundSearch(request);
 };
-

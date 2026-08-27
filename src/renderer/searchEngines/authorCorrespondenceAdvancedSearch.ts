@@ -87,6 +87,7 @@ export const buildAuthorCorrespondenceAdvancedProgressSummary = (options: {
   remainingCandidateCount: number;
   pendingAuthorNames: string[];
   pendingAuthorReferenceSources: AuthorCorrespondenceReferenceSource[];
+  safetyWarnings?: NonNullable<AdvancedProgressSummary["safetyWarnings"]>;
 }): AdvancedProgressSummary => {
   const pendingAuthorNames = buildUniqueAuthorSearchNames(options.pendingAuthorNames);
   const pendingAuthorReferenceSources = dedupeAuthorCorrespondenceReferenceSources(
@@ -104,6 +105,10 @@ export const buildAuthorCorrespondenceAdvancedProgressSummary = (options: {
     remainingCandidateCount: options.remainingCandidateCount,
     ...(pendingAuthorNames.length ? { pendingAuthorNames } : {}),
     ...(pendingAuthorReferenceSources.length ? { pendingAuthorReferenceSources } : {}),
+    ...(options.safetyWarnings?.length ? {
+      safetyWarnings: options.safetyWarnings,
+      automaticMangaReplayBlocked: true,
+    } : {}),
   };
 };
 
@@ -394,6 +399,8 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       ...initialResult.advancedSearch,
       discoveredAuthorPageCount: 0,
       discoveredAuthorMatchKeys: [],
+      safetyWarnings: undefined,
+      automaticMangaReplayBlocked: false,
     } : undefined,
   };
   cache = await cacheController.publish((current) => (
@@ -470,6 +477,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
   );
   const processedMangaKeys = new Set(cache.processedMangaKeys);
   let completedSeedCount = 0;
+  const safetyWarnings: NonNullable<AdvancedProgressSummary["safetyWarnings"]> = [];
   const resolveAdvancedAuthorName = (authorName: string): string | undefined => (
     resolveCompatibleMangaAuthorName(authorName, referenceNames)
   );
@@ -534,6 +542,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
         remainingCandidateCount,
         pendingAuthorNames,
         pendingAuthorReferenceSources,
+        safetyWarnings,
       }),
     };
   };
@@ -774,6 +783,18 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       undefined,
       executionContext,
     );
+    (mangaResult.warnings ?? []).forEach((warning) => {
+      if (safetyWarnings.some((entry) => `${entry.seedKey}:${entry.code}:${entry.message}` === (
+        `${seed.key}:${warning.code}:${warning.message}`
+      ))) return;
+      safetyWarnings.push({
+        seedKey: seed.key,
+        seedTitle: seed.result.title,
+        code: warning.code,
+        message: warning.message,
+      });
+      if (safetyWarnings.length > 50) safetyWarnings.shift();
+    });
     const seedSourceKeys = new Set(seed.result.sources.map(buildMultiSearchSourceIdentityKey));
     const equivalentSources = mangaResult.matches
       .map((match) => match.source)

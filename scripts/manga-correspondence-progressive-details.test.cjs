@@ -44,9 +44,16 @@ const source = `
   } from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
   export {
     createAuthorCorrespondenceSessionCacheSnapshot,
+    mergeAuthorCorrespondenceSessionCacheSnapshots,
     recordAuthorCorrespondenceAdvancedDiscoveries,
     startAuthorCorrespondenceAdvancedDiscoveryBatch,
   } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
+  export {
+    buildReusableAuthorSearchCandidates,
+    selectAutomaticReusableAuthorSearch,
+  } from "@/renderer/backgroundSearch/reusableAuthorSearches";
+  export { importLinkedAuthorSearchIntoManga } from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
+  export { filterMangaCorrespondenceRejectedCandidatesByText } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedFilters";
   export {
     buildAuthorCorrespondenceRejectedMangaTargets,
     buildAuthorCorrespondenceRejectedOpenTargets,
@@ -74,6 +81,7 @@ const {
   buildAuthorCorrespondenceRejectedMangaTargets,
   buildAuthorCorrespondenceRejectedOpenTargets,
   buildAuthorCorrespondenceReplayInput,
+  buildReusableAuthorSearchCandidates,
   buildInitialAuthorCorrespondenceDiscoveries,
   buildMultiSearchSourceIdentityKey,
   collectEvidenceBackedAdvancedAuthorAliases,
@@ -82,10 +90,13 @@ const {
   createSearchExecutionContext,
   filterAuthorCorrespondenceNameSearchSources,
   filterIncompatibleAdvancedAuthorMatches,
+  filterMangaCorrespondenceRejectedCandidatesByText,
   findCompatibleMangaAuthorName,
   isAuthorCorrespondenceNameSearchSourceVerified,
   isAuthorCorrespondenceAdvancedSeedActive,
+  importLinkedAuthorSearchIntoManga,
   mergeAuthorCorrespondenceSessionResults,
+  mergeAuthorCorrespondenceSessionCacheSnapshots,
   mergeAuthorCorrespondenceRejectedAuthorCandidates,
   mergeMultiSearchResults,
   resolveAuthorCorrespondenceAdvancedBatchSize,
@@ -95,6 +106,7 @@ const {
   runAuthorCorrespondenceSearch,
   runAuthorCorrespondenceWorkflow,
   runMangaCorrespondenceSearch,
+  selectAutomaticReusableAuthorSearch,
   selectAuthorCorrespondenceAdvancedSeeds,
   startAuthorCorrespondenceAdvancedDiscoveryBatch,
   writeAuthorCorrespondenceInvalidations,
@@ -162,6 +174,198 @@ const buildCorrespondenceInput = (overrides = {}) => ({
   scrapeDetailsWithCards: false,
   enableRomajiPhoneticMerge: false,
   ...overrides,
+});
+
+const buildReusableSearchMetadata = (id, kind, primaryTerm, resultCount, updatedAt) => ({
+  id,
+  schemaVersion: 1,
+  kind,
+  title: `${kind} · ${primaryTerm}`,
+  primaryTerm,
+  status: "completed",
+  storageMode: "temporaryFile",
+  retentionHours: 24,
+  createdAt: updatedAt,
+  updatedAt,
+  revision: 1,
+  progress: { completedUnits: 1, resultCount },
+  inputAvailable: true,
+  resultAvailable: true,
+});
+
+const buildReusableAuthorJob = ({
+  id,
+  name,
+  resultCount,
+  processedMangaCount = 0,
+  safetyBlocked = false,
+  updatedAt = "2026-08-27T00:00:00.000Z",
+}) => ({
+  metadata: buildReusableSearchMetadata(id, "authorCorrespondence", name, resultCount, updatedAt),
+  input: {
+    referenceName: name,
+    names: [name],
+    referenceSources: [],
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 6,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  },
+  result: {
+    referenceName: name,
+    matches: [],
+    searchedNames: [name],
+    advancedSearch: {
+      completedBatchCount: 1,
+      lastBatchMangaCount: processedMangaCount,
+      processedMangaCount,
+      discoveredMangaSourceCount: resultCount,
+      discoveredAuthorPageCount: resultCount,
+      remainingCandidateCount: 0,
+      automaticMangaReplayBlocked: safetyBlocked,
+    },
+  },
+});
+
+const buildReusableMangaJob = (linkedAuthorImports = []) => ({
+  metadata: buildReusableSearchMetadata(
+    "manga-yuzuriha",
+    "mangaCorrespondence",
+    "InCha na Ore dake ga Shitteiru Seitokaichou no Uragawa.",
+    12,
+    "2026-08-27T12:00:00.000Z",
+  ),
+  input: buildCorrespondenceInput({
+    reference: {
+      ...buildCorrespondenceInput().reference,
+      title: "InCha na Ore dake ga Shitteiru Seitokaichou no Uragawa.",
+      authors: ["Yuzuriha"],
+    },
+    linkedAuthorImports,
+  }),
+  result: {
+    matches: [],
+    rejectedCandidates: [],
+    passNumber: 1,
+    trace: [],
+    searchedTitles: [],
+    searchedAuthors: ["Yuzuriha"],
+    discoveries: [],
+  },
+});
+
+test("automatic reuse selects the richest exact author corpus", () => {
+  const shallow = buildReusableAuthorJob({
+    id: "author-yuzuriha-shallow",
+    name: "Yuzuriha",
+    resultCount: 3,
+    processedMangaCount: 2,
+  });
+  const deep = buildReusableAuthorJob({
+    id: "author-yuzuriha-deep",
+    name: "YUZURIHA",
+    resultCount: 18,
+    processedMangaCount: 40,
+  });
+  const unrelated = buildReusableAuthorJob({
+    id: "author-unrelated",
+    name: "Another Author",
+    resultCount: 50,
+    processedMangaCount: 100,
+  });
+  const mangaJob = buildReusableMangaJob();
+
+  const candidates = buildReusableAuthorSearchCandidates(mangaJob, [unrelated, shallow, deep]);
+  const selected = selectAutomaticReusableAuthorSearch(mangaJob, [unrelated, shallow, deep]);
+
+  assert.equal(candidates[0].job.metadata.id, deep.metadata.id);
+  assert.deepEqual(candidates[0].matchedNames, ["Yuzuriha"]);
+  assert.equal(selected.job.metadata.id, deep.metadata.id);
+});
+
+test("automatic reuse respects safeguards and an existing imported author link", () => {
+  const blocked = buildReusableAuthorJob({
+    id: "author-yuzuriha-blocked",
+    name: "Yuzuriha",
+    resultCount: 30,
+    processedMangaCount: 80,
+    safetyBlocked: true,
+  });
+  const candidates = buildReusableAuthorSearchCandidates(buildReusableMangaJob(), [blocked]);
+  const blockedSelection = selectAutomaticReusableAuthorSearch(buildReusableMangaJob(), [blocked]);
+  const alreadyLinkedSelection = selectAutomaticReusableAuthorSearch(buildReusableMangaJob([{
+    authorJobId: "author-yuzuriha-previous",
+    sourceCacheRevision: 4,
+    importedCacheRevision: 2,
+    importedAt: "2026-08-27T11:00:00.000Z",
+    names: ["Yuzuriha"],
+    referenceSources: [],
+  }]), [buildReusableAuthorJob({
+    id: "author-yuzuriha-other",
+    name: "Yuzuriha",
+    resultCount: 10,
+  })]);
+
+  assert.equal(candidates[0].automaticImportBlocked, true);
+  assert.equal(blockedSelection, undefined);
+  assert.equal(alreadyLinkedSelection, undefined);
+});
+
+test("a standalone author search can be linked to a manga without changing its origin", async () => {
+  const authorJob = buildReusableAuthorJob({
+    id: "standalone-author-yuzuriha",
+    name: "Yuzuriha",
+    resultCount: 20,
+    processedMangaCount: 50,
+  });
+  const mangaJob = buildReusableMangaJob();
+  const sourceCache = createAuthorCorrespondenceSessionCacheSnapshot({
+    revision: 7,
+    processedMangaKeys: ["processed-work"],
+  });
+  const emptyCache = createAuthorCorrespondenceSessionCacheSnapshot();
+  let replayRequest;
+  let publishedCache;
+  let relationUpdateCount = 0;
+  global.window = {
+    setTimeout,
+    api: {
+      getBackgroundSearchJob: async (jobId) => (
+        jobId === authorJob.metadata.id ? authorJob : mangaJob
+      ),
+      getAuthorCorrespondenceSessionCache: async (jobId) => (
+        jobId === authorJob.metadata.id ? sourceCache : emptyCache
+      ),
+      setAuthorCorrespondenceSessionCache: async (_jobId, cache) => {
+        publishedCache = cache;
+      },
+      replayBackgroundSearch: async (request) => {
+        replayRequest = request;
+        return mangaJob.metadata;
+      },
+      updateBackgroundSearchRelation: async () => {
+        relationUpdateCount += 1;
+      },
+    },
+  };
+
+  const outcome = await importLinkedAuthorSearchIntoManga({
+    authorJobId: authorJob.metadata.id,
+    mangaJobId: mangaJob.metadata.id,
+    automatic: false,
+    autoRefreshOnCompletion: true,
+    blockAutomaticImportOnSafetyWarning: true,
+  });
+
+  assert.equal(outcome, "replayed");
+  assert.equal(relationUpdateCount, 0);
+  assert.deepEqual(publishedCache.processedMangaKeys, ["processed-work"]);
+  assert.equal(replayRequest.jobId, mangaJob.metadata.id);
+  assert.equal(replayRequest.input.linkedAuthorImports[0].authorJobId, authorJob.metadata.id);
+  assert.equal(replayRequest.input.linkedAuthorImports[0].sourceCacheRevision, 7);
+  assert.equal(replayRequest.input.linkedAuthorImports[0].autoRefreshOnCompletion, true);
 });
 
 test("correspondence stops a paginated source after the configured unproductive streak", async () => {
@@ -1413,6 +1617,64 @@ const buildAdvancedSource = (scraperId, title, detailUrl) => ({
   canOpenDetails: true,
 });
 
+test("rejected manga text filtering checks titles, authors, sources, reasons and scores", () => {
+  const buildRejectedCandidate = ({ id, title, author, reason, score }) => ({
+    key: id,
+    source: {
+      ...buildAdvancedSource(id, title, `https://${id}.test/work/${id}`),
+      tentativeAuthorNames: [author],
+    },
+    analyzedTitle: title,
+    alternativeTitles: [],
+    authors: [author],
+    chapterConfidence: "medium",
+    rejectionReason: reason,
+    score,
+    scoreReasons: reason === "authorMismatch"
+      ? ["Auteur explicite trop éloigné de la référence"]
+      : ["Version dérivée ou contenu annexe détecté"],
+    discoveredByStepIds: [],
+    decision: "pending",
+    useAsSearchSeed: false,
+  });
+  const authorCandidate = buildRejectedCandidate({
+    id: "source-yuzuriha",
+    title: "InCha Side Story",
+    author: "Yuzuriha",
+    reason: "authorMismatch",
+    score: 82,
+  });
+  const derivativeCandidate = buildRejectedCandidate({
+    id: "source-derivative",
+    title: "Unrelated Animation",
+    author: "Another Author",
+    reason: "derivative",
+    score: 34,
+  });
+  const candidates = [authorCandidate, derivativeCandidate];
+
+  assert.deepEqual(
+    filterMangaCorrespondenceRejectedCandidatesByText(candidates, "Yuzuriha 82"),
+    [authorCandidate],
+  );
+  assert.deepEqual(
+    filterMangaCorrespondenceRejectedCandidatesByText(candidates, "source yuzuriha"),
+    [authorCandidate],
+  );
+  assert.deepEqual(
+    filterMangaCorrespondenceRejectedCandidatesByText(candidates, "auteur différent"),
+    [authorCandidate],
+  );
+  assert.deepEqual(
+    filterMangaCorrespondenceRejectedCandidatesByText(candidates, "dérivée"),
+    [derivativeCandidate],
+  );
+  assert.deepEqual(
+    filterMangaCorrespondenceRejectedCandidatesByText(candidates, "Yuzuriha, dérivée"),
+    candidates,
+  );
+});
+
 test("author identity matching reuses normalized variants and a conservative typo fallback", () => {
   assert.deepEqual(
     findCompatibleMangaAuthorName("Ooshima Aki", ["Oshima Aki"]),
@@ -2140,6 +2402,166 @@ test("cancelling an advanced author pass validates completed manga and keeps pen
   assert.equal(summary.processedMangaCount, 35);
   assert.deepEqual(summary.pendingAuthorNames, ["New Author"]);
   assert.deepEqual(summary.pendingAuthorReferenceSources, [pendingSource]);
+});
+
+test("advanced author safeguards block an automatic manga replay", () => {
+  const summary = buildAuthorCorrespondenceAdvancedProgressSummary({
+    batchCompleted: true,
+    completedBatchCount: 0,
+    requestedBatchCount: 1,
+    completedSeedCount: 1,
+    processedMangaCount: 1,
+    discoveredMangaSourceCount: 3,
+    discoveredAuthorMatchKeys: [],
+    remainingCandidateCount: 0,
+    pendingAuthorNames: [],
+    pendingAuthorReferenceSources: [],
+    safetyWarnings: [{
+      seedKey: "seed-a",
+      seedTitle: "Runaway Work",
+      code: "taskExpansion",
+      message: "Task expansion stopped.",
+    }],
+  });
+
+  assert.equal(summary.automaticMangaReplayBlocked, true);
+  assert.equal(summary.safetyWarnings.length, 1);
+});
+
+test("linked author corpus snapshots merge listings and manga enrichments without losing sources", () => {
+  const firstSource = buildAdvancedSource(
+    "source-a",
+    "First Work",
+    "https://source-a.test/work/first",
+  );
+  const secondSource = buildAdvancedSource(
+    "source-a",
+    "Second Work",
+    "https://source-a.test/work/second",
+  );
+  const current = createAuthorCorrespondenceSessionCacheSnapshot({
+    revision: 2,
+    runs: [{
+      key: "source-a::https://source-a.test/authors/example",
+      name: "Example",
+      scraper,
+      query: "https://source-a.test/authors/example",
+      status: "done",
+      results: [firstSource],
+      loadedPages: 1,
+      hasNextPage: true,
+    }],
+    processedMangaKeys: ["first"],
+  });
+  const incoming = createAuthorCorrespondenceSessionCacheSnapshot({
+    revision: 5,
+    runs: [{
+      key: "source-a::https://source-a.test/authors/example",
+      name: "Example",
+      scraper,
+      query: "https://source-a.test/authors/example",
+      status: "done",
+      results: [firstSource, secondSource],
+      loadedPages: 3,
+      hasNextPage: false,
+    }],
+    mangaEnrichments: [{
+      seedKey: "first",
+      anchorSourceKeys: [buildMultiSearchSourceIdentityKey(firstSource)],
+      sources: [secondSource],
+    }],
+    processedMangaKeys: ["second"],
+  });
+
+  const merged = mergeAuthorCorrespondenceSessionCacheSnapshots(current, incoming);
+  assert.equal(merged.runs.length, 1);
+  assert.equal(merged.runs[0].results.length, 2);
+  assert.equal(merged.runs[0].loadedPages, 3);
+  assert.equal(merged.runs[0].hasNextPage, false);
+  assert.deepEqual(merged.processedMangaKeys.sort(), ["first", "second"]);
+  assert.equal(merged.mangaEnrichments.length, 1);
+});
+
+test("a manga replay analyzes an imported author corpus without loading its author page again", async () => {
+  const authorUrl = "https://source-a.test/authors/author-a";
+  const importedSource = buildAdvancedSource(
+    "source-a",
+    "Series One 2",
+    "https://source-a.test/work/series-one-2",
+  );
+  importedSource.scraper = {
+    ...scraper,
+    id: "source-a",
+    name: "Source A",
+    baseUrl: "https://source-a.test/",
+  };
+  importedSource.result = {
+    ...importedSource.result,
+    authorUrl,
+    authorUrls: [authorUrl],
+    authorNames: ["Author A"],
+    detailsMetadataFetched: true,
+    detailsTitle: "Series One 2",
+  };
+  const cache = createAuthorCorrespondenceSessionCacheSnapshot({
+    revision: 4,
+    runs: [{
+      key: `source-a::${authorUrl}`,
+      name: "Author A",
+      scraper: importedSource.scraper,
+      query: authorUrl,
+      status: "done",
+      results: [importedSource],
+      loadedPages: 2,
+      hasNextPage: false,
+    }],
+  });
+  const requestedUrls = [];
+  global.window = {
+    setTimeout,
+    api: {
+      getAuthorCorrespondenceSessionCache: async () => cache,
+      fetchScraperDocument: async (request) => {
+        requestedUrls.push(String(request.targetUrl));
+        return {
+          ok: true,
+          requestedUrl: String(request.targetUrl),
+          finalUrl: String(request.targetUrl),
+          html: "<html><body></body></html>",
+        };
+      },
+    },
+  };
+  const executionContext = createSearchExecutionContext({
+    kind: "mangaCorrespondence",
+    backgroundJobId: "linked-manga-job",
+  });
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    reference: {
+      ...buildCorrespondenceInput().reference,
+      chapter: "1",
+      authors: ["Author A"],
+      authorUrls: [],
+    },
+    maxPages: 1,
+    linkedAuthorImports: [{
+      authorJobId: "linked-author-job",
+      sourceCacheRevision: 4,
+      importedCacheRevision: 1,
+      importedAt: "2026-08-27T00:00:00.000Z",
+      names: ["Author A"],
+      referenceSources: [{
+        scraperId: "source-a",
+        authorUrl,
+        name: "Author A",
+      }],
+    }],
+  }), new AbortController().signal, async () => {}, undefined, executionContext);
+
+  assert.ok(result.matches.some((match) => (
+    match.source.result.detailUrl === importedSource.result.detailUrl
+  )));
+  assert.ok(!requestedUrls.some((url) => url.includes("/authors/")));
 });
 
 test("session manga matches stay attached to their originating combined card", () => {

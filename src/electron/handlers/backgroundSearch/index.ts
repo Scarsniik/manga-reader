@@ -13,4 +13,5 @@ export {
   retryBackgroundSearch,
   saveBackgroundSearchResult,
   updateBackgroundSearch,
+  updateBackgroundSearchRelation,
 } from "./service";

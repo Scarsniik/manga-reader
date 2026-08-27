@@ -35,6 +35,7 @@ const ORIGIN_LABELS: Record<MangaCorrespondenceDiscovery["origin"], string> = {
   details: "Fiche",
   authorPage: "Page auteur",
   manual: "Ajout manuel",
+  linkedAuthorSearch: "Recherche auteur liée",
 };
 
 export default function MangaCorrespondenceDiscoveriesDialog({

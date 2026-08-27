@@ -151,6 +151,9 @@ ipcMain.handle("background-search-mark-opened", async (_event: IpcMainInvokeEven
 ipcMain.handle("background-search-delete", async (_event: IpcMainInvokeEvent, jobId: string) => (
     backgroundSearch.deleteBackgroundSearch(jobId)
 ));
+ipcMain.handle("background-search-update-relation", async (_event: IpcMainInvokeEvent, request: any) => (
+    backgroundSearch.updateBackgroundSearchRelation(request)
+));
 ipcMain.handle("author-correspondence-session-cache-get", async (
     _event: IpcMainInvokeEvent,
     jobId: string,

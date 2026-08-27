@@ -54,6 +54,43 @@
   font-weight: 400;
   opacity: .72;
 }
+.manga-correspondence-dialog label.manga-correspondence-dialog__advanced-count {
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  align-items: center;
+  padding: 0 .9rem;
+}
+.manga-correspondence-dialog__advanced-count small {
+  grid-column: 1 / -1;
+  opacity: .72;
+}
+.manga-correspondence-dialog__linked-options {
+  display: grid;
+  gap: .55rem;
+  padding: .8rem .9rem;
+  border: 1px solid rgba(255, 188, 71, .25);
+  border-radius: 9px;
+  background: rgba(255, 188, 71, .06);
+}
+.manga-correspondence-dialog__linked-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  cursor: pointer;
+}
+.manga-correspondence-dialog__linked-options input {
+  flex: 0 0 auto;
+  min-height: auto;
+  width: auto;
+  margin-top: .15rem;
+}
+.manga-correspondence-dialog__linked-options span {
+  display: grid;
+  gap: .2rem;
+}
+.manga-correspondence-dialog__linked-options small {
+  font-weight: 400;
+  opacity: .72;
+}
 .manga-correspondence-dialog__error { margin: 0; color: var(--danger, #ff6b6b); }
 .manga-correspondence-dialog__actions { display: flex; justify-content: flex-end; gap: .65rem; }
 .manga-correspondence-dialog__actions button {
@@ -79,6 +116,83 @@
   cursor: not-allowed;
   opacity: .48;
 }
+
+.existing-author-search-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.existing-author-search-dialog {
+  display: grid;
+  gap: 14px;
+  color: #e8e8e8;
+}
+
+.existing-author-search-dialog > p { margin: 0; color: #aaa; }
+.existing-author-search-dialog__filter { display: grid; gap: 6px; font-weight: 700; }
+.existing-author-search-dialog__filter input {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  background: #121212;
+  color: #ededed;
+  font: inherit;
+}
+.existing-author-search-dialog__list {
+  display: grid;
+  max-height: min(460px, 48vh);
+  gap: 7px;
+  overflow: auto;
+}
+.existing-author-search-dialog__list > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #303030;
+  border-radius: 9px;
+  background: #151515;
+  cursor: pointer;
+}
+.existing-author-search-dialog__list > label.is-selected {
+  border-color: rgba(93, 156, 255, .62);
+  background: rgba(93, 156, 255, .1);
+}
+.existing-author-search-dialog__list input { margin-top: 3px; }
+.existing-author-search-dialog__list label > span,
+.existing-author-search-dialog__refresh > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.existing-author-search-dialog__list small,
+.existing-author-search-dialog__refresh small {
+  color: #9d9d9d;
+  font-weight: 400;
+}
+.existing-author-search-dialog__list em {
+  color: #e3bd73;
+  font-size: 12px;
+  font-style: normal;
+}
+.existing-author-search-dialog > .existing-author-search-dialog__warning {
+  padding: 9px 11px;
+  border: 1px solid rgba(221, 166, 65, .38);
+  border-radius: 8px;
+  background: rgba(221, 166, 65, .08);
+  color: #dec58d;
+}
+.existing-author-search-dialog__refresh {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #303030;
+  border-radius: 9px;
+  background: #121212;
+  cursor: pointer;
+}
+.existing-author-search-dialog__refresh input { margin-top: 3px; }
 
 @media (max-width: 720px) {
   .manga-correspondence-dialog { min-width: 0; }

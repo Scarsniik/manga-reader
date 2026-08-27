@@ -1,5 +1,6 @@
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import { MAX_AUTHOR_CORRESPONDENCE_SESSION_CACHE_COUNT } from "@/shared/backgroundSearch";
 
 export type AuthorCorrespondenceMangaEnrichment = {
@@ -24,6 +25,65 @@ const EMPTY_SNAPSHOT: AuthorCorrespondenceSessionCacheSnapshot = {
   processedMangaKeys: [],
   discoveredAuthorMatchKeys: [],
   newAuthorMatchKeys: [],
+};
+
+const mergeSources = (
+  current: MultiSearchSourceResult[],
+  incoming: MultiSearchSourceResult[],
+): MultiSearchSourceResult[] => Array.from(new Map(
+  [...current, ...incoming].map((source) => [buildMultiSearchSourceIdentityKey(source), source]),
+).values());
+
+export const mergeAuthorCorrespondenceSessionCacheSnapshots = (
+  current: AuthorCorrespondenceSessionCacheSnapshot,
+  incoming: AuthorCorrespondenceSessionCacheSnapshot,
+): AuthorCorrespondenceSessionCacheSnapshot => {
+  const runsByKey = new Map(current.runs.map((run) => [run.key, run]));
+  incoming.runs.forEach((run) => {
+    const existing = runsByKey.get(run.key);
+    runsByKey.set(run.key, existing ? {
+      ...existing,
+      ...run,
+      results: mergeSources(existing.results, run.results),
+      pendingResults: mergeSources(existing.pendingResults ?? [], run.pendingResults ?? []),
+      pendingCandidates: mergeSources(existing.pendingCandidates ?? [], run.pendingCandidates ?? []),
+      cacheResults: mergeSources(existing.cacheResults ?? [], run.cacheResults ?? []),
+      loadedPages: Math.max(existing.loadedPages, run.loadedPages),
+      checkedPages: Math.max(existing.checkedPages ?? 0, run.checkedPages ?? 0),
+    } : run);
+  });
+  const enrichmentsByKey = new Map(current.mangaEnrichments.map((enrichment) => [
+    enrichment.seedKey,
+    enrichment,
+  ]));
+  incoming.mangaEnrichments.forEach((enrichment) => {
+    const existing = enrichmentsByKey.get(enrichment.seedKey);
+    enrichmentsByKey.set(enrichment.seedKey, existing ? {
+      ...existing,
+      anchorSourceKeys: Array.from(new Set([
+        ...existing.anchorSourceKeys,
+        ...enrichment.anchorSourceKeys,
+      ])),
+      sources: mergeSources(existing.sources, enrichment.sources),
+    } : enrichment);
+  });
+  return createAuthorCorrespondenceSessionCacheSnapshot({
+    revision: Math.max(current.revision, incoming.revision),
+    runs: Array.from(runsByKey.values()),
+    mangaEnrichments: Array.from(enrichmentsByKey.values()),
+    processedMangaKeys: Array.from(new Set([
+      ...current.processedMangaKeys,
+      ...incoming.processedMangaKeys,
+    ])),
+    discoveredAuthorMatchKeys: Array.from(new Set([
+      ...current.discoveredAuthorMatchKeys,
+      ...incoming.discoveredAuthorMatchKeys,
+    ])),
+    newAuthorMatchKeys: Array.from(new Set([
+      ...current.newAuthorMatchKeys,
+      ...incoming.newAuthorMatchKeys,
+    ])),
+  });
 };
 
 const snapshots = new Map<string, AuthorCorrespondenceSessionCacheSnapshot>();
