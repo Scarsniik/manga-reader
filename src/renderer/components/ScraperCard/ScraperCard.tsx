@@ -1,4 +1,5 @@
 import React from 'react';
+import { useScraperCardViewTrackingSettings } from '@/renderer/stores/scraperCardViewTracking';
 import './style.scss';
 
 export type ScraperCardAction = (
@@ -66,9 +67,6 @@ const isInteractiveMiddleClickTarget = (
   return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
 };
 
-const VIEWED_INTERSECTION_RATIO = 0.8;
-const VIEWED_DWELL_MS = 1000;
-
 export default function ScraperCard({
   title,
   coverUrl,
@@ -91,7 +89,8 @@ export default function ScraperCard({
   const articleRef = React.useRef<HTMLElement | null>(null);
   const onViewedRef = React.useRef(onViewed);
   const hasReportedViewRef = React.useRef(false);
-  const canReportView = Boolean(onViewed);
+  const viewTrackingSettings = useScraperCardViewTrackingSettings(Boolean(onViewed));
+  const canReportView = Boolean(onViewed) && viewTrackingSettings.loaded;
   const normalizedSummary = normalizeOptionalText(summary);
   const normalizedEmptySummary = normalizeOptionalText(emptySummary);
   const resolvedCoverAlt = normalizeOptionalText(coverAlt) || title;
@@ -135,7 +134,7 @@ export default function ScraperCard({
         return;
       }
 
-      if (currentIntersectionRatio < VIEWED_INTERSECTION_RATIO) {
+      if (currentIntersectionRatio < viewTrackingSettings.intersectionRatio) {
         return;
       }
 
@@ -149,21 +148,21 @@ export default function ScraperCard({
         return;
       }
 
-      viewedTimeoutId = window.setTimeout(reportIfCardStayedVisible, VIEWED_DWELL_MS);
+      viewedTimeoutId = window.setTimeout(reportIfCardStayedVisible, viewTrackingSettings.dwellMs);
     };
 
     observer = new IntersectionObserver((entries) => {
       const entry = entries.find((item) => item.target === article);
       currentIntersectionRatio = entry?.intersectionRatio ?? 0;
 
-      if (currentIntersectionRatio >= VIEWED_INTERSECTION_RATIO) {
+      if (currentIntersectionRatio >= viewTrackingSettings.intersectionRatio) {
         scheduleViewedTimeout();
         return;
       }
 
       clearViewedTimeout();
     }, {
-      threshold: [0, VIEWED_INTERSECTION_RATIO],
+      threshold: [0, viewTrackingSettings.intersectionRatio],
     });
 
     observer.observe(article);
@@ -172,7 +171,7 @@ export default function ScraperCard({
       clearViewedTimeout();
       observer?.disconnect();
     };
-  }, [canReportView]);
+  }, [canReportView, viewTrackingSettings.dwellMs, viewTrackingSettings.intersectionRatio]);
 
   const renderAction = (action: ScraperCardAction) => {
     if (action.type === 'custom') {

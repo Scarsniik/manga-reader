@@ -8,8 +8,10 @@ import type {
 } from "@/shared/scraper";
 import {
   buildSearchResultViewHistoryIdentity,
+  filterByScraperViewHistoryNewState,
   sortByScraperViewHistoryNewState,
 } from "@/renderer/utils/scraperViewHistory";
+import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
@@ -32,6 +34,7 @@ import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
+import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -174,6 +177,16 @@ export default function ScraperTagFavoriteResults({
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
   const {
+    active: showUnseenOnly,
+    recordsById: unseenFilterRecordsById,
+    newCardIds: unseenFilterNewCardIds,
+    setActive: setShowUnseenOnly,
+  } = useFrozenScraperUnseenFilter(
+    viewHistoryRecordsById,
+    newViewHistoryIds,
+    { resetKey: `${favorite.id}\u0000${pageIndex}` },
+  );
+  const {
     shouldHideBlacklistedCards,
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
@@ -197,7 +210,7 @@ export default function ScraperTagFavoriteResults({
       viewHistoryRecordsById,
     ],
   );
-  const displayedMergedResults = React.useMemo(
+  const blacklistFilteredMergedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
       sortedMergedResults,
       tagBlacklistByScraper,
@@ -207,6 +220,23 @@ export default function ScraperTagFavoriteResults({
       shouldHideBlacklistedCards,
       sortedMergedResults,
       tagBlacklistByScraper,
+    ],
+  );
+  const displayedMergedResults = React.useMemo(
+    () => filterByScraperViewHistoryNewState(
+      blacklistFilteredMergedResults,
+      (result) => result.sources.map((source) => (
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
+      )),
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
+      showUnseenOnly,
+    ),
+    [
+      blacklistFilteredMergedResults,
+      showUnseenOnly,
+      unseenFilterNewCardIds,
+      unseenFilterRecordsById,
     ],
   );
   const blacklistedMergedResultCount = React.useMemo(
@@ -313,6 +343,14 @@ export default function ScraperTagFavoriteResults({
                   filterModes={languageFilterModes}
                   onToggleFilterMode={onToggleLanguageFilterMode}
                 />
+                <ResultFilterToggle
+                  active={showUnseenOnly}
+                  label="Non vus seulement"
+                  inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+                  activeTitle="Afficher aussi les cards déjà vues"
+                  onChange={setShowUnseenOnly}
+                  variant="result"
+                />
               </div>
             </div>
           </div>
@@ -367,7 +405,11 @@ export default function ScraperTagFavoriteResults({
         ) : loading ? (
           <div className="scraper-browser__message">Chargement du tag combine...</div>
         ) : totalResultCount > 0 ? (
-          <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
+          <div className="scraper-browser__message">
+            {showUnseenOnly
+              ? "Aucune card non vue ne correspond aux filtres actifs."
+              : "Aucun resultat ne correspond aux filtres actifs."}
+          </div>
         ) : (
           <div className="scraper-browser__message">Aucun resultat sur cette page.</div>
         )}

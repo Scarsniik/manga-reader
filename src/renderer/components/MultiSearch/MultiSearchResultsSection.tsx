@@ -6,6 +6,7 @@ import type {
 } from "@/shared/scraper";
 import {
   buildSearchResultViewHistoryIdentity,
+  filterByScraperViewHistoryNewState,
   sortByScraperViewHistoryNewState,
 } from "@/renderer/utils/scraperViewHistory";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
@@ -36,6 +37,8 @@ import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
+import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -101,6 +104,10 @@ const buildSingleSourceMergedResult = (source: MultiSearchSourceResult): MultiSe
   tentativeAuthorNames: source.tentativeAuthorNames,
   contentTypes: source.contentTypes,
 });
+
+const getResultViewHistoryIdentities = (result: MultiSearchMergedResult) => (
+  result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result))
+);
 
 const getMergeProgressLabel = (progress: MultiSearchMergeProgress): string => {
   if (progress.phase === "queued") {
@@ -179,6 +186,16 @@ export default function MultiSearchResultsSection({
   onToggleReadingStatusFilter,
 }: Props) {
   const {
+    active: showUnseenOnly,
+    recordsById: unseenFilterRecordsById,
+    newCardIds: unseenFilterNewCardIds,
+    setActive: setShowUnseenOnly,
+  } = useFrozenScraperUnseenFilter(
+    viewHistoryRecordsById,
+    newViewHistoryIds,
+    { resetKey: `${viewMode}\u0000${baseQuery}` },
+  );
+  const {
     shouldHideBlacklistedCards,
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
@@ -186,7 +203,7 @@ export default function MultiSearchResultsSection({
   const sortMergedResultsByUnseen = React.useCallback((results: MultiSearchMergedResult[]) => (
     sortByScraperViewHistoryNewState(
       results,
-      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
+      getResultViewHistoryIdentities,
       viewHistoryRecordsById,
       newViewHistoryIds,
       showUnseenFirst,
@@ -196,13 +213,28 @@ export default function MultiSearchResultsSection({
     () => sortMergedResultsByUnseen(mergedResults),
     [mergedResults, sortMergedResultsByUnseen],
   );
-  const displayedMergedResults = React.useMemo(
+  const blacklistFilteredMergedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
       sortedMergedResults,
       tagBlacklistByScraper,
       shouldHideBlacklistedCards,
     ),
     [shouldHideBlacklistedCards, sortedMergedResults, tagBlacklistByScraper],
+  );
+  const displayedMergedResults = React.useMemo(
+    () => filterByScraperViewHistoryNewState(
+      blacklistFilteredMergedResults,
+      getResultViewHistoryIdentities,
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
+      showUnseenOnly,
+    ),
+    [
+      blacklistFilteredMergedResults,
+      showUnseenOnly,
+      unseenFilterNewCardIds,
+      unseenFilterRecordsById,
+    ],
   );
   const blacklistedMergedResultCount = React.useMemo(
     () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
@@ -219,20 +251,37 @@ export default function MultiSearchResultsSection({
     viewMode === "byScraper"
       ? runs.map((run) => {
         const sortedResults = sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult));
+        const blacklistFilteredResults = filterBlacklistedMultiSearchResults(
+          sortedResults,
+          tagBlacklistByScraper,
+          shouldHideBlacklistedCards,
+        );
 
         return {
           scraperId: run.scraper.id,
           scraperName: run.scraper.name,
+          sourceResultCount: sortedResults.length,
           blacklistedResultCount: countBlacklistedMultiSearchResults(sortedResults, tagBlacklistByScraper),
-          results: filterBlacklistedMultiSearchResults(
-            sortedResults,
-            tagBlacklistByScraper,
-            shouldHideBlacklistedCards,
+          results: filterByScraperViewHistoryNewState(
+            blacklistFilteredResults,
+            getResultViewHistoryIdentities,
+            unseenFilterRecordsById,
+            unseenFilterNewCardIds,
+            showUnseenOnly,
           ),
         };
       })
       : []
-  ), [runs, shouldHideBlacklistedCards, sortMergedResultsByUnseen, tagBlacklistByScraper, viewMode]);
+  ), [
+    runs,
+    shouldHideBlacklistedCards,
+    showUnseenOnly,
+    sortMergedResultsByUnseen,
+    tagBlacklistByScraper,
+    viewMode,
+    unseenFilterNewCardIds,
+    unseenFilterRecordsById,
+  ]);
   const blacklistedScraperResultCount = React.useMemo(
     () => scraperResultGroups.reduce((count, group) => count + group.blacklistedResultCount, 0),
     [scraperResultGroups],
@@ -282,6 +331,14 @@ export default function MultiSearchResultsSection({
                 <MultiSearchReadingStatusFilterBar
                   selectedStatuses={readingStatusFilters}
                   onToggleStatus={onToggleReadingStatusFilter}
+                />
+                <ResultFilterToggle
+                  active={showUnseenOnly}
+                  label="Non vus seulement"
+                  inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+                  activeTitle="Afficher aussi les cards déjà vues"
+                  onChange={setShowUnseenOnly}
+                  variant="result"
                 />
               </div>
             </div>
@@ -375,7 +432,11 @@ export default function MultiSearchResultsSection({
           />
         )}
         {!mergeProgress.isActive && !displayedMergedResults.length && mergedResults.length ? (
-          <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
+          <div className="scraper-browser__message">
+            {showUnseenOnly
+              ? "Aucune card non vue ne correspond aux filtres actifs."
+              : "Aucun resultat ne correspond aux filtres actifs."}
+          </div>
         ) : null}
       </section>
     );
@@ -409,6 +470,14 @@ export default function MultiSearchResultsSection({
               <MultiSearchReadingStatusFilterBar
                 selectedStatuses={readingStatusFilters}
                 onToggleStatus={onToggleReadingStatusFilter}
+              />
+              <ResultFilterToggle
+                active={showUnseenOnly}
+                label="Non vus seulement"
+                inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+                activeTitle="Afficher aussi les cards déjà vues"
+                onChange={setShowUnseenOnly}
+                variant="result"
               />
             </div>
           </div>
@@ -470,8 +539,14 @@ export default function MultiSearchResultsSection({
               onOpenProgressReader={onOpenProgressReader}
               onSetSourcesRead={onSetSourcesRead}
             />
-            {!group.results.length && shouldHideBlacklistedCards && group.blacklistedResultCount > 0 ? (
-              <div className="scraper-browser__message">Tous les resultats visibles sont masques par la blacklist.</div>
+            {!group.results.length && group.sourceResultCount > 0 ? (
+              <div className="scraper-browser__message">
+                {showUnseenOnly
+                  ? "Aucune card non vue ne correspond aux filtres actifs."
+                  : shouldHideBlacklistedCards && group.blacklistedResultCount > 0
+                    ? "Tous les resultats visibles sont masques par la blacklist."
+                    : "Aucun resultat ne correspond aux filtres actifs."}
+              </div>
             ) : null}
           </div>
         ))}

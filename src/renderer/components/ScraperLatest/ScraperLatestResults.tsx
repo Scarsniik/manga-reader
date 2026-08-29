@@ -18,7 +18,10 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
-import { buildSearchResultViewHistoryIdentity, isScraperViewHistoryCardNew } from "@/renderer/utils/scraperViewHistory";
+import {
+  buildSearchResultViewHistoryIdentity,
+  filterByScraperViewHistoryNewState,
+} from "@/renderer/utils/scraperViewHistory";
 import type { Manga } from "@/renderer/types";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
@@ -29,6 +32,8 @@ import {
 import BlacklistedCardsDisplayToggle from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import ScraperLatestScanActions from "@/renderer/components/ScraperLatest/ScraperLatestScanActions";
 import ScraperLatestScanTools from "@/renderer/components/ScraperLatest/ScraperLatestScanTools";
+import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
+import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
 type StatusItem = {
   key: string;
@@ -222,6 +227,21 @@ export default function ScraperLatestResults({
   const [mergeRefreshKey, setMergeRefreshKey] = React.useState(0);
   const [isStatusPanelOpen, setIsStatusPanelOpen] = React.useState(false);
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const unseenFilterResetKey = `${title}\u0000${preserveStoredResults}`;
+  const initialUnseenFilterResetKeyRef = React.useRef(unseenFilterResetKey);
+  const {
+    active: showUnseenOnly,
+    recordsById: unseenFilterRecordsById,
+    newCardIds: unseenFilterNewCardIds,
+    setActive: setShowUnseenOnly,
+  } = useFrozenScraperUnseenFilter(
+    viewHistoryRecordsById,
+    newViewHistoryIds,
+    {
+      initiallyActive: !preserveStoredResults,
+      resetKey: unseenFilterResetKey,
+    },
+  );
   const { mergedResults, mergeProgress } = useIncrementalMultiSearchMerge(
     sources,
     mergeRefreshKey,
@@ -240,16 +260,21 @@ export default function ScraperLatestResults({
     [languageFilterModes, manuallySplitResults],
   );
   const visibleResults = React.useMemo(
-    () => preserveStoredResults
-      ? languageFilteredResults
-      : languageFilteredResults.filter((result) => (
-        isScraperViewHistoryCardNew(
-          viewHistoryRecordsById,
-          result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-          newViewHistoryIds,
-        )
+    () => filterByScraperViewHistoryNewState(
+      languageFilteredResults,
+      (result) => result.sources.map((source) => (
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
       )),
-    [languageFilteredResults, newViewHistoryIds, preserveStoredResults, viewHistoryRecordsById],
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
+      showUnseenOnly,
+    ),
+    [
+      languageFilteredResults,
+      showUnseenOnly,
+      unseenFilterNewCardIds,
+      unseenFilterRecordsById,
+    ],
   );
   const visibleBlacklistedResultCount = React.useMemo(
     () => countBlacklistedMultiSearchResults(visibleResults, tagBlacklistByScraper),
@@ -304,7 +329,13 @@ export default function ScraperLatestResults({
 
   React.useEffect(() => {
     setIsStatusPanelOpen(false);
-  }, [title]);
+    if (initialUnseenFilterResetKeyRef.current === unseenFilterResetKey) {
+      return;
+    }
+
+    initialUnseenFilterResetKeyRef.current = unseenFilterResetKey;
+    setShowUnseenOnly(!preserveStoredResults);
+  }, [preserveStoredResults, setShowUnseenOnly, unseenFilterResetKey]);
 
   return (
     <section className="multi-search__results scraper-latest-results">
@@ -399,7 +430,8 @@ export default function ScraperLatestResults({
             </p>
           ) : (
             <p>
-              {displayedResults.length} card(s), {visibleSourceCount} source(s) non vue(s)
+              {displayedResults.length} card(s), {visibleSourceCount} source(s)
+              {showUnseenOnly ? " non vue(s)" : " visible(s)"}
               {shouldHideBlacklistedCards && blacklistedCardCount > 0
                 ? `, ${blacklistedCardCount} masquee(s)`
                 : ""}.
@@ -418,11 +450,21 @@ export default function ScraperLatestResults({
             />
           </div>
           <div className="multi-search__result-filter-stack">
-            <MultiSearchLanguageFilterBar
-              languageCodes={resultLanguageCodes}
-              filterModes={languageFilterModes}
-              onToggleFilterMode={onToggleLanguageFilterMode}
-            />
+            <div className="multi-search__facet-filter-row">
+              <MultiSearchLanguageFilterBar
+                languageCodes={resultLanguageCodes}
+                filterModes={languageFilterModes}
+                onToggleFilterMode={onToggleLanguageFilterMode}
+              />
+              <ResultFilterToggle
+                active={showUnseenOnly}
+                label="Non vus seulement"
+                inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+                activeTitle="Afficher aussi les cards déjà vues"
+                onChange={setShowUnseenOnly}
+                variant="result"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -500,7 +542,9 @@ export default function ScraperLatestResults({
         <div className="multi-search__message is-info">
           {shouldHideBlacklistedCards && blacklistedCardCount > 0
             ? "Toutes les nouveautes visibles sont masquees par la blacklist."
-            : emptyLabel}
+            : showUnseenOnly && languageFilteredResults.length > 0
+              ? "Aucune card non vue ne correspond aux filtres actifs."
+              : emptyLabel}
         </div>
       ) : null}
 

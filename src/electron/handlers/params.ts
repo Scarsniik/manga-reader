@@ -6,6 +6,8 @@ import {
     DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
     DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
+    DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT,
+    DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS,
     normalizeScraperViewHistorySettings,
 } from "../scraper";
 import {
@@ -707,6 +709,8 @@ const defaultSettings = {
     scraperViewHistoryMaxRecords: DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
     scraperViewHistorySeenRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
     scraperViewHistoryReadRetentionDays: DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
+    scraperViewHistoryVisibilityPercent: DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT,
+    scraperViewHistoryDwellSeconds: DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS,
     backgroundSearchStorageMode: "memory" as "memory" | "temporaryFile",
     backgroundSearchTemporaryRetentionHours: DEFAULT_BACKGROUND_SEARCH_RETENTION_HOURS,
     backgroundSearchMaxConcurrent: DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT,

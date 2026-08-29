@@ -135,3 +135,19 @@ export const sortByScraperViewHistoryNewState = <T,>(
     })
     .map(({ item }) => item);
 };
+
+export const filterByScraperViewHistoryNewState = <T,>(
+  items: T[],
+  getIdentities: (item: T) => ScraperViewHistoryCardIdentity[],
+  recordsById: Map<string, ScraperViewHistoryRecord>,
+  newCardIds: Set<string>,
+  enabled: boolean,
+): T[] => (
+  enabled
+    ? items.filter((item) => isScraperViewHistoryCardNew(
+      recordsById,
+      getIdentities(item),
+      newCardIds,
+    ))
+    : items
+);

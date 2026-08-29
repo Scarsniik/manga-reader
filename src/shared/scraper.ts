@@ -972,11 +972,15 @@ export interface SaveScraperLatestCheckpointRequest extends ScraperLatestCheckpo
 export const DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;
 export const DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS = 45;
 export const DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS = 365;
+export const DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT = 80;
+export const DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS = 1;
 
 export interface ScraperViewHistorySettings {
   scraperViewHistoryMaxRecords: number;
   scraperViewHistorySeenRetentionDays: number;
   scraperViewHistoryReadRetentionDays: number;
+  scraperViewHistoryVisibilityPercent: number;
+  scraperViewHistoryDwellSeconds: number;
 }
 
 const parseScraperViewHistoryNumericSetting = (value: unknown): number => {
@@ -1016,6 +1020,38 @@ export const normalizeScraperViewHistoryReadRetentionDays = (value: unknown): nu
   normalizeScraperViewHistoryUnlimitedInteger(value, DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS)
 );
 
+const normalizeScraperViewHistoryBoundedNumber = (
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
+  const parsed = parseScraperViewHistoryNumericSetting(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(maximum, Math.max(minimum, parsed));
+};
+
+export const normalizeScraperViewHistoryVisibilityPercent = (value: unknown): number => (
+  normalizeScraperViewHistoryBoundedNumber(
+    value,
+    DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT,
+    1,
+    100,
+  )
+);
+
+export const normalizeScraperViewHistoryDwellSeconds = (value: unknown): number => (
+  normalizeScraperViewHistoryBoundedNumber(
+    value,
+    DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS,
+    0.1,
+    60,
+  )
+);
+
 export const normalizeScraperViewHistorySettings = (
   settings: Record<string, unknown> | null | undefined,
 ): ScraperViewHistorySettings => ({
@@ -1025,6 +1061,12 @@ export const normalizeScraperViewHistorySettings = (
   ),
   scraperViewHistoryReadRetentionDays: normalizeScraperViewHistoryReadRetentionDays(
     settings?.scraperViewHistoryReadRetentionDays,
+  ),
+  scraperViewHistoryVisibilityPercent: normalizeScraperViewHistoryVisibilityPercent(
+    settings?.scraperViewHistoryVisibilityPercent,
+  ),
+  scraperViewHistoryDwellSeconds: normalizeScraperViewHistoryDwellSeconds(
+    settings?.scraperViewHistoryDwellSeconds,
   ),
 });
 

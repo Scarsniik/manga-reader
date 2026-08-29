@@ -18,6 +18,12 @@ import {
   type ScraperCardPotentialMatchResult,
 } from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
 import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
+import ResultFilterToggle from '@/renderer/components/ResultFilterToggle/ResultFilterToggle';
+import {
+  buildSearchResultViewHistoryIdentity,
+  filterByScraperViewHistoryNewState,
+} from '@/renderer/utils/scraperViewHistory';
+import useFrozenScraperUnseenFilter from '@/renderer/hooks/useFrozenScraperUnseenFilter';
 
 type Props = {
   scraperId: string;
@@ -107,6 +113,16 @@ export default function ScraperSearchResultsSection({
   onOpenPotentialMatchInWorkspace,
 }: Props) {
   const {
+    active: showUnseenOnly,
+    recordsById: unseenFilterRecordsById,
+    newCardIds: unseenFilterNewCardIds,
+    setActive: setShowUnseenOnly,
+  } = useFrozenScraperUnseenFilter(
+    viewHistoryRecordsById,
+    newViewHistoryIds,
+    { resetKey: `${scraperId}\u0000${mode}\u0000${query}\u0000${searchPageIndex}` },
+  );
+  const {
     shouldHideBlacklistedCards,
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
@@ -133,7 +149,7 @@ export default function ScraperSearchResultsSection({
     ), 0)
   ), [resultsWithTagContext, tagBlacklistEntries]);
 
-  const displayedSearchResults = React.useMemo(() => {
+  const blacklistFilteredSearchResults = React.useMemo(() => {
     if (!shouldHideBlacklistedCards) {
       return resultsWithTagContext;
     }
@@ -142,6 +158,22 @@ export default function ScraperSearchResultsSection({
       getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length === 0
     ));
   }, [resultsWithTagContext, shouldHideBlacklistedCards, tagBlacklistEntries]);
+  const displayedSearchResults = React.useMemo(
+    () => filterByScraperViewHistoryNewState(
+      blacklistFilteredSearchResults,
+      (result) => [buildSearchResultViewHistoryIdentity(scraperId, result)],
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
+      showUnseenOnly,
+    ),
+    [
+      blacklistFilteredSearchResults,
+      scraperId,
+      showUnseenOnly,
+      unseenFilterNewCardIds,
+      unseenFilterRecordsById,
+    ],
+  );
 
   if (!visibleSearchResults.length && !backLabel) {
     return null;
@@ -209,6 +241,14 @@ export default function ScraperSearchResultsSection({
 
         <div className="scraper-browser__results-side">
           {headerAction}
+          <ResultFilterToggle
+            active={showUnseenOnly}
+            label="Non vus seulement"
+            inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+            activeTitle="Afficher aussi les cards déjà vues"
+            onChange={setShowUnseenOnly}
+            variant="result"
+          />
           <BlacklistedCardsDisplayToggle
             blacklistedCardCount={blacklistedSearchResultCount}
             hideBlacklistedCards={hideBlacklistedCards}
@@ -288,7 +328,9 @@ export default function ScraperSearchResultsSection({
         <div className="scraper-browser__message">
           {shouldHideBlacklistedCards && blacklistedSearchResultCount > 0
             ? 'Tous les resultats visibles sont masques par la blacklist.'
-            : 'Aucun resultat ne correspond aux filtres actifs.'}
+            : showUnseenOnly
+              ? 'Aucune card non vue ne correspond aux filtres actifs.'
+              : 'Aucun resultat ne correspond aux filtres actifs.'}
         </div>
       ) : null}
 

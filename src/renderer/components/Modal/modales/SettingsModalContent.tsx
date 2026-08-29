@@ -15,6 +15,8 @@ import {
   DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS,
   DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS,
   DEFAULT_SCRAPER_VIEW_HISTORY_SEEN_RETENTION_DAYS,
+  DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT,
+  DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS,
   normalizeScraperViewHistorySettings,
 } from '@/shared/scraper'
 import { normalizeMangaCorrespondenceSafetyParams } from '@/shared/mangaCorrespondenceSafetySettings'
@@ -389,6 +391,24 @@ export default function SettingsModalContent() {
           step: 1,
           placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_READ_RETENTION_DAYS),
         },
+        {
+          name: 'scraperViewHistoryVisibilityPercent',
+          label: 'Surface visible requise pour considérer une card comme vue (%)',
+          type: 'number',
+          min: 1,
+          max: 100,
+          step: 1,
+          placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_VISIBILITY_PERCENT),
+        },
+        {
+          name: 'scraperViewHistoryDwellSeconds',
+          label: 'Durée visible requise pour considérer une card comme vue (secondes)',
+          type: 'number',
+          min: 0.1,
+          max: 60,
+          step: 0.1,
+          placeholder: String(DEFAULT_SCRAPER_VIEW_HISTORY_DWELL_SECONDS),
+        },
       ],
     },
     {
@@ -533,6 +553,8 @@ export default function SettingsModalContent() {
         'scraperViewHistoryMaxRecords',
         'scraperViewHistorySeenRetentionDays',
         'scraperViewHistoryReadRetentionDays',
+        'scraperViewHistoryVisibilityPercent',
+        'scraperViewHistoryDwellSeconds',
       ]),
     },
     {

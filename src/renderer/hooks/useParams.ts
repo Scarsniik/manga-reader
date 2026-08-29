@@ -109,6 +109,8 @@ export type AppParams = {
     scraperViewHistoryMaxRecords?: number;
     scraperViewHistorySeenRetentionDays?: number;
     scraperViewHistoryReadRetentionDays?: number;
+    scraperViewHistoryVisibilityPercent?: number;
+    scraperViewHistoryDwellSeconds?: number;
     backgroundSearchStorageMode?: 'memory' | 'temporaryFile';
     backgroundSearchTemporaryRetentionHours?: number;
     backgroundSearchMaxConcurrent?: number;

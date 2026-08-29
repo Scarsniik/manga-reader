@@ -29,6 +29,12 @@ import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
+import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
+import {
+  buildSearchResultViewHistoryIdentity,
+  filterByScraperViewHistoryNewState,
+} from "@/renderer/utils/scraperViewHistory";
+import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
 type Props = {
   title: string;
@@ -152,6 +158,16 @@ export default function ScraperAuthorCombinedResults({
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
   const {
+    active: showUnseenOnly,
+    recordsById: unseenFilterRecordsById,
+    newCardIds: unseenFilterNewCardIds,
+    setActive: setShowUnseenOnly,
+  } = useFrozenScraperUnseenFilter(
+    viewHistoryRecordsById,
+    newViewHistoryIds,
+    { resetKey: `${title}\u0000${multiSearchQuery}` },
+  );
+  const {
     shouldHideBlacklistedCards,
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
@@ -160,13 +176,30 @@ export default function ScraperAuthorCombinedResults({
     () => applyManualMultiSearchSplits(displayedResults, splitResultIds),
     [displayedResults, splitResultIds],
   );
-  const visibleDisplayedResults = React.useMemo(
+  const blacklistFilteredResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
       manuallySplitResults,
       tagBlacklistByScraper,
       shouldHideBlacklistedCards,
     ),
     [manuallySplitResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
+  );
+  const visibleDisplayedResults = React.useMemo(
+    () => filterByScraperViewHistoryNewState(
+      blacklistFilteredResults,
+      (result) => result.sources.map((source) => (
+        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
+      )),
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
+      showUnseenOnly,
+    ),
+    [
+      blacklistFilteredResults,
+      showUnseenOnly,
+      unseenFilterNewCardIds,
+      unseenFilterRecordsById,
+    ],
   );
   const blacklistedResultCount = React.useMemo(
     () => countBlacklistedMultiSearchResults(manuallySplitResults, tagBlacklistByScraper),
@@ -306,6 +339,14 @@ export default function ScraperAuthorCombinedResults({
                     selectedStatuses={readingStatusFilters}
                     onToggleStatus={onToggleReadingStatus}
                   />
+                  <ResultFilterToggle
+                    active={showUnseenOnly}
+                    label="Non vus seulement"
+                    inactiveTitle="Afficher les cards non vues au moment d'activer ce filtre"
+                    activeTitle="Afficher aussi les cards déjà vues"
+                    onChange={setShowUnseenOnly}
+                    variant="result"
+                  />
                 </div>
               </div>
             </div>
@@ -347,7 +388,11 @@ export default function ScraperAuthorCombinedResults({
             ))}
           </div>
           {!visibleDisplayedResults.length ? (
-            <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
+            <div className="scraper-browser__message">
+              {showUnseenOnly
+                ? "Aucune card non vue ne correspond aux filtres actifs."
+                : "Aucun resultat ne correspond aux filtres actifs."}
+            </div>
           ) : null}
         </section>
       ) : loading ? (
