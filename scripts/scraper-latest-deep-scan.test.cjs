@@ -54,6 +54,7 @@ const scraper = {
     sourceLanguages: ["en"],
     contentTypes: ["Manga"],
     latest: { enabled: true, module: "homepage" },
+    originalSourceKeyword: "Original",
   },
   features: [{
     kind: "homepage",
@@ -66,13 +67,16 @@ const scraper = {
       resultItemSelector: ".card",
       titleSelector: ".title",
       detailUrlSelector: ".title@href",
+      sourceUrlSelector: ".source@href",
       languageDetection: { detectFromTitle: false },
     },
   }],
 };
 
-const buildCardHtml = (slug, title) => (
-  `<article class="card"><a class="title" href="/details/${slug}">${title}</a></article>`
+const buildCardHtml = (slug, title, sourceName) => (
+  `<article class="card"><a class="title" href="/details/${slug}">${title}</a>`
+  + (sourceName ? `<a class="source" href="/sources/${sourceName.toLowerCase()}">${sourceName}</a>` : "")
+  + "</article>"
 );
 
 const buildHistoryId = (slug, title) => buildScraperViewHistoryCardId(
@@ -133,6 +137,8 @@ const runDeepScan = async ({
   checkpoint = buildCheckpoint(),
   initialRuns,
   mode = "foreground",
+  originalOnly = false,
+  searchMode = "deep",
 }) => {
   const requestedPages = [];
   global.window = {
@@ -165,13 +171,40 @@ const runDeepScan = async ({
   };
 
   const result = await runScraperLatestSearch(
-    buildInput(resultLimit),
+    { ...buildInput(resultLimit), originalOnly, searchMode },
     new AbortController().signal,
     async () => {},
     { mode, initialRuns },
   );
   return { requestedPages, run: result.runs[0] };
 };
+
+test("original-only latest scans keep loading pages until the requested quota is filled", async () => {
+  const buildCards = (prefix, count, sourceName) => Array.from(
+    { length: count },
+    (_value, index) => buildCardHtml(
+      `${prefix}-${index + 1}`,
+      `${prefix} card ${index + 1}`,
+      sourceName,
+    ),
+  ).join("");
+  const { requestedPages, run } = await runDeepScan({
+    resultLimit: 60,
+    checkpoint: null,
+    originalOnly: true,
+    searchMode: "quick",
+    pages: new Map([
+      [1, buildCards("Derived", 20, "Existing series")],
+      [2, buildCards("Original A", 40, "Original")],
+      [3, buildCards("Original B", 20, "Original work")],
+    ]),
+  });
+
+  assert.deepEqual(requestedPages, [1, 2, 3]);
+  assert.equal(run.results.length, 60);
+  assert.ok(run.results.every((source) => source.result.title.startsWith("Original")));
+  assert.equal(run.excludedByOriginalCount, 20);
+});
 
 for (const mode of ["foreground", "background"]) {
   test(`deep ${mode} scans recent pages before resuming its checkpoint`, async () => {

@@ -144,6 +144,7 @@ export type MultiSearchBackgroundInput = {
   paceMode: "fast" | "careful";
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
+  originalOnly?: boolean;
   viewMode: "merged" | "byScraper";
   selectedLanguageCodes?: string[];
   selectedContentTypes?: string[];
@@ -326,6 +327,7 @@ export type ListingBackgroundInput = {
   }>>;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
+  originalOnly?: boolean;
   selectedFavoriteIds?: string[];
   selectedScraperIds?: string[];
   selectedTagFavoriteIds?: string[];

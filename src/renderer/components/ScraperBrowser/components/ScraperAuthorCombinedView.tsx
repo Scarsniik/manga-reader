@@ -36,6 +36,7 @@ import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "@/renderer/components/ScraperAuthorFavorites/style.scss";
 import useParams from "@/renderer/hooks/useParams";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
 
 type Props = {
   scraper: ScraperRecord;
@@ -102,7 +103,8 @@ export default function ScraperAuthorCombinedView({
   onSwitchToPagedView,
   onOpenSourceDetails,
 }: Props) {
-  const { params } = useParams();
+  const { params, setParams } = useParams();
+  const searchOriginalOnly = params?.scraperAuthorOriginalOnly === true;
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
@@ -131,6 +133,7 @@ export default function ScraperAuthorCombinedView({
       initialPageCount,
       cacheResults: false,
       scrapeDetailsWithCards,
+      originalOnly: searchOriginalOnly,
     },
   );
   const loadedSources = useMemo(() => flattenMultiSearchSources(runs), [runs]);
@@ -258,13 +261,21 @@ export default function ScraperAuthorCombinedView({
       sourceSectionTitle="Page auteur"
       loadingMessage="Chargement de la vue auteur combinee..."
       viewModeAction={(
-        <button
-          type="button"
-          className="scraper-author-favorites-view__clear"
-          onClick={onSwitchToPagedView}
-        >
-          Vue par pages
-        </button>
+        <>
+          <OriginalWorksFilterToggle
+            active={searchOriginalOnly}
+            onChange={(value) => setParams({ scraperAuthorOriginalOnly: value }, { remount: false })}
+            label="Originaux uniquement"
+            title="Recharger les pages auteur en excluant les œuvres dérivées avant leur collecte"
+          />
+          <button
+            type="button"
+            className="scraper-author-favorites-view__clear"
+            onClick={onSwitchToPagedView}
+          >
+            Vue par pages
+          </button>
+        </>
       )}
       favoriteAction={favoriteAction}
       onReload={() => void start()}

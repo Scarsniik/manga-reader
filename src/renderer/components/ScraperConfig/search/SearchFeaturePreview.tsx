@@ -90,6 +90,11 @@ export default function SearchFeaturePreview({
                     Langue <LanguageFlags languageCodes={result.languageCodes} />
                   </div>
                 ) : null}
+                {result.sourceNames?.length ? (
+                  <div className="scraper-fake-search-card__meta">
+                    Source : {result.sourceNames.join(', ')}
+                  </div>
+                ) : null}
                 {result.detailUrl ? (
                   <div className="scraper-fake-search-card__meta">Lien de fiche detecte</div>
                 ) : (

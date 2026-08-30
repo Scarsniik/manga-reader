@@ -143,6 +143,12 @@ export const SCRAPING_FIELDS: Field[] = [
     type: 'text',
     placeholder: 'Optionnel : .next a@href',
   },
+  {
+    name: 'sourceUrlSelector',
+    label: 'Selecteur du lien source',
+    type: 'text',
+    placeholder: 'Optionnel : .source a@href',
+  },
 ];
 
 export const SCRAPING_FIELD_SELECTOR_NAMES = LISTING_SCRAPING_FIELD_SELECTOR_NAMES;
@@ -163,6 +169,7 @@ export const DEFAULT_AUTHOR_CONFIG: AuthorFeatureFormState = {
   titleSelector: { kind: 'css', value: '' },
   detailUrlSelector: undefined,
   authorUrlSelector: undefined,
+  sourceUrlSelector: undefined,
   thumbnailSelector: undefined,
   summarySelector: undefined,
   pageCountSelector: undefined,

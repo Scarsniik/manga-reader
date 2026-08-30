@@ -99,7 +99,8 @@
   gap: 8px;
 }
 
-.scraper-card__metadata span {
+.scraper-card__metadata span,
+.scraper-card__metadata-link {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
@@ -110,6 +111,25 @@
   color: #d8d8d8;
   font-size: 12px;
   font-weight: 700;
+}
+
+.scraper-card__metadata-link {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.scraper-card__metadata-link:hover {
+  border-color: rgba(93, 156, 255, 0.45);
+  background: rgba(93, 156, 255, 0.12);
+  color: #eef6ff;
+}
+
+.scraper-card__metadata-link:focus-visible {
+  outline: none;
+  border-color: #5d9cff;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.18);
 }
 
 .scraper-card__actions {
@@ -354,6 +374,36 @@ button.scraper-card__chip {
   background: rgba(95, 173, 122, 0.14);
   border: 1px solid rgba(95, 173, 122, 0.24);
   color: #8ee0a3;
+}
+
+.scraper-card__chip.is-source {
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(95, 173, 122, 0.1);
+  border: 1px solid rgba(95, 173, 122, 0.2);
+  color: #87c997;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.scraper-card__chip.is-source.is-clickable:hover {
+  border-color: rgba(95, 173, 122, 0.48);
+  background: rgba(95, 173, 122, 0.16);
+  color: #a9e7b8;
+  transform: translateY(-1px);
+}
+
+.scraper-card__chip.is-source.is-clickable:focus-visible {
+  outline: none;
+  border-color: #5fad7a;
+  box-shadow: 0 0 0 3px rgba(95, 173, 122, 0.16);
+}
+
+.scraper-card__chip.is-favorite-author {
+  border-color: rgba(245, 191, 76, 0.5);
+  background: rgba(245, 191, 76, 0.14);
+  color: #f4cf79;
 }
 
 .scraper-card__metadata span.is-favorite-tag,

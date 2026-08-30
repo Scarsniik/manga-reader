@@ -50,6 +50,7 @@ export type FakeDetailsPreview = {
   description?: string;
   authors?: string;
   tags?: string;
+  sources?: string;
   status?: string;
   pageCount?: string;
   languageCodes: string[];
@@ -142,6 +143,18 @@ export const SELECTOR_FIELDS: Field[] = [
     placeholder: 'Optionnel : .tagcloud a@href ou .tagcloud a@data-id',
   },
   {
+    name: 'sourcesSelector',
+    label: 'Selecteur du nom de source',
+    type: 'text',
+    placeholder: 'Optionnel : .meta .source a',
+  },
+  {
+    name: 'sourceUrlSelector',
+    label: 'Selecteur de source (nom et lien)',
+    type: 'text',
+    placeholder: 'Optionnel : .meta .source a@href',
+  },
+  {
     name: 'statusSelector',
     label: 'Selecteur du statut',
     type: 'text',
@@ -203,6 +216,8 @@ export const FIELD_SELECTOR_FIELD_NAMES = [
   'authorUrlSelector',
   'tagsSelector',
   'tagUrlSelector',
+  'sourcesSelector',
+  'sourceUrlSelector',
   'statusSelector',
   'pageCountSelector',
   'thumbnailsSelector',
@@ -223,6 +238,7 @@ export const DERIVED_VALUE_FIELD_OPTIONS = [
   { value: 'description', label: 'Description' },
   { value: 'authors', label: 'Auteurs' },
   { value: 'tags', label: 'Tags' },
+  { value: 'sources', label: 'Source' },
   { value: 'status', label: 'Statut' },
   { value: 'pageCount', label: 'Nombre de pages' },
 ] as const;
@@ -239,6 +255,8 @@ export const DEFAULT_DETAILS_CONFIG: ScraperDetailsFeatureConfig = {
   authorUrlSelector: undefined,
   tagsSelector: undefined,
   tagUrlSelector: undefined,
+  sourcesSelector: undefined,
+  sourceUrlSelector: undefined,
   statusSelector: undefined,
   pageCountSelector: undefined,
   thumbnailsMode: 'image',
@@ -258,11 +276,11 @@ const createDraftId = (): string => `derived-${Date.now()}-${Math.random().toStr
 
 export type DetailsFieldKey = Extract<
   ScraperFeatureValidationCheck['key'],
-  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'status' | 'pageCount'
+  'title' | 'cover' | 'description' | 'authors' | 'tags' | 'sources' | 'status' | 'pageCount'
 >;
 
 export const isFieldKey = (value: unknown): value is DetailsFieldKey => (
-  ['title', 'cover', 'description', 'authors', 'tags', 'status', 'pageCount'].includes(String(value))
+  ['title', 'cover', 'description', 'authors', 'tags', 'sources', 'status', 'pageCount'].includes(String(value))
 );
 
 export const createDerivedValueFormItem = (
@@ -327,6 +345,8 @@ export const buildDetailsConfig = (values: Partial<DetailsFormState>): ScraperDe
   authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
   tagsSelector: trimOptionalFieldSelector(values.tagsSelector),
   tagUrlSelector: trimOptionalFieldSelector(values.tagUrlSelector),
+  sourcesSelector: trimOptionalFieldSelector(values.sourcesSelector),
+  sourceUrlSelector: trimOptionalFieldSelector(values.sourceUrlSelector),
   statusSelector: trimOptionalFieldSelector(values.statusSelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
   thumbnailsMode: values.thumbnailsMode === 'css_sprite' ? 'css_sprite' : 'image',
@@ -358,6 +378,8 @@ export const getInitialConfig = (feature: ScraperFeatureDefinition): ScraperDeta
     authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalFieldSelector(raw.tagsSelector),
     tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
+    sourcesSelector: trimOptionalFieldSelector(raw.sourcesSelector),
+    sourceUrlSelector: trimOptionalFieldSelector(raw.sourceUrlSelector),
     statusSelector: trimOptionalFieldSelector(raw.statusSelector),
     pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
     thumbnailsMode: raw.thumbnailsMode === 'css_sprite' ? 'css_sprite' : 'image',
@@ -426,6 +448,7 @@ export const buildValidationPresentation = (
           treatAsUrl: check.key === 'cover'
             || check.key === 'authorUrl'
             || check.key === 'tagUrl'
+            || check.key === 'sourceUrl'
             || check.key === 'thumbnails'
             || check.key === 'thumbnailsNextPage',
         })
@@ -515,6 +538,7 @@ export const buildPreviewFromValidation = (
     description: getSample('description'),
     authors: getSample('authors'),
     tags: getSample('tags'),
+    sources: getSample('sources'),
     status: getSample('status'),
     pageCount: getSample('pageCount'),
     languageCodes: validationResult.checks.find((check) => check.key === 'language')?.samples ?? [],

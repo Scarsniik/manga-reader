@@ -678,7 +678,9 @@ const defaultSettings = {
     multiSearchPaceMode: DEFAULT_MULTI_SEARCH_PACE_MODE,
     multiSearchViewMode: DEFAULT_MULTI_SEARCH_VIEW_MODE,
     multiSearchScrapeDetailsWithCards: false,
+    multiSearchOriginalOnly: false,
     scraperAuthorCombinedView: false,
+    scraperAuthorOriginalOnly: false,
     scraperTagCombinedView: false,
     scraperAuthorFavoriteShowUnseenFirst: false,
     scraperTagFavoriteShowUnseenFirst: true,
@@ -703,6 +705,8 @@ const defaultSettings = {
     scraperLatestAuthorCacheMaxAgeHours: DEFAULT_SCRAPER_LATEST_AUTHOR_CACHE_MAX_AGE_HOURS,
     scraperLatestIncludedLanguageCodes: [] as string[],
     scraperLatestAuthorIncludedLanguageCodes: [] as string[],
+    scraperLatestOriginalOnly: false,
+    scraperLatestAuthorOriginalOnly: false,
     scraperLatestIncludedScraperIds: [] as string[],
     scraperLatestIncludedAuthorFavoriteIds: [] as string[],
     scraperLatestIncludedTagFavoriteIds: [] as string[],
@@ -912,6 +916,18 @@ const normalizeSettings = (value: unknown) => {
     merged.multiSearchScrapeDetailsWithCards = typeof merged.multiSearchScrapeDetailsWithCards === "boolean"
         ? merged.multiSearchScrapeDetailsWithCards
         : defaultSettings.multiSearchScrapeDetailsWithCards;
+    merged.multiSearchOriginalOnly = typeof merged.multiSearchOriginalOnly === "boolean"
+        ? merged.multiSearchOriginalOnly
+        : defaultSettings.multiSearchOriginalOnly;
+    merged.scraperLatestOriginalOnly = typeof merged.scraperLatestOriginalOnly === "boolean"
+        ? merged.scraperLatestOriginalOnly
+        : defaultSettings.scraperLatestOriginalOnly;
+    merged.scraperLatestAuthorOriginalOnly = typeof merged.scraperLatestAuthorOriginalOnly === "boolean"
+        ? merged.scraperLatestAuthorOriginalOnly
+        : defaultSettings.scraperLatestAuthorOriginalOnly;
+    merged.scraperAuthorOriginalOnly = typeof merged.scraperAuthorOriginalOnly === "boolean"
+        ? merged.scraperAuthorOriginalOnly
+        : defaultSettings.scraperAuthorOriginalOnly;
     merged.scraperAuthorCombinedView = typeof merged.scraperAuthorCombinedView === "boolean"
         ? merged.scraperAuthorCombinedView
         : defaultSettings.scraperAuthorCombinedView;
@@ -1287,6 +1303,18 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.multiSearchScrapeDetailsWithCards = typeof nextSettings.multiSearchScrapeDetailsWithCards === "boolean"
             ? nextSettings.multiSearchScrapeDetailsWithCards
             : defaultSettings.multiSearchScrapeDetailsWithCards;
+        nextSettings.multiSearchOriginalOnly = typeof nextSettings.multiSearchOriginalOnly === "boolean"
+            ? nextSettings.multiSearchOriginalOnly
+            : defaultSettings.multiSearchOriginalOnly;
+        nextSettings.scraperLatestOriginalOnly = typeof nextSettings.scraperLatestOriginalOnly === "boolean"
+            ? nextSettings.scraperLatestOriginalOnly
+            : defaultSettings.scraperLatestOriginalOnly;
+        nextSettings.scraperLatestAuthorOriginalOnly = typeof nextSettings.scraperLatestAuthorOriginalOnly === "boolean"
+            ? nextSettings.scraperLatestAuthorOriginalOnly
+            : defaultSettings.scraperLatestAuthorOriginalOnly;
+        nextSettings.scraperAuthorOriginalOnly = typeof nextSettings.scraperAuthorOriginalOnly === "boolean"
+            ? nextSettings.scraperAuthorOriginalOnly
+            : defaultSettings.scraperAuthorOriginalOnly;
         nextSettings.scraperAuthorCombinedView = typeof nextSettings.scraperAuthorCombinedView === "boolean"
             ? nextSettings.scraperAuthorCombinedView
             : defaultSettings.scraperAuthorCombinedView;

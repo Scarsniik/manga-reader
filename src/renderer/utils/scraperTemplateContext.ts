@@ -13,6 +13,7 @@ type DetailsTemplateContextInput = {
   description?: string;
   authors: string[];
   tags: string[];
+  sources: string[];
   mangaStatus?: string;
   pageCount?: string;
   derivedValues: Record<string, string>;
@@ -37,6 +38,7 @@ export const buildScraperTemplateContextFromDetails = (
   description: details.description,
   authors: details.authors.length ? details.authors.join(', ') : undefined,
   tags: details.tags.length ? details.tags.join(', ') : undefined,
+  sources: details.sources.length ? details.sources.join(', ') : undefined,
   status: details.mangaStatus,
   pageCount: details.pageCount,
   chapter: chapter?.url || undefined,
@@ -70,6 +72,7 @@ export const buildScraperTemplateContextFromValidation = (
     description: checksByKey.get('description'),
     authors: checksByKey.get('authors'),
     tags: checksByKey.get('tags'),
+    sources: checksByKey.get('sources'),
     status: checksByKey.get('status'),
     pageCount: checksByKey.get('pageCount'),
     chapter: options?.chapterUrl || undefined,

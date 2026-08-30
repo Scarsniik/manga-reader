@@ -133,6 +133,7 @@ const runMultiSearchEngineCore = async (
               paceConfig: pace,
               includedLanguageCodes: input.includedLanguageCodes,
               scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+              originalOnly: input.originalOnly,
               detailsCache,
               fetchDocument: executionContext.fetchDocument,
             });
@@ -169,6 +170,7 @@ const runMultiSearchEngineCore = async (
                   paceConfig: pace,
                   includedLanguageCodes: input.includedLanguageCodes,
                   scrapeDetailsWithCards: input.scrapeDetailsWithCards,
+                  originalOnly: input.originalOnly,
                   detailsCache,
                   fetchDocument: executionContext.fetchDocument,
                 }),

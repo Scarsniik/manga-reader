@@ -72,6 +72,10 @@ export const mergeScraperCardWithDetails = (
     { tags: item.tags, tagUrls: item.tagUrls },
     { tags: details.tags, tagUrls: details.tagUrls },
   );
+  const sourceValues = mergeScraperTagValuePairs(
+    { tags: item.sourceNames, tagUrls: item.sourceUrls },
+    { tags: details.sources, tagUrls: details.sourceUrls },
+  );
   const thumbnailCandidates = uniqueTextValues([
     ...(item.thumbnailCandidates ?? []),
     item.thumbnailUrl,
@@ -92,6 +96,8 @@ export const mergeScraperCardWithDetails = (
     authorNames: authorNames.length ? authorNames : item.authorNames,
     tags: tagValues.tags.length ? tagValues.tags : item.tags,
     tagUrls: tagValues.tagUrls.length ? tagValues.tagUrls : item.tagUrls,
+    sourceNames: sourceValues.tags.length ? sourceValues.tags : item.sourceNames,
+    sourceUrls: sourceValues.tagUrls.length ? sourceValues.tagUrls : item.sourceUrls,
     thumbnailUrl: thumbnailCandidates[0],
     thumbnailCandidates: thumbnailCandidates.length > 1 ? thumbnailCandidates : undefined,
     summary: optionalText(item.summary) || optionalText(details.description),

@@ -199,8 +199,8 @@ export default function ScraperTagFavoriteResults({
     () => sortByScraperViewHistoryNewState(
       manuallySplitMergedResults,
       (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-      viewHistoryRecordsById,
-      newViewHistoryIds,
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
       showUnseenFirst,
     ),
     [
@@ -405,11 +405,7 @@ export default function ScraperTagFavoriteResults({
         ) : loading ? (
           <div className="scraper-browser__message">Chargement du tag combine...</div>
         ) : totalResultCount > 0 ? (
-          <div className="scraper-browser__message">
-            {showUnseenOnly
-              ? "Aucune card non vue ne correspond aux filtres actifs."
-              : "Aucun resultat ne correspond aux filtres actifs."}
-          </div>
+          <div className="scraper-browser__message">Aucun resultat ne correspond aux filtres actifs.</div>
         ) : (
           <div className="scraper-browser__message">Aucun resultat sur cette page.</div>
         )}

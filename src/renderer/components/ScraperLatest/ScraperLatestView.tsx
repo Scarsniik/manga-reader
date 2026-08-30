@@ -68,6 +68,8 @@ import {
   canContinueScraperLatestSearch,
   resolveScraperLatestSearchMode,
 } from "@/renderer/components/ScraperLatest/scraperLatestContinuation";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import CompactFilterGroup from "@/renderer/components/CompactFilterGroup/CompactFilterGroup";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -361,6 +363,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     [attachedInput?.includedLanguageCodes, attachedSearch.job?.metadata.kind, params?.scraperLatestAuthorIncludedLanguageCodes],
   );
   const authorIncludedLanguagesKey = authorIncludedLanguageCodes.join("|");
+  const authorSearchOriginalOnly = attachedSearch.job?.metadata.kind === "latestAuthors"
+    ? attachedInput?.originalOnly === true
+    : params?.scraperLatestAuthorOriginalOnly === true;
   const defaultScraperResultLimit = getScraperResultLimit(
     params?.scraperLatestScraperResultLimit ?? params?.scraperLatestResultLimit,
   );
@@ -397,6 +402,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     [attachedInput?.includedLanguageCodes, attachedSearch.job?.metadata.kind, params?.scraperLatestIncludedLanguageCodes],
   );
   const scraperIncludedLanguagesKey = scraperIncludedLanguageCodes.join("|");
+  const scraperSearchOriginalOnly = attachedSearch.job?.metadata.kind === "latestSources"
+    ? attachedInput?.originalOnly === true
+    : params?.scraperLatestOriginalOnly === true;
   const enabledLatestScrapers = React.useMemo(
     () => getEnabledLatestScrapers(scrapers),
     [scrapers],
@@ -469,6 +477,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     authorFavoriteCacheMaxAgeHours: params?.scraperLatestAuthorCacheMaxAgeHours,
     searchMode: scraperSearchMode,
     quickConsecutiveSeenStopThreshold: scraperQuickConsecutiveSeenStopThreshold,
+    originalOnly: authorSearchOriginalOnly,
   });
   const scraperRuns = useScraperLatestRuns();
   const authorSources = React.useMemo(
@@ -635,6 +644,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     params?.scraperPerformanceReportsEnabled,
     params?.scraperLatestPerformanceReportsEnabled,
     params?.scraperScrapeDetailsWithCards,
+    scraperSearchOriginalOnly,
     scraperLatestConcurrency,
   ]);
 
@@ -681,6 +691,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         includedScraperIds: scraperIncludedScraperIds,
         tagFavorites: scraperIncludedTagFavorites,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        originalOnly: scraperSearchOriginalOnly,
         excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
         tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
         performanceReportsEnabled: params?.scraperPerformanceReportsEnabled === true
@@ -700,6 +711,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperResultLimitMode,
+    scraperSearchOriginalOnly,
     scraperRuns.start,
     shouldHideBlacklistedLatestCards,
     scrapers,
@@ -775,6 +787,9 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           (run.excludedByBlacklistedTagCount ?? 0) > 0
             ? `${run.excludedByBlacklistedTagCount} ignorée(s) par blacklist`
             : "",
+          (run.excludedByOriginalCount ?? 0) > 0
+            ? `${run.excludedByOriginalCount} œuvre(s) dérivée(s) ignorée(s)`
+            : "",
           `${run.loadedPages} page(s) chargée(s)`,
         ].filter(Boolean).join(" - "),
         error: run.error,
@@ -813,6 +828,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             run.includedByLanguageCount > 0 ? `${run.includedByLanguageCount} acceptee(s) par langue` : "",
             run.excludedByLanguageCount > 0 ? `${run.excludedByLanguageCount} ignoree(s) par langue` : "",
             run.excludedByBlacklistedTagCount > 0 ? `${run.excludedByBlacklistedTagCount} ignoree(s) par blacklist` : "",
+            run.excludedByOriginalCount > 0 ? `${run.excludedByOriginalCount} derivee(s) ignoree(s)` : "",
             run.languageRejectLimitReached ? "arret langue" : "",
             run.safetyLimitReached ? "garde-fou atteint" : "",
             run.checkpointUsed ? "checkpoint utilise" : "",
@@ -858,6 +874,21 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     }, {
       remount: false,
     });
+    lastStartedScraperRefreshKeyRef.current = 0;
+    setScraperRefreshKey(0);
+    setScraperSearchMode("quick");
+    scraperRuns.reset();
+  }, [scraperRuns, setParams]);
+
+  const handleAuthorSearchOriginalOnlyChange = React.useCallback((value: boolean) => {
+    setParams({ scraperLatestAuthorOriginalOnly: value }, { remount: false });
+    lastStartedAuthorRefreshKeyRef.current = 0;
+    setAuthorRefreshKey(0);
+    authorRuns.reset();
+  }, [authorRuns.reset, setParams]);
+
+  const handleScraperSearchOriginalOnlyChange = React.useCallback((value: boolean) => {
+    setParams({ scraperLatestOriginalOnly: value }, { remount: false });
     lastStartedScraperRefreshKeyRef.current = 0;
     setScraperRefreshKey(0);
     setScraperSearchMode("quick");
@@ -916,13 +947,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             ? " Auteurs favoris inclus : tous."
             : ` Auteurs favoris inclus : ${includedAuthorLabel}.`;
 
-    return `${baseSummary}${authorFilterSummary} Langues incluses : ${includedLanguageLabel}.`;
+    return `${baseSummary}${authorFilterSummary} Langues incluses : ${includedLanguageLabel}.`
+      + (authorSearchOriginalOnly ? " Recherche limitée aux œuvres originales." : "");
   }, [
     authorFavorites,
     authorFavoritesLoaded,
     authorIncludesNoFavorites,
     authorIncludedFavoriteIds,
     authorIncludedLanguageCodes,
+    authorSearchOriginalOnly,
     authorPageCount,
     scraperLatestConcurrency,
   ]);
@@ -993,11 +1026,14 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     const languageRejectSummary = scraperLanguageRejectLimit > 0
       ? ` Arret d'une source apres ${scraperLanguageRejectLimit} resultat(s) refuses par langue.`
       : " Arret par refus de langue desactive.";
+    const originalFilterSummary = scraperSearchOriginalOnly
+      ? " Les œuvres dérivées sont exclues avant le calcul du quota."
+      : "";
     if (!scraperIncludedLanguageCodes.length) {
-      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
+      return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary}${originalFilterSummary}${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
     }
 
-    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
+    return `${baseSummary}${concurrencySummary}${scraperFilterSummary}${tagFavoriteFilterSummary} Langues incluses : ${includedLanguageLabel}.${originalFilterSummary}${deepPageLimitSummary}${continuousPageSafetyLimitSummary}${quickSeenStopSummary}${languageRejectSummary}`;
   }, [
     enabledLatestScrapers,
     scraperIncludesNoScrapers,
@@ -1012,6 +1048,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperResultLimitMode,
+    scraperSearchOriginalOnly,
     tagResultLimit,
     tagFavorites,
     tagFavoritesLoaded,
@@ -1092,6 +1129,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         concurrency: scraperLatestConcurrency,
         includedLanguageCodes: authorIncludedLanguageCodes,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        originalOnly: authorSearchOriginalOnly,
         useAuthorFavoriteCache: params?.scraperLatestAuthorsUseCache !== false,
         authorFavoriteCacheMaxAgeHours: params?.scraperLatestAuthorCacheMaxAgeHours,
         selectedFavoriteIds: authorIncludedFavorites.map((favorite) => favorite.id),
@@ -1111,6 +1149,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         concurrency: scraperLatestConcurrency,
         includedLanguageCodes: scraperIncludedLanguageCodes,
         scrapeDetailsWithCards: params?.scraperScrapeDetailsWithCards === true,
+        originalOnly: scraperSearchOriginalOnly,
         excludeBlacklistedTagCards: shouldHideBlacklistedLatestCards,
         tagBlacklistByScraper: params?.scraperBlacklistedTagsByScraper,
         selectedScraperIds: scraperIncludedScraperIds,
@@ -1130,6 +1169,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
   }, [
     authorIncludedFavorites,
     authorIncludedLanguageCodes,
+    authorSearchOriginalOnly,
     authorPageCount,
     includedLatestScrapers,
     params,
@@ -1144,6 +1184,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     scraperQuickConsecutiveSeenStopThreshold,
     scraperResultLimit,
     scraperResultLimitMode,
+    scraperSearchOriginalOnly,
     scrapersById,
     shouldHideBlacklistedLatestCards,
     tagResultLimit,
@@ -1392,6 +1433,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             value={authorIncludedLanguageCodes}
             onChange={attachedSearch.attached ? () => {} : handleAuthorIncludedLanguageCodesChange}
           />
+          <CompactFilterGroup ariaLabel="Autres filtres de recherche">
+            <OriginalWorksFilterToggle
+              active={authorSearchOriginalOnly}
+              disabled={attachedSearch.attached}
+              onChange={handleAuthorSearchOriginalOnlyChange}
+              label="Originaux uniquement"
+              title="Exclure les œuvres dérivées pendant le scan des auteurs favoris"
+            />
+          </CompactFilterGroup>
         </div>
       ) : null}
 
@@ -1411,6 +1461,15 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
             value={scraperIncludedLanguageCodes}
             onChange={attachedSearch.attached ? () => {} : handleScraperIncludedLanguageCodesChange}
           />
+          <CompactFilterGroup ariaLabel="Autres filtres de recherche">
+            <OriginalWorksFilterToggle
+              active={scraperSearchOriginalOnly}
+              disabled={attachedSearch.attached}
+              onChange={handleScraperSearchOriginalOnlyChange}
+              label="Originaux uniquement"
+              title="Exclure les œuvres dérivées avant le calcul du quota de nouveautés"
+            />
+          </CompactFilterGroup>
         </div>
       ) : null}
 

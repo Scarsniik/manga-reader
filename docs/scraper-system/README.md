@@ -1,6 +1,6 @@
 # Systeme de scraper site/API
 
-Date : 2026-04-10
+Date : 2026-08-28
 
 Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`.
 
@@ -25,6 +25,7 @@ Ce dossier regroupe la documentation du theme `scraper` / `connecteur de source`
 - modeliser chaque fonctionnalite comme un bloc autonome
 - rendre un scraper configure directement utilisable dans l'application
 - centraliser aussi les regles de bookmarks dans la config globale du scraper
+- distinguer les oeuvres originales des doujin derives grace a la source facultative et au mot-cle global facultatif du scraper
 - pour un telechargement de chapitre, prioriser la couverture issue de `Fiche`, puis fallback sur l'image du chapitre si besoin
 
 ## Site de reference

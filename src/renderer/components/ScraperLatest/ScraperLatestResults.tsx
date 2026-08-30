@@ -32,6 +32,8 @@ import {
 import BlacklistedCardsDisplayToggle from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import ScraperLatestScanActions from "@/renderer/components/ScraperLatest/ScraperLatestScanActions";
 import ScraperLatestScanTools from "@/renderer/components/ScraperLatest/ScraperLatestScanTools";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
@@ -227,6 +229,7 @@ export default function ScraperLatestResults({
   const [mergeRefreshKey, setMergeRefreshKey] = React.useState(0);
   const [isStatusPanelOpen, setIsStatusPanelOpen] = React.useState(false);
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const [originalOnly, setOriginalOnly] = React.useState(false);
   const unseenFilterResetKey = `${title}\u0000${preserveStoredResults}`;
   const initialUnseenFilterResetKeyRef = React.useRef(unseenFilterResetKey);
   const {
@@ -259,9 +262,13 @@ export default function ScraperLatestResults({
     () => filterMultiSearchMergedResultsByLanguage(manuallySplitResults, languageFilterModes),
     [languageFilterModes, manuallySplitResults],
   );
+  const originalFilteredResults = React.useMemo(
+    () => filterMultiSearchMergedResultsByOriginal(languageFilteredResults, originalOnly),
+    [languageFilteredResults, originalOnly],
+  );
   const visibleResults = React.useMemo(
     () => filterByScraperViewHistoryNewState(
-      languageFilteredResults,
+      originalFilteredResults,
       (result) => result.sources.map((source) => (
         buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
       )),
@@ -270,7 +277,7 @@ export default function ScraperLatestResults({
       showUnseenOnly,
     ),
     [
-      languageFilteredResults,
+      originalFilteredResults,
       showUnseenOnly,
       unseenFilterNewCardIds,
       unseenFilterRecordsById,
@@ -292,6 +299,7 @@ export default function ScraperLatestResults({
   const blacklistedCardCount = Math.max(0, hiddenBlacklistedCardCount) + visibleBlacklistedResultCount;
   const mergedCardCount = manuallySplitResults.length;
   const languageHiddenCardCount = Math.max(0, mergedCardCount - languageFilteredResults.length);
+  const originalHiddenCardCount = Math.max(0, languageFilteredResults.length - originalFilteredResults.length);
   const visibleSourceCount = React.useMemo(
     () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
     [displayedResults],
@@ -426,6 +434,9 @@ export default function ScraperLatestResults({
                 : ""}
               {languageHiddenCardCount > 0
                 ? ` · ${languageHiddenCardCount} exclue(s) par le filtre de langue`
+                : ""}
+              {originalHiddenCardCount > 0
+                ? ` · ${originalHiddenCardCount} non originale(s) masquee(s)`
                 : ""}.
             </p>
           ) : (
@@ -434,6 +445,9 @@ export default function ScraperLatestResults({
               {showUnseenOnly ? " non vue(s)" : " visible(s)"}
               {shouldHideBlacklistedCards && blacklistedCardCount > 0
                 ? `, ${blacklistedCardCount} masquee(s)`
+                : ""}
+              {originalHiddenCardCount > 0
+                ? `, ${originalHiddenCardCount} non originale(s) masquee(s)`
                 : ""}.
             </p>
           )}
@@ -450,11 +464,17 @@ export default function ScraperLatestResults({
             />
           </div>
           <div className="multi-search__result-filter-stack">
-            <div className="multi-search__facet-filter-row">
+            <div className="multi-search__facet-filter-row scraper-latest-results__facet-filter-row">
               <MultiSearchLanguageFilterBar
                 languageCodes={resultLanguageCodes}
                 filterModes={languageFilterModes}
                 onToggleFilterMode={onToggleLanguageFilterMode}
+              />
+              <OriginalWorksFilterToggle
+                active={originalOnly}
+                onChange={setOriginalOnly}
+                label="Originaux"
+                variant="result"
               />
               <ResultFilterToggle
                 active={showUnseenOnly}
@@ -542,7 +562,7 @@ export default function ScraperLatestResults({
         <div className="multi-search__message is-info">
           {shouldHideBlacklistedCards && blacklistedCardCount > 0
             ? "Toutes les nouveautes visibles sont masquees par la blacklist."
-            : showUnseenOnly && languageFilteredResults.length > 0
+            : showUnseenOnly && originalFilteredResults.length > 0
               ? "Aucune card non vue ne correspond aux filtres actifs."
               : emptyLabel}
         </div>

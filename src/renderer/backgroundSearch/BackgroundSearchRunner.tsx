@@ -84,9 +84,13 @@ const getCompletedProgress = (result: BackgroundSearchExecutionResult): Backgrou
       totalUnits: result.runs.length,
       resultCount,
       excludedResultCount: result.runs.reduce(
-        (count, run) => count + ("excludedByBlacklistedTagCount" in run
-          ? run.excludedByBlacklistedTagCount ?? 0
-          : 0),
+        (count, run) => count
+          + ("excludedByBlacklistedTagCount" in run
+            ? run.excludedByBlacklistedTagCount ?? 0
+            : 0)
+          + ("excludedByOriginalCount" in run
+            ? run.excludedByOriginalCount ?? 0
+            : 0),
         0,
       ),
     };

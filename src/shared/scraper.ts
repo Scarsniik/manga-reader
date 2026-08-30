@@ -5,6 +5,7 @@ export type ScraperFeatureKind =
   | 'details'
   | 'author'
   | 'tag'
+  | 'source'
   | 'tagList'
   | 'chapters'
   | 'pages'
@@ -291,6 +292,7 @@ export interface ScraperGlobalConfig {
   defaultLanguage?: string;
   sourceLanguages: string[];
   contentTypes: string[];
+  originalSourceKeyword?: string;
   homeSearch: ScraperHomeSearchConfig;
   latest: ScraperLatestConfig;
   bookmark: ScraperBookmarkConfig;
@@ -323,6 +325,8 @@ export type ScraperFeatureValidationCheckKey =
   | 'authorUrl'
   | 'tags'
   | 'tagUrl'
+  | 'sources'
+  | 'sourceUrl'
   | 'status'
   | 'pageCount'
   | 'language'
@@ -400,6 +404,7 @@ export interface ScraperCardListConfig {
   titleSelector: ScraperFieldSelector;
   detailUrlSelector?: ScraperFieldSelector;
   authorUrlSelector?: ScraperFieldSelector;
+  sourceUrlSelector?: ScraperFieldSelector;
   thumbnailSelector?: ScraperFieldSelector;
   summarySelector?: ScraperFieldSelector;
   pageCountSelector?: ScraperFieldSelector;
@@ -432,6 +437,14 @@ export interface ScraperTagFeatureConfig extends ScraperCardListConfig {
   testUrl?: string;
   testValue?: string;
   tagNameSelector?: ScraperFieldSelector;
+}
+
+export interface ScraperSourceFeatureConfig extends ScraperCardListConfig {
+  urlStrategy: ScraperDetailsUrlStrategy;
+  urlTemplate?: string;
+  testUrl?: string;
+  testValue?: string;
+  sourceNameSelector?: ScraperFieldSelector;
 }
 
 export interface ScraperTagListFeatureConfig {
@@ -480,6 +493,8 @@ export interface ScraperSearchResultItem {
   authorUrl?: string;
   authorUrls?: string[];
   authorNames?: string[];
+  sourceNames?: string[];
+  sourceUrls?: string[];
   tags?: string[];
   tagUrls?: string[];
   thumbnailUrl?: string;
@@ -501,6 +516,8 @@ export interface ScraperDetailsFeatureConfig {
   authorUrlSelector?: ScraperFieldSelector;
   tagsSelector?: ScraperFieldSelector;
   tagUrlSelector?: ScraperFieldSelector;
+  sourcesSelector?: ScraperFieldSelector;
+  sourceUrlSelector?: ScraperFieldSelector;
   statusSelector?: ScraperFieldSelector;
   pageCountSelector?: ScraperFieldSelector;
   thumbnailsMode?: ScraperDetailsThumbnailsMode;
@@ -687,6 +704,8 @@ export interface ScraperBookmarkRecord {
   authors: string[];
   authorUrls?: string[];
   tags: string[];
+  sourceNames?: string[];
+  sourceUrls?: string[];
   mangaStatus?: string;
   pageCount?: string;
   languageCodes?: string[];
@@ -717,6 +736,7 @@ export type ScraperBookmarkFilterState = {
   maxPages: string;
   readingStatuses: ScraperBookmarkReadingStatus[];
   seriesFilterMode: ScraperBookmarkSeriesFilterMode;
+  originalOnly: boolean;
   sortBy: ScraperBookmarkSortKey;
 };
 
@@ -727,6 +747,7 @@ export const DEFAULT_SCRAPER_BOOKMARK_FILTERS: ScraperBookmarkFilterState = {
   maxPages: "",
   readingStatuses: [],
   seriesFilterMode: "default",
+  originalOnly: false,
   sortBy: "created-desc",
 };
 
@@ -894,6 +915,8 @@ export interface SaveScraperBookmarkRequest {
   authors?: string[];
   authorUrls?: string[];
   tags?: string[];
+  sourceNames?: string[];
+  sourceUrls?: string[];
   mangaStatus?: string;
   pageCount?: string;
   languageCodes?: string[];
@@ -1226,6 +1249,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     description: 'Definir comment ouvrir une page tag et extraire la liste de cards retournee.',
   },
   {
+    kind: 'source',
+    label: 'Source',
+    description: 'Definir comment ouvrir la page d\'une oeuvre source et extraire la liste de cards retournee.',
+  },
+  {
     kind: 'tagList',
     label: 'Liste de tags',
     description: 'Definir comment recuperer la liste complete des tags disponibles sur la source.',
@@ -1253,6 +1281,7 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
     defaultLanguage: undefined,
     sourceLanguages: [],
     contentTypes: [],
+    originalSourceKeyword: undefined,
     homeSearch: {
       enabled: false,
       query: '',
@@ -1273,6 +1302,79 @@ export function createDefaultScraperGlobalConfig(): ScraperGlobalConfig {
     },
   };
 }
+
+const SCRAPER_SOURCE_DETECTION_FEATURE_KINDS = new Set<ScraperFeatureKind>([
+  'homepage',
+  'search',
+  'details',
+  'author',
+  'tag',
+  'source',
+]);
+
+const hasConfiguredSourceSelector = (feature: ScraperFeatureDefinition): boolean => {
+  if (feature.status === 'not_configured' || !SCRAPER_SOURCE_DETECTION_FEATURE_KINDS.has(feature.kind)) {
+    return false;
+  }
+
+  const config = feature.config && typeof feature.config === 'object'
+    ? feature.config as Record<string, unknown>
+    : {};
+  const selectors = feature.kind === 'details'
+    ? [config.sourcesSelector, config.sourceUrlSelector]
+    : [config.sourceUrlSelector];
+
+  return selectors.some((selector) => {
+    if (typeof selector === 'string') {
+      return selector.trim().length > 0;
+    }
+
+    return Boolean(
+      selector
+      && typeof selector === 'object'
+      && String((selector as Record<string, unknown>).value ?? '').trim(),
+    );
+  });
+};
+
+export const normalizeScraperOriginalSourceValue = (value: unknown): string => (
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+);
+
+export const hasScraperSourceDetection = (
+  scraper: ScraperRecord | null | undefined,
+): boolean => Boolean(scraper?.features.some(hasConfiguredSourceSelector));
+
+export const isScraperResultOriginal = (
+  scraper: ScraperRecord | null | undefined,
+  result: Pick<ScraperSearchResultItem, 'sourceNames' | 'sourceUrls'>,
+): boolean => {
+  if (!scraper || !hasScraperSourceDetection(scraper)) {
+    return true;
+  }
+
+  const keyword = normalizeScraperOriginalSourceValue(scraper.globalConfig.originalSourceKeyword);
+  const sourceNames = (result.sourceNames ?? [])
+    .map(normalizeScraperOriginalSourceValue)
+    .filter(Boolean);
+  const sourceUrls = (result.sourceUrls ?? [])
+    .map((sourceUrl) => String(sourceUrl ?? '').trim())
+    .filter(Boolean);
+  if (!sourceNames.length && !sourceUrls.length) {
+    return true;
+  }
+
+  if (!keyword) {
+    return false;
+  }
+
+  return sourceNames.some((sourceName) => sourceName.includes(keyword));
+};
 
 export function createDefaultScraperFeatures(): ScraperFeatureDefinition[] {
   return SCRAPER_FEATURE_TEMPLATES.map((feature) => ({

@@ -22,6 +22,7 @@ type BuildMultiSearchHistorySettingsOptions = {
   advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
   viewMode: MultiSearchViewMode;
+  originalOnly: boolean;
 };
 
 const formatDepth = (
@@ -112,6 +113,7 @@ export const buildMultiSearchHistorySettings = ({
   advancedPages,
   paceMode,
   viewMode,
+  originalOnly,
 }: BuildMultiSearchHistorySettingsOptions): SearchHistorySettings => ({
   Scrappers: sortedFallbackList(selectedScrapers.map((scraper) => scraper.name), "Aucun"),
   _scraperIds: sortedList(selectedScrapers.map((scraper) => scraper.id)),
@@ -124,4 +126,5 @@ export const buildMultiSearchHistorySettings = ({
   Profondeur: formatDepth(depthMode, advancedPages),
   Rythme: formatPace(paceMode),
   Vue: formatView(viewMode),
+  Œuvres: originalOnly ? "Originales uniquement" : "Toutes",
 });

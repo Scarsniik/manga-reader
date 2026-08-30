@@ -7,6 +7,7 @@ export const hasRenderableDetails = (details: ScraperRuntimeDetailsResult): bool
     details.description ||
     details.authors.length ||
     details.tags.length ||
+    details.sources.length ||
     (details.thumbnails?.length ?? 0) > 0 ||
     details.mangaStatus ||
     details.pageCount ||

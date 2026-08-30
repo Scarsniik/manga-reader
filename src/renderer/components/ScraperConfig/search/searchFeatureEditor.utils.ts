@@ -54,6 +54,7 @@ export const SEARCH_SCRAPING_FIELD_NAMES = [
   'titleSelector',
   'detailUrlSelector',
   'authorUrlSelector',
+  'sourceUrlSelector',
   'thumbnailSelector',
   'summarySelector',
   'pageCountSelector',
@@ -174,12 +175,19 @@ export const SCRAPING_FIELDS: Field[] = [
     type: 'text',
     placeholder: 'Optionnel : .next a@href',
   },
+  {
+    name: 'sourceUrlSelector',
+    label: 'Selecteur de source (nom et lien)',
+    type: 'text',
+    placeholder: 'Optionnel : .source a@href',
+  },
 ];
 
 export const SCRAPING_FIELD_SELECTOR_NAMES = [
   'titleSelector',
   'detailUrlSelector',
   'authorUrlSelector',
+  'sourceUrlSelector',
   'thumbnailSelector',
   'summarySelector',
   'pageCountSelector',
@@ -203,6 +211,7 @@ export const DEFAULT_SEARCH_CONFIG: SearchFeatureFormState = {
   titleSelector: { kind: 'css', value: '' },
   detailUrlSelector: undefined,
   authorUrlSelector: undefined,
+  sourceUrlSelector: undefined,
   thumbnailSelector: undefined,
   summarySelector: undefined,
   pageCountSelector: undefined,
@@ -277,6 +286,7 @@ export const buildSearchScrapingFields = (
   titleSelector: normalizeRequiredFieldSelector(values.titleSelector),
   detailUrlSelector: trimOptionalFieldSelector(values.detailUrlSelector),
   authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
+  sourceUrlSelector: trimOptionalFieldSelector(values.sourceUrlSelector),
   thumbnailSelector: trimOptionalFieldSelector(values.thumbnailSelector),
   summarySelector: trimOptionalFieldSelector(values.summarySelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
@@ -372,6 +382,7 @@ export const buildValidationPresentation = (
   const coverCheck = validationResult.checks.find((check) => check.key === 'cover');
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
+  const sourceUrlCheck = validationResult.checks.find((check) => check.key === 'sourceUrl');
   const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
   const languageCheck = validationResult.checks.find((check) => check.key === 'language');
 
@@ -404,6 +415,10 @@ export const buildValidationPresentation = (
 
   if (authorUrlCheck?.matchedCount) {
     details.push(`Liens auteur detectes : ${authorUrlCheck.matchedCount}`);
+  }
+
+  if (sourceUrlCheck?.matchedCount) {
+    details.push(`Liens source detectes : ${sourceUrlCheck.matchedCount}`);
   }
 
   if (coverCheck?.matchedCount) {

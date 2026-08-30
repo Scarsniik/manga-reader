@@ -1,10 +1,10 @@
 # Configuration des scrapers
 
-Date : 2026-06-08
+Date : 2026-08-28
 
 Ce document explique le fonctionnement technique de la configuration des scrapers. Il decrit le
 modele commun, les regles de selecteurs et de templates, puis chaque module de scraping branche en
-V1 : `Recherche`, `Fiche`, `Auteur`, `Tag`, `Liste de tags`, `Chapitres` et `Pages`.
+V1 : `Homepage`, `Recherche`, `Fiche`, `Auteur`, `Tag`, `Source`, `Liste de tags`, `Chapitres` et `Pages`.
 
 ## Perimetre
 
@@ -80,7 +80,7 @@ HTML present dans la reponse HTTP.
 
 En mode regex, la regex s'applique uniquement au HTML du bloc courant :
 
-- pour `Recherche`, `Auteur` et `Tag`, au HTML de la card trouvee par `resultItemSelector`
+- pour `Recherche`, `Auteur`, `Tag` et `Source`, au HTML de la card trouvee par `resultItemSelector`
 - pour `Chapitres`, au HTML du chapitre trouve par `chapterItemSelector`
 - pour `Fiche`, `Pages` et les liens de pagination, au HTML du document ou du conteneur courant
 
@@ -97,14 +97,14 @@ automatiquement le flag global pour recuperer toutes les correspondances.
 
 ## Detection de langue
 
-Les modules `Recherche`, `Auteur`, `Tag` et `Fiche` ont une section `Langue` separee. Elle peut combiner
+Les modules `Recherche`, `Auteur`, `Tag`, `Source` et `Fiche` ont une section `Langue` separee. Elle peut combiner
 trois sources :
 
 - detection dans le titre, avec les marqueurs explicites comme `[EN]`, `(FR)`, `English`, `RAW`
 - selecteur de langue classique, pour une metadonnee texte comme `English`
 - selecteur de langue processed, pour une metadonnee non textuelle transformee ensuite
 
-Dans `Auteur` et `Tag`, la configuration de langue peut etre copiee depuis `Recherche`, comme les
+Dans `Auteur`, `Tag` et `Source`, la configuration de langue peut etre copiee depuis `Recherche`, comme les
 selecteurs de scraping. Cela copie aussi la table de correspondance du mode processed.
 
 Pour le mode processed, la normalisation gere pour l'instant le modele 3hentai : une valeur ou une
@@ -164,7 +164,7 @@ Si un template de contexte contient une variable non resolue, la construction de
 
 ### Variables de recherche
 
-Utilisees par `Recherche` et par une partie des templates `Auteur` et `Tag` :
+Utilisees par `Recherche` et par une partie des templates `Auteur`, `Tag` et `Source` :
 
 | Variable | Valeur |
 | --- | --- |
@@ -184,7 +184,7 @@ Utilisees par `Fiche` en mode template :
 | `{{value}}`, `{{id}}`, `{{slug}}` | valeur de test ou valeur runtime encodee |
 | `{{rawValue}}`, `{{rawId}}`, `{{rawSlug}}` | valeur brute |
 
-En runtime, `Fiche`, `Auteur` et `Tag` acceptent aussi une URL directe meme si le mode template est
+En runtime, `Fiche`, `Auteur`, `Tag` et `Source` acceptent aussi une URL directe meme si le mode template est
 actif : si la saisie ressemble a une URL, un chemin relatif ou une ancre, elle est resolue directement.
 
 ### Variables issues de Fiche
@@ -201,6 +201,7 @@ utiliser ce contexte :
 | `{{description}}` | description extraite |
 | `{{authors}}` | auteurs extraits, joints par virgule + espace |
 | `{{tags}}` | tags extraits, joints par virgule + espace |
+| `{{sources}}` | oeuvres sources extraites, jointes par virgule + espace |
 | `{{status}}` | statut extrait |
 | `{{pageCount}}` | nombre de pages extrait |
 | `{{nomVariable}}` | variable derivee configuree dans `Fiche`, encodee sauf si elle est une URL absolue en debut de template |
@@ -225,6 +226,9 @@ scraper.
 | --- | --- |
 | `defaultTagIds` | tags ajoutes automatiquement aux mangas telecharges depuis ce scraper |
 | `defaultLanguage` | langue appliquee aux mangas telecharges |
+| `sourceLanguages` | langues proposees pour selectionner ce scraper dans les recherches multi-sources |
+| `contentTypes` | types de contenu proposes pour selectionner ce scraper |
+| `originalSourceKeyword` | mot-cle facultatif qui identifie une source originale, par exemple `Original` ; vide, l'absence de source signifie originale |
 | `bookmark.excludedFields` | metadonnees a ne pas enregistrer dans les bookmarks |
 | `chapterDownloads.autoAssignSeries` | rattache les telechargements de chapitre a une serie creee depuis le titre de la fiche |
 | `homeSearch.enabled` | lance une recherche automatiquement a l'ouverture du scraper, si le module `Homepage` n'est pas utilise comme accueil |
@@ -263,6 +267,39 @@ defaut. La valeur `__no_author_favorites__` correspond a l'option `Aucun`.
 Le parametre applicatif `scraperLatestIncludedTagFavoriteIds` limite l'onglet `Sources` aux tags
 favoris selectionnes. Si la liste est vide, aucun tag favori n'est inclus par defaut. La valeur
 `__all_tag_favorites__` correspond a l'option `Tous` et inclut tous les tags favoris.
+
+### Detection des oeuvres originales
+
+La detection de source est consideree active des qu'un module configure parmi `Homepage`,
+`Recherche`, `Fiche`, `Auteur`, `Tag` ou `Source` possede un selecteur de source. Quand
+`originalSourceKeyword` est renseigne, la comparaison avec le nom extrait est insensible a la casse
+et aux accents et accepte le mot-cle au sein d'un libelle plus long.
+
+Les regles de classement sont volontairement prudentes :
+
+- sans detection de source configuree, tous les mangas du scraper sont originaux ;
+- une card sans source extraite est consideree originale, car la source est facultative ;
+- sans mot-cle global, toute card qui expose une source (par exemple un tag `parody`) est non originale ;
+- une card dont au moins une source contient le mot-cle est originale ;
+- une card qui expose uniquement d'autres oeuvres sources est non originale.
+
+Le filtre `Rechercher uniquement les originaux` des recherches multi-sources, des nouveautes et des
+pages auteur est applique dans le moteur, avant de stocker et compter les resultats. Pour les
+nouveautes, une oeuvre derivee ne consomme donc pas le quota : le moteur continue la pagination
+jusqu'au nombre d'originaux demande ou jusqu'a l'epuisement de la source. Les filtres places dans
+les sections de resultats restent disponibles en complement et ne modifient que l'affichage.
+
+Le filtre `Originaux uniquement` est disponible dans la recherche multi-sources, les nouveautes,
+les resultats auteur pagines ou combines et les bookmarks. Sur une card fusionnee, seules les
+sources de scraper classees originales sont conservees ; la card disparait si aucune ne reste.
+Les bookmarks enregistrent aussi les noms et URLs de source afin que ce filtre fonctionne sans
+recharger la fiche. Un ancien bookmark sans cette metadonnee suit le fallback original.
+
+### Metadonnees compactes des cards
+
+L'oeuvre source est affichee comme une chip discrete, au meme niveau visuel que les tags. Quand la
+card fournit un auteur rattache a un favori auteur du meme scraper, cet auteur est aussi affiche
+sous forme de chip favorite. Les auteurs non favoris ne sont pas ajoutes aux cards de recherche.
 
 Quand `scraperLatestIncludedScraperIds` vaut `__no_scrapers__` et qu'aucun tag favori lancable
 n'est inclus, les scans de nouveautes sont desactives.
@@ -314,6 +351,7 @@ au body brut.
 | `titleSelector` | oui | card | extrait le titre ; une card sans titre est ignoree |
 | `detailUrlSelector` | non | card | extrait l'URL de fiche, necessaire pour ouvrir `Fiche` depuis une card |
 | `authorUrlSelector` | non | card | extrait l'URL auteur, necessaire pour ouvrir `Auteur` directement depuis une card |
+| `sourceUrlSelector` | non | card | extrait sur le meme lien le nom de l'oeuvre source et sa cible, necessaires pour afficher la source et ouvrir `Source` depuis une card |
 | `thumbnailSelector` | non | card | extrait l'image de miniature |
 | `summarySelector` | non | card | extrait un resume court |
 | `pageCountSelector` | non | card | extrait le nombre de pages affiche sur la card |
@@ -425,6 +463,8 @@ injectee dans le template.
 | `authorUrlSelector` | non | liens auteur ; doit viser la meme logique d'ordre que `authorsSelector` |
 | `tagsSelector` | non | tags ; plusieurs valeurs possibles, dedoublonnees |
 | `tagUrlSelector` | non | cible tag ; doit viser la meme logique d'ordre que `tagsSelector`. Un `href` est resolu en URL, un `data-id` ou un texte reste une valeur brute utilisable par le template `Tag` |
+| `sourcesSelector` | non | noms des oeuvres sources ; utile pour les doujin tires d'une autre oeuvre |
+| `sourceUrlSelector` | non | liens vers les pages source. Si `sourcesSelector` est vide, le texte des liens fournit aussi les noms ; un seul selecteur comme `.source a@href` suffit donc dans le cas courant |
 | `statusSelector` | non | statut du manga |
 | `pageCountSelector` | non | nombre de pages du manga |
 | `thumbnailsListSelector` | non | conteneur optionnel des vignettes/pages visibles sur la fiche |
@@ -453,7 +493,7 @@ Sources disponibles :
 
 | Source | Champs requis | Comportement |
 | --- | --- | --- |
-| `field` | `sourceField` | reutilise un champ deja extrait : `title`, `cover`, `description`, `authors`, `tags`, `status`, `pageCount` |
+| `field` | `sourceField` | reutilise un champ deja extrait : `title`, `cover`, `description`, `authors`, `tags`, `sources`, `status`, `pageCount` |
 | `selector` | `selector` | execute un selecteur personnalise sur la fiche |
 | `requested_url` | aucun | utilise l'URL demandee |
 | `final_url` | aucun | utilise l'URL finale, puis fallback sur l'URL demandee |
@@ -486,7 +526,8 @@ derivees et produit un apercu. Seul `titleSelector` est strictement requis pour 
 valide ; les champs optionnels peuvent rester absents.
 
 En runtime, une fiche est consideree exploitable si au moins un contenu est extrait : titre,
-couverture, description, auteurs, tags, vignettes, statut ou nombre de pages.
+couverture, description, auteurs, tags, sources, vignettes, statut ou nombre de pages. Les sources
+sont affichees sous forme de chips et ouvrent le module `Source` quand une cible exploitable existe.
 
 ## Module Auteur
 
@@ -518,6 +559,7 @@ module `Auteur`.
 | `titleSelector` | oui | card | titre de la card ; une card sans titre est ignoree |
 | `detailUrlSelector` | non | card | URL de fiche pour ouvrir `Fiche` depuis la page auteur |
 | `authorUrlSelector` | non | card | URL auteur si les cards exposent aussi un auteur |
+| `sourceUrlSelector` | non | card | nom et cible de l'oeuvre source si les cards l'exposent |
 | `thumbnailSelector` | non | card | miniature |
 | `summarySelector` | non | card | resume |
 | `pageCountSelector` | non | card | nombre de pages affiche sur la card |
@@ -578,6 +620,7 @@ favori tag.
 | `titleSelector` | oui | card | titre de la card ; une card sans titre est ignoree |
 | `detailUrlSelector` | non | card | URL de fiche pour ouvrir `Fiche` depuis la page tag |
 | `authorUrlSelector` | non | card | URL auteur si les cards exposent aussi un auteur |
+| `sourceUrlSelector` | non | card | nom et cible de l'oeuvre source si les cards l'exposent |
 | `thumbnailSelector` | non | card | miniature |
 | `summarySelector` | non | card | resume |
 | `pageCountSelector` | non | card | nombre de pages affiche sur la card |
@@ -611,6 +654,43 @@ cards que celle des tags favoris ; `Vue par pages` permet de revenir a la pagina
 Le controle partage `Scraper et ajouter` est reserve a la vue fusionnee. Il accepte un nombre entier
 d'au moins une page, scrape les pages suivantes dans l'ordre et les conserve avec les pages deja
 visibles. La plage de pages fusionnee reste affichee dans l'en-tete.
+
+## Module Source
+
+`Source` represente l'oeuvre d'origine dont un doujin est tire. Il charge une page d'oeuvre source
+et extrait la liste des doujin ou mangas associes, avec le meme moteur de cards que `Recherche` et
+`Tag`. Le champ reste entierement facultatif sur les sites et les contenus qui n'exposent pas cette
+notion.
+
+### Construction de l'URL
+
+| Champ | Requis | Description |
+| --- | --- | --- |
+| `urlStrategy` | oui | `result_url` pour suivre un lien extrait, ou `template` pour construire la page depuis un nom ou un slug |
+| `urlTemplate` | si template | URL source construite avec les variables de recherche et de pagination |
+| `testUrl` | validation en `result_url` | URL ou chemin de page source utilise pour le test |
+| `testValue` | selon template | nom ou slug injecte dans le template de test |
+
+### Selecteurs
+
+| Selecteur | Requis | Zone | Description |
+| --- | --- | --- | --- |
+| `sourceNameSelector` | non | document | nom de l'oeuvre affiche sur la page source ; il devient le titre de la vue |
+| `resultListSelector` | non | document | limite la zone de parsing |
+| `resultItemSelector` | oui | conteneur ou document | detecte chaque card associee a la source |
+| `titleSelector` | oui | card | titre de la card ; une card sans titre est ignoree |
+| `detailUrlSelector` | non | card | URL de fiche pour ouvrir `Fiche` |
+| `authorUrlSelector` | non | card | URL auteur si la card l'expose |
+| `sourceUrlSelector` | non | card | nom et cible d'une oeuvre source affichee par la card |
+| `thumbnailSelector` | non | card | miniature |
+| `summarySelector` | non | card | resume |
+| `pageCountSelector` | non | card | nombre de pages |
+| `nextPageSelector` | non | document | lien de page suivante |
+
+La pagination suit les memes regles que `Tag` : un placeholder `{{page}}` ou `{{pageIndex}}` dans
+le template est prioritaire, sinon le runtime suit `nextPageSelector`. Le module peut etre ouvert
+depuis les sources extraites sur une card ou une fiche. Avec `result_url`, une URL extraite est
+necessaire ; avec `template`, le nom seul peut servir de cible.
 
 ## Module Chapitres
 

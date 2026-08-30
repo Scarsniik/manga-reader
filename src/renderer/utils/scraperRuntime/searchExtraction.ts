@@ -3,6 +3,7 @@ import type {
   ScraperCardListConfig,
   ScraperFieldSelector,
   ScraperSearchResultItem,
+  ScraperSourceFeatureConfig,
   ScraperTagFeatureConfig,
 } from "@/shared/scraper";
 import type { ScraperDocumentFetcher, ScraperRuntimeSearchPageResult } from "@/renderer/utils/scraperRuntime/types";
@@ -21,6 +22,8 @@ const getListingPageNameSelector = (config: ScraperCardListConfig): ScraperField
     ? (config as ScraperAuthorFeatureConfig).authorNameSelector
     : "tagNameSelector" in config
       ? (config as ScraperTagFeatureConfig).tagNameSelector
+      : "sourceNameSelector" in config
+        ? (config as ScraperSourceFeatureConfig).sourceNameSelector
       : undefined;
 
 const uniqueSearchResults = (results: ScraperSearchResultItem[]): ScraperSearchResultItem[] => {
@@ -91,6 +94,12 @@ const buildSearchResultItem = (
   const authorNameValues = config.authorUrlSelector
     ? uniqueValues(extractTextFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
     : [];
+  const sourceUrlValues = config.sourceUrlSelector
+    ? uniqueValues(extractUrlFieldSelectorValuesFromRoot(item, config.sourceUrlSelector))
+    : [];
+  const sourceNameValues = config.sourceUrlSelector
+    ? uniqueValues(extractTextFieldSelectorValuesFromRoot(item, config.sourceUrlSelector))
+    : [];
   const summaryValue = config.summarySelector
     ? extractFieldSelectorValuesFromRoot(item, config.summarySelector)[0]
     : undefined;
@@ -106,6 +115,10 @@ const buildSearchResultItem = (
       ? authorUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
       : undefined,
     authorNames: authorNameValues.length ? authorNameValues : undefined,
+    sourceNames: sourceNameValues.length ? sourceNameValues : undefined,
+    sourceUrls: sourceUrlValues.length
+      ? sourceUrlValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))
+      : undefined,
     thumbnailUrl: thumbnailCandidates[0],
     thumbnailCandidates: thumbnailCandidates.length > 1 ? thumbnailCandidates : undefined,
     summary: summaryValue,

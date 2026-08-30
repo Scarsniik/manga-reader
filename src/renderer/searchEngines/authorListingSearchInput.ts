@@ -15,6 +15,7 @@ export type AuthorListingSearchSettings = {
   concurrency: number;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
+  originalOnly?: boolean;
   useAuthorFavoriteCache?: boolean;
   authorFavoriteCacheMaxAgeHours?: number;
   selectedFavoriteIds?: string[];
@@ -84,6 +85,7 @@ export const buildAuthorListingSearchInput = (
   concurrency: Math.max(1, Math.floor(settings.concurrency)),
   includedLanguageCodes: settings.includedLanguageCodes,
   scrapeDetailsWithCards: settings.scrapeDetailsWithCards,
+  originalOnly: settings.originalOnly === true,
   useAuthorFavoriteCache: settings.useAuthorFavoriteCache,
   authorFavoriteCacheMaxAgeHours: settings.authorFavoriteCacheMaxAgeHours,
   selectedFavoriteIds: settings.selectedFavoriteIds,
@@ -111,4 +113,5 @@ export const buildScraperAuthorListingSearchInput = (
   concurrency: Math.max(1, Math.floor(settings.concurrency)),
   includedLanguageCodes: [],
   scrapeDetailsWithCards: settings.scrapeDetailsWithCards,
+  originalOnly: settings.originalOnly === true,
 });

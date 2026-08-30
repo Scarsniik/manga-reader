@@ -1,4 +1,4 @@
-export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author' | 'tag' | 'tagList';
+export type ScraperRouteMode = 'homepage' | 'search' | 'manga' | 'author' | 'tag' | 'source' | 'tagList';
 
 export const SCRAPER_MULTI_SEARCH_VIEW_ID = 'multi-search';
 export const SCRAPER_AUTHOR_FAVORITES_VIEW_ID = 'author-favorites';
@@ -27,6 +27,9 @@ export type ScraperRouteState = {
   tagActive?: boolean;
   tagQuery?: string;
   tagPage?: number;
+  sourceActive?: boolean;
+  sourceQuery?: string;
+  sourcePage?: number;
   tagListQuery?: string;
   mangaQuery: string;
   mangaUrl?: string;
@@ -46,6 +49,9 @@ const SCRAPER_AUTHOR_PAGE_PARAM = 'scraperAuthorPage';
 const SCRAPER_TAG_ACTIVE_PARAM = 'scraperTagActive';
 const SCRAPER_TAG_QUERY_PARAM = 'scraperTagQuery';
 const SCRAPER_TAG_PAGE_PARAM = 'scraperTagPage';
+const SCRAPER_SOURCE_ACTIVE_PARAM = 'scraperSourceActive';
+const SCRAPER_SOURCE_QUERY_PARAM = 'scraperSourceQuery';
+const SCRAPER_SOURCE_PAGE_PARAM = 'scraperSourcePage';
 const SCRAPER_TAG_LIST_QUERY_PARAM = 'scraperTagListQuery';
 const SCRAPER_MANGA_QUERY_PARAM = 'scraperMangaQuery';
 const SCRAPER_MANGA_URL_PARAM = 'scraperMangaUrl';
@@ -81,6 +87,8 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
       ? 'author'
       : rawMode === 'tag'
         ? 'tag'
+        : rawMode === 'source'
+          ? 'source'
         : rawMode === 'tagList'
           ? 'tagList'
         : rawMode === 'homepage'
@@ -102,6 +110,9 @@ export const parseScraperRouteState = (search: string): ScraperRouteState => {
     tagActive: params.get(SCRAPER_TAG_ACTIVE_PARAM) === '1',
     tagQuery: params.get(SCRAPER_TAG_QUERY_PARAM) ?? '',
     tagPage: normalizePage(params.get(SCRAPER_TAG_PAGE_PARAM)),
+    sourceActive: params.get(SCRAPER_SOURCE_ACTIVE_PARAM) === '1',
+    sourceQuery: params.get(SCRAPER_SOURCE_QUERY_PARAM) ?? '',
+    sourcePage: normalizePage(params.get(SCRAPER_SOURCE_PAGE_PARAM)),
     tagListQuery: params.get(SCRAPER_TAG_LIST_QUERY_PARAM) ?? '',
     mangaQuery: params.get(SCRAPER_MANGA_QUERY_PARAM) ?? '',
     mangaUrl: params.get(SCRAPER_MANGA_URL_PARAM) || undefined,
@@ -128,6 +139,9 @@ export const writeScraperRouteState = (
   params.delete(SCRAPER_TAG_ACTIVE_PARAM);
   params.delete(SCRAPER_TAG_QUERY_PARAM);
   params.delete(SCRAPER_TAG_PAGE_PARAM);
+  params.delete(SCRAPER_SOURCE_ACTIVE_PARAM);
+  params.delete(SCRAPER_SOURCE_QUERY_PARAM);
+  params.delete(SCRAPER_SOURCE_PAGE_PARAM);
   params.delete(SCRAPER_TAG_LIST_QUERY_PARAM);
   params.delete(SCRAPER_MANGA_QUERY_PARAM);
   params.delete(SCRAPER_MANGA_URL_PARAM);
@@ -180,6 +194,15 @@ export const writeScraperRouteState = (
     }
   }
 
+  if (state.sourceActive) {
+    params.set(SCRAPER_SOURCE_ACTIVE_PARAM, '1');
+    params.set(SCRAPER_SOURCE_PAGE_PARAM, String(Math.max(1, state.sourcePage ?? 1)));
+
+    if (state.sourceQuery) {
+      params.set(SCRAPER_SOURCE_QUERY_PARAM, state.sourceQuery);
+    }
+  }
+
   if (state.tagListQuery) {
     params.set(SCRAPER_TAG_LIST_QUERY_PARAM, state.tagListQuery);
   }
@@ -218,6 +241,9 @@ export const clearScraperRouteState = (search: string): string => (
     tagActive: false,
     tagQuery: '',
     tagPage: 1,
+    sourceActive: false,
+    sourceQuery: '',
+    sourcePage: 1,
     tagListQuery: '',
     mangaQuery: '',
     bookmarksFilterScraperId: null,

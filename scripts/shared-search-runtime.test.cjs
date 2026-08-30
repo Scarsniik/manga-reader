@@ -21,6 +21,10 @@ const source = `
     buildSearchCheckpointFingerprint,
     createSearchExecutionContext,
   } from "@/renderer/searchEngines/searchExecutionContext";
+  export {
+    hasScraperSourceDetection,
+    isScraperResultOriginal,
+  } from "@/shared/scraper";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "shared-search-runtime-test.ts" },
@@ -48,6 +52,8 @@ const {
   doesScraperCardNeedMetadata,
   createSearchExecutionContext,
   buildSearchCheckpointFingerprint,
+  hasScraperSourceDetection,
+  isScraperResultOriginal,
 } = bundledModule.exports;
 
 global.DOMParser = class DOMParser {
@@ -131,7 +137,7 @@ test("the common listing loader fetches, parses and returns cards", async () => 
       ok: true,
       requestedUrl: request.targetUrl,
       finalUrl: request.targetUrl,
-      html: '<main><article><a class="title" href="/manga/1">Manga 1</a></article></main>',
+      html: '<main><article><a class="title" href="/manga/1">Manga 1</a><a class="source" href="/source/original">Original</a></article></main>',
     };
   };
   const page = await fetchResolvedScraperListingPage({
@@ -141,6 +147,7 @@ test("the common listing loader fetches, parses and returns cards", async () => 
       resultItemSelector: "article",
       titleSelector: { kind: "css", value: ".title" },
       detailUrlSelector: { kind: "css", value: ".title@href" },
+      sourceUrlSelector: { kind: "css", value: ".source@href" },
       languageDetection: { detectFromTitle: false },
     },
     targetUrl: "https://example.test/search?q=manga",
@@ -154,6 +161,35 @@ test("the common listing loader fetches, parses and returns cards", async () => 
   assert.equal(page.requestedPageUrl, "https://example.test/search?q=manga");
   assert.equal(page.items[0].title, "Manga 1");
   assert.equal(page.items[0].detailUrl, "https://example.test/manga/1");
+  assert.deepEqual(page.items[0].sourceNames, ["Original"]);
+  assert.deepEqual(page.items[0].sourceUrls, ["https://example.test/source/original"]);
+});
+
+test("original-work detection follows the configured source keyword and keeps safe fallbacks", () => {
+  assert.equal(hasScraperSourceDetection(scraper), false);
+  assert.equal(isScraperResultOriginal(scraper, { sourceNames: ["Another work"] }), true);
+
+  const scraperWithSourceDetection = {
+    ...scraper,
+    globalConfig: { originalSourceKeyword: "Original" },
+    features: [{
+      kind: "search",
+      status: "configured",
+      config: { sourceUrlSelector: { kind: "css", value: ".source@href" } },
+    }],
+  };
+  assert.equal(hasScraperSourceDetection(scraperWithSourceDetection), true);
+  assert.equal(isScraperResultOriginal(scraperWithSourceDetection, { sourceNames: ["Original work"] }), true);
+  assert.equal(isScraperResultOriginal(scraperWithSourceDetection, { sourceNames: ["One Piece"] }), false);
+  assert.equal(isScraperResultOriginal(scraperWithSourceDetection, {}), true);
+
+  const scraperWithoutOriginalKeyword = {
+    ...scraperWithSourceDetection,
+    globalConfig: {},
+  };
+  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, {}), true);
+  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceNames: ["One Piece"] }), false);
+  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceUrls: ["https://example.test/parody/one-piece"] }), false);
 });
 
 test("detail metadata is shared in-flight and does not validate cover images", async () => {
@@ -170,6 +206,7 @@ test("detail metadata is shared in-flight and does not validate cover images", a
       html: `
         <h1 class="title">Manga 1</h1>
         <a class="author" href="/artist/a">Author A</a>
+        <a class="source" href="/source/original">Original</a>
         <img class="cover" src="/cover.jpg">
       `,
     };
@@ -179,6 +216,8 @@ test("detail metadata is shared in-flight and does not validate cover images", a
     titleSelector: { kind: "css", value: ".title" },
     authorsSelector: { kind: "css", value: ".author" },
     authorUrlSelector: { kind: "css", value: ".author@href" },
+    sourcesSelector: { kind: "css", value: ".source" },
+    sourceUrlSelector: { kind: "css", value: ".source@href" },
     coverSelector: { kind: "css", value: ".cover@src" },
     languageDetection: { detectFromTitle: false },
     derivedValues: [],
@@ -193,5 +232,7 @@ test("detail metadata is shared in-flight and does not validate cover images", a
   assert.equal(requestShapes[0].validateImage, undefined);
   assert.equal(first.title, "Manga 1");
   assert.deepEqual(first.authorUrls, ["https://example.test/artist/a"]);
+  assert.deepEqual(first.sources, ["Original"]);
+  assert.deepEqual(first.sourceUrls, ["https://example.test/source/original"]);
   assert.deepEqual(second, first);
 });

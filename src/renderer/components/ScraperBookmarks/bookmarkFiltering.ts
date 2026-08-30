@@ -11,6 +11,7 @@ import type {
 import {
   DEFAULT_SCRAPER_BOOKMARK_FILTERS as SHARED_DEFAULT_BOOKMARK_FILTERS,
   normalizeScraperViewHistorySourceUrl,
+  isScraperResultOriginal,
 } from "@/shared/scraper";
 import type { MultiSearchLanguageFilterModes } from "@/renderer/components/MultiSearch/types";
 import {
@@ -319,6 +320,13 @@ export const filterAndSortScraperBookmarks = ({
     }
 
     if (!matchesLanguageFilters(bookmark, scraper, filters.languageFilterModes)) {
+      return false;
+    }
+
+    if (filters.originalOnly && !isScraperResultOriginal(scraper, {
+      sourceNames: bookmark.sourceNames,
+      sourceUrls: bookmark.sourceUrls,
+    })) {
       return false;
     }
 

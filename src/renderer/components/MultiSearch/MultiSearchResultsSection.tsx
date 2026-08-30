@@ -37,6 +37,8 @@ import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 
@@ -185,6 +187,7 @@ export default function MultiSearchResultsSection({
   onToggleLanguageFilterMode,
   onToggleReadingStatusFilter,
 }: Props) {
+  const [originalOnly, setOriginalOnly] = React.useState(false);
   const {
     active: showUnseenOnly,
     recordsById: unseenFilterRecordsById,
@@ -204,8 +207,8 @@ export default function MultiSearchResultsSection({
     sortByScraperViewHistoryNewState(
       results,
       getResultViewHistoryIdentities,
-      viewHistoryRecordsById,
-      newViewHistoryIds,
+      unseenFilterRecordsById,
+      unseenFilterNewCardIds,
       showUnseenFirst,
     )
   ), [newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById]);
@@ -213,13 +216,17 @@ export default function MultiSearchResultsSection({
     () => sortMergedResultsByUnseen(mergedResults),
     [mergedResults, sortMergedResultsByUnseen],
   );
+  const originalFilteredMergedResults = React.useMemo(
+    () => filterMultiSearchMergedResultsByOriginal(sortedMergedResults, originalOnly),
+    [originalOnly, sortedMergedResults],
+  );
   const blacklistFilteredMergedResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
-      sortedMergedResults,
+      originalFilteredMergedResults,
       tagBlacklistByScraper,
       shouldHideBlacklistedCards,
     ),
-    [shouldHideBlacklistedCards, sortedMergedResults, tagBlacklistByScraper],
+    [originalFilteredMergedResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
   );
   const displayedMergedResults = React.useMemo(
     () => filterByScraperViewHistoryNewState(
@@ -237,8 +244,8 @@ export default function MultiSearchResultsSection({
     ],
   );
   const blacklistedMergedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
-    [sortedMergedResults, tagBlacklistByScraper],
+    () => countBlacklistedMultiSearchResults(originalFilteredMergedResults, tagBlacklistByScraper),
+    [originalFilteredMergedResults, tagBlacklistByScraper],
   );
   const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
   const mergeProgressClassName = [
@@ -250,7 +257,11 @@ export default function MultiSearchResultsSection({
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
       ? runs.map((run) => {
-        const sortedResults = sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult));
+        const sortedResults = filterMultiSearchMergedResultsByOriginal(
+          sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
+          originalOnly,
+        );
+
         const blacklistFilteredResults = filterBlacklistedMultiSearchResults(
           sortedResults,
           tagBlacklistByScraper,
@@ -273,6 +284,7 @@ export default function MultiSearchResultsSection({
       })
       : []
   ), [
+    originalOnly,
     runs,
     shouldHideBlacklistedCards,
     showUnseenOnly,
@@ -331,6 +343,12 @@ export default function MultiSearchResultsSection({
                 <MultiSearchReadingStatusFilterBar
                   selectedStatuses={readingStatusFilters}
                   onToggleStatus={onToggleReadingStatusFilter}
+                />
+                <OriginalWorksFilterToggle
+                  active={originalOnly}
+                  onChange={setOriginalOnly}
+                  label="Originaux"
+                  variant="result"
                 />
                 <ResultFilterToggle
                   active={showUnseenOnly}
@@ -470,6 +488,12 @@ export default function MultiSearchResultsSection({
               <MultiSearchReadingStatusFilterBar
                 selectedStatuses={readingStatusFilters}
                 onToggleStatus={onToggleReadingStatusFilter}
+              />
+              <OriginalWorksFilterToggle
+                active={originalOnly}
+                onChange={setOriginalOnly}
+                label="Originaux"
+                variant="result"
               />
               <ResultFilterToggle
                 active={showUnseenOnly}

@@ -3,6 +3,7 @@ import {
   buildScraperViewHistoryCardId,
   DEFAULT_SCRAPER_BOOKMARK_FILTERS,
   normalizeScraperViewHistorySourceUrl,
+  isScraperResultOriginal,
   type ScraperBookmarkFilterState,
   type ScraperBookmarkLanguageFilterMode,
   type ScraperBookmarkLanguageFilterModes,
@@ -227,6 +228,7 @@ const normalizeBookmarkFilters = (
   maxPages: String(filters?.maxPages ?? DEFAULT_SCRAPER_BOOKMARK_FILTERS.maxPages),
   readingStatuses: normalizeReadingStatuses(filters?.readingStatuses),
   seriesFilterMode: normalizeSeriesFilterMode(filters?.seriesFilterMode),
+  originalOnly: filters?.originalOnly === true,
   sortBy: normalizeSortKey(filters?.sortBy),
 });
 
@@ -617,6 +619,13 @@ const matchesBookmarkFilters = (
   }
 
   if (!matchesLanguageFilters(candidate.languageValues, filters.languageFilterModes)) {
+    return false;
+  }
+
+  if (filters.originalOnly && !isScraperResultOriginal(candidate.scraper, {
+    sourceNames: candidate.bookmark.sourceNames,
+    sourceUrls: candidate.bookmark.sourceUrls,
+  })) {
     return false;
   }
 

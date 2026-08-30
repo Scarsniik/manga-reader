@@ -91,6 +91,8 @@ const sanitizeFeatureValidationCheck = (
     "authorUrl",
     "tags",
     "tagUrl",
+    "sources",
+    "sourceUrl",
     "status",
     "pageCount",
     "language",
@@ -144,7 +146,7 @@ const sanitizeDerivedValueResult = (
   derivedValue: Partial<ScraperDetailsDerivedValueResult>,
 ): ScraperDetailsDerivedValueResult | null => {
   const allowedSourceTypes = ["requested_url", "final_url", "field", "selector", "html"];
-  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "status", "pageCount"];
+  const allowedFieldKeys = ["title", "cover", "description", "authors", "tags", "sources", "status", "pageCount"];
   const allowedIssueCodes = ["missing_source", "invalid_selector", "invalid_pattern", "no_match"];
 
   const key = String(derivedValue.key ?? "").trim();
@@ -369,6 +371,7 @@ export const sanitizeGlobalConfig = (
     defaultLanguage: defaultLanguage || undefined,
     sourceLanguages: sanitizeStringList(globalConfig?.sourceLanguages),
     contentTypes: sanitizeStringList(globalConfig?.contentTypes),
+    originalSourceKeyword: String(globalConfig?.originalSourceKeyword ?? "").trim() || undefined,
     homeSearch: {
       enabled: Boolean(globalConfig?.homeSearch?.enabled),
       query: homeSearchQuery,
@@ -428,6 +431,9 @@ export const sanitizeScraperBookmarkRecord = (
   const authorUrls = sanitizeStringList(record.authorUrls)
     .map(normalizeScraperBookmarkUrl)
     .filter(Boolean);
+  const sourceUrls = sanitizeStringList(record.sourceUrls)
+    .map(normalizeScraperBookmarkUrl)
+    .filter(Boolean);
 
   return {
     scraperId,
@@ -439,6 +445,8 @@ export const sanitizeScraperBookmarkRecord = (
     authors: sanitizeStringList(record.authors),
     authorUrls: authorUrls.length ? authorUrls : undefined,
     tags: sanitizeStringList(record.tags),
+    sourceNames: sanitizeStringList(record.sourceNames),
+    sourceUrls: sourceUrls.length ? sourceUrls : undefined,
     mangaStatus: mangaStatus || undefined,
     pageCount: pageCount || undefined,
     languageCodes: languageCodes.length ? languageCodes : undefined,

@@ -1,6 +1,6 @@
 # Systeme de scraper site/API - etat d'implementation V1
 
-Date : 2026-04-10
+Date : 2026-08-28
 
 ## Perimetre effectivement branche
 
@@ -29,6 +29,10 @@ La V1 actuellement branchee couvre :
 21. les liens auteur optionnels recuperes depuis `Recherche` et `Fiche`
 22. l'execution runtime de `Chapitres` et `Pages`
 23. le telechargement et la lecture en ligne branches sur `Pages`
+24. l'extraction facultative de l'oeuvre source sur les cards et les fiches
+25. la configuration et l'execution runtime de `Source`, avec navigation et pagination
+26. l'affichage compact des sources et des auteurs favoris sur les cards
+27. le filtre `Originaux uniquement` dans les recherches multi-sources, les nouveautes, les resultats auteur et les bookmarks
 
 Pas encore branche :
 
@@ -143,6 +147,7 @@ L'etape `Composants` expose pour le moment :
 - `Fiche`
 - `Auteur`
 - `Tag`
+- `Source`
 - `Liste de tags`
 - `Chapitres`
 - `Pages`
@@ -167,6 +172,7 @@ Les reglages globaux du scraper couvrent maintenant :
 - la langue par defaut des mangas importes
 - la recherche d'accueil eventuelle, distincte du module executable `Homepage`
 - l'activation du scraper dans le mode `Nouveautes`, avec choix du module `Homepage` ou `Recherche`
+- le mot-cle facultatif de source qui identifie une oeuvre originale
 - les metadonnees de bookmark a exclure du stockage local
 - le masquage optionnel des cards dont la fiche contient un tag blackliste pour le scraper source
 
@@ -179,6 +185,12 @@ Pour les bookmarks, une section dediee permet de choisir plusieurs informations 
 - le statut
 - la couverture
 - le nombre de pages
+
+La source extraite est conservee dans les bookmarks pour permettre le filtre `Originaux
+uniquement`. Si aucun selecteur de source n'est configure pour un scraper, tous ses mangas sont
+consideres originaux. Si la source est facultative et absente d'une card, la card est egalement
+consideree originale. Quand une source existe, le classement utilise le mot-cle global du scraper
+s'il est renseigne ; sans mot-cle, la presence de la source suffit a classer la card comme derivee.
 
 ## Configuration actuelle de `Fiche`
 
@@ -194,9 +206,10 @@ Le composant permet :
 - un acces par URL connue
 - ou un acces par template d'URL
 - un selecteur de titre obligatoire
-- des selecteurs optionnels pour couverture, description, auteurs, tags, statut et nombre de pages
+- des selecteurs optionnels pour couverture, description, auteurs, tags, oeuvre source, statut et nombre de pages
 - un selecteur optionnel de lien auteur, pour rendre les tags auteur cliquables
 - un selecteur optionnel de cible tag, pour rendre les tags cliquables vers le composant `Tag`
+- un selecteur optionnel de source, qui extrait le nom et le lien et rend l'oeuvre cliquable vers `Source`
 - des selecteurs optionnels pour extraire une liste ordonnee de vignettes depuis la fiche et son lien de page suivante
 - une liste de variables derivees reutilisables par d'autres composants
 

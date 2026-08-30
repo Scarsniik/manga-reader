@@ -4,6 +4,7 @@ import {
   type ScraperHomepageFeatureConfig,
   type ScraperPagesFeatureConfig,
   type ScraperSearchFeatureConfig,
+  type ScraperSourceFeatureConfig,
   type ScraperTagFeatureConfig,
   type ScraperTagListFeatureConfig,
 } from "@/shared/scraper";
@@ -32,6 +33,9 @@ export const hasAuthorPagePlaceholder = (config: ScraperAuthorFeatureConfig | nu
   hasPagePlaceholder(config?.urlTemplate);
 
 export const hasTagPagePlaceholder = (config: ScraperTagFeatureConfig | null | undefined): boolean =>
+  hasPagePlaceholder(config?.urlTemplate);
+
+export const hasSourcePagePlaceholder = (config: ScraperSourceFeatureConfig | null | undefined): boolean =>
   hasPagePlaceholder(config?.urlTemplate);
 
 export const hasTagListPagePlaceholder = (config: ScraperTagListFeatureConfig | null | undefined): boolean =>

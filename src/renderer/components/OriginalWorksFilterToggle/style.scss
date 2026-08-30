@@ -1,0 +1,42 @@
+.original-works-filter-toggle.original-works-filter-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #343434;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d6d6d6;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.original-works-filter-toggle.original-works-filter-toggle:hover:not(:disabled),
+.original-works-filter-toggle.original-works-filter-toggle:focus-visible {
+  border-color: rgba(93, 156, 255, 0.5);
+  color: #eef6ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(93, 156, 255, 0.16);
+}
+
+.original-works-filter-toggle.original-works-filter-toggle.is-active {
+  border-color: rgba(93, 156, 255, 0.68);
+  background: rgba(93, 156, 255, 0.16);
+  color: #eef4ff;
+}
+
+.original-works-filter-toggle.original-works-filter-toggle.is-result {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.original-works-filter-toggle.original-works-filter-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

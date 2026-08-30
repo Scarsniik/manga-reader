@@ -370,6 +370,7 @@ export default function ScraperSearchFeatureEditor({
       titleSelector: "resultItemSelector",
       detailUrlSelector: "resultItemSelector",
       authorUrlSelector: "resultItemSelector",
+      sourceUrlSelector: "resultItemSelector",
       thumbnailSelector: "resultItemSelector",
       summarySelector: "resultItemSelector",
       pageCountSelector: "resultItemSelector",
@@ -379,6 +380,7 @@ export default function ScraperSearchFeatureEditor({
     valueModeByFieldName: {
       detailUrlSelector: "url",
       authorUrlSelector: "url",
+      sourceUrlSelector: "url",
       thumbnailSelector: "url",
       nextPageSelector: "url",
     },
@@ -628,6 +630,7 @@ export default function ScraperSearchFeatureEditor({
 
       const titles = extractedResults.map((result) => result.title).filter(Boolean);
       const authorUrls = extractedResults.map((result) => result.authorUrl).filter(Boolean) as string[];
+      const sourceUrls = extractedResults.flatMap((result) => result.sourceUrls ?? []);
       const thumbnails = extractedResults.map((result) => result.thumbnailUrl).filter(Boolean) as string[];
       const summaries = extractedResults.map((result) => result.summary).filter(Boolean) as string[];
       const pageCounts = extractedResults.map((result) => result.pageCount).filter(Boolean) as string[];
@@ -719,6 +722,24 @@ export default function ScraperSearchFeatureEditor({
             : {
               key: 'pageCount' as const,
               selector: formatScraperFieldSelectorForDisplay(config.pageCountSelector),
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match' as const,
+            }]
+          : []),
+        ...(config.sourceUrlSelector
+          ? [sourceUrls.length > 0
+            ? {
+              key: 'sourceUrl' as const,
+              selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
+              required: false,
+              matchedCount: sourceUrls.length,
+              sample: sourceUrls[0],
+              samples: sourceUrls.slice(0, 12),
+            }
+            : {
+              key: 'sourceUrl' as const,
+              selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
               required: false,
               matchedCount: 0,
               issueCode: 'no_match' as const,

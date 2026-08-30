@@ -77,7 +77,9 @@ export type AppParams = {
     multiSearchPaceMode?: string;
     multiSearchViewMode?: string;
     multiSearchScrapeDetailsWithCards?: boolean;
+    multiSearchOriginalOnly?: boolean;
     scraperAuthorCombinedView?: boolean;
+    scraperAuthorOriginalOnly?: boolean;
     scraperTagCombinedView?: boolean;
     scraperAuthorFavoriteShowUnseenFirst?: boolean;
     scraperTagFavoriteShowUnseenFirst?: boolean;
@@ -103,6 +105,8 @@ export type AppParams = {
     scraperLatestAuthorCacheMaxAgeHours?: number;
     scraperLatestIncludedLanguageCodes?: string[];
     scraperLatestAuthorIncludedLanguageCodes?: string[];
+    scraperLatestOriginalOnly?: boolean;
+    scraperLatestAuthorOriginalOnly?: boolean;
     scraperLatestIncludedScraperIds?: string[];
     scraperLatestIncludedAuthorFavoriteIds?: string[];
     scraperLatestIncludedTagFavoriteIds?: string[];

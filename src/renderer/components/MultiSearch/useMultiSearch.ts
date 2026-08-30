@@ -60,6 +60,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     paceMode: MultiSearchBackgroundInput["paceMode"],
     includedLanguageCodes: string[],
     restoredScrapeDetailsWithCards: boolean,
+    restoredOriginalOnly = false,
   ) => {
     searchAbortControllerRef.current?.abort();
     searchTokenRef.current += 1;
@@ -71,6 +72,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
       paceMode,
       includedLanguageCodes,
       scrapeDetailsWithCards: restoredScrapeDetailsWithCards,
+      originalOnly: restoredOriginalOnly,
       viewMode: "merged",
     };
     setRuns(restoredRuns.map((run) => (

@@ -47,6 +47,7 @@ export type ScraperLatestRun = {
   quickConsecutiveSeenResultCount: number;
   excludedByLanguageCount: number;
   excludedByBlacklistedTagCount: number;
+  excludedByOriginalCount: number;
   includedByLanguageCount: number;
   loadedPages: number;
   checkedPages: number;
@@ -83,6 +84,7 @@ type StartOptions = {
   excludeBlacklistedTagCards?: boolean;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   performanceReportsEnabled?: boolean;
+  originalOnly?: boolean;
   storedContinuation?: {
     input: ListingBackgroundInput;
     runs?: BackgroundListingRun[];
@@ -139,6 +141,7 @@ const toForegroundRun = (
   quickConsecutiveSeenResultCount: run.quickConsecutiveSeenResultCount ?? 0,
   excludedByLanguageCount: run.excludedByLanguageCount ?? 0,
   excludedByBlacklistedTagCount: run.excludedByBlacklistedTagCount ?? 0,
+  excludedByOriginalCount: run.excludedByOriginalCount ?? 0,
   includedByLanguageCount: run.includedByLanguageCount ?? 0,
   loadedPages: run.loadedPages,
   checkedPages: run.checkedPages ?? 0,
@@ -191,6 +194,9 @@ const toInitialBackgroundRun = (
   includedByLanguageCount: preserveCurrentResults ? run.includedByLanguageCount ?? 0 : 0,
   excludedByBlacklistedTagCount: preserveCurrentResults
     ? run.excludedByBlacklistedTagCount ?? 0
+    : 0,
+  excludedByOriginalCount: preserveCurrentResults
+    ? run.excludedByOriginalCount ?? 0
     : 0,
 });
 
@@ -329,6 +335,7 @@ export default function useScraperLatestRuns() {
       concurrency,
       includedLanguageCodes: includedLanguageCodeValues,
       scrapeDetailsWithCards: options.scrapeDetailsWithCards === true,
+      originalOnly: options.originalOnly === true,
       excludeBlacklistedTagCards: options.excludeBlacklistedTagCards === true,
       tagBlacklistByScraper: options.tagBlacklistByScraper,
       searchMode,

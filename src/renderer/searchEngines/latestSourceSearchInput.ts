@@ -23,6 +23,7 @@ export type LatestSourceSearchSettings = LatestSourceListingSettings & {
   concurrency: number;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
+  originalOnly?: boolean;
   excludeBlacklistedTagCards: boolean;
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   quickConsecutiveSeenStopThreshold: number;
@@ -81,6 +82,7 @@ export const buildLatestSourceSearchInput = (
   tagBlacklistByScraper: settings.tagBlacklistByScraper,
   includedLanguageCodes: settings.includedLanguageCodes,
   scrapeDetailsWithCards: settings.scrapeDetailsWithCards,
+  originalOnly: settings.originalOnly === true,
   selectedScraperIds: settings.selectedScraperIds,
   selectedTagFavoriteIds: settings.selectedTagFavoriteIds,
   searchMode: settings.searchMode,

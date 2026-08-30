@@ -82,6 +82,7 @@ export type BackgroundListingRun = {
   includedByLanguageCount?: number;
   languageRejectLimitReached?: boolean;
   excludedByBlacklistedTagCount?: number;
+  excludedByOriginalCount?: number;
   error?: string;
 };
 

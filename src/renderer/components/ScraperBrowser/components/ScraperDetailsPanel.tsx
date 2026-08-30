@@ -137,9 +137,11 @@ type Props = {
   chapters: ScraperRuntimeChapterResult[];
   hasAuthor: boolean;
   hasTag: boolean;
+  hasSource: boolean;
   backLabel?: string | null;
   canResolveAuthorName: boolean;
   canResolveTagName: boolean;
+  canResolveSourceName: boolean;
   hasPages: boolean;
   usesChapters: boolean;
   displaysThumbnails?: boolean;
@@ -159,6 +161,7 @@ type Props = {
   onOpenAuthorInWorkspace?: (value: string, title: string) => void;
   onOpenTag: (value: string, title: string) => void;
   onOpenTagInWorkspace?: (value: string, title: string) => void;
+  onOpenSource: (value: string, title: string) => void;
   onOpenReader: (options?: ScraperOpenReaderOptions) => void;
   onAddToLibrary: (chapter?: ScraperRuntimeChapterResult) => void;
   onLinkSourceToManga: (chapter?: ScraperRuntimeChapterResult) => void;
@@ -182,9 +185,11 @@ export default function ScraperDetailsPanel({
   chapters,
   hasAuthor,
   hasTag,
+  hasSource,
   backLabel = null,
   canResolveAuthorName,
   canResolveTagName,
+  canResolveSourceName,
   displaysThumbnails = true,
   hasPages,
   usesChapters,
@@ -204,6 +209,7 @@ export default function ScraperDetailsPanel({
   onOpenAuthorInWorkspace,
   onOpenTag,
   onOpenTagInWorkspace,
+  onOpenSource,
   onOpenReader,
   onAddToLibrary,
   onLinkSourceToManga,
@@ -363,6 +369,8 @@ export default function ScraperDetailsPanel({
                 authors={detailsResult.authors}
                 authorUrls={detailsResult.authorUrls}
                 tags={detailsResult.tags}
+                sourceNames={detailsResult.sources}
+                sourceUrls={detailsResult.sourceUrls}
                 mangaStatus={detailsResult.mangaStatus}
                 pageCount={detailsResult.pageCount}
                 languageCodes={languageCodes}
@@ -607,6 +615,38 @@ export default function ScraperDetailsPanel({
                     data-prevent-middle-click-autoscroll={onOpenTagInWorkspace ? 'true' : undefined}
                   >
                     {tag}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {detailsResult.sources.length ? (
+            <div className="scraper-card__chips">
+              {detailsResult.sources.map((sourceName, index) => {
+                const sourcePageUrl = detailsResult.sourceUrls[index];
+                const canOpenSource = hasSource && Boolean(
+                  sourcePageUrl || (canResolveSourceName && sourceName),
+                );
+                const sourceTarget = sourcePageUrl || sourceName;
+
+                if (!canOpenSource || !sourceTarget) {
+                  return (
+                    <span key={`${sourceName}-${index}`} className="scraper-card__chip is-source">
+                      Source : {sourceName}
+                    </span>
+                  );
+                }
+
+                return (
+                  <button
+                    key={`${sourceName}-${index}`}
+                    type="button"
+                    className="scraper-card__chip is-source is-clickable"
+                    onClick={() => onOpenSource(sourceTarget, sourceName)}
+                    title={`Ouvrir la page source pour ${sourceName}`}
+                  >
+                    Source : {sourceName}
                   </button>
                 );
               })}

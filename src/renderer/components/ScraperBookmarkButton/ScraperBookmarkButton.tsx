@@ -29,6 +29,8 @@ type Props = {
   authors?: string[];
   authorUrls?: string[];
   tags?: string[];
+  sourceNames?: string[];
+  sourceUrls?: string[];
   mangaStatus?: string | null;
   pageCount?: string | null;
   languageCodes?: string[];
@@ -52,6 +54,8 @@ export default function ScraperBookmarkButton({
   authors,
   authorUrls,
   tags,
+  sourceNames,
+  sourceUrls,
   mangaStatus,
   pageCount,
   languageCodes,
@@ -70,6 +74,8 @@ export default function ScraperBookmarkButton({
   const normalizedAuthors = useMemo(() => normalizeStringList(authors), [authors]);
   const normalizedAuthorUrls = useMemo(() => normalizeStringList(authorUrls), [authorUrls]);
   const normalizedTags = useMemo(() => normalizeStringList(tags), [tags]);
+  const normalizedSourceNames = useMemo(() => normalizeStringList(sourceNames), [sourceNames]);
+  const normalizedSourceUrls = useMemo(() => normalizeStringList(sourceUrls), [sourceUrls]);
   const normalizedLanguageCodes = useMemo(() => normalizeLanguageCodes(languageCodes), [languageCodes]);
   const normalizedExcludedFields = useMemo(() => normalizeExcludedFields(excludedFields), [excludedFields]);
   const bookmarkRequest = useMemo<SaveScraperBookmarkRequest | null>(() => {
@@ -87,6 +93,8 @@ export default function ScraperBookmarkButton({
       authors: normalizedAuthors,
       authorUrls: normalizedAuthorUrls,
       tags: normalizedTags,
+      sourceNames: normalizedSourceNames,
+      sourceUrls: normalizedSourceUrls,
       mangaStatus: normalizeOptional(mangaStatus),
       pageCount: normalizeOptional(pageCount),
       languageCodes: normalizedLanguageCodes,
@@ -102,6 +110,8 @@ export default function ScraperBookmarkButton({
     normalizedScraperId,
     normalizedSourceUrl,
     normalizedTags,
+    normalizedSourceNames,
+    normalizedSourceUrls,
     normalizedLanguageCodes,
     normalizedTitle,
     pageCount,

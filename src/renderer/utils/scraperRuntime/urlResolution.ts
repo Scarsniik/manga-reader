@@ -9,6 +9,7 @@ import {
   type ScraperHomepageFeatureConfig,
   type ScraperRequestConfig,
   type ScraperSearchFeatureConfig,
+  type ScraperSourceFeatureConfig,
   type ScraperTagFeatureConfig,
   type ScraperTagListFeatureConfig,
 } from "@/shared/scraper";
@@ -263,6 +264,31 @@ export const resolveScraperAuthorTargetUrl = (
 export const resolveScraperTagTargetUrl = (
   baseUrl: string,
   config: ScraperTagFeatureConfig,
+  query: string,
+  options?: {
+    pageIndex?: number;
+  },
+): string => {
+  const { looksLikeDirectUrlInput, pageIndex, trimmedQuery } =
+    buildScraperListingTemplateResolution(config, query, options);
+
+  if (config.urlStrategy === "template") {
+    if (!looksLikeDirectUrlInput || pageIndex > 0) {
+      const templateQuery = looksLikeDirectUrlInput
+        ? extractScraperTemplateValueFromUrl(baseUrl, config.urlTemplate, trimmedQuery) ?? trimmedQuery
+        : trimmedQuery;
+      const searchResolvedTemplate = applyScraperSearchTemplate(config.urlTemplate || "", templateQuery, options);
+
+      return resolveScraperUrl(baseUrl, searchResolvedTemplate);
+    }
+  }
+
+  return resolveScraperUrl(baseUrl, trimmedQuery);
+};
+
+export const resolveScraperSourceTargetUrl = (
+  baseUrl: string,
+  config: ScraperSourceFeatureConfig,
   query: string,
   options?: {
     pageIndex?: number;

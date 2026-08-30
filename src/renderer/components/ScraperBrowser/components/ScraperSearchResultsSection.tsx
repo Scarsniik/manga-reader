@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ScraperCardAction } from '@/renderer/components/ScraperCard/ScraperCard';
 import { ScraperRuntimeSearchPageResult } from '@/renderer/utils/scraperRuntime';
-import { ScraperSearchResultItem, type ScraperViewHistoryRecord } from '@/shared/scraper';
+import { ScraperSearchResultItem, type ScraperRecord, type ScraperViewHistoryRecord } from '@/shared/scraper';
 import ScraperSearchPagination from '@/renderer/components/ScraperBrowser/ScraperSearchPagination';
 import ScraperSearchResultCard from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultCard';
 import {
@@ -18,6 +18,8 @@ import {
   type ScraperCardPotentialMatchResult,
 } from '@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches';
 import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
+import OriginalWorksFilterToggle from '@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle';
+import { isScraperResultOriginal } from '@/renderer/utils/scraperOriginalWorks';
 import ResultFilterToggle from '@/renderer/components/ResultFilterToggle/ResultFilterToggle';
 import {
   buildSearchResultViewHistoryIdentity,
@@ -27,7 +29,8 @@ import useFrozenScraperUnseenFilter from '@/renderer/hooks/useFrozenScraperUnsee
 
 type Props = {
   scraperId: string;
-  mode: 'homepage' | 'search' | 'author' | 'tag';
+  scraper: ScraperRecord;
+  mode: 'homepage' | 'search' | 'author' | 'tag' | 'source';
   backLabel?: string | null;
   authorTitle?: string | null;
   visibleSearchResults: ScraperSearchResultItem[];
@@ -43,11 +46,15 @@ type Props = {
   headerAction?: React.ReactNode;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
+  canOpenSearchResultsAsSource: boolean;
+  canResolveSourceName: boolean;
   viewHistoryRecordsById: Map<string, ScraperViewHistoryRecord>;
   newViewHistoryIds: Set<string>;
   tagBlacklistEntries?: ScraperTagBlacklistEntry[];
   tagFavoriteSources?: ScraperTagFavoriteSourceTarget[];
   hideBlacklistedCards?: boolean;
+  searchOriginalOnly?: boolean;
+  onSearchOriginalOnlyChange?: (value: boolean) => void;
   renderReadAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderBookmarkAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
   renderAddToLibraryAction?: (result: ScraperSearchResultItem) => ScraperCardAction | null;
@@ -60,6 +67,7 @@ type Props = {
   onBack?: () => void;
   onOpenResult: (result: ScraperSearchResultItem) => void;
   onOpenAuthorResultAction: (result: ScraperSearchResultItem) => void;
+  onOpenSource: (value: string, title: string) => void;
   onResultKeyDown: (event: React.KeyboardEvent<HTMLElement>, result: ScraperSearchResultItem) => void;
   onOpenResultAction: (result: ScraperSearchResultItem) => void;
   onOpenResultImage: (result: ScraperSearchResultItem) => void;
@@ -71,6 +79,7 @@ type Props = {
 
 export default function ScraperSearchResultsSection({
   scraperId,
+  scraper,
   mode,
   backLabel = null,
   authorTitle = null,
@@ -87,11 +96,15 @@ export default function ScraperSearchResultsSection({
   headerAction,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
+  canOpenSearchResultsAsSource,
+  canResolveSourceName,
   viewHistoryRecordsById,
   newViewHistoryIds,
   tagBlacklistEntries = [],
   tagFavoriteSources = [],
   hideBlacklistedCards = false,
+  searchOriginalOnly = false,
+  onSearchOriginalOnlyChange,
   renderReadAction,
   renderBookmarkAction,
   renderAddToLibraryAction,
@@ -104,6 +117,7 @@ export default function ScraperSearchResultsSection({
   onBack,
   onOpenResult,
   onOpenAuthorResultAction,
+  onOpenSource,
   onResultKeyDown,
   onOpenResultAction,
   onOpenResultImage,
@@ -112,6 +126,7 @@ export default function ScraperSearchResultsSection({
   onOpenPotentialMatch,
   onOpenPotentialMatchInWorkspace,
 }: Props) {
+  const [originalOnly, setOriginalOnly] = React.useState(false);
   const {
     active: showUnseenOnly,
     recordsById: unseenFilterRecordsById,
@@ -143,21 +158,27 @@ export default function ScraperSearchResultsSection({
     ));
   }, [authorTitle, mode, query, visibleSearchResults]);
 
+  const originalFilteredResults = React.useMemo(() => (
+    mode === 'author' && originalOnly
+      ? resultsWithTagContext.filter((result) => isScraperResultOriginal(scraper, result))
+      : resultsWithTagContext
+  ), [mode, originalOnly, resultsWithTagContext, scraper]);
+
   const blacklistedSearchResultCount = React.useMemo(() => (
-    resultsWithTagContext.reduce((count, result) => (
+    originalFilteredResults.reduce((count, result) => (
       count + (getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length > 0 ? 1 : 0)
     ), 0)
-  ), [resultsWithTagContext, tagBlacklistEntries]);
+  ), [originalFilteredResults, tagBlacklistEntries]);
 
   const blacklistFilteredSearchResults = React.useMemo(() => {
     if (!shouldHideBlacklistedCards) {
-      return resultsWithTagContext;
+      return originalFilteredResults;
     }
 
-    return resultsWithTagContext.filter((result) => (
+    return originalFilteredResults.filter((result) => (
       getBlacklistedScraperTags(tagBlacklistEntries, result.tags, result.tagUrls).length === 0
     ));
-  }, [resultsWithTagContext, shouldHideBlacklistedCards, tagBlacklistEntries]);
+  }, [originalFilteredResults, shouldHideBlacklistedCards, tagBlacklistEntries]);
   const displayedSearchResults = React.useMemo(
     () => filterByScraperViewHistoryNewState(
       blacklistFilteredSearchResults,
@@ -182,10 +203,13 @@ export default function ScraperSearchResultsSection({
   const isAuthorMode = mode === 'author';
   const isTagMode = mode === 'tag';
   const isHomepageMode = mode === 'homepage';
+  const isSourceMode = mode === 'source';
   const heading = isAuthorMode
     ? authorTitle || 'Resultats auteur'
     : isTagMode
       ? authorTitle || 'Resultats tag'
+      : isSourceMode
+        ? authorTitle || 'Resultats source'
       : isHomepageMode
         ? 'Homepage'
         : 'Resultats de recherche';
@@ -225,6 +249,12 @@ export default function ScraperSearchResultsSection({
                       {searchResultsCount} resultat(s) extrait(s) depuis la page tag courante.
                     </>
                   )
+                : isSourceMode
+                  ? (
+                    <>
+                      {searchResultsCount} resultat(s) extrait(s) depuis la page source courante.
+                    </>
+                  )
                 : isHomepageMode
                   ? (
                     <>
@@ -241,6 +271,24 @@ export default function ScraperSearchResultsSection({
 
         <div className="scraper-browser__results-side">
           {headerAction}
+          {isAuthorMode ? (
+            <>
+              <OriginalWorksFilterToggle
+                active={searchOriginalOnly}
+                onChange={(value) => onSearchOriginalOnlyChange?.(value)}
+                disabled={!onSearchOriginalOnlyChange}
+                label="Originaux · recherche"
+                title="Relancer la recherche auteur en excluant les œuvres dérivées pendant la collecte"
+                variant="result"
+              />
+              <OriginalWorksFilterToggle
+                active={originalOnly}
+                onChange={setOriginalOnly}
+                label="Originaux · affichage"
+                variant="result"
+              />
+            </>
+          ) : null}
           <ResultFilterToggle
             active={showUnseenOnly}
             label="Non vus seulement"
@@ -297,6 +345,8 @@ export default function ScraperSearchResultsSection({
               canOpenResult={canOpenResult}
               canOpenSearchResultsAsDetails={canOpenSearchResultsAsDetails}
               canOpenSearchResultsAsAuthor={canOpenSearchResultsAsAuthor}
+              canOpenSearchResultsAsSource={canOpenSearchResultsAsSource}
+              canResolveSourceName={canResolveSourceName}
               canOpenAuthorResult={canOpenAuthorResult}
               viewHistoryRecordsById={viewHistoryRecordsById}
               newViewHistoryIds={newViewHistoryIds}
@@ -313,6 +363,7 @@ export default function ScraperSearchResultsSection({
                 : potentialMatchesLoading}
               onOpenResult={onOpenResult}
               onOpenAuthorResultAction={onOpenAuthorResultAction}
+              onOpenSource={onOpenSource}
               onResultKeyDown={onResultKeyDown}
               onOpenResultAction={onOpenResultAction}
               onOpenResultImage={onOpenResultImage}
@@ -328,9 +379,7 @@ export default function ScraperSearchResultsSection({
         <div className="scraper-browser__message">
           {shouldHideBlacklistedCards && blacklistedSearchResultCount > 0
             ? 'Tous les resultats visibles sont masques par la blacklist.'
-            : showUnseenOnly
-              ? 'Aucune card non vue ne correspond aux filtres actifs.'
-              : 'Aucun resultat ne correspond aux filtres actifs.'}
+            : 'Aucun resultat ne correspond aux filtres actifs.'}
         </div>
       ) : null}
 

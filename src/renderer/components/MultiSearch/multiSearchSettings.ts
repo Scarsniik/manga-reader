@@ -25,6 +25,7 @@ export type MultiSearchPersistentSettings = {
   advancedPages: MultiSearchAdvancedPages;
   paceMode: MultiSearchPaceMode;
   viewMode: MultiSearchViewMode;
+  originalOnly: boolean;
 };
 
 const DEFAULT_SETTINGS: MultiSearchPersistentSettings = {
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS: MultiSearchPersistentSettings = {
   advancedPages: 3,
   paceMode: "fast",
   viewMode: "merged",
+  originalOnly: false,
 };
 
 const normalizeStringList = (
@@ -147,4 +149,5 @@ export const getMultiSearchPersistentSettingsFromParams = (
   advancedPages: normalizeAdvancedPages(params?.multiSearchAdvancedPages),
   paceMode: normalizePaceMode(params?.multiSearchPaceMode),
   viewMode: normalizeViewMode(params?.multiSearchViewMode),
+  originalOnly: params?.multiSearchOriginalOnly === true,
 });

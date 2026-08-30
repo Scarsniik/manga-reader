@@ -13,6 +13,7 @@ import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/componen
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { createScraperCardDetailsCache } from "@/renderer/utils/scraperRuntime";
 import { findAuthorFavoriteCachedSource } from "@/renderer/utils/scraperAuthorFavoriteCache";
+import { isMultiSearchSourceOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
 import {
   runAuthorFavoriteRefreshSearchEngine,
@@ -38,6 +39,7 @@ type AuthorFavoriteRunsOptions = {
   authorFavoriteCacheMaxAgeHours?: number;
   searchMode?: "quick" | "continuous" | "deep";
   quickConsecutiveSeenStopThreshold?: number;
+  originalOnly?: boolean;
 };
 
 export type AuthorFavoriteSourceRun = {
@@ -184,10 +186,9 @@ const buildRunFromCacheSource = async (
   cachedSource: ScraperAuthorFavoriteCacheSource,
   contextualAuthorNames: string[],
   includedLanguageCodes: string[],
-): Promise<AuthorFavoriteSourceRun> => ({
-  ...run,
-  status: "done",
-  results: await enrichSourceResultsWithJapaneseRomanization(buildSourceResultsFromItems(
+  originalOnly: boolean,
+): Promise<AuthorFavoriteSourceRun> => {
+  const results = await enrichSourceResultsWithJapaneseRomanization(buildSourceResultsFromItems(
     run.scraper,
     cachedSource.results.map((cachedResult) => cachedResult.result),
     (_result, index) => cachedSource.results[index]?.pageIndex ?? 0,
@@ -195,13 +196,19 @@ const buildRunFromCacheSource = async (
     () => contextualAuthorNames,
   ).filter((source) => (
     doesMultiSearchSourceMatchIncludedLanguages(source, includedLanguageCodes)
-  ))),
-  loadedPages: cachedSource.loadedPages,
-  hasNextPage: cachedSource.hasNextPage,
-  currentPageUrl: cachedSource.currentPageUrl,
-  nextPageUrl: cachedSource.nextPageUrl,
-  error: undefined,
-});
+  )));
+
+  return {
+    ...run,
+    status: "done",
+    results: results.filter((source) => !originalOnly || isMultiSearchSourceOriginal(source)),
+    loadedPages: cachedSource.loadedPages,
+    hasNextPage: cachedSource.hasNextPage,
+    currentPageUrl: cachedSource.currentPageUrl,
+    nextPageUrl: cachedSource.nextPageUrl,
+    error: undefined,
+  };
+};
 
 export default function useAuthorFavoriteRuns(
   favorite: ScraperAuthorFavoriteRecord | null,
@@ -211,6 +218,7 @@ export default function useAuthorFavoriteRuns(
   const { initialPageCount, cacheResults } = options;
   const scrapeDetailsWithCards = options.scrapeDetailsWithCards === true;
   const includedLanguageCodes = options.includedLanguageCodes ?? ALL_AUTHOR_FAVORITE_LANGUAGES;
+  const originalOnly = options.originalOnly === true;
   const sourceFavorites = useMemo(
     () => options.sourceFavorites ?? (favorite ? [favorite] : []),
     [favorite, options.sourceFavorites],
@@ -276,6 +284,7 @@ export default function useAuthorFavoriteRuns(
       concurrency,
       includedLanguageCodes,
       scrapeDetailsWithCards,
+      originalOnly,
       useAuthorFavoriteCache: searchKind === "latestAuthors" && options.useAuthorFavoriteCache === true,
       authorFavoriteCacheMaxAgeHours: options.authorFavoriteCacheMaxAgeHours,
       selectedFavoriteIds: favoriteRecords.map((favoriteRecord) => favoriteRecord.id),
@@ -310,6 +319,7 @@ export default function useAuthorFavoriteRuns(
     options.quickConsecutiveSeenStopThreshold,
     options.searchMode,
     options.useAuthorFavoriteCache,
+    originalOnly,
     scrapeDetailsWithCards,
     scrapersById,
     searchKind,
@@ -336,10 +346,16 @@ export default function useAuthorFavoriteRuns(
     return Promise.all(initialRuns.map(async (run) => {
       const cachedSource = findCachedSource(cache, run);
       return cachedSource
-        ? buildRunFromCacheSource(run, cachedSource, contextualAuthorNames, includedLanguageCodes)
+        ? buildRunFromCacheSource(
+          run,
+          cachedSource,
+          contextualAuthorNames,
+          includedLanguageCodes,
+          originalOnly,
+        )
         : run;
     }));
-  }, [cacheResults, contextualAuthorNames, favorite, includedLanguageCodes]);
+  }, [cacheResults, contextualAuthorNames, favorite, includedLanguageCodes, originalOnly]);
 
   const saveRunsCache = useCallback(async (
     nextRuns: AuthorFavoriteSourceRun[],

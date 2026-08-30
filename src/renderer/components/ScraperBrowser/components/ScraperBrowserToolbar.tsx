@@ -45,6 +45,7 @@ export default function ScraperBrowserToolbar({
     manga: 'Manga',
     author: 'Auteur',
     tag: 'Tag',
+    source: 'Source',
     tagList: 'Tags',
   };
   const isHomepageMode = mode === 'homepage';

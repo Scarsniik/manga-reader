@@ -25,6 +25,7 @@ export const LISTING_SCRAPING_FIELD_NAMES = [
   'titleSelector',
   'detailUrlSelector',
   'authorUrlSelector',
+  'sourceUrlSelector',
   'thumbnailSelector',
   'summarySelector',
   'pageCountSelector',
@@ -37,6 +38,7 @@ export const LISTING_SCRAPING_FIELD_SELECTOR_NAMES = [
   'titleSelector',
   'detailUrlSelector',
   'authorUrlSelector',
+  'sourceUrlSelector',
   'thumbnailSelector',
   'summarySelector',
   'pageCountSelector',
@@ -71,6 +73,7 @@ export const buildListingScrapingFields = (
   titleSelector: normalizeRequiredFieldSelector(values.titleSelector),
   detailUrlSelector: trimOptionalFieldSelector(values.detailUrlSelector),
   authorUrlSelector: trimOptionalFieldSelector(values.authorUrlSelector),
+  sourceUrlSelector: trimOptionalFieldSelector(values.sourceUrlSelector),
   thumbnailSelector: trimOptionalFieldSelector(values.thumbnailSelector),
   summarySelector: trimOptionalFieldSelector(values.summarySelector),
   pageCountSelector: trimOptionalFieldSelector(values.pageCountSelector),
@@ -142,6 +145,7 @@ export const buildListingValidationPresentation = (
   const summaryCheck = validationResult.checks.find((check) => check.key === 'description');
   const listingNameCheck = validationResult.checks.find((check) => check.key === options.listingNameCheckKey);
   const authorUrlCheck = validationResult.checks.find((check) => check.key === 'authorUrl');
+  const sourceUrlCheck = validationResult.checks.find((check) => check.key === 'sourceUrl');
   const pageCountCheck = validationResult.checks.find((check) => check.key === 'pageCount');
   const languageCheck = validationResult.checks.find((check) => check.key === 'language');
 
@@ -178,6 +182,10 @@ export const buildListingValidationPresentation = (
 
   if (authorUrlCheck?.matchedCount) {
     details.push(`Liens auteur detectes : ${authorUrlCheck.matchedCount}`);
+  }
+
+  if (sourceUrlCheck?.matchedCount) {
+    details.push(`Liens source detectes : ${sourceUrlCheck.matchedCount}`);
   }
 
   if (coverCheck?.matchedCount) {

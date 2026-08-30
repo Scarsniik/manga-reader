@@ -147,6 +147,9 @@ const buildMultiSearchSettingsParamsPatch = (
   ...(settings.advancedPages ? { multiSearchAdvancedPages: settings.advancedPages } : {}),
   ...(settings.paceMode ? { multiSearchPaceMode: settings.paceMode } : {}),
   ...(settings.viewMode ? { multiSearchViewMode: settings.viewMode } : {}),
+  ...(typeof settings.originalOnly === "boolean"
+    ? { multiSearchOriginalOnly: settings.originalOnly }
+    : {}),
 });
 
 export default function MultiSearchBrowser({
@@ -172,6 +175,7 @@ export default function MultiSearchBrowser({
   const [advancedPages, setAdvancedPages] = useState<MultiSearchAdvancedPages>(3);
   const [paceMode, setPaceMode] = useState<MultiSearchPaceMode>("fast");
   const [viewMode, setViewMode] = useState<MultiSearchViewMode>("merged");
+  const [originalOnly, setOriginalOnly] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const [isExportingJson, setIsExportingJson] = useState(false);
   const [showMergeReloadButton, setShowMergeReloadButton] = useState(false);
@@ -225,12 +229,14 @@ export default function MultiSearchBrowser({
       paceMode,
       includedLanguageCodes,
       params?.multiSearchScrapeDetailsWithCards === true,
+      originalOnly,
     );
   }, [
     attachedSearch.attached,
     includedLanguageCodes,
     paceMode,
     params?.multiSearchScrapeDetailsWithCards,
+    originalOnly,
     restoreRuns,
     runs,
   ]);
@@ -255,6 +261,7 @@ export default function MultiSearchBrowser({
     setAdvancedPages(input.advancedPages ?? (input.maxPages === null ? "maximum" : input.maxPages));
     setPaceMode(input.paceMode);
     setViewMode(input.viewMode);
+    setOriginalOnly(input.originalOnly === true);
     replaceRuns(result?.runs ?? []);
     setBackgroundMessage(job.metadata.status === "running" || job.metadata.status === "queued"
       ? "Recherche en arrière-plan en cours. Les résultats sont actualisés automatiquement."
@@ -299,6 +306,7 @@ export default function MultiSearchBrowser({
     setAdvancedPages(settings.advancedPages);
     setPaceMode(settings.paceMode);
     setViewMode(settings.viewMode);
+    setOriginalOnly(settings.originalOnly);
   }, []);
 
   const persistMultiSearchSettings = React.useCallback((settings: Partial<MultiSearchPersistentSettings>) => {
@@ -333,6 +341,12 @@ export default function MultiSearchBrowser({
     const normalizedValue = normalizeMultiSearchSelectedContentTypes(value);
     setSelectedContentTypes(normalizedValue);
     persistMultiSearchSettings({ selectedContentTypes: normalizedValue });
+  }, [detachFromAttachedSearch, persistMultiSearchSettings]);
+
+  const handleOriginalOnlyChange = React.useCallback((value: boolean) => {
+    detachFromAttachedSearch();
+    setOriginalOnly(value);
+    persistMultiSearchSettings({ originalOnly: value });
   }, [detachFromAttachedSearch, persistMultiSearchSettings]);
 
   const handleDepthModeChange = React.useCallback((value: MultiSearchDepthMode) => {
@@ -456,6 +470,7 @@ export default function MultiSearchBrowser({
         persistentSettings.paceMode,
         persistentSettings.includedLanguageCodes,
         params?.multiSearchScrapeDetailsWithCards === true,
+        persistentSettings.originalOnly,
       );
       return;
     }
@@ -479,6 +494,7 @@ export default function MultiSearchBrowser({
           persistentSettings.paceMode,
           persistentSettings.includedLanguageCodes,
           params?.multiSearchScrapeDetailsWithCards === true,
+          persistentSettings.originalOnly,
         );
         return;
       }
@@ -766,6 +782,7 @@ export default function MultiSearchBrowser({
       paceMode,
       includedLanguageCodes,
       scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
+      originalOnly,
       viewMode,
       selectedLanguageCodes,
       selectedContentTypes,
@@ -801,6 +818,7 @@ export default function MultiSearchBrowser({
           advancedPages,
           paceMode,
           viewMode,
+          originalOnly,
         }),
       });
     }
@@ -1120,10 +1138,12 @@ export default function MultiSearchBrowser({
         selectedLanguageCodes={selectedLanguageCodes}
         includedLanguageCodes={includedLanguageCodes}
         selectedContentTypes={selectedContentTypes}
+        originalOnly={originalOnly}
         onSelectedScraperIdsChange={handleSelectedScraperIdsChange}
         onSelectedLanguageCodesChange={handleSelectedLanguageCodesChange}
         onIncludedLanguageCodesChange={handleIncludedLanguageCodesChange}
         onSelectedContentTypesChange={handleSelectedContentTypesChange}
+        onOriginalOnlyChange={handleOriginalOnlyChange}
       /> : null}
 
       <section className="multi-search__panel multi-search__summary">
@@ -1132,6 +1152,7 @@ export default function MultiSearchBrowser({
           <span>Langues des scrappers : {selectedLanguageSummaryLabel}</span>
           <span>Langues incluses : {includedLanguageSummaryLabel}</span>
           <span>Types : {selectedTypeSummaryLabel}</span>
+          <span>Œuvres : {originalOnly ? "originaux uniquement (filtre de recherche)" : "toutes"}</span>
           <div className="multi-search__summary-counts">
             <span>{statusCounts.done} termine(s)</span>
             <span>{statusCounts.loading} en cours</span>

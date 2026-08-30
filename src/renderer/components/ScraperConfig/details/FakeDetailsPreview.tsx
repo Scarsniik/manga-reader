@@ -37,6 +37,9 @@ export default function FakeDetailsPreview({ preview }: Props) {
           {preview.tags ? (
             <span className="scraper-feature-pill is-validated">{preview.tags}</span>
           ) : null}
+          {preview.sources ? (
+            <span className="scraper-feature-pill is-configured">Source : {preview.sources}</span>
+          ) : null}
           {pageCountLabel ? (
             <span className="scraper-feature-pill">{pageCountLabel}</span>
           ) : null}

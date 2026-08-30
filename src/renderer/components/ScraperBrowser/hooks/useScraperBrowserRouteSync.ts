@@ -81,13 +81,24 @@ const getListingRouteTarget = (
     };
   }
 
-  if (!routeState.tagActive) {
+  if (mode === 'tag') {
+    if (!routeState.tagActive) {
+      return null;
+    }
+
+    return {
+      query: routeState.tagQuery ?? '',
+      pageIndex: Math.max(0, (routeState.tagPage ?? 1) - 1),
+    };
+  }
+
+  if (!routeState.sourceActive) {
     return null;
   }
 
   return {
-    query: routeState.tagQuery ?? '',
-    pageIndex: Math.max(0, (routeState.tagPage ?? 1) - 1),
+    query: routeState.sourceQuery ?? '',
+    pageIndex: Math.max(0, (routeState.sourcePage ?? 1) - 1),
   };
 };
 
@@ -120,6 +131,7 @@ type UseScraperBrowserRouteSyncOptions = {
   hasSearch: boolean;
   hasAuthor: boolean;
   hasTag: boolean;
+  hasSource: boolean;
   hasTagList: boolean;
   hasDetails: boolean;
   hasConfiguredHomeSearch: boolean;
@@ -151,6 +163,7 @@ type UseScraperBrowserRouteSyncOptions = {
   runSearchLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runAuthorLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runTagLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
+  runSourceLookup: (query: string, options?: ListingLookupOptions) => Promise<void>;
   runDetailsLookup: (query: string, options?: DetailsLookupOptions) => Promise<void>;
   loadDetailsFromTargetUrl: (targetUrl: string, options?: DetailsLookupOptions) => Promise<void>;
 };
@@ -169,6 +182,7 @@ export function useScraperBrowserRouteSync({
   hasSearch,
   hasAuthor,
   hasTag,
+  hasSource,
   hasTagList,
   hasDetails,
   hasConfiguredHomeSearch,
@@ -200,6 +214,7 @@ export function useScraperBrowserRouteSync({
   runSearchLookup,
   runAuthorLookup,
   runTagLookup,
+  runSourceLookup,
   runDetailsLookup,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserRouteSyncOptions) {
@@ -396,6 +411,7 @@ export function useScraperBrowserRouteSync({
         && !routeState.searchActive
         && !routeState.authorActive
         && !routeState.tagActive
+        && !routeState.sourceActive
         && routeState.mode !== 'tagList'
         && !routeState.mangaQuery
         && !routeState.mangaUrl
@@ -478,6 +494,32 @@ export function useScraperBrowserRouteSync({
       return;
     }
 
+    if (nextMode === 'source') {
+      setQuery(routeState.sourceQuery ?? '');
+
+      if (routeState.sourceActive && hasSource) {
+        const cachedSourceState = listingReturnStateMatchesRoute(restoredListingReturnState, routeState, 'source')
+          ? restoredListingReturnState
+          : null;
+        if (cachedSourceState?.page && cachedSourceState.results.length > 0) {
+          restoreListingReturnState(cachedSourceState);
+          return;
+        }
+
+        await runSourceLookup(routeState.sourceQuery ?? '', {
+          pageIndex: Math.max(0, (routeState.sourcePage ?? 1) - 1),
+          canCommit,
+        });
+        return;
+      }
+
+      setListingReturnState(null);
+      resetDetailsState();
+      resetListingState();
+      clearFeedback();
+      return;
+    }
+
     if (nextMode === 'tagList' && hasTagList) {
       setQuery(routeState.tagListQuery ?? '');
       setListingReturnState(null);
@@ -521,6 +563,7 @@ export function useScraperBrowserRouteSync({
     defaultMode,
     hasAuthor,
     hasTag,
+    hasSource,
     hasTagList,
     hasHomepage,
     hasConfiguredHomeSearch,
@@ -543,6 +586,7 @@ export function useScraperBrowserRouteSync({
     runHomepageLookup,
     runSearchLookup,
     runTagLookup,
+    runSourceLookup,
     scraperId,
     setListingReturnState,
     setMode,
@@ -684,6 +728,24 @@ export function useScraperBrowserRouteSync({
           page: 1,
         };
 
+    const persistedSourceState = mode === 'source'
+      ? {
+        active: hasExecutedListing,
+        query,
+        page: listingPageIndex + 1,
+      }
+      : listingReturnState?.mode === 'source' && listingReturnState.hasExecutedListing
+        ? {
+          active: true,
+          query: listingReturnState.query,
+          page: listingReturnState.pageIndex + 1,
+        }
+        : {
+          active: false,
+          query: '',
+          page: 1,
+        };
+
     const nextSearch = writeScraperRouteState(locationSearch, {
       scraperId,
       mode,
@@ -698,6 +760,9 @@ export function useScraperBrowserRouteSync({
       tagActive: persistedTagState.active,
       tagQuery: persistedTagState.query,
       tagPage: persistedTagState.page,
+      sourceActive: persistedSourceState.active,
+      sourceQuery: persistedSourceState.query,
+      sourcePage: persistedSourceState.page,
       tagListQuery: mode === 'tagList' ? query : routeState.tagListQuery ?? '',
       mangaQuery: mode === 'manga' ? query : '',
       mangaUrl: mode === 'manga'

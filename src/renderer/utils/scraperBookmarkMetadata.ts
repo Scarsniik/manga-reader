@@ -216,6 +216,16 @@ export const shouldSyncBookmarkMetadata = (
     return true;
   }
 
+  const nextSourceNames = normalizeBookmarkStringList(request.sourceNames);
+  if (nextSourceNames.length && !areSameStringLists(nextSourceNames, bookmark.sourceNames ?? [])) {
+    return true;
+  }
+
+  const nextSourceUrls = normalizeBookmarkStringList(request.sourceUrls);
+  if (nextSourceUrls.length && !areSameStringLists(nextSourceUrls, bookmark.sourceUrls ?? [])) {
+    return true;
+  }
+
   const nextLanguageCodes = normalizeBookmarkLanguageCodes(request.languageCodes);
   if (
     !excludedFields.has("languageCodes")
@@ -241,6 +251,8 @@ export const buildScraperBookmarkRequestFromRecord = (
   authors: bookmark.authors,
   authorUrls: bookmark.authorUrls,
   tags: bookmark.tags,
+  sourceNames: bookmark.sourceNames,
+  sourceUrls: bookmark.sourceUrls,
   mangaStatus: bookmark.mangaStatus,
   pageCount: bookmark.pageCount,
   languageCodes: getScraperBookmarkLanguageCodes(bookmark, scraper),
@@ -330,6 +342,8 @@ export const enrichScraperBookmarkRequestFromDetails = async (
     const authors = normalizeBookmarkStringList(extractedDetails.authors);
     const authorUrls = normalizeBookmarkStringList(extractedDetails.authorUrls);
     const tags = normalizeBookmarkStringList(extractedDetails.tags);
+    const sourceNames = normalizeBookmarkStringList(extractedDetails.sources);
+    const sourceUrls = normalizeBookmarkStringList(extractedDetails.sourceUrls);
     const languageCodes = normalizeBookmarkLanguageCodes(extractedDetails.languageCodes);
 
     return {
@@ -340,6 +354,8 @@ export const enrichScraperBookmarkRequestFromDetails = async (
       authors: authors.length ? authors : requestWithLanguageFallback.authors,
       authorUrls: authorUrls.length ? authorUrls : requestWithLanguageFallback.authorUrls,
       tags: tags.length ? tags : requestWithLanguageFallback.tags,
+      sourceNames: sourceNames.length ? sourceNames : requestWithLanguageFallback.sourceNames,
+      sourceUrls: sourceUrls.length ? sourceUrls : requestWithLanguageFallback.sourceUrls,
       mangaStatus: normalizeBookmarkOptionalText(extractedDetails.mangaStatus) || requestWithLanguageFallback.mangaStatus,
       pageCount: normalizeBookmarkOptionalText(extractedDetails.pageCount) || requestWithLanguageFallback.pageCount,
       languageCodes: languageCodes.length ? languageCodes : requestWithLanguageFallback.languageCodes,

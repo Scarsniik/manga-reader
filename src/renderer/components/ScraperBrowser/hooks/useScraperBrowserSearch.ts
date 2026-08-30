@@ -15,6 +15,7 @@ import {
   ScraperRecord,
   ScraperSearchFeatureConfig,
   ScraperSearchResultItem,
+  ScraperSourceFeatureConfig,
   ScraperTagFeatureConfig,
 } from '@/shared/scraper';
 import {
@@ -33,6 +34,7 @@ import {
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
+  hasSourcePagePlaceholder,
   hasTagPagePlaceholder,
   isScraperListingPaginationEndError,
   resolveScraperAuthorTargetUrl,
@@ -40,6 +42,7 @@ import {
   resolveScraperHomepageTargetUrl,
   resolveScraperSearchRequestConfig,
   resolveScraperSearchTargetUrl,
+  resolveScraperSourceTargetUrl,
   resolveScraperTagTargetUrl,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
@@ -73,6 +76,7 @@ type FetchListingPageOptions = {
 type UseScraperBrowserSearchOptions = {
   scraper: ScraperRecord;
   scrapeDetailsWithCards: boolean;
+  authorOriginalOnly: boolean;
   scrapingConcurrency: number;
   routeSyncEnabled: boolean;
   locationPathname: string;
@@ -86,12 +90,14 @@ type UseScraperBrowserSearchOptions = {
   hasSearch: boolean;
   hasAuthor: boolean;
   hasTag: boolean;
+  hasSource: boolean;
   hasConfiguredHomeSearch: boolean;
   homeSearchQuery: string;
   homepageConfig: ScraperHomepageFeatureConfig | null;
   searchConfig: ScraperSearchFeatureConfig | null;
   authorConfig: ScraperAuthorFeatureConfig | null;
   tagConfig: ScraperTagFeatureConfig | null;
+  sourceConfig: ScraperSourceFeatureConfig | null;
   detailsConfig: ScraperDetailsFeatureConfig | null;
   canOpenSearchResultsAsDetails: boolean;
   canOpenSearchResultsAsAuthor: boolean;
@@ -126,7 +132,7 @@ type UseScraperBrowserSearchOptions = {
 };
 
 const isListingMode = (value: ScraperBrowseMode): value is ScraperListingMode => (
-  value === 'homepage' || value === 'search' || value === 'author' || value === 'tag'
+  value === 'homepage' || value === 'search' || value === 'author' || value === 'tag' || value === 'source'
 );
 
 const getListingModeLabel = (mode: ScraperListingMode): string => (
@@ -134,6 +140,8 @@ const getListingModeLabel = (mode: ScraperListingMode): string => (
     ? 'page auteur'
     : mode === 'tag'
       ? 'page tag'
+      : mode === 'source'
+        ? 'page source'
       : mode === 'homepage'
         ? 'homepage'
         : 'recherche'
@@ -172,6 +180,7 @@ const getRouteStateForNavigation = (options: {
   hasExecutedSourceListing: boolean;
   nextAuthorQuery?: string;
   nextTagQuery?: string;
+  nextSourceQuery?: string;
   mangaUrl?: string;
 }): string => {
   const {
@@ -184,6 +193,7 @@ const getRouteStateForNavigation = (options: {
     hasExecutedSourceListing,
     nextAuthorQuery,
     nextTagQuery,
+    nextSourceQuery,
     mangaUrl,
   } = options;
   const currentRouteState = parseScraperRouteState(routeSearch);
@@ -230,6 +240,17 @@ const getRouteStateForNavigation = (options: {
       query: currentRouteState.tagQuery ?? '',
       page: currentRouteState.tagPage ?? 1,
     };
+  const persistedSourceState = sourceMode === 'source'
+    ? {
+      active: hasExecutedSourceListing,
+      query: sourceQuery,
+      page: currentPage,
+    }
+    : {
+      active: currentRouteState.sourceActive,
+      query: currentRouteState.sourceQuery ?? '',
+      page: currentRouteState.sourcePage ?? 1,
+    };
   const persistedTagListQuery = sourceMode === 'tagList'
     ? sourceQuery
     : currentRouteState.tagListQuery ?? '';
@@ -260,6 +281,15 @@ const getRouteStateForNavigation = (options: {
     tagPage: nextMode === 'tag'
       ? 1
       : persistedTagState.page,
+    sourceActive: nextMode === 'source'
+      ? true
+      : persistedSourceState.active,
+    sourceQuery: nextMode === 'source'
+      ? (nextSourceQuery ?? '')
+      : persistedSourceState.query,
+    sourcePage: nextMode === 'source'
+      ? 1
+      : persistedSourceState.page,
     tagListQuery: nextMode === 'tagList' ? sourceQuery : persistedTagListQuery,
     mangaQuery: '',
     mangaUrl,
@@ -269,6 +299,7 @@ const getRouteStateForNavigation = (options: {
 export function useScraperBrowserSearch({
   scraper,
   scrapeDetailsWithCards,
+  authorOriginalOnly,
   scrapingConcurrency,
   routeSyncEnabled,
   locationPathname,
@@ -282,12 +313,14 @@ export function useScraperBrowserSearch({
   hasSearch,
   hasAuthor,
   hasTag,
+  hasSource,
   hasConfiguredHomeSearch,
   homeSearchQuery,
   homepageConfig,
   searchConfig,
   authorConfig,
   tagConfig,
+  sourceConfig,
   detailsConfig,
   canOpenSearchResultsAsDetails,
   canOpenSearchResultsAsAuthor,
@@ -324,6 +357,7 @@ export function useScraperBrowserSearch({
   const authorEnginePageUrlsRef = useRef(new Map<number, string>());
   const authorEngineAbortControllerRef = useRef<AbortController | null>(null);
   const authorDetailsCacheRef = useRef(createScraperCardDetailsCache());
+  const authorEngineOriginalOnlyRef = useRef(authorOriginalOnly);
 
   useEffect(() => () => authorEngineAbortControllerRef.current?.abort(), []);
   const fetchListingPage = useCallback(async (
@@ -337,7 +371,9 @@ export function useScraperBrowserSearch({
         ? searchConfig
         : listingMode === 'author'
           ? authorConfig
-          : tagConfig;
+          : listingMode === 'tag'
+            ? tagConfig
+            : sourceConfig;
     if (!config?.resultItemSelector || !hasScraperFieldSelectorValue(config.titleSelector)) {
       throw new Error(`Le composant ${getListingModeLabel(listingMode)} n'est pas encore suffisamment configure pour etre execute.`);
     }
@@ -369,17 +405,19 @@ export function useScraperBrowserSearch({
         : `Impossible de charger la ${getListingModeLabel(listingMode)}.`,
       scrapeDetailsWithCards,
     });
-  }, [authorConfig, homepageConfig, scrapeDetailsWithCards, scraper, searchConfig, tagConfig]);
+  }, [authorConfig, homepageConfig, scrapeDetailsWithCards, scraper, searchConfig, sourceConfig, tagConfig]);
 
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
     listingMode === 'author'
       ? hasAuthorPagePlaceholder(authorConfig)
       : listingMode === 'tag'
         ? hasTagPagePlaceholder(tagConfig)
+      : listingMode === 'source'
+        ? hasSourcePagePlaceholder(sourceConfig)
       : listingMode === 'homepage'
         ? hasSearchPagePlaceholder(homepageConfig)
       : hasSearchPagePlaceholder(searchConfig)
-  ), [authorConfig, homepageConfig, searchConfig, tagConfig]);
+  ), [authorConfig, homepageConfig, searchConfig, sourceConfig, tagConfig]);
 
   const loadListingResultsPage = useCallback(async (
     listingMode: ScraperListingMode,
@@ -415,6 +453,8 @@ export function useScraperBrowserSearch({
         })
         : listingMode === 'tag'
           ? resolveScraperTagTargetUrl(scraper.baseUrl, tagConfig!, nextQuery, { pageIndex })
+        : listingMode === 'source'
+          ? resolveScraperSourceTargetUrl(scraper.baseUrl, sourceConfig!, nextQuery, { pageIndex })
         : listingMode === 'homepage'
           ? resolveScraperHomepageTargetUrl(scraper.baseUrl, homepageConfig!, { pageIndex })
         : resolveScraperSearchTargetUrl(scraper.baseUrl, searchConfig!, nextQuery, { pageIndex })
@@ -475,6 +515,7 @@ export function useScraperBrowserSearch({
     homepageConfig,
     scraper.baseUrl,
     searchConfig,
+    sourceConfig,
     tagConfig,
   ]);
 
@@ -492,7 +533,9 @@ export function useScraperBrowserSearch({
   }> => {
     const normalizedTargetPageIndex = Math.max(0, Math.floor(targetPageIndex));
     const sourceKey = `${scraper.id}::${nextQuery}`;
-    const currentRun = !forceReset && authorEngineRunRef.current?.key === sourceKey
+    const currentRun = !forceReset
+      && authorEngineOriginalOnlyRef.current === authorOriginalOnly
+      && authorEngineRunRef.current?.key === sourceKey
       ? authorEngineRunRef.current
       : null;
 
@@ -526,6 +569,7 @@ export function useScraperBrowserSearch({
     const controller = new AbortController();
     authorEngineAbortControllerRef.current = controller;
     if (!currentRun) {
+      authorEngineOriginalOnlyRef.current = authorOriginalOnly;
       authorEnginePageUrlsRef.current = new Map();
       authorDetailsCacheRef.current = createScraperCardDetailsCache();
     }
@@ -536,6 +580,7 @@ export function useScraperBrowserSearch({
       maxPages: pageCount,
       concurrency: scrapingConcurrency,
       scrapeDetailsWithCards,
+      originalOnly: authorOriginalOnly,
       templateContext,
     });
     const result = await runScraperAuthorSearchEngine(
@@ -588,7 +633,7 @@ export function useScraperBrowserSearch({
       pageIndex: resolvedPageIndex,
       items,
     };
-  }, [scrapeDetailsWithCards, scraper, scrapingConcurrency]);
+  }, [authorOriginalOnly, scrapeDetailsWithCards, scraper, scrapingConcurrency]);
 
   const runListingLookup = useCallback(async (
     listingMode: ScraperListingMode,
@@ -646,6 +691,11 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    if (listingMode === 'source' && (!sourceConfig?.resultItemSelector || !hasScraperFieldSelectorValue(sourceConfig.titleSelector))) {
+      setRuntimeError('Le composant Source n\'est pas encore suffisamment configure pour etre execute.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -678,6 +728,8 @@ export function useScraperBrowserSearch({
             ? 'La page auteur a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
             : listingMode === 'tag'
               ? 'La page tag a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
+            : listingMode === 'source'
+              ? 'La page source a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
             : listingMode === 'homepage'
               ? 'La homepage a bien ete chargee, mais aucune card exploitable n\'a ete extraite avec la configuration actuelle.'
               : 'La recherche a bien ete lancee, mais aucun resultat exploitable n\'a ete extrait avec la configuration actuelle.',
@@ -712,6 +764,7 @@ export function useScraperBrowserSearch({
     resetDetailsState,
     resetListingState,
     searchConfig,
+    sourceConfig,
     tagConfig,
     setHasExecutedListing,
     setListingPage,
@@ -751,6 +804,13 @@ export function useScraperBrowserSearch({
     await runListingLookup('tag', nextQuery, options);
   }, [runListingLookup]);
 
+  const runSourceLookup = useCallback(async (
+    nextQuery: string,
+    options?: ListingLookupOptions,
+  ) => {
+    await runListingLookup('source', nextQuery, options);
+  }, [runListingLookup]);
+
   const handleListingNextPage = useCallback(async () => {
     if (!listingPage || !isListingMode(mode)) {
       return;
@@ -766,6 +826,10 @@ export function useScraperBrowserSearch({
         })
         : mode === 'tag'
           ? resolveScraperTagTargetUrl(scraper.baseUrl, tagConfig!, query, {
+            pageIndex: nextPageIndex,
+          })
+        : mode === 'source'
+          ? resolveScraperSourceTargetUrl(scraper.baseUrl, sourceConfig!, query, {
             pageIndex: nextPageIndex,
           })
         : mode === 'homepage'
@@ -808,6 +872,8 @@ export function useScraperBrowserSearch({
             ? 'Aucune card exploitable n\'a ete trouvee sur la page auteur suivante.'
             : mode === 'tag'
               ? 'Aucune card exploitable n\'a ete trouvee sur la page tag suivante.'
+            : mode === 'source'
+              ? 'Aucune card exploitable n\'a ete trouvee sur la page source suivante.'
             : mode === 'homepage'
               ? 'Aucune card exploitable n\'a ete trouvee sur la page homepage suivante.'
               : 'Aucun resultat exploitable n\'a ete trouve sur la page suivante.',
@@ -861,6 +927,7 @@ export function useScraperBrowserSearch({
     scraper.baseUrl,
     scrollToBrowserTop,
     searchConfig,
+    sourceConfig,
     tagConfig,
     homepageConfig,
     setHasExecutedListing,
@@ -1140,6 +1207,8 @@ export function useScraperBrowserSearch({
         ? runAuthorLookup
         : listingReturnState.mode === 'tag'
           ? runTagLookup
+          : listingReturnState.mode === 'source'
+            ? runSourceLookup
           : runSearchLookup;
       await rerunLookup(listingReturnState.query, {
         pageIndex: listingReturnState.pageIndex,
@@ -1161,6 +1230,7 @@ export function useScraperBrowserSearch({
     runAuthorLookup,
     runHomepageLookup,
     runSearchLookup,
+    runSourceLookup,
     runTagLookup,
     setHasExecutedListing,
     setListingPage,
@@ -1301,6 +1371,22 @@ export function useScraperBrowserSearch({
       return;
     }
 
+    if (nextMode === 'source') {
+      if (detailsResult && listingReturnState?.mode === 'source') {
+        await handleBackToListing();
+        return;
+      }
+
+      clearFeedback();
+      resetAsyncState();
+      resetDetailsState();
+      resetListingState();
+      setListingReturnState(null);
+      setMode('source');
+      setQuery('');
+      return;
+    }
+
     if (nextMode === 'tagList') {
       clearFeedback();
       resetAsyncState();
@@ -1338,6 +1424,7 @@ export function useScraperBrowserSearch({
     runSearchLookup,
     runAuthorLookup,
     runTagLookup,
+    runSourceLookup,
     handleListingNextPage,
     handleListingPreviousPage,
     handleOpenResult,

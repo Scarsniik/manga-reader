@@ -6,7 +6,7 @@ import {
 } from '@/renderer/utils/scraperRuntime';
 import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 
-export type ScraperListingMode = 'homepage' | 'search' | 'author' | 'tag';
+export type ScraperListingMode = 'homepage' | 'search' | 'author' | 'tag' | 'source';
 export type ScraperBrowseMode = ScraperListingMode | 'manga' | 'tagList';
 export type ScraperBrowserHistorySourceKind = ScraperBrowseMode | 'bookmarks';
 
@@ -32,6 +32,7 @@ export type ScraperBrowserInitialState = {
   authorTemplateContext?: ScraperTemplateContext | null;
   authorDisplayName?: string | null;
   tagDisplayName?: string | null;
+  sourceDisplayName?: string | null;
 };
 
 export type ScraperBrowserReturnState = {

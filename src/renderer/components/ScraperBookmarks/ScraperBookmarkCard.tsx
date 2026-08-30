@@ -21,6 +21,8 @@ import {
   normalizeScraperTagFavoriteValue,
   type ScraperTagFavoriteSourceTarget,
 } from '@/renderer/utils/scraperTagFavorites';
+import { useScraperAuthorFavorites } from '@/renderer/stores/scraperAuthorFavorites';
+import { getFavoriteScraperAuthors } from '@/renderer/utils/scraperAuthorFavorites';
 
 type Props = {
   bookmark: ScraperBookmarkRecord;
@@ -42,9 +44,10 @@ type Props = {
 
 const renderChipGroup = (
   values: string[],
-  variant: 'author' | 'tag',
+  variant: 'author' | 'tag' | 'source',
   blacklistedTagKeys?: Set<string>,
   favoriteTagKeys?: Set<string>,
+  favoriteAuthorKeys?: Set<string>,
 ) => {
   if (!values.length) {
     return null;
@@ -58,6 +61,7 @@ const renderChipGroup = (
           className={[
             'scraper-card__chip',
             `is-${variant}`,
+            favoriteAuthorKeys?.has(value.trim().toLocaleLowerCase()) ? 'is-favorite-author' : '',
             favoriteTagKeys?.has(normalizeScraperTagFavoriteValue(value)) ? 'is-favorite-tag' : '',
             blacklistedTagKeys?.has(normalizeScraperTagBlacklistValue(value)) ? 'is-blacklisted-tag' : '',
           ].filter(Boolean).join(' ')}
@@ -65,6 +69,8 @@ const renderChipGroup = (
             ? 'Tag blackliste'
             : favoriteTagKeys?.has(normalizeScraperTagFavoriteValue(value))
               ? 'Tag favori'
+              : favoriteAuthorKeys?.has(value.trim().toLocaleLowerCase())
+                ? 'Auteur favori'
               : undefined}
         >
           {value}
@@ -137,6 +143,17 @@ export default function ScraperBookmarkCard({
     () => new Set(favoriteTagMatches.map((match) => normalizeScraperTagFavoriteValue(match.tag))),
     [favoriteTagMatches],
   );
+  const { favorites: authorFavorites } = useScraperAuthorFavorites();
+  const favoriteAuthorMatches = React.useMemo(() => getFavoriteScraperAuthors(
+    authorFavorites,
+    bookmark.scraperId,
+    bookmark.authors,
+    bookmark.authorUrls,
+  ), [authorFavorites, bookmark.authorUrls, bookmark.authors, bookmark.scraperId]);
+  const favoriteAuthorKeys = React.useMemo(
+    () => new Set(favoriteAuthorMatches.map((match) => match.name.trim().toLocaleLowerCase())),
+    [favoriteAuthorMatches],
+  );
   const hasBlacklistedTags = blacklistedTagMatches.length > 0;
   const defaultBookmarkAction: ScraperCardAction = {
     id: 'bookmark-toggle',
@@ -153,6 +170,8 @@ export default function ScraperBookmarkCard({
         authors={bookmark.authors}
         authorUrls={bookmark.authorUrls}
         tags={bookmark.tags}
+        sourceNames={bookmark.sourceNames}
+        sourceUrls={bookmark.sourceUrls}
         mangaStatus={bookmark.mangaStatus}
         pageCount={bookmark.pageCount}
         languageCodes={languageCodes}
@@ -225,8 +244,9 @@ export default function ScraperBookmarkCard({
               <span>Langue <LanguageFlags languageCodes={languageCodes} /></span>
             </div>
           ) : null}
-          {renderChipGroup(bookmark.authors, 'author')}
+          {renderChipGroup(bookmark.authors, 'author', undefined, undefined, favoriteAuthorKeys)}
           {renderChipGroup(bookmark.tags, 'tag', blacklistedTagKeys, favoriteTagKeys)}
+          {renderChipGroup(bookmark.sourceNames ?? [], 'source')}
         </>
       )}
       actions={actions}

@@ -23,6 +23,7 @@ import {
   extractLanguageCodesFromRoot,
   extractRegexValuesFromRoot,
   extractSelectorValues,
+  extractTextFieldSelectorValuesFromRoot,
   extractUrlFieldSelectorValuesFromRoot,
   getImageSelectorCandidateUrls,
   parseSelectorExpression,
@@ -175,6 +176,25 @@ export const extractScraperTagUrlsFromDocument = (
 ): string[] => uniqueValues(
   extractScraperTagUrlValuesFromDocument(doc, selector, requestMeta).filter(Boolean),
 );
+
+export const extractScraperSourceUrlsFromDocument = (
+  doc: Document,
+  selector: ScraperFieldSelector | undefined,
+  requestMeta: Pick<ScraperRuntimeDetailsRequestMeta, "requestedUrl" | "finalUrl">,
+): string[] => uniqueValues(
+  extractScraperTagUrlValuesFromDocument(doc, selector, requestMeta).filter(Boolean),
+);
+
+export const extractScraperSourceNamesFromDocument = (
+  doc: Document,
+  selector: ScraperFieldSelector | undefined,
+): string[] => {
+  if (!selector || !hasScraperFieldSelectorValue(selector)) {
+    return [];
+  }
+
+  return uniqueValues(extractTextFieldSelectorValuesFromRoot(doc, selector));
+};
 
 export const extractScraperDetailsThumbnailsFromDocument = (
   doc: Document,
@@ -349,6 +369,7 @@ export const extractScraperDetailsFieldValues = (
     description: config.descriptionSelector,
     authors: config.authorsSelector,
     tags: config.tagsSelector,
+    sources: config.sourcesSelector,
     status: config.statusSelector,
     pageCount: config.pageCountSelector,
   };
@@ -491,6 +512,13 @@ const buildScraperDetailsResult = (
     tags: fieldValuesByKey.tags ?? [],
     tagUrls: extractScraperTagUrlValuesFromDocument(doc, config.tagUrlSelector, requestMeta),
   });
+  const sourceNamesFromLinks = extractScraperSourceNamesFromDocument(doc, config.sourceUrlSelector);
+  const sourceValues = mergeScraperTagValuePairs({
+    tags: (fieldValuesByKey.sources ?? []).length
+      ? fieldValuesByKey.sources ?? []
+      : sourceNamesFromLinks,
+    tagUrls: extractScraperSourceUrlsFromDocument(doc, config.sourceUrlSelector, requestMeta),
+  });
 
   return {
     requestedUrl: requestMeta.requestedUrl,
@@ -505,6 +533,8 @@ const buildScraperDetailsResult = (
     authorUrls: extractScraperAuthorUrlsFromDocument(doc, config.authorUrlSelector, requestMeta),
     tags: tagValues.tags,
     tagUrls: tagValues.tagUrls,
+    sources: sourceValues.tags,
+    sourceUrls: sourceValues.tagUrls,
     thumbnails:
       config.thumbnailsSelector && hasScraperFieldSelectorValue(config.thumbnailsSelector)
         ? thumbnailsPage.thumbnails

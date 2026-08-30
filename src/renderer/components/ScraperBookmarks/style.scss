@@ -232,6 +232,11 @@
   grid-column: span 2;
 }
 
+.scraper-bookmarks-view__other-filters {
+  grid-column: span 2;
+  align-self: end;
+}
+
 .scraper-bookmarks-view__checkboxes {
   display: flex;
   flex-wrap: wrap;

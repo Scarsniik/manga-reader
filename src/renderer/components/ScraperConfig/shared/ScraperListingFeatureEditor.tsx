@@ -415,6 +415,7 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
       titleSelector: "resultItemSelector",
       detailUrlSelector: "resultItemSelector",
       authorUrlSelector: "resultItemSelector",
+      sourceUrlSelector: "resultItemSelector",
       thumbnailSelector: "resultItemSelector",
       summarySelector: "resultItemSelector",
       pageCountSelector: "resultItemSelector",
@@ -424,6 +425,7 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
     valueModeByFieldName: {
       detailUrlSelector: "url",
       authorUrlSelector: "url",
+      sourceUrlSelector: "url",
       thumbnailSelector: "url",
       nextPageSelector: "url",
     },
@@ -591,6 +593,7 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
       const titles = extractedResults.map((result) => result.title).filter(Boolean);
       const listingNames = getListingNames(extractedPage);
       const authorUrls = extractedResults.map((result) => result.authorUrl).filter(Boolean) as string[];
+      const sourceUrls = extractedResults.flatMap((result) => result.sourceUrls ?? []);
       const thumbnails = extractedResults.map((result) => result.thumbnailUrl).filter(Boolean) as string[];
       const summaries = extractedResults.map((result) => result.summary).filter(Boolean) as string[];
       const pageCounts = extractedResults.map((result) => result.pageCount).filter(Boolean) as string[];
@@ -609,6 +612,9 @@ export default function ScraperListingFeatureEditor<TConfig extends ListingFeatu
           : []),
         ...(config.authorUrlSelector
           ? [buildSelectorCheck('authorUrl', config.authorUrlSelector, false, authorUrls)]
+          : []),
+        ...(config.sourceUrlSelector
+          ? [buildSelectorCheck('sourceUrl', config.sourceUrlSelector, false, sourceUrls)]
           : []),
         ...(config.summarySelector
           ? [buildSelectorCheck('description', config.summarySelector, false, summaries)]

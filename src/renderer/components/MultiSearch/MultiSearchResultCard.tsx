@@ -42,6 +42,8 @@ import { normalizeScraperTagFavoriteValue } from "@/renderer/utils/scraperTagFav
 import ScraperPotentialMangaMatches from "@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches";
 import type { ScraperCardPotentialMatchResult } from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
 import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import { useScraperAuthorFavorites } from "@/renderer/stores/scraperAuthorFavorites";
+import { getFavoriteScraperAuthors } from "@/renderer/utils/scraperAuthorFavorites";
 import "./card.scss";
 
 type Props = {
@@ -178,6 +180,25 @@ export default function MultiSearchResultCard({
   const activeCoverUrl = coverIndex < coverUrls.length ? coverUrls[coverIndex] : undefined;
   const languageLabels = result.sourceLanguageCodes.map(getLanguageLabel);
   const pageCountLabel = formatScraperPageCountForDisplay(result.pageCount);
+  const { favorites: authorFavorites } = useScraperAuthorFavorites();
+  const favoriteAuthorMatches = React.useMemo(() => {
+    const seenFavoriteIds = new Set<string>();
+    return result.sources.flatMap((source) => getFavoriteScraperAuthors(
+      authorFavorites,
+      source.scraper.id,
+      source.result.authorNames,
+      source.result.authorUrls ?? (source.result.authorUrl ? [source.result.authorUrl] : []),
+    )).filter((match) => {
+      if (seenFavoriteIds.has(match.favorite.id)) {
+        return false;
+      }
+      seenFavoriteIds.add(match.favorite.id);
+      return true;
+    });
+  }, [authorFavorites, result.sources]);
+  const workSourceNames = React.useMemo(() => Array.from(new Set(
+    result.sources.flatMap((source) => source.result.sourceNames ?? []).map((name) => name.trim()).filter(Boolean),
+  )), [result.sources]);
   const blacklistedTagMatches = React.useMemo(
     () => getMultiSearchBlacklistedTagMatches(result, tagBlacklistByScraper),
     [result, tagBlacklistByScraper],
@@ -299,6 +320,20 @@ export default function MultiSearchResultCard({
       </span>
       <span>Types : {formatValues(result.contentTypes, "Non renseigne")}</span>
       {pageCountLabel ? <span>{pageCountLabel}</span> : null}
+      {workSourceNames.length ? (
+        <div className="multi-search-card__work-sources" title={`Source : ${workSourceNames.join(", ")}`}>
+          {workSourceNames.map((sourceName) => <span key={sourceName}>{sourceName}</span>)}
+        </div>
+      ) : null}
+      {favoriteAuthorMatches.length ? (
+        <div className="multi-search-card__favorite-authors" title="Auteurs favoris">
+          {favoriteAuthorMatches.map((match) => (
+            <span key={match.favorite.id} title={`Auteur favori : ${match.favorite.name}`}>
+              {match.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {visibleFavoriteTagMatches.length > 0 && (
         <div className="multi-search-card__favorite-tags" title="Tags favoris">
           {visibleFavoriteTagMatches.map((match) => (

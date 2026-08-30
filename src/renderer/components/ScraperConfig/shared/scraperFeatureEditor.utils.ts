@@ -36,6 +36,8 @@ export const CHECK_LABELS: Record<ScraperFeatureValidationCheck['key'], string> 
   authorUrl: 'Lien auteur',
   tags: 'Tags',
   tagUrl: 'Cible tag',
+  sources: 'Source',
+  sourceUrl: 'Lien source',
   status: 'Statut',
   pageCount: 'Nombre de pages',
   language: 'Langue',

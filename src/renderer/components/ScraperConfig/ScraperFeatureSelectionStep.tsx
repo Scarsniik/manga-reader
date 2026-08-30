@@ -9,6 +9,7 @@ import ScraperDetailsFeatureEditor from '@/renderer/components/ScraperConfig/Scr
 import ScraperGlobalSettingsEditor from '@/renderer/components/ScraperConfig/ScraperGlobalSettingsEditor';
 import ScraperPagesFeatureEditor from '@/renderer/components/ScraperConfig/ScraperPagesFeatureEditor';
 import ScraperSearchFeatureEditor from '@/renderer/components/ScraperConfig/ScraperSearchFeatureEditor';
+import ScraperSourceFeatureEditor from '@/renderer/components/ScraperConfig/ScraperSourceFeatureEditor';
 import ScraperTagFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagFeatureEditor';
 import ScraperTagListFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTagListFeatureEditor';
 import ScraperTitleAnalysisFeatureEditor from '@/renderer/components/ScraperConfig/ScraperTitleAnalysisFeatureEditor';
@@ -51,9 +52,16 @@ export default function ScraperFeatureSelectionStep({
       defaultLanguage,
       homeSearch,
       bookmark,
+      originalSourceKeyword,
     } = scraper.globalConfig;
 
-    if (defaultTagIds.length || defaultLanguage || homeSearch.enabled || bookmark.excludedFields.length) {
+    if (
+      defaultTagIds.length
+      || defaultLanguage
+      || homeSearch.enabled
+      || bookmark.excludedFields.length
+      || originalSourceKeyword
+    ) {
       return { label: 'Configure', className: 'is-configured' };
     }
 
@@ -117,6 +125,17 @@ export default function ScraperFeatureSelectionStep({
     if (activeFeature.kind === 'tag') {
       return (
         <ScraperTagFeatureEditor
+          feature={activeFeature}
+          actionSurface={actionSurface}
+          onUnsavedChangesChange={onUnsavedChangesChange}
+          onBack={() => setActiveFeatureKind(null)}
+        />
+      );
+    }
+
+    if (activeFeature.kind === 'source') {
+      return (
+        <ScraperSourceFeatureEditor
           feature={activeFeature}
           actionSurface={actionSurface}
           onUnsavedChangesChange={onUnsavedChangesChange}

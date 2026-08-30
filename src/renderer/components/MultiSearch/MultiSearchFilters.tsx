@@ -10,6 +10,8 @@ import {
   NO_MULTI_SEARCH_SCRAPERS_VALUE,
   UNKNOWN_MULTI_SEARCH_VALUE,
 } from "@/renderer/components/MultiSearch/multiSearchConstants";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import CompactFilterGroup from "@/renderer/components/CompactFilterGroup/CompactFilterGroup";
 
 export type MultiSearchFilterOption = {
   label: string;
@@ -24,10 +26,12 @@ type Props = {
   selectedLanguageCodes: string[];
   includedLanguageCodes: string[];
   selectedContentTypes: string[];
+  originalOnly: boolean;
   onSelectedScraperIdsChange: (value: string[]) => void;
   onSelectedLanguageCodesChange: (value: string[]) => void;
   onIncludedLanguageCodesChange: (value: string[]) => void;
   onSelectedContentTypesChange: (value: string[]) => void;
+  onOriginalOnlyChange: (value: boolean) => void;
 };
 
 const toIncludeOptions = (options: MultiSearchFilterOption[]): IncludeFilterOption[] => (
@@ -56,10 +60,12 @@ export default function MultiSearchFilters({
   selectedLanguageCodes,
   includedLanguageCodes,
   selectedContentTypes,
+  originalOnly,
   onSelectedScraperIdsChange,
   onSelectedLanguageCodesChange,
   onIncludedLanguageCodesChange,
   onSelectedContentTypesChange,
+  onOriginalOnlyChange,
 }: Props) {
   const includeScraperOptions = React.useMemo(
     () => toIncludeOptions(scraperOptions),
@@ -140,6 +146,14 @@ export default function MultiSearchFilters({
           </>
         )}
       />
+      <CompactFilterGroup ariaLabel="Autres filtres de recherche">
+        <OriginalWorksFilterToggle
+          active={originalOnly}
+          onChange={onOriginalOnlyChange}
+          label="Originaux uniquement"
+          title="Appliquer le filtre avant de collecter les résultats"
+        />
+      </CompactFilterGroup>
     </div>
   );
 }

@@ -12,6 +12,15 @@ import {
 import { keepNewSourceResults } from "@/renderer/components/MultiSearch/multiSearchRunState";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import { enrichScraperListingSourcesWithCardDetails } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import {
+  doesScraperCardNeedMetadata,
+  SCRAPER_METADATA_REQUIREMENTS_BY_PHASE,
+} from "@/renderer/utils/scraperRuntime";
+import {
+  hasScraperSourceDetection,
+  isMultiSearchSourceOriginal,
+} from "@/renderer/utils/scraperOriginalWorks";
 
 export type ExecuteMultiSearchTermPageOptions = {
   scraper: ScraperRecord;
@@ -22,6 +31,7 @@ export type ExecuteMultiSearchTermPageOptions = {
   paceConfig: PaceConfig;
   includedLanguageCodes: string[];
   scrapeDetailsWithCards: boolean;
+  originalOnly?: boolean;
   detailsCache?: ScraperCardDetailsCache;
   fetchDocument?: ScraperDocumentFetcher;
 };
@@ -44,6 +54,7 @@ export const executeMultiSearchTermPage = async ({
   paceConfig,
   includedLanguageCodes,
   scrapeDetailsWithCards,
+  originalOnly = false,
   detailsCache,
   fetchDocument,
 }: ExecuteMultiSearchTermPageOptions): Promise<ExecuteMultiSearchTermPageResult> => {
@@ -57,13 +68,35 @@ export const executeMultiSearchTermPage = async ({
     paceConfig,
     { scrapeDetailsWithCards, detailsCache, fetchDocument },
   );
-  const { includedSources: pageResults } = await processScraperListingPage({
+  const { includedSources } = await processScraperListingPage({
     scraper,
     page,
     pageIndex,
     searchTerm: term,
     includedLanguageCodes,
   });
+  const mustResolveSources = originalOnly && hasScraperSourceDetection(scraper);
+  const sourceIndexesToEnrich = mustResolveSources
+    ? includedSources.flatMap((source, index) => (
+      doesScraperCardNeedMetadata(
+        source.result,
+        SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.originalFiltering,
+      ) ? [index] : []
+    ))
+    : [];
+  const enrichedSources = sourceIndexesToEnrich.length
+    ? await enrichScraperListingSourcesWithCardDetails(
+      scraper,
+      sourceIndexesToEnrich.map((index) => includedSources[index]),
+      { scrapeDetailsWithCards: true, detailsCache, fetchDocument },
+    )
+    : [];
+  const enrichedByIndex = new Map(sourceIndexesToEnrich.map((sourceIndex, resultIndex) => (
+    [sourceIndex, enrichedSources[resultIndex] ?? includedSources[sourceIndex]]
+  )));
+  const pageResults = includedSources
+    .map((source, index) => enrichedByIndex.get(index) ?? source)
+    .filter((source) => !originalOnly || isMultiSearchSourceOriginal(source));
   const newPageResults = keepNewSourceResults(existingResults, pageResults);
   const hasOnlyDuplicateResults = pageResults.length > 0 && newPageResults.length === 0;
   return {

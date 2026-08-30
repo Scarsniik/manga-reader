@@ -8,6 +8,7 @@ export type ScraperCardMetadataField =
   | "cover"
   | "summary"
   | "pageCount"
+  | "sources"
   | "pagination";
 
 export type ScraperCardMetadataRequirements = ReadonlySet<ScraperCardMetadataField>;
@@ -28,7 +29,9 @@ export const SCRAPER_METADATA_REQUIREMENTS_BY_PHASE = {
     "tags",
     "summary",
     "pageCount",
+    "sources",
   ]),
+  originalFiltering: createScraperCardMetadataRequirements(["sources"]),
   coverDisplay: createScraperCardMetadataRequirements(["cover"]),
   pagination: createScraperCardMetadataRequirements(["pagination"]),
 } as const;
@@ -56,6 +59,8 @@ export const hasScraperCardMetadataField = (
       return hasText(item.summary);
     case "pageCount":
       return hasText(item.pageCount);
+    case "sources":
+      return hasTextList(item.sourceNames) || hasTextList(item.sourceUrls);
     case "pagination":
       return true;
     default:

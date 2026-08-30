@@ -16,6 +16,8 @@ import type {
   ScraperBookmarkSortKey,
 } from "@/renderer/components/ScraperBookmarks/bookmarkFiltering";
 import { DEFAULT_BOOKMARK_FILTERS } from "@/renderer/components/ScraperBookmarks/bookmarkFiltering";
+import CompactFilterGroup from "@/renderer/components/CompactFilterGroup/CompactFilterGroup";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
 
 type Props = {
   filters: ScraperBookmarkFilterState;
@@ -55,6 +57,7 @@ const countActiveFilters = (filters: ScraperBookmarkFilterState): number => (
   + (filters.maxPages.trim() ? 1 : 0)
   + filters.readingStatuses.length
   + (filters.seriesFilterMode !== DEFAULT_BOOKMARK_FILTERS.seriesFilterMode ? 1 : 0)
+  + (filters.originalOnly ? 1 : 0)
   + (filters.sortBy !== DEFAULT_BOOKMARK_FILTERS.sortBy ? 1 : 0)
 );
 
@@ -204,6 +207,17 @@ export default function ScraperBookmarkFilters({
             ))}
           </div>
         </fieldset>
+
+        <CompactFilterGroup
+          className="scraper-bookmarks-view__other-filters"
+          ariaLabel="Autres filtres de bookmarks"
+        >
+          <OriginalWorksFilterToggle
+            active={filters.originalOnly}
+            onChange={(originalOnly) => updateFilters({ originalOnly })}
+            label="Originaux uniquement"
+          />
+        </CompactFilterGroup>
 
         <div className="scraper-bookmarks-view__field scraper-bookmarks-view__language-field">
           <span>Langues</span>

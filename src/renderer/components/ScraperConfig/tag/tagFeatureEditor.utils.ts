@@ -120,6 +120,12 @@ export const SCRAPING_FIELDS: Field[] = [
     placeholder: 'Optionnel : .author a@href',
   },
   {
+    name: 'sourceUrlSelector',
+    label: 'Selecteur du lien source',
+    type: 'text',
+    placeholder: 'Optionnel : .source a@href',
+  },
+  {
     name: 'thumbnailSelector',
     label: 'Selecteur de miniature',
     type: 'text',
@@ -163,6 +169,7 @@ export const DEFAULT_TAG_CONFIG: TagFeatureFormState = {
   titleSelector: { kind: 'css', value: '' },
   detailUrlSelector: undefined,
   authorUrlSelector: undefined,
+  sourceUrlSelector: undefined,
   thumbnailSelector: undefined,
   summarySelector: undefined,
   pageCountSelector: undefined,

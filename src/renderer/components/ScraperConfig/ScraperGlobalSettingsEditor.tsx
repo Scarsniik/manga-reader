@@ -4,6 +4,7 @@ import { Field } from '@/renderer/components/utils/Form/types';
 import { languages } from '@/renderer/consts/languages';
 import FreeStringListField from '@/renderer/components/ScraperConfig/shared/FreeStringListField';
 import {
+  hasScraperSourceDetection,
   ScraperBookmarkMetadataField,
   ScraperGlobalConfig,
   ScraperLatestModule,
@@ -101,6 +102,7 @@ const buildGlobalConfig = (
     defaultLanguage: String(values.defaultLanguage ?? '').trim().toLowerCase() || undefined,
     sourceLanguages: sanitizeStringList(metadata.sourceLanguages).map((language) => language.toLowerCase()),
     contentTypes: sanitizeStringList(metadata.contentTypes),
+    originalSourceKeyword: String(values.originalSourceKeyword ?? '').trim() || undefined,
     homeSearch: {
       enabled: Boolean(values.homeSearchEnabled),
       query: String(values.homeSearchQuery ?? '').trim(),
@@ -129,6 +131,7 @@ export default function ScraperGlobalSettingsEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [sourceLanguages, setSourceLanguages] = useState<string[]>(() => scraper.globalConfig.sourceLanguages ?? []);
   const [contentTypes, setContentTypes] = useState<string[]>(() => scraper.globalConfig.contentTypes ?? []);
+  const hasSourceDetection = hasScraperSourceDetection(scraper);
   const hasSearch = useMemo(
     () => scraper.features.some((feature) => feature.kind === 'search' && feature.status !== 'not_configured'),
     [scraper.features],
@@ -192,6 +195,12 @@ export default function ScraperGlobalSettingsEditor({
       step: 100,
     },
     {
+      name: 'originalSourceKeyword',
+      label: 'Mot-cle de la source originale (facultatif)',
+      type: 'text',
+      placeholder: 'Exemple : Original. Vide = absence de source.',
+    },
+    {
       name: 'requestMaxConcurrentRequests',
       label: 'Nombre maximum de requetes simultanees',
       type: 'number',
@@ -231,6 +240,7 @@ export default function ScraperGlobalSettingsEditor({
   const initialValues = useMemo(() => ({
     defaultTagIds: scraper.globalConfig.defaultTagIds,
     defaultLanguage: scraper.globalConfig.defaultLanguage ?? '',
+    originalSourceKeyword: scraper.globalConfig.originalSourceKeyword ?? '',
     bookmarkExcludedFields: scraper.globalConfig.bookmark.excludedFields,
     chapterDownloadsAutoAssignSeries: scraper.globalConfig.chapterDownloads.autoAssignSeries,
     requestMinDelayMs: scraper.globalConfig.requestLimits.minDelayMs,
@@ -417,6 +427,23 @@ export default function ScraperGlobalSettingsEditor({
         </span>
       </div>
 
+      <div className="scraper-config-note">
+        <strong>Oeuvres originales</strong>
+        <span>
+          Le mot-cle facultatif est compare au nom de source extrait, sans tenir compte de la casse
+          ni des accents. S&apos;il est vide, une card est originale uniquement quand aucune source
+          n&apos;est extraite. Sans selecteur de source actif, tous les mangas de ce scrapper sont
+          consideres originaux.
+        </span>
+      </div>
+
+      {!hasSourceDetection ? (
+        <div className="scraper-validation-result__message is-warning">
+          Aucun selecteur de source n&apos;est actif : le filtre `Originaux uniquement` conservera tous
+          les mangas de ce scrapper.
+        </div>
+      ) : null}
+
       <div className="scraper-config-section">
         <div className="scraper-config-section__header">
           <h4>Metadonnees de recherche multi-sources</h4>
@@ -511,6 +538,13 @@ export default function ScraperGlobalSettingsEditor({
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Types de contenu</span>
           <strong>{contentTypesLabel}</strong>
+        </div>
+        <div className="scraper-config-summary__row scraper-config-summary__row--block">
+          <span>Source originale</span>
+          <strong>
+            {scraper.globalConfig.originalSourceKeyword
+              || (hasSourceDetection ? 'Absence de source extraite' : 'Tous les mangas sont consideres originaux')}
+          </strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">
           <span>Bookmark</span>

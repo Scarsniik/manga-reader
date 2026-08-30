@@ -29,6 +29,8 @@ import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
+import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import {
   buildSearchResultViewHistoryIdentity,
@@ -157,6 +159,7 @@ export default function ScraperAuthorCombinedResults({
   onSelectCover,
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
+  const [originalOnly, setOriginalOnly] = React.useState(false);
   const {
     active: showUnseenOnly,
     recordsById: unseenFilterRecordsById,
@@ -176,13 +179,17 @@ export default function ScraperAuthorCombinedResults({
     () => applyManualMultiSearchSplits(displayedResults, splitResultIds),
     [displayedResults, splitResultIds],
   );
+  const originalFilteredResults = React.useMemo(
+    () => filterMultiSearchMergedResultsByOriginal(manuallySplitResults, originalOnly),
+    [manuallySplitResults, originalOnly],
+  );
   const blacklistFilteredResults = React.useMemo(
     () => filterBlacklistedMultiSearchResults(
-      manuallySplitResults,
+      originalFilteredResults,
       tagBlacklistByScraper,
       shouldHideBlacklistedCards,
     ),
-    [manuallySplitResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
+    [originalFilteredResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
   );
   const visibleDisplayedResults = React.useMemo(
     () => filterByScraperViewHistoryNewState(
@@ -202,8 +209,8 @@ export default function ScraperAuthorCombinedResults({
     ],
   );
   const blacklistedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(manuallySplitResults, tagBlacklistByScraper),
-    [manuallySplitResults, tagBlacklistByScraper],
+    () => countBlacklistedMultiSearchResults(originalFilteredResults, tagBlacklistByScraper),
+    [originalFilteredResults, tagBlacklistByScraper],
   );
 
   return (
@@ -338,6 +345,12 @@ export default function ScraperAuthorCombinedResults({
                   <MultiSearchReadingStatusFilterBar
                     selectedStatuses={readingStatusFilters}
                     onToggleStatus={onToggleReadingStatus}
+                  />
+                  <OriginalWorksFilterToggle
+                    active={originalOnly}
+                    onChange={setOriginalOnly}
+                    label="Originaux"
+                    variant="result"
                   />
                   <ResultFilterToggle
                     active={showUnseenOnly}

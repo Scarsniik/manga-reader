@@ -67,7 +67,9 @@ import {
   extractScraperDetailsThumbnailsFromDocument,
   extractScraperDetailsThumbnailsPageFromDocument,
   getScraperRuntimeThumbnailDisplayUrl,
+  extractScraperSourceNamesFromDocument,
   extractScraperTagUrlsFromDocument,
+  extractScraperSourceUrlsFromDocument,
   extractScraperLanguageCodesFromRoot,
 } from '@/renderer/utils/scraperRuntime';
 
@@ -320,6 +322,7 @@ export default function ScraperDetailsFeatureEditor({
       coverSelector: "url",
       authorUrlSelector: "url",
       tagUrlSelector: "url",
+      sourceUrlSelector: "url",
       thumbnailsSelector: "url",
       thumbnailsNextPageSelector: "url",
     },
@@ -533,6 +536,56 @@ export default function ScraperDetailsFeatureEditor({
           checks.push({
             key: 'tagUrl',
             selector: formatScraperFieldSelectorForDisplay(config.tagUrlSelector),
+            required: false,
+            matchedCount: 0,
+            issueCode: 'invalid_selector',
+          });
+        }
+      }
+      if (config.sourcesSelector) {
+        testSelector('sources', config.sourcesSelector, false);
+      } else if (config.sourceUrlSelector) {
+        try {
+          const sourceNames = extractScraperSourceNamesFromDocument(doc, config.sourceUrlSelector);
+          if (sourceNames.length > 0) {
+            extractedValuesByKey.sources = sourceNames;
+            checks.push({
+              key: 'sources',
+              selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
+              required: false,
+              matchedCount: sourceNames.length,
+              sample: sourceNames[0],
+            });
+          }
+        } catch {
+          // The URL-specific check below reports invalid selectors.
+        }
+      }
+      if (config.sourceUrlSelector) {
+        try {
+          const sourceUrls = extractScraperSourceUrlsFromDocument(doc, config.sourceUrlSelector, {
+            requestedUrl: typedDocumentResult.requestedUrl,
+            finalUrl: typedDocumentResult.finalUrl,
+          });
+          checks.push(sourceUrls.length > 0
+            ? {
+              key: 'sourceUrl',
+              selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
+              required: false,
+              matchedCount: sourceUrls.length,
+              sample: sourceUrls[0],
+            }
+            : {
+              key: 'sourceUrl',
+              selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
+              required: false,
+              matchedCount: 0,
+              issueCode: 'no_match',
+            });
+        } catch {
+          checks.push({
+            key: 'sourceUrl',
+            selector: formatScraperFieldSelectorForDisplay(config.sourceUrlSelector),
             required: false,
             matchedCount: 0,
             issueCode: 'invalid_selector',

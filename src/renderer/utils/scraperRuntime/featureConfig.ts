@@ -19,6 +19,7 @@ import {
   type ScraperRequestConfig,
   type ScraperRequestField,
   type ScraperSearchFeatureConfig,
+  type ScraperSourceFeatureConfig,
   type ScraperTagFeatureConfig,
   type ScraperTagListFeatureConfig,
   type ScraperTitleAnalysisConfig,
@@ -90,6 +91,7 @@ const buildCardListConfig = (raw: Record<string, unknown>): ScraperCardListConfi
   titleSelector: normalizeRequiredFieldSelector(raw.titleSelector),
   detailUrlSelector: trimOptionalFieldSelector(raw.detailUrlSelector),
   authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
+  sourceUrlSelector: trimOptionalFieldSelector(raw.sourceUrlSelector),
   thumbnailSelector: trimOptionalFieldSelector(raw.thumbnailSelector),
   summarySelector: trimOptionalFieldSelector(raw.summarySelector),
   pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
@@ -255,6 +257,20 @@ export const getScraperTagFeatureConfig = (
   };
 };
 
+export const getScraperSourceFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperSourceFeatureConfig | null => {
+  const raw = getFeatureConfigRecord(feature);
+  if (!raw) {
+    return null;
+  }
+
+  return {
+    ...buildListingFeatureConfig(raw),
+    sourceNameSelector: trimOptionalFieldSelector(raw.sourceNameSelector),
+  };
+};
+
 export const getScraperTagListFeatureConfig = (
   feature: ScraperFeatureDefinition | null | undefined,
 ): ScraperTagListFeatureConfig | null => {
@@ -299,6 +315,8 @@ export const getScraperDetailsFeatureConfig = (
     authorUrlSelector: trimOptionalFieldSelector(raw.authorUrlSelector),
     tagsSelector: trimOptionalFieldSelector(raw.tagsSelector),
     tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
+    sourcesSelector: trimOptionalFieldSelector(raw.sourcesSelector),
+    sourceUrlSelector: trimOptionalFieldSelector(raw.sourceUrlSelector),
     statusSelector: trimOptionalFieldSelector(raw.statusSelector),
     pageCountSelector: trimOptionalFieldSelector(raw.pageCountSelector),
     thumbnailsMode: raw.thumbnailsMode === "css_sprite" ? "css_sprite" : "image",

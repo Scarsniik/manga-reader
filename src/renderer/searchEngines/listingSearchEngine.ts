@@ -102,6 +102,10 @@ import {
   buildScraperSearchResultIdentity,
 } from "@/renderer/utils/scraperSearchResultIdentity";
 import { throwIfSearchAborted } from "@/renderer/searchEngines/searchEngineCancellation";
+import {
+  hasScraperSourceDetection,
+  isMultiSearchSourceOriginal,
+} from "@/renderer/utils/scraperOriginalWorks";
 
 const normalizeResultUrl = (source: MultiSearchSourceResult): string => (
   buildScraperSearchResultIdentity(source.scraper.id, source.result, "title")
@@ -338,6 +342,7 @@ export const runListingSearchEngine = async (
       excludedByLanguageCount: initialRun?.excludedByLanguageCount,
       includedByLanguageCount: initialRun?.includedByLanguageCount,
       excludedByBlacklistedTagCount: initialRun?.excludedByBlacklistedTagCount,
+      excludedByOriginalCount: initialRun?.excludedByOriginalCount,
     };
   });
   const executionPageLimits = runs.map((run) => run.loadedPages + configuredMaxPages);
@@ -451,7 +456,9 @@ export const runListingSearchEngine = async (
     totalUnits: runs.length,
     resultCount: countListingResults(runs),
     excludedResultCount: runs.reduce(
-      (count, run) => count + (run.excludedByBlacklistedTagCount ?? 0),
+      (count, run) => count
+        + (run.excludedByBlacklistedTagCount ?? 0)
+        + (run.excludedByOriginalCount ?? 0),
       0,
     ),
     currentLabel: label,
@@ -491,10 +498,13 @@ export const runListingSearchEngine = async (
     purpose: string,
     pageIndex: number,
   ): Promise<MultiSearchSourceResult[]> => {
+    const requirements = input.scrapeDetailsWithCards === true
+      ? SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.displayedDetails
+      : SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.originalFiltering;
     const requiredIndexes = candidateBatch.flatMap((candidate, index) => (
       doesScraperCardNeedMetadata(
         candidate.result,
-        SCRAPER_METADATA_REQUIREMENTS_BY_PHASE.displayedDetails,
+        requirements,
       ) ? [index] : []
     ));
     const skippedCount = candidateBatch.length - requiredIndexes.length;
@@ -546,7 +556,10 @@ export const runListingSearchEngine = async (
       ? state.pendingCandidates.length
       : Math.max(0, resultLimit - run.results.length);
     if (
-      input.scrapeDetailsWithCards !== true
+      (
+        input.scrapeDetailsWithCards !== true
+        && !(input.originalOnly === true && hasScraperSourceDetection(run.scraper))
+      )
       || remainingResultSlots === 0
       || state.pendingCandidates.length === 0
     ) {
@@ -555,6 +568,7 @@ export const runListingSearchEngine = async (
 
     let excludedByEnrichedLanguageCount = 0;
     let excludedByBlacklistedTagCount = 0;
+    let excludedByOriginalCount = 0;
     const enrichment = await enrichCandidatesForTarget({
       candidates: state.pendingCandidates,
       targetCount: remainingResultSlots,
@@ -565,6 +579,10 @@ export const runListingSearchEngine = async (
         run.loadedPages,
       ),
       isAccepted: (item) => {
+        if (input.originalOnly === true && !isMultiSearchSourceOriginal(item)) {
+          excludedByOriginalCount += 1;
+          return false;
+        }
         if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
           excludedByEnrichedLanguageCount += 1;
           return false;
@@ -609,6 +627,8 @@ export const runListingSearchEngine = async (
         && excludedByLanguageCount >= normalizedLanguageRejectLimit,
       excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
         + excludedByBlacklistedTagCount,
+      excludedByOriginalCount: (run.excludedByOriginalCount ?? 0)
+        + excludedByOriginalCount,
     };
   };
 
@@ -650,7 +670,7 @@ export const runListingSearchEngine = async (
     try {
       if (latestAuthorCacheAssignments.has(source.id)) {
         const cachedSource = latestAuthorCacheAssignments.get(source.id);
-        const cachedResults = cachedSource
+        let cachedResults = cachedSource
           ? await enrichSourceResultsWithJapaneseRomanization(buildSourceResultsFromItems(
             run.scraper,
             cachedSource.results.map((cachedResult) => cachedResult.result),
@@ -661,6 +681,14 @@ export const runListingSearchEngine = async (
             doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)
           )))
           : [];
+        if (input.originalOnly === true && cachedResults.length > 0) {
+          cachedResults = (await enrichRequiredCandidateMetadata(
+            run,
+            cachedResults,
+            "card-details-cache-original-filter",
+            cachedSource?.loadedPages ?? 0,
+          )).filter(isMultiSearchSourceOriginal);
+        }
         run = {
           ...run,
           status: "done",
@@ -811,8 +839,15 @@ export const runListingSearchEngine = async (
           : Math.max(0, storedResultLimit - run.results.length);
         let enrichedLanguageExcludedCount = 0;
         let excludedByBlacklistedTagCount = 0;
+        let excludedByOriginalCount = 0;
         let newEligibleSources: MultiSearchSourceResult[];
-        if (input.scrapeDetailsWithCards === true && rawUnseenSources.length > 0) {
+        if (
+          rawUnseenSources.length > 0
+          && (
+            input.scrapeDetailsWithCards === true
+            || (input.originalOnly === true && hasScraperSourceDetection(run.scraper))
+          )
+        ) {
           const enrichment = await enrichCandidatesForTarget({
             candidates: rawUnseenSources,
             targetCount: remainingResultSlots,
@@ -823,6 +858,10 @@ export const runListingSearchEngine = async (
               pageIndex,
             ),
             isAccepted: (item) => {
+              if (input.originalOnly === true && !isMultiSearchSourceOriginal(item)) {
+                excludedByOriginalCount += 1;
+                return false;
+              }
               if (!doesMultiSearchSourceMatchIncludedLanguages(item, input.includedLanguageCodes)) {
                 enrichedLanguageExcludedCount += 1;
                 return false;
@@ -922,6 +961,8 @@ export const runListingSearchEngine = async (
           languageRejectLimitReached: languageProgress.boundaryReached,
           excludedByBlacklistedTagCount: (run.excludedByBlacklistedTagCount ?? 0)
             + excludedByBlacklistedTagCount,
+          excludedByOriginalCount: (run.excludedByOriginalCount ?? 0)
+            + excludedByOriginalCount,
           pendingResults: state.pendingResults,
           pendingCandidates: state.pendingCandidates,
           quickConsecutiveSeenResultCount: state.consecutiveSeenResultCount,
@@ -1007,6 +1048,7 @@ export const runListingSearchEngine = async (
           excludedByLanguageCount: newPageSources.length - includedPageSources.length
             + enrichedLanguageExcludedCount,
           excludedByBlacklistedTagCount,
+          excludedByOriginalCount,
         }, source.id);
         await emit(run.name);
       }

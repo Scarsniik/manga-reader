@@ -9,7 +9,7 @@ import type {
 
 export type DetailsFieldKey = Extract<
   ScraperFeatureValidationCheckKey,
-  "title" | "cover" | "description" | "authors" | "tags" | "status" | "pageCount"
+  "title" | "cover" | "description" | "authors" | "tags" | "sources" | "status" | "pageCount"
 >;
 
 export type ScraperRuntimeChapterResult = ScraperChapterItem;
@@ -47,6 +47,8 @@ export type ScraperRuntimeDetailsResult = {
   authorUrls: string[];
   tags: string[];
   tagUrls: string[];
+  sources: string[];
+  sourceUrls: string[];
   thumbnails?: ScraperRuntimeThumbnail[];
   thumbnailsNextPageUrl?: string;
   mangaStatus?: string;
@@ -105,6 +107,7 @@ export const DETAILS_FIELD_KEYS: DetailsFieldKey[] = [
   "description",
   "authors",
   "tags",
+  "sources",
   "status",
   "pageCount",
 ];

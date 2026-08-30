@@ -1,0 +1,17 @@
+.compact-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  background: #161616;
+}
+
+@media (max-width: 760px) {
+  .compact-filter-group {
+    justify-content: flex-start;
+  }
+}
