@@ -188,9 +188,10 @@ Pour les bookmarks, une section dediee permet de choisir plusieurs informations 
 
 La source extraite est conservee dans les bookmarks pour permettre le filtre `Originaux
 uniquement`. Si aucun selecteur de source n'est configure pour un scraper, tous ses mangas sont
-consideres originaux. Si la source est facultative et absente d'une card, la card est egalement
-consideree originale. Quand une source existe, le classement utilise le mot-cle global du scraper
-s'il est renseigne ; sans mot-cle, la presence de la source suffit a classer la card comme derivee.
+consideres originaux. Si aucun nom de source n'est extrait d'une card, la card est egalement
+consideree originale. Le libelle commun `original` est reconnu automatiquement ; le mot-cle global
+facultatif du scraper permet d'ajouter un autre libelle propre au site. Les autres sources classent
+la card comme derivee.
 
 ## Configuration actuelle de `Fiche`
 

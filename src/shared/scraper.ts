@@ -1346,6 +1346,15 @@ export const normalizeScraperOriginalSourceValue = (value: unknown): string => (
     .trim()
 );
 
+const DEFAULT_ORIGINAL_SOURCE_KEYWORD = "original";
+
+const getScraperOriginalSourceKeywords = (
+  scraper: ScraperRecord,
+): string[] => Array.from(new Set([
+  DEFAULT_ORIGINAL_SOURCE_KEYWORD,
+  normalizeScraperOriginalSourceValue(scraper.globalConfig.originalSourceKeyword),
+].filter(Boolean)));
+
 export const hasScraperSourceDetection = (
   scraper: ScraperRecord | null | undefined,
 ): boolean => Boolean(scraper?.features.some(hasConfiguredSourceSelector));
@@ -1358,22 +1367,17 @@ export const isScraperResultOriginal = (
     return true;
   }
 
-  const keyword = normalizeScraperOriginalSourceValue(scraper.globalConfig.originalSourceKeyword);
   const sourceNames = (result.sourceNames ?? [])
     .map(normalizeScraperOriginalSourceValue)
     .filter(Boolean);
-  const sourceUrls = (result.sourceUrls ?? [])
-    .map((sourceUrl) => String(sourceUrl ?? '').trim())
-    .filter(Boolean);
-  if (!sourceNames.length && !sourceUrls.length) {
+  if (!sourceNames.length) {
     return true;
   }
 
-  if (!keyword) {
-    return false;
-  }
-
-  return sourceNames.some((sourceName) => sourceName.includes(keyword));
+  const originalKeywords = getScraperOriginalSourceKeywords(scraper);
+  return sourceNames.some((sourceName) => (
+    originalKeywords.some((keyword) => sourceName.includes(keyword))
+  ));
 };
 
 export function createDefaultScraperFeatures(): ScraperFeatureDefinition[] {

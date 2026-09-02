@@ -165,7 +165,7 @@ test("the common listing loader fetches, parses and returns cards", async () => 
   assert.deepEqual(page.items[0].sourceUrls, ["https://example.test/source/original"]);
 });
 
-test("original-work detection follows the configured source keyword and keeps safe fallbacks", () => {
+test("original-work detection centralizes common, custom and missing-source rules", () => {
   assert.equal(hasScraperSourceDetection(scraper), false);
   assert.equal(isScraperResultOriginal(scraper, { sourceNames: ["Another work"] }), true);
 
@@ -188,8 +188,22 @@ test("original-work detection follows the configured source keyword and keeps sa
     globalConfig: {},
   };
   assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, {}), true);
+  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceNames: ["Original"] }), true);
   assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceNames: ["One Piece"] }), false);
-  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceUrls: ["https://example.test/parody/one-piece"] }), false);
+  assert.equal(isScraperResultOriginal(scraperWithoutOriginalKeyword, { sourceUrls: ["https://example.test/parody/one-piece"] }), true);
+
+  const scraperWithCustomOriginalKeyword = {
+    ...scraperWithSourceDetection,
+    globalConfig: { originalSourceKeyword: "Création maison" },
+  };
+  assert.equal(isScraperResultOriginal(
+    scraperWithCustomOriginalKeyword,
+    { sourceNames: ["CREATION MAISON"] },
+  ), true);
+  assert.equal(isScraperResultOriginal(
+    scraperWithCustomOriginalKeyword,
+    { sourceNames: ["Original work"] },
+  ), true);
 });
 
 test("detail metadata is shared in-flight and does not validate cover images", async () => {

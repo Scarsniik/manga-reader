@@ -196,9 +196,9 @@ export default function ScraperGlobalSettingsEditor({
     },
     {
       name: 'originalSourceKeyword',
-      label: 'Mot-cle de la source originale (facultatif)',
+      label: 'Autre mot-cle de source originale (facultatif)',
       type: 'text',
-      placeholder: 'Exemple : Original. Vide = absence de source.',
+      placeholder: 'Exemple : creation maison',
     },
     {
       name: 'requestMaxConcurrentRequests',
@@ -430,10 +430,10 @@ export default function ScraperGlobalSettingsEditor({
       <div className="scraper-config-note">
         <strong>Oeuvres originales</strong>
         <span>
-          Le mot-cle facultatif est compare au nom de source extrait, sans tenir compte de la casse
-          ni des accents. S&apos;il est vide, une card est originale uniquement quand aucune source
-          n&apos;est extraite. Sans selecteur de source actif, tous les mangas de ce scrapper sont
-          consideres originaux.
+          Le libelle `Original` est reconnu automatiquement. Le mot-cle facultatif permet d&apos;ajouter
+          un autre libelle propre au site, sans tenir compte de la casse ni des accents. Une card sans
+          nom de source extrait est aussi consideree originale. Sans selecteur de source actif, tous
+          les mangas de ce scrapper sont consideres originaux.
         </span>
       </div>
 
@@ -543,7 +543,10 @@ export default function ScraperGlobalSettingsEditor({
           <span>Source originale</span>
           <strong>
             {scraper.globalConfig.originalSourceKeyword
-              || (hasSourceDetection ? 'Absence de source extraite' : 'Tous les mangas sont consideres originaux')}
+              ? `Original ou ${scraper.globalConfig.originalSourceKeyword}`
+              : hasSourceDetection
+                ? "Original ou absence de source extraite"
+                : "Tous les mangas sont consideres originaux"}
           </strong>
         </div>
         <div className="scraper-config-summary__row scraper-config-summary__row--block">

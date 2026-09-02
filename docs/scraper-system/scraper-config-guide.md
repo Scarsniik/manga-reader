@@ -272,15 +272,16 @@ favoris selectionnes. Si la liste est vide, aucun tag favori n'est inclus par de
 
 La detection de source est consideree active des qu'un module configure parmi `Homepage`,
 `Recherche`, `Fiche`, `Auteur`, `Tag` ou `Source` possede un selecteur de source. Quand
-`originalSourceKeyword` est renseigne, la comparaison avec le nom extrait est insensible a la casse
-et aux accents et accepte le mot-cle au sein d'un libelle plus long.
+`originalSourceKeyword` est renseigne, il ajoute un libelle propre au site au mot-cle commun
+`original`. La comparaison avec le nom extrait est insensible a la casse et aux accents et accepte
+le mot-cle au sein d'un libelle plus long.
 
 Les regles de classement sont volontairement prudentes :
 
 - sans detection de source configuree, tous les mangas du scraper sont originaux ;
-- une card sans source extraite est consideree originale, car la source est facultative ;
-- sans mot-cle global, toute card qui expose une source (par exemple un tag `parody`) est non originale ;
-- une card dont au moins une source contient le mot-cle est originale ;
+- une card sans nom de source extrait est consideree originale, meme si une URL de source orpheline
+  a ete extraite ;
+- une card dont au moins une source contient `original` ou le mot-cle du scraper est originale ;
 - une card qui expose uniquement d'autres oeuvres sources est non originale.
 
 Le filtre `Rechercher uniquement les originaux` des recherches multi-sources, des nouveautes et des
