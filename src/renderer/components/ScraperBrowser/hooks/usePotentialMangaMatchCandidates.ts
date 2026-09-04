@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppHistoryRecords } from "@/shared/history";
 import type { SavedReadingList } from "@/shared/readingList";
 import type {
@@ -35,8 +35,13 @@ export type PotentialMangaMatchCandidateCollections = {
 
 type Options = {
   scraper: ScraperRecord | null;
-  libraryMangas: Manga[];
+  libraryMangas?: Manga[];
   enabled?: boolean;
+};
+
+type PotentialMatchLibraryState = {
+  mangas: Manga[];
+  loading: boolean;
 };
 
 const sharedRecordsListeners = new Set<() => void>();
@@ -54,6 +59,51 @@ const subscribeDisabled = () => () => {};
 const getApi = (): any => (
   typeof window === "undefined" ? null : (window as any).api
 );
+
+const usePotentialMatchLibrary = (enabled: boolean): PotentialMatchLibraryState => {
+  const [state, setState] = useState<PotentialMatchLibraryState>({
+    mangas: [],
+    loading: false,
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      setState({ mangas: [], loading: false });
+      return undefined;
+    }
+
+    let cancelled = false;
+    const load = () => {
+      const api = getApi();
+      if (typeof api?.getMangas !== "function") {
+        setState({ mangas: [], loading: false });
+        return;
+      }
+
+      setState((current) => ({ ...current, loading: true }));
+      void api.getMangas()
+        .then((mangas: unknown) => {
+          if (!cancelled) {
+            setState({ mangas: Array.isArray(mangas) ? mangas as Manga[] : [], loading: false });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setState((current) => ({ ...current, loading: false }));
+          }
+        });
+    };
+
+    load();
+    window.addEventListener("mangas-updated", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("mangas-updated", load);
+    };
+  }, [enabled]);
+
+  return state;
+};
 
 const subscribe = (listener: () => void): (() => void) => {
   sharedRecordsListeners.add(listener);
@@ -177,6 +227,8 @@ export default function usePotentialMangaMatchCandidates({
   enabled = true,
 }: Options): PotentialMangaMatchCandidateCollections {
   const active = enabled && Boolean(scraper);
+  const automaticLibrary = usePotentialMatchLibrary(active && libraryMangas === undefined);
+  const resolvedLibraryMangas = libraryMangas ?? automaticLibrary.mangas;
   const bookmarkState = useScraperBookmarks({ enabled: active });
   const viewHistoryState = useScraperViewHistory({ enabled: active });
   const sharedRecords = useSyncExternalStore(
@@ -235,14 +287,14 @@ export default function usePotentialMangaMatchCandidates({
 
   const readingCandidates = useMemo(() => buildReadingCandidates({
     historyRecords: sharedRecords.historyRecords,
-    libraryMangas,
+    libraryMangas: resolvedLibraryMangas,
     progressRecords: sharedRecords.progressRecords,
     viewHistoryRecords: viewHistoryReadRecords,
     bookmarks: bookmarkState.bookmarks,
     scrapersById,
   }), [
     bookmarkState.bookmarks,
-    libraryMangas,
+    resolvedLibraryMangas,
     scrapersById,
     sharedRecords.historyRecords,
     sharedRecords.progressRecords,
@@ -258,9 +310,9 @@ export default function usePotentialMangaMatchCandidates({
 
   const readingListCandidates = useMemo(() => buildReadingListCandidates({
     lists: sharedRecords.savedReadingLists,
-    libraryMangas,
+    libraryMangas: resolvedLibraryMangas,
     scrapersById,
-  }), [libraryMangas, scrapersById, sharedRecords.savedReadingLists]);
+  }), [resolvedLibraryMangas, scrapersById, sharedRecords.savedReadingLists]);
 
   return {
     readingCandidates,
@@ -270,6 +322,7 @@ export default function usePotentialMangaMatchCandidates({
       sharedRecords.loading
       || bookmarkState.loading
       || viewHistoryState.loading
+      || automaticLibrary.loading
     ),
   };
 }

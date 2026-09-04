@@ -6,7 +6,8 @@
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  overscroll-behavior: contain;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .app-modal {

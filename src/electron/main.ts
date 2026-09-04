@@ -1,17 +1,54 @@
 import "./env";
 import { app, BrowserWindow, protocol, shell } from "electron";
+import { existsSync, unwatchFile, watchFile } from "node:fs";
 import path from "path";
 import { configureApplicationIdentity } from "./appIdentity";
 import { attachWindowStateListeners } from "./handlers/windowControls";
+import { usesRendererBuild } from "./rendererMode";
 import { resolveLocalProtocolPath } from "./utils/localProtocol";
 
 let mainWindow: BrowserWindow | null;
 let backgroundSearchWorkerWindow: BrowserWindow | null = null;
+let backgroundSearchWorkerStartupTimer: NodeJS.Timeout | null = null;
 let startupWindowShowTimer: NodeJS.Timeout | null = null;
+let developmentRendererReadyPath: string | null = null;
+let developmentRendererReloadTimer: NodeJS.Timeout | null = null;
 let applicationIsQuitting = false;
 
 // Configure identity and profile paths before Chromium initializes session/cache storage.
 configureApplicationIdentity();
+
+const watchDevelopmentRenderer = (rendererDirectoryPath: string) => {
+    if (app.isPackaged || process.env.ELECTRON_DEV_RENDERER_BUILD !== "1" || developmentRendererReadyPath) {
+        return;
+    }
+
+    developmentRendererReadyPath = path.join(rendererDirectoryPath, ".dev-ready");
+    watchFile(developmentRendererReadyPath, { interval: 200, persistent: false }, (current, previous) => {
+        if (current.mtimeMs <= 0 || current.mtimeMs === previous.mtimeMs) {
+            return;
+        }
+
+        if (developmentRendererReloadTimer) {
+            clearTimeout(developmentRendererReloadTimer);
+        }
+
+        developmentRendererReloadTimer = setTimeout(() => {
+            developmentRendererReloadTimer = null;
+            if (!existsSync(path.join(rendererDirectoryPath, "index.html"))) {
+                return;
+            }
+
+            console.info("[dev] Renderer rebuilt; reloading application windows");
+            const rendererWindows = [mainWindow, backgroundSearchWorkerWindow];
+            for (const rendererWindow of rendererWindows) {
+                if (rendererWindow && !rendererWindow.isDestroyed()) {
+                    rendererWindow.webContents.reloadIgnoringCache();
+                }
+            }
+        }, 250);
+    });
+};
 
 const showMainWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -127,7 +164,7 @@ const createBackgroundSearchWorkerWindow = () => {
 
     const loadWorkerApplication = () => {
         if (workerWindow.isDestroyed()) return;
-        if (app.isPackaged) {
+        if (usesRendererBuild()) {
             void workerWindow.loadFile(packagedIndexPath, { hash: "/background-search-runner" });
         } else {
             const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:3000";
@@ -142,6 +179,20 @@ const createBackgroundSearchWorkerWindow = () => {
     loadWorkerApplication();
 
     return workerWindow;
+};
+
+const scheduleBackgroundSearchWorkerWindow = () => {
+    if (backgroundSearchWorkerWindow || backgroundSearchWorkerStartupTimer) {
+        return;
+    }
+
+    const startupDelayMs = app.isPackaged ? 0 : 5000;
+    backgroundSearchWorkerStartupTimer = setTimeout(() => {
+        backgroundSearchWorkerStartupTimer = null;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            createBackgroundSearchWorkerWindow();
+        }
+    }, startupDelayMs);
 };
 
 const createWindow = () => {
@@ -176,6 +227,7 @@ const createWindow = () => {
         }
 
         showMainWindow();
+        scheduleBackgroundSearchWorkerWindow();
     });
 
     mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
@@ -207,13 +259,16 @@ const createWindow = () => {
         void openExternalNavigation(url);
     });
 
-    if (app.isPackaged) {
-        // En production, charge le build Vite dans dist/renderer (chemin absolu, compatible asar et portable)
+    if (usesRendererBuild()) {
+        // Load the Vite bundle from disk in production and in the fast development workflow.
         void mainWindow.loadFile(packagedIndexPath);
-        // Supprime la barre de menu native pour un vrai mode prod
-        mainWindow.setMenuBarVisibility(false);
+        if (app.isPackaged) {
+            mainWindow.setMenuBarVisibility(false);
+        } else {
+            watchDevelopmentRenderer(path.dirname(packagedIndexPath));
+        }
     } else {
-        // En dev, charge le serveur Vite
+        // Keep direct Vite server support for standalone renderer debugging.
         const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:3000";
         void mainWindow.loadURL(devServerUrl);
     }
@@ -224,6 +279,10 @@ const createWindow = () => {
             startupWindowShowTimer = null;
         }
         mainWindow = null;
+        if (backgroundSearchWorkerStartupTimer) {
+            clearTimeout(backgroundSearchWorkerStartupTimer);
+            backgroundSearchWorkerStartupTimer = null;
+        }
         if (backgroundSearchWorkerWindow && !backgroundSearchWorkerWindow.isDestroyed()) {
             backgroundSearchWorkerWindow.destroy();
         }
@@ -232,11 +291,13 @@ const createWindow = () => {
     startupWindowShowTimer = setTimeout(() => {
         startupWindowShowTimer = null;
         showMainWindow();
-    }, 4000);
+        scheduleBackgroundSearchWorkerWindow();
+    }, app.isPackaged ? 4000 : 15000);
 
-    // Ouvre DevTools seulement en développement
     if (!app.isPackaged) {
-        mainWindow.webContents.openDevTools();
+        if (process.env.ELECTRON_OPEN_DEVTOOLS === "1") {
+            mainWindow.webContents.openDevTools();
+        }
     } else {
         // En production, bloque toute ouverture des DevTools
         mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -266,7 +327,6 @@ if (!singleInstanceLock) {
     app.on("second-instance", () => {
         if (mainWindow === null) {
             createWindow();
-            createBackgroundSearchWorkerWindow();
             return;
         }
 
@@ -300,7 +360,6 @@ app.whenReady()
         void appUpdate.initializeAppUpdate();
 
         createWindow();
-        createBackgroundSearchWorkerWindow();
         appUpdate.scheduleStartupUpdateCheck(mainWindow);
         startOcrPrewarmInBackground();
     })
@@ -316,6 +375,14 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
     applicationIsQuitting = true;
+    if (developmentRendererReloadTimer) {
+        clearTimeout(developmentRendererReloadTimer);
+        developmentRendererReloadTimer = null;
+    }
+    if (developmentRendererReadyPath) {
+        unwatchFile(developmentRendererReadyPath);
+        developmentRendererReadyPath = null;
+    }
     const collectionsDatabase = require("./database/connection") as typeof import("./database/connection");
     collectionsDatabase.closeCollectionsDatabase();
 });
@@ -323,7 +390,6 @@ app.on("before-quit", () => {
 app.on("activate", () => {
     if (mainWindow === null) {
         createWindow();
-        createBackgroundSearchWorkerWindow();
     }
 });
 

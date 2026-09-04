@@ -136,6 +136,12 @@ type WorkspaceTarget =
       scraperId: string;
       query: string;
       title?: string;
+    }
+  | {
+      kind: "scraper.source";
+      scraperId: string;
+      query: string;
+      title?: string;
     };
 ```
 

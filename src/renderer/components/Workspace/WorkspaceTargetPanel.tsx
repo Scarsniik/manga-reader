@@ -8,6 +8,7 @@ import ScraperBrowser from "@/renderer/components/ScraperBrowser/ScraperBrowser"
 import type { ScraperBrowserInitialState } from "@/renderer/components/ScraperBrowser/types";
 import WorkspaceScraperAuthorPanel from "@/renderer/components/Workspace/WorkspaceScraperAuthorPanel";
 import WorkspaceScraperTagPanel from "@/renderer/components/Workspace/WorkspaceScraperTagPanel";
+import WorkspaceScraperSourcePanel from "@/renderer/components/Workspace/WorkspaceScraperSourcePanel";
 import { ScraperBookmarkFrequentStatsPanel } from "@/renderer/components/ScraperBookmarks/ScraperBookmarkTagStatsDialog";
 import {
   readWorkspaceBrowserTabCache,
@@ -489,6 +490,20 @@ export default function WorkspaceTargetPanel({
   if (target.kind === "scraper.tag") {
     return (
       <WorkspaceScraperTagPanel
+        tabId={tabId}
+        scraperId={target.scraperId}
+        query={target.query}
+        title={target.title}
+        onOpenReaderTarget={handleOpenReaderTarget}
+        onOpenWorkspaceTarget={handleOpenWorkspaceTarget}
+        onTitleChange={handleTitleChange}
+      />
+    );
+  }
+
+  if (target.kind === "scraper.source") {
+    return (
+      <WorkspaceScraperSourcePanel
         tabId={tabId}
         scraperId={target.scraperId}
         query={target.query}

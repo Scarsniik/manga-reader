@@ -36,6 +36,8 @@ import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilter
 import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
+import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
+import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
 
 type StatusItem = {
   key: string;
@@ -334,6 +336,10 @@ export default function ScraperLatestResults({
     && secondaryActionLabel
     && continuousActionLabel,
   );
+  const quickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromMergedResults(displayedResults),
+    [displayedResults],
+  );
 
   React.useEffect(() => {
     setIsStatusPanelOpen(false);
@@ -351,6 +357,7 @@ export default function ScraperLatestResults({
         <div className="scraper-latest-results__head-top">
           <h3>{title}</h3>
           <div className="multi-search__section-actions">
+            <QuickReviewLauncher items={quickReviewItems} />
             {onShowBlacklistedCardsLocallyChange ? (
               <BlacklistedCardsDisplayToggle
                 blacklistedCardCount={blacklistedCardCount}

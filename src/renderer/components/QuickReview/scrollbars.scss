@@ -1,0 +1,31 @@
+.quick-review__content,
+.quick-review__thumbnails-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126, 232, 199, 0.48) rgba(255, 255, 255, 0.055);
+}
+
+.quick-review__content::-webkit-scrollbar,
+.quick-review__thumbnails-scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.quick-review__content::-webkit-scrollbar-track,
+.quick-review__thumbnails-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.quick-review__content::-webkit-scrollbar-thumb,
+.quick-review__thumbnails-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(126, 232, 199, 0.46);
+  background-clip: padding-box;
+}
+
+.quick-review__content::-webkit-scrollbar-thumb:hover,
+.quick-review__thumbnails-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(126, 232, 199, 0.72);
+  background-clip: padding-box;
+}

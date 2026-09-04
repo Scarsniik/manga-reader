@@ -26,6 +26,8 @@ import {
   filterByScraperViewHistoryNewState,
 } from '@/renderer/utils/scraperViewHistory';
 import useFrozenScraperUnseenFilter from '@/renderer/hooks/useFrozenScraperUnseenFilter';
+import QuickReviewLauncher from '@/renderer/components/QuickReview/QuickReviewLauncher';
+import { buildQuickReviewItemsFromSearchResults } from '@/renderer/components/QuickReview/quickReviewItems';
 
 type Props = {
   scraperId: string;
@@ -195,6 +197,10 @@ export default function ScraperSearchResultsSection({
       unseenFilterRecordsById,
     ],
   );
+  const quickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromSearchResults(scraper, displayedSearchResults),
+    [displayedSearchResults, scraper],
+  );
 
   if (!visibleSearchResults.length && !backLabel) {
     return null;
@@ -270,6 +276,7 @@ export default function ScraperSearchResultsSection({
         </div>
 
         <div className="scraper-browser__results-side">
+          <QuickReviewLauncher items={quickReviewItems} />
           {headerAction}
           {isAuthorMode ? (
             <>

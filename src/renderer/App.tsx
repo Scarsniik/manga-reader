@@ -6,7 +6,6 @@ import OcrRuntimeGlobalUi from "@/renderer/components/OcrRuntime/OcrRuntimeGloba
 import './styles/main.scss';
 import useRefresh from '@/renderer/hooks/useRefresh';
 import usePreventMiddleClickAutoScroll from "@/renderer/hooks/usePreventMiddleClickAutoScroll";
-import BackgroundSearchRunner from "@/renderer/backgroundSearch/BackgroundSearchRunner";
 import BackgroundSearchOpenCoordinator from "@/renderer/backgroundSearch/BackgroundSearchOpenCoordinator";
 import "@/renderer/backgroundSearch/style.scss";
 
@@ -22,6 +21,9 @@ const loadDefaultComponent = async (loader: () => Promise<unknown>): Promise<Def
 const Home = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Home/Home.js')));
 const Reader = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Reader/Reader.js')));
 const WorkspaceView = React.lazy(() => loadDefaultComponent(() => import('@/renderer/components/Workspace/WorkspaceView.js')));
+const BackgroundSearchRunner = React.lazy(() => (
+    loadDefaultComponent(() => import("@/renderer/backgroundSearch/BackgroundSearchRunner.js"))
+));
 const SelectorAssistantView = React.lazy(() => (
     loadDefaultComponent(() => import('@/renderer/components/SelectorAssistant/SelectorAssistantView.js'))
 ));
@@ -56,7 +58,11 @@ const MainApplication: React.FC = () => {
     );
 };
 
-const BackgroundSearchWorkerApplication: React.FC = () => <BackgroundSearchRunner />;
+const BackgroundSearchWorkerApplication: React.FC = () => (
+    <React.Suspense fallback={null}>
+        <BackgroundSearchRunner />
+    </React.Suspense>
+);
 
 const App: React.FC = () => (
     window.location.hash.startsWith('#/background-search-runner')

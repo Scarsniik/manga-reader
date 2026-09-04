@@ -5,6 +5,7 @@ import {
   type WebContentsView,
 } from "electron";
 import path from "path";
+import { usesRendererBuild } from "../rendererMode";
 import { buildScraperFetchInit, sanitizeRequestConfig } from "./scrapers/shared";
 import { SCRAPER_DOCUMENT_ACCEPT } from "./scrapers/documentFetch";
 import type { OpenSelectorAssistantRequest } from "../../shared/selectorAssistant";
@@ -153,7 +154,7 @@ export const loadSelectorAssistantHostWindow = async (
   window: BrowserWindow,
   sessionId: string,
 ): Promise<void> => {
-  if (app.isPackaged) {
+  if (usesRendererBuild()) {
     const indexPath = path.join(app.getAppPath(), "dist", "renderer", "index.html");
     await window.loadFile(indexPath, { hash: `/selector-assistant?session=${encodeURIComponent(sessionId)}` });
     return;

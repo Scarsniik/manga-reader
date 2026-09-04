@@ -11,6 +11,7 @@ Scaramanga is a lightweight desktop application designed to help users learn Jap
 - **Version Badge**: The custom title bar displays the actual application version instead of a fixed label.
 - **User Data Access**: Open the managed user data folder directly from the Options modal for inspection or backup.
 - **Reading Lists**: Convert open manga workspace tabs into an ordered or shuffled session, save lists, and resume them from Bookmarks.
+- **Quick Review**: Browse filtered scraper results or open workspace manga tabs one card at a time with configurable navigation and bookmark shortcuts.
 - **Read-only Collection Statistics**: Review library, reading, scraper, bookmark, and user-data storage statistics from the Options modal.
 - **Combined Author Correspondences**: Open author pages found by a correspondence search in the favorite-author combined view, using the configured author page limit, and invalidate incorrect matches from either view.
 - **Linked Correspondence Searches**: Deepen authors from a manga correspondence job, automatically or manually reuse an existing author corpus across several manga searches, and replay them with safeguard-aware blocking.
@@ -61,6 +62,19 @@ scaramanga
    ```
    npm start
    ```
+
+## Development
+
+Start the Electron application with the fast development workflow:
+
+```
+npm run electron:dev
+```
+
+The command builds the renderer once before opening Electron, then watches for
+renderer changes and reloads the window automatically. This avoids the slow
+development-server module waterfall. It also reuses TypeScript's incremental
+cache and repairs an incomplete Electron binary download when necessary.
 
 ## Usage
 

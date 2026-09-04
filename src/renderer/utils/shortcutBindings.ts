@@ -1,6 +1,12 @@
 export const SHORTCUT_BINDING_SLOT_COUNT = 3;
+export type ShortcutPressType = "short" | "long";
 
 export type ShortcutActionId =
+  | "quickReviewPrevious"
+  | "quickReviewNext"
+  | "quickReviewBookmark"
+  | "quickReviewThumbnailsPrevious"
+  | "quickReviewThumbnailsNext"
   | "readerScrollUp"
   | "readerScrollDown"
   | "readerPageNext"
@@ -34,6 +40,32 @@ type ShortcutActionGroup = {
 };
 
 export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
+  {
+    id: "quick-review",
+    label: "Review rapide",
+    actions: [
+      {
+        id: "quickReviewPrevious",
+        label: "Fiche précédente",
+      },
+      {
+        id: "quickReviewNext",
+        label: "Fiche suivante",
+      },
+      {
+        id: "quickReviewBookmark",
+        label: "Bookmark et fiche suivante",
+      },
+      {
+        id: "quickReviewThumbnailsPrevious",
+        label: "Miniatures : défiler en arrière",
+      },
+      {
+        id: "quickReviewThumbnailsNext",
+        label: "Miniatures : défiler en avant",
+      },
+    ],
+  },
   {
     id: "reader-navigation",
     label: "Lecteur",
@@ -121,6 +153,11 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
 ];
 
 export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
+  quickReviewPrevious: ["ArrowLeft", "", ""],
+  quickReviewNext: ["ArrowRight", "", ""],
+  quickReviewBookmark: ["Hold+ArrowRight", "", ""],
+  quickReviewThumbnailsPrevious: ["ArrowUp", "", ""],
+  quickReviewThumbnailsNext: ["ArrowDown", "", ""],
   readerScrollUp: ["Z", "ArrowUp", "U"],
   readerScrollDown: ["S", "ArrowDown", "J"],
   readerPageNext: ["D", "ArrowRight", "P"],
@@ -141,6 +178,14 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   readerOcrPlayVoiceFaster: ["", "", ""],
 };
 
+const LEGACY_QUICK_REVIEW_SHORTCUT_BINDINGS: Partial<ShortcutBindingsByAction> = {
+  quickReviewPrevious: ["ArrowLeft", "", ""],
+  quickReviewNext: ["ArrowRight", "", ""],
+  quickReviewBookmark: ["ArrowDown", "", ""],
+  quickReviewThumbnailsPrevious: ["PageUp", "", ""],
+  quickReviewThumbnailsNext: ["PageDown", "", ""],
+};
+
 const LEGACY_SHORTCUT_SETTING_BY_ACTION: Partial<Record<ShortcutActionId, string>> = {
   readerOcrNavigateUp: "readerOcrShortcutUp",
   readerOcrNavigateLeft: "readerOcrShortcutLeft",
@@ -149,6 +194,9 @@ const LEGACY_SHORTCUT_SETTING_BY_ACTION: Partial<Record<ShortcutActionId, string
 };
 
 const MODIFIER_KEY_LABELS = new Map<string, string>([
+  ["hold", "Hold"],
+  ["long", "Hold"],
+  ["longpress", "Hold"],
   ["control", "Ctrl"],
   ["ctrl", "Ctrl"],
   ["alt", "Alt"],
@@ -173,7 +221,7 @@ const KEY_LABELS = new Map<string, string>([
   ["+", "Plus"],
 ]);
 
-const MODIFIER_DISPLAY_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
+const MODIFIER_DISPLAY_ORDER = ["Hold", "Ctrl", "Alt", "Shift", "Meta"];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -239,7 +287,9 @@ export const normalizeShortcutBinding = (value: unknown): string => {
 
 export const formatShortcutBinding = (binding: string): string => {
   const normalizedBinding = normalizeShortcutBinding(binding);
-  return normalizedBinding ? normalizedBinding.replace(/\+/g, " + ") : "Vide";
+  return normalizedBinding
+    ? normalizedBinding.split("+").map((part) => part === "Hold" ? "Maintenir" : part).join(" + ")
+    : "Vide";
 };
 
 const normalizeShortcutSlots = (value: unknown, fallbackSlots: string[]): string[] => {
@@ -264,13 +314,21 @@ export const normalizeShortcutSettings = (settings: unknown): ShortcutBindingsBy
 
   return SHORTCUT_ACTION_GROUPS.flatMap((group) => group.actions).reduce((result, action) => {
     const legacySettingKey = LEGACY_SHORTCUT_SETTING_BY_ACTION[action.id];
-    const rawSlots = shortcutRecord[action.id] ?? (legacySettingKey ? settingsRecord[legacySettingKey] : undefined);
+    const storedSlots = shortcutRecord[action.id] ?? (legacySettingKey ? settingsRecord[legacySettingKey] : undefined);
+    const legacySlots = LEGACY_QUICK_REVIEW_SHORTCUT_BINDINGS[action.id];
+    const rawSlots = legacySlots
+      && JSON.stringify(normalizeShortcutSlots(storedSlots, legacySlots)) === JSON.stringify(legacySlots)
+      ? undefined
+      : storedSlots;
     result[action.id] = normalizeShortcutSlots(rawSlots, DEFAULT_SHORTCUT_BINDINGS[action.id]);
     return result;
   }, {} as ShortcutBindingsByAction);
 };
 
-export const getShortcutBindingFromKeyboardEvent = (event: KeyboardEvent): string | null => {
+export const getShortcutBindingFromKeyboardEvent = (
+  event: KeyboardEvent,
+  pressType: ShortcutPressType = "short",
+): string | null => {
   if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) {
     return null;
   }
@@ -285,6 +343,7 @@ export const getShortcutBindingFromKeyboardEvent = (event: KeyboardEvent): strin
   );
 
   return [
+    pressType === "long" ? "Hold" : "",
     event.ctrlKey ? "Ctrl" : "",
     event.altKey ? "Alt" : "",
     shouldIncludeShift ? "Shift" : "",
@@ -296,21 +355,25 @@ export const getShortcutBindingFromKeyboardEvent = (event: KeyboardEvent): strin
 export const doesKeyboardEventMatchShortcutBinding = (
   event: KeyboardEvent,
   binding: string,
+  pressType: ShortcutPressType = "short",
 ): boolean => {
   const normalizedBinding = normalizeShortcutBinding(binding);
   if (!normalizedBinding) {
     return false;
   }
 
-  return getShortcutBindingFromKeyboardEvent(event) === normalizedBinding;
+  return getShortcutBindingFromKeyboardEvent(event, pressType) === normalizedBinding;
 };
 
 export const doesKeyboardEventMatchShortcutAction = (
   event: KeyboardEvent,
   shortcuts: ShortcutBindingsByAction,
   actionId: ShortcutActionId,
+  pressType: ShortcutPressType = "short",
 ): boolean => (
-  shortcuts[actionId].some((binding) => doesKeyboardEventMatchShortcutBinding(event, binding))
+  shortcuts[actionId].some((binding) => (
+    doesKeyboardEventMatchShortcutBinding(event, binding, pressType)
+  ))
 );
 
 export const setShortcutBindingSlot = (

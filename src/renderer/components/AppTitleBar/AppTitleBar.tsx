@@ -6,11 +6,9 @@ import {
     type AppTitleBarContext,
     getAvailableTitleBarMenuActions,
 } from "@/renderer/components/AppTitleBar/titleBarMenu";
-import {
-    ChevronDownIcon,
-    CloseXIcon,
-    OpenBookIcon,
-} from "@/renderer/components/icons";
+import ChevronDownIcon from "@/renderer/components/icons/chevron-down.svg?react";
+import CloseXIcon from "@/renderer/components/icons/close-x.svg?react";
+import OpenBookIcon from "@/renderer/components/icons/open-book.svg?react";
 import MaximizeWindowIcon from "@/renderer/components/AppTitleBar/icons/maximize-window.svg?react";
 import MinimizeWindowIcon from "@/renderer/components/AppTitleBar/icons/minimize-window.svg?react";
 import RestoreWindowIcon from "@/renderer/components/AppTitleBar/icons/restore-window.svg?react";
@@ -53,6 +51,7 @@ const DEFAULT_WINDOW_STATE: WindowState = {
 
 const DEFAULT_TITLE_BAR_CONTEXT: AppTitleBarContext = {
     mangaTabCount: 0,
+    quickReviewTabCount: 0,
     surface: "main",
 };
 

@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Manga } from "@/renderer/types";
-import type { WorkspaceTarget } from "@/renderer/types/workspace";
 import type { ScraperRecord } from "@/shared/scraper";
 import type { MultiSearchMergedResult } from "@/renderer/components/MultiSearch/types";
 import useParams from "@/renderer/hooks/useParams";
@@ -10,6 +9,7 @@ import useScraperCardPotentialMatches, {
   type ScraperCardPotentialMatchInput,
 } from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
 import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import { buildPotentialMangaMatchWorkspaceTarget } from "@/renderer/components/ScraperBrowser/utils/potentialMatchWorkspaceTarget";
 import {
   clearScraperRouteState,
   writeScraperRouteState,
@@ -21,26 +21,6 @@ type Options = {
   libraryMangas: Manga[];
   fallbackScraper: ScraperRecord | null;
 };
-
-const buildLibraryTarget = (title: string): WorkspaceTarget => ({
-  kind: "manga-manager.view",
-  viewId: "library",
-  title: "Bibliotheque",
-  locationState: {
-    librarySearchQuery: title,
-  },
-});
-
-const buildWorkspaceTarget = (match: ScraperPotentialMangaMatch): WorkspaceTarget => (
-  match.target.kind === "library"
-    ? buildLibraryTarget(match.target.title)
-    : {
-      kind: "scraper.details",
-      scraperId: match.target.scraperId,
-      sourceUrl: match.target.sourceUrl,
-      title: match.target.title,
-    }
-);
 
 export default function useMultiSearchCardPotentialMatches({
   results,
@@ -135,7 +115,7 @@ export default function useMultiSearchCardPotentialMatches({
   }, [location.pathname, location.search, location.state, navigate]);
 
   const openMatchInWorkspace = useCallback((match: ScraperPotentialMangaMatch) => {
-    void openWorkspaceTarget(buildWorkspaceTarget(match));
+    void openWorkspaceTarget(buildPotentialMangaMatchWorkspaceTarget(match));
   }, []);
 
   return {

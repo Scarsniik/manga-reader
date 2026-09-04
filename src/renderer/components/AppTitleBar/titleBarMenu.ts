@@ -2,6 +2,7 @@ export type AppTitleBarSurface = "main" | "workspace";
 
 export type AppTitleBarContext = {
   mangaTabCount: number;
+  quickReviewTabCount: number;
   surface: AppTitleBarSurface;
 };
 
@@ -15,6 +16,7 @@ export type AppTitleBarMenuAction = {
 
 export const APP_TITLE_BAR_CONTEXT_EVENT = "app-titlebar-context-changed";
 export const CREATE_READING_LIST_EVENT = "workspace-create-reading-list";
+export const OPEN_WORKSPACE_QUICK_REVIEW_EVENT = "workspace-open-quick-review";
 
 export const APP_TITLE_BAR_MENU_ACTIONS: AppTitleBarMenuAction[] = [
   {
@@ -23,6 +25,13 @@ export const APP_TITLE_BAR_MENU_ACTIONS: AppTitleBarMenuAction[] = [
     commandEventName: CREATE_READING_LIST_EVENT,
     surfaces: ["workspace"],
     isAvailable: (context) => context.mangaTabCount > 0,
+  },
+  {
+    id: "open-quick-review",
+    label: "Revoir rapidement les fiches",
+    commandEventName: OPEN_WORKSPACE_QUICK_REVIEW_EVENT,
+    surfaces: ["workspace"],
+    isAvailable: (context) => context.quickReviewTabCount > 0,
   },
 ];
 

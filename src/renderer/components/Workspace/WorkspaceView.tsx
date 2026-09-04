@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   APP_TITLE_BAR_CONTEXT_EVENT,
   CREATE_READING_LIST_EVENT,
+  OPEN_WORKSPACE_QUICK_REVIEW_EVENT,
 } from "@/renderer/components/AppTitleBar/titleBarMenu";
 import {
   buildReadingListItemFromTab,
@@ -9,9 +10,16 @@ import {
 } from "@/renderer/components/ReadingList/readingListItems";
 import WorkspaceTabBar from "@/renderer/components/Workspace/WorkspaceTabBar";
 import WorkspaceTargetPanel from "@/renderer/components/Workspace/WorkspaceTargetPanel";
-import { clearWorkspaceBrowserTabCache } from "@/renderer/components/Workspace/workspaceBrowserTabCache";
+import {
+  clearWorkspaceBrowserTabCache,
+  readWorkspaceBrowserTabCache,
+} from "@/renderer/components/Workspace/workspaceBrowserTabCache";
 import type { WorkspaceTab, WorkspaceTarget } from "@/renderer/types/workspace";
 import useParams from "@/renderer/hooks/useParams";
+import useModal from "@/renderer/hooks/useModal";
+import QuickReviewDialog from "@/renderer/components/QuickReview/QuickReviewDialog";
+import { buildQuickReviewItemFromDetailsTarget } from "@/renderer/components/QuickReview/quickReviewItems";
+import type { ScraperRecord } from "@/shared/scraper";
 import "@/renderer/components/Workspace/style.scss";
 
 type WorkspaceApi = {
@@ -66,6 +74,10 @@ const getTargetTitle = (target: WorkspaceTarget): string => {
     return "Page tag";
   }
 
+  if (target.kind === "scraper.source") {
+    return "Page source";
+  }
+
   if (target.kind === "scraper.bookmarkTags") {
     return target.statsKind === "authors" ? "Auteurs fréquents" : "Tags fréquents";
   }
@@ -89,6 +101,7 @@ const createWorkspaceTab = (target: WorkspaceTarget, isNew: boolean): WorkspaceT
 
 export default function WorkspaceView() {
   const { params } = useParams();
+  const { openModal } = useModal();
   const [tabs, setTabsState] = useState<WorkspaceTab[]>(storedTabs);
   const [activeTabId, setActiveTabIdState] = useState<string | null>(storedActiveTabId);
 
@@ -146,6 +159,53 @@ export default function WorkspaceView() {
     updateActiveTabId(readingListTab.id);
   }, [params?.readingListKeepSourceTabs, updateActiveTabId, updateTabs]);
 
+  const openQuickReview = useCallback(async () => {
+    const sourceTabs = storedTabs.filter((tab) => tab.target.kind === "scraper.details");
+    if (!sourceTabs.length) return;
+
+    try {
+      const scraperData = typeof window.api?.getScrapers === "function"
+        ? await window.api.getScrapers()
+        : [];
+      const scrapersById = new Map<string, ScraperRecord>(
+        (Array.isArray(scraperData) ? scraperData : []).map((scraper: ScraperRecord) => [scraper.id, scraper]),
+      );
+      const items = sourceTabs.flatMap((tab) => {
+        if (tab.target.kind !== "scraper.details") return [];
+        const scraper = scrapersById.get(tab.target.scraperId);
+        if (!scraper) return [];
+
+        const targetKey = `scraper.details:${tab.target.scraperId}:${tab.target.sourceUrl}`;
+        const cachedDetails = readWorkspaceBrowserTabCache(tab.id, targetKey)?.initialState.detailsResult;
+        return [buildQuickReviewItemFromDetailsTarget({
+          id: `workspace:${tab.id}`,
+          scraper,
+          sourceUrl: tab.target.sourceUrl,
+          title: tab.title || tab.target.title,
+          details: cachedDetails,
+        })];
+      });
+
+      if (!items.length) {
+        throw new Error("Aucune fiche exploitable n'est ouverte dans les onglets.");
+      }
+
+      openModal({
+        title: `Review rapide · ${items.length} fiche(s)`,
+        content: <QuickReviewDialog items={items} />,
+        className: "quick-review-modal",
+        bodyClassName: "quick-review-modal__body",
+        actions: [{ label: "Fermer", variant: "secondary" }],
+      });
+    } catch (error) {
+      openModal({
+        title: "Review rapide",
+        content: error instanceof Error ? error.message : "Impossible de préparer les fiches ouvertes.",
+        actions: [{ label: "Fermer", variant: "secondary" }],
+      });
+    }
+  }, [openModal]);
+
   const replaceTabTarget = useCallback((
     tabId: string,
     target: WorkspaceTarget,
@@ -182,9 +242,18 @@ export default function WorkspaceView() {
   }, [createReadingList]);
 
   useEffect(() => {
+    const handleOpenQuickReview = () => {
+      void openQuickReview();
+    };
+    window.addEventListener(OPEN_WORKSPACE_QUICK_REVIEW_EVENT, handleOpenQuickReview);
+    return () => window.removeEventListener(OPEN_WORKSPACE_QUICK_REVIEW_EVENT, handleOpenQuickReview);
+  }, [openQuickReview]);
+
+  useEffect(() => {
     window.dispatchEvent(new CustomEvent(APP_TITLE_BAR_CONTEXT_EVENT, {
       detail: {
         mangaTabCount: tabs.filter(isReadingListSourceTab).length,
+        quickReviewTabCount: tabs.filter((tab) => tab.target.kind === "scraper.details").length,
         surface: "workspace",
       },
     }));
@@ -195,6 +264,7 @@ export default function WorkspaceView() {
       window.dispatchEvent(new CustomEvent(APP_TITLE_BAR_CONTEXT_EVENT, {
         detail: {
           mangaTabCount: 0,
+          quickReviewTabCount: 0,
           surface: "main",
         },
       }));

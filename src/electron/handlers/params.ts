@@ -18,6 +18,20 @@ import {
     MANGA_CORRESPONDENCE_SAFETY_PARAM_DEFAULTS,
     normalizeMangaCorrespondenceSafetyParams,
 } from "../../shared/mangaCorrespondenceSafetySettings";
+import {
+    DEFAULT_QUICK_REVIEW_PREFETCH_COUNT,
+    DEFAULT_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+    DEFAULT_QUICK_REVIEW_THUMBNAIL_SIZE,
+    DEFAULT_QUICK_REVIEW_DISPLAY_SETTINGS,
+    normalizeQuickReviewDisplaySettings,
+    normalizeQuickReviewPrefetchCount,
+    normalizeQuickReviewThumbnailMaxColumns,
+    normalizeQuickReviewThumbnailSize,
+} from "../../shared/quickReviewSettings";
+import {
+    DEFAULT_SHORTCUT_LONG_PRESS_DELAY_MS,
+    normalizeShortcutLongPressDelay,
+} from "../../shared/shortcutSettings";
 import { paramsFilePath, ensureDataDir } from "../utils";
 
 const DEFAULT_READER_OCR_PRELOAD_PAGE_COUNT = 2;
@@ -103,6 +117,11 @@ const DEFAULT_BACKGROUND_SEARCH_MAX_CONCURRENT = 3;
 const SHORTCUT_BINDING_SLOT_COUNT = 3;
 
 const defaultShortcutBindings = {
+    quickReviewPrevious: ["ArrowLeft", "", ""],
+    quickReviewNext: ["ArrowRight", "", ""],
+    quickReviewBookmark: ["Hold+ArrowRight", "", ""],
+    quickReviewThumbnailsPrevious: ["ArrowUp", "", ""],
+    quickReviewThumbnailsNext: ["ArrowDown", "", ""],
     readerScrollUp: ["Z", "ArrowUp", "U"],
     readerScrollDown: ["S", "ArrowDown", "J"],
     readerPageNext: ["D", "ArrowRight", "P"],
@@ -121,6 +140,14 @@ const defaultShortcutBindings = {
     readerOcrPlayVoice: ["", "", ""],
     readerOcrPlayVoiceSlower: ["", "", ""],
     readerOcrPlayVoiceFaster: ["", "", ""],
+};
+
+const legacyQuickReviewShortcutBindings: Partial<typeof defaultShortcutBindings> = {
+    quickReviewPrevious: ["ArrowLeft", "", ""],
+    quickReviewNext: ["ArrowRight", "", ""],
+    quickReviewBookmark: ["ArrowDown", "", ""],
+    quickReviewThumbnailsPrevious: ["PageUp", "", ""],
+    quickReviewThumbnailsNext: ["PageDown", "", ""],
 };
 
 const legacyShortcutSettingByAction: Partial<Record<keyof typeof defaultShortcutBindings, string>> = {
@@ -606,8 +633,14 @@ const normalizeShortcutSettings = (settings: Record<string, unknown>) => {
     return Object.entries(defaultShortcutBindings).reduce((result, [actionId, fallbackSlots]) => {
         const typedActionId = actionId as keyof typeof defaultShortcutBindings;
         const legacySettingKey = legacyShortcutSettingByAction[typedActionId];
+        const storedSlots = shortcutRecord[actionId] ?? (legacySettingKey ? settings[legacySettingKey] : undefined);
+        const legacySlots = legacyQuickReviewShortcutBindings[typedActionId];
+        const rawSlots = legacySlots
+            && JSON.stringify(normalizeShortcutSlots(storedSlots, legacySlots)) === JSON.stringify(legacySlots)
+            ? undefined
+            : storedSlots;
         result[typedActionId] = normalizeShortcutSlots(
-            shortcutRecord[actionId] ?? (legacySettingKey ? settings[legacySettingKey] : undefined),
+            rawSlots,
             fallbackSlots,
         );
         return result;
@@ -652,6 +685,11 @@ const defaultSettings = {
     readerOpenOcrPanelForJapaneseManga: false,
     readerRecommendBookmarks: false,
     readingListKeepSourceTabs: false,
+    quickReviewPrefetchCount: DEFAULT_QUICK_REVIEW_PREFETCH_COUNT,
+    quickReviewThumbnailSize: DEFAULT_QUICK_REVIEW_THUMBNAIL_SIZE,
+    quickReviewThumbnailMaxColumns: DEFAULT_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+    shortcutLongPressDelayMs: DEFAULT_SHORTCUT_LONG_PRESS_DELAY_MS,
+    ...DEFAULT_QUICK_REVIEW_DISPLAY_SETTINGS,
     shortcuts: defaultShortcutBindings,
     readerOcrDetectedSectionOpen: true,
     readerOcrManualSectionOpen: true,
@@ -818,6 +856,13 @@ const normalizeSettings = (value: unknown) => {
     merged.readingListKeepSourceTabs = typeof merged.readingListKeepSourceTabs === "boolean"
         ? merged.readingListKeepSourceTabs
         : defaultSettings.readingListKeepSourceTabs;
+    merged.quickReviewPrefetchCount = normalizeQuickReviewPrefetchCount(merged.quickReviewPrefetchCount);
+    merged.quickReviewThumbnailSize = normalizeQuickReviewThumbnailSize(merged.quickReviewThumbnailSize);
+    merged.quickReviewThumbnailMaxColumns = normalizeQuickReviewThumbnailMaxColumns(
+        merged.quickReviewThumbnailMaxColumns,
+    );
+    merged.shortcutLongPressDelayMs = normalizeShortcutLongPressDelay(merged.shortcutLongPressDelayMs);
+    Object.assign(merged, normalizeQuickReviewDisplaySettings(merged));
     merged.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(merged.scraperAuthorFavoritePageCount);
     merged.scraperLatestResultLimit = normalizeScraperLatestResultLimit(merged.scraperLatestResultLimit);
     merged.scraperLatestScraperResultLimit = normalizeScraperLatestResultLimit(
@@ -1216,6 +1261,19 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.readingListKeepSourceTabs = typeof nextSettings.readingListKeepSourceTabs === "boolean"
             ? nextSettings.readingListKeepSourceTabs
             : defaultSettings.readingListKeepSourceTabs;
+        nextSettings.quickReviewPrefetchCount = normalizeQuickReviewPrefetchCount(
+            nextSettings.quickReviewPrefetchCount,
+        );
+        nextSettings.quickReviewThumbnailSize = normalizeQuickReviewThumbnailSize(
+            nextSettings.quickReviewThumbnailSize,
+        );
+        nextSettings.quickReviewThumbnailMaxColumns = normalizeQuickReviewThumbnailMaxColumns(
+            nextSettings.quickReviewThumbnailMaxColumns,
+        );
+        nextSettings.shortcutLongPressDelayMs = normalizeShortcutLongPressDelay(
+            nextSettings.shortcutLongPressDelayMs,
+        );
+        Object.assign(nextSettings, normalizeQuickReviewDisplaySettings(nextSettings));
         nextSettings.scraperAuthorFavoritePageCount = normalizeScraperAuthorFavoritePageCount(
             nextSettings.scraperAuthorFavoritePageCount,
         );

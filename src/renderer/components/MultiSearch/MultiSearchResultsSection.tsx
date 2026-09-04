@@ -41,6 +41,8 @@ import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilter
 import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
+import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
+import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -298,6 +300,16 @@ export default function MultiSearchResultsSection({
     () => scraperResultGroups.reduce((count, group) => count + group.blacklistedResultCount, 0),
     [scraperResultGroups],
   );
+  const mergedQuickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromMergedResults(displayedMergedResults),
+    [displayedMergedResults],
+  );
+  const byScraperQuickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromMergedResults(
+      scraperResultGroups.flatMap((group) => group.results),
+    ),
+    [scraperResultGroups],
+  );
 
   if (viewMode === "merged") {
     return (
@@ -362,6 +374,7 @@ export default function MultiSearchResultsSection({
             </div>
           </div>
           <div className="multi-search__section-actions">
+            <QuickReviewLauncher items={mergedQuickReviewItems} />
             <BlacklistedCardsDisplayToggle
               blacklistedCardCount={blacklistedMergedResultCount}
               hideBlacklistedCards={hideBlacklistedCards}
@@ -507,6 +520,7 @@ export default function MultiSearchResultsSection({
           </div>
         </div>
         <div className="multi-search__section-actions">
+          <QuickReviewLauncher items={byScraperQuickReviewItems} />
           <BlacklistedCardsDisplayToggle
             blacklistedCardCount={blacklistedScraperResultCount}
             hideBlacklistedCards={hideBlacklistedCards}

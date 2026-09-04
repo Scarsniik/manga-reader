@@ -126,6 +126,13 @@ type ScraperTagWorkspaceTarget = {
     title?: string;
 };
 
+type ScraperSourceWorkspaceTarget = {
+    kind: "scraper.source";
+    scraperId: string;
+    query: string;
+    title?: string;
+};
+
 type ScraperBookmarkTagsWorkspaceTarget = {
     kind: "scraper.bookmarkTags";
     filterScraperId?: string | null;
@@ -159,6 +166,7 @@ type WorkspaceTarget =
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
     | ScraperTagWorkspaceTarget
+    | ScraperSourceWorkspaceTarget
     | ScraperBookmarkTagsWorkspaceTarget
     | ReadingListWorkspaceTarget;
 

@@ -293,13 +293,14 @@ function Get-InstalledExecutable {
 function Start-InstalledApplication {
     param([Parameter(Mandatory = $true)][string]$ExecutablePath)
 
+    $workingDirectory = Split-Path -Parent $ExecutablePath
     $savedElectronRunAsNode = [Environment]::GetEnvironmentVariable(
         "ELECTRON_RUN_AS_NODE",
         "Process"
     )
     try {
         [Environment]::SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", $null, "Process")
-        $launchedProcess = Start-Process -FilePath $ExecutablePath -PassThru
+        Start-Process -FilePath $ExecutablePath -WorkingDirectory $workingDirectory
     } finally {
         [Environment]::SetEnvironmentVariable(
             "ELECTRON_RUN_AS_NODE",
@@ -307,26 +308,6 @@ function Start-InstalledApplication {
             "Process"
         )
     }
-
-    Start-Sleep -Seconds 4
-    $expectedPath = [System.IO.Path]::GetFullPath($ExecutablePath)
-    $runningProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
-        [System.IO.Path]::GetFullPath($_.ExecutablePath).Equals(
-            $expectedPath,
-            [System.StringComparison]::OrdinalIgnoreCase
-        )
-    }
-    if (-not $runningProcesses) {
-        $exitDetail = if ($launchedProcess.HasExited) {
-            " It exited with code $($launchedProcess.ExitCode)."
-        } else {
-            ""
-        }
-        throw "No installed application process remained active after launch.$exitDetail"
-    }
-
-    return $runningProcesses
 }
 
 $identity = Get-AppIdentity
@@ -353,11 +334,11 @@ if (-not ([string]$installedVersion).StartsWith([string]$packageJson.version)) {
 }
 
 Write-Step "Launching $installedExecutable"
-$runningProcesses = Start-InstalledApplication -ExecutablePath $installedExecutable
+Start-InstalledApplication -ExecutablePath $installedExecutable
 
 Write-Host ""
 Write-Host "Reinstallation completed."
 Write-Host "Installer: $installerPath"
 Write-Host "Application: $installedExecutable"
 Write-Host "Version: $installedVersion"
-Write-Host "Processes: $(@($runningProcesses).Count)"
+Write-Host "The application was launched independently; this script can now exit."

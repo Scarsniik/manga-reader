@@ -16,6 +16,7 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
+import { loadMoreScraperDetailsThumbnails } from '@/renderer/utils/scraperDetailsThumbnails';
 import {
   buildReaderWorkspaceTarget,
   buildReaderPath,
@@ -24,17 +25,13 @@ import {
 import type { ReaderWorkspaceTarget, WorkspaceTarget } from '@/renderer/types/workspace';
 import {
   createScraperMangaId,
-  createScraperRuntimeImageThumbnail,
   extractScraperDetailsFromDocumentWithImageFallbacks,
-  extractScraperDetailsThumbnailsPageFromDocument,
-  getScraperRuntimeThumbnailKey,
   hasRenderableDetails,
   resolveScraperChapters,
   resolveScraperDetailsTargetUrl,
   resolveScraperPageUrls,
   ScraperRuntimeChapterResult,
   ScraperRuntimeDetailsResult,
-  ScraperRuntimeThumbnail,
 } from '@/renderer/utils/scraperRuntime';
 
 type UseScraperBrowserDetailsOptions = {
@@ -83,20 +80,6 @@ const normalizeRequestedReaderPage = (
   }
 
   return Math.max(1, Math.min(totalPages, Math.floor(value)));
-};
-
-const mergeUniqueThumbnails = (values: ScraperRuntimeThumbnail[]): ScraperRuntimeThumbnail[] => {
-  const seen = new Set<string>();
-
-  return values.filter((value) => {
-    const key = getScraperRuntimeThumbnailKey(value);
-    if (seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
 };
 
 export function useScraperBrowserDetails({
@@ -392,87 +375,19 @@ export function useScraperBrowserDetails({
         return;
       }
 
-      if (!detailsResult.thumbnailsNextPageUrl) {
-        if (!pagesConfig || usesChaptersForPages) {
-          return;
-        }
-
-        const pageUrls = await resolveCurrentPageUrls();
-        if (!pageUrls.length) {
-          setRuntimeError('Aucune page supplementaire n\'a ete resolue.');
-          return;
-        }
-
-        setDetailsResult((previous) => (
-          previous
-            ? {
-              ...previous,
-              thumbnails: pageUrls.map(createScraperRuntimeImageThumbnail),
-              thumbnailsNextPageUrl: undefined,
-            }
-            : previous
-        ));
-        return;
-      }
-
-      if (!detailsConfig || !hasScraperFieldSelectorValue(detailsConfig.thumbnailsSelector)) {
-        setRuntimeError('Le selecteur des vignettes est requis pour charger la suite.');
-        return;
-      }
-
       const fetchScraperDocument = (window as any).api?.fetchScraperDocument;
       if (typeof fetchScraperDocument !== 'function') {
         setRuntimeError('Le runtime du scrapper n\'est pas disponible dans cette version.');
         return;
       }
-
-      const documentResult = await fetchScraperDocument({
-        baseUrl: scraper.baseUrl,
-        targetUrl: detailsResult.thumbnailsNextPageUrl,
+      const nextDetails = await loadMoreScraperDetailsThumbnails({
+        scraper,
+        details: detailsResult,
+        detailsConfig,
+        pagesConfig,
+        fetchDocument: fetchScraperDocument,
       });
-
-      if (!documentResult?.ok || !documentResult.html) {
-        setRuntimeError(
-          documentResult?.error
-            || (typeof documentResult?.status === 'number'
-              ? `La page de vignettes a repondu avec le code HTTP ${documentResult.status}.`
-              : 'Impossible de charger la page de vignettes suivante.'),
-        );
-        return;
-      }
-
-      const parser = new DOMParser();
-      const documentNode = parser.parseFromString(documentResult.html, 'text/html');
-      const thumbnailsPage = extractScraperDetailsThumbnailsPageFromDocument(documentNode, detailsConfig, {
-        requestedUrl: documentResult.requestedUrl,
-        finalUrl: documentResult.finalUrl,
-      });
-
-      if (!thumbnailsPage.thumbnails.length && !thumbnailsPage.nextPageUrl) {
-        setRuntimeError('Aucune vignette supplementaire n\'a ete trouvee.');
-        return;
-      }
-
-      setDetailsResult((previous) => {
-        if (!previous) {
-          return previous;
-        }
-
-        const currentThumbnails = previous.thumbnails ?? [];
-        const nextThumbnails = mergeUniqueThumbnails([
-          ...currentThumbnails,
-          ...thumbnailsPage.thumbnails,
-        ]);
-        const nextPageUrl = thumbnailsPage.nextPageUrl === previous.thumbnailsNextPageUrl
-          ? undefined
-          : thumbnailsPage.nextPageUrl;
-
-        return {
-          ...previous,
-          thumbnails: nextThumbnails,
-          thumbnailsNextPageUrl: nextPageUrl,
-        };
-      });
+      setDetailsResult(nextDetails);
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de charger la suite des vignettes.');
     } finally {
@@ -483,12 +398,10 @@ export function useScraperBrowserDetails({
     detailsConfig,
     detailsResult,
     pagesConfig,
-    resolveCurrentPageUrls,
-    scraper.baseUrl,
+    scraper,
     setDetailsResult,
     setLoadingMoreThumbnails,
     setRuntimeError,
-    usesChaptersForPages,
   ]);
 
   const handleOpenReader = useCallback(async (options?: ScraperOpenReaderOptions) => {

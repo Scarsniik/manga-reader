@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo } from 'react';
+import React from 'react';
 import { ScraperBookmarkMetadataField } from '@/shared/scraper';
 import LanguageFlags from '@/renderer/components/LanguageFlags/LanguageFlags';
 import { Manga } from '@/renderer/types';
-import buildConfirmActionModal from '@/renderer/components/Modal/modales/ConfirmActionModal';
 import ScraperBookmarkButton from '@/renderer/components/ScraperBookmarkButton/ScraperBookmarkButton';
 import ScraperPotentialMangaMatches from '@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches';
+import ScraperRuntimeThumbnailImage, {
+  isScraperRuntimeCssSpriteThumbnail,
+} from '@/renderer/components/ScraperRuntimeThumbnail/ScraperRuntimeThumbnailImage';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
 import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
+import usePotentialMangaMatchBookmarkGuard from '@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchBookmarkGuard';
 import { MagnifyingGlassIcon } from '@/renderer/components/icons';
-import { useModal } from '@/renderer/hooks/useModal';
 import {
   formatScraperPageCountForDisplay,
   formatScraperValueForDisplay,
@@ -27,62 +29,13 @@ import {
 } from '@/renderer/utils/scraperTagFavorites';
 
 const MIDDLE_BUTTON = 1;
-const POTENTIAL_MATCH_WARNING_DETAIL_LIMIT = 4;
-
-const getPotentialWarningMatchLabel = (match: ScraperPotentialMangaMatch): string => (
-  `${match.title} - ${match.sourceLabel} (${match.detailLabel})`
-);
-
-const buildPotentialMatchWarningDetails = (
-  readingMatches: ScraperPotentialMangaMatch[],
-  bookmarkMatches: ScraperPotentialMangaMatch[],
-  readingListMatches: ScraperPotentialMangaMatch[],
-): React.ReactNode => {
-  const matches = [
-    ...readingMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Lecture" })),
-    ...bookmarkMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Bookmark" })),
-    ...readingListMatches.map((match) => ({ label: getPotentialWarningMatchLabel(match), kind: "Liste" })),
-  ];
-  const visibleMatches = matches.slice(0, POTENTIAL_MATCH_WARNING_DETAIL_LIMIT);
-  const hiddenCount = Math.max(0, matches.length - visibleMatches.length);
-
-  return (
-    <>
-      <ul>
-        {visibleMatches.map((match) => (
-          <li key={`${match.kind}:${match.label}`}>
-            <strong>{match.kind}</strong>
-            {" - "}
-            {match.label}
-          </li>
-        ))}
-      </ul>
-      {hiddenCount > 0 ? (
-        <p>{hiddenCount} autre{hiddenCount > 1 ? "s" : ""} correspondance{hiddenCount > 1 ? "s" : ""}.</p>
-      ) : null}
-    </>
-  );
-};
-
 type ThumbnailFrameStyle = React.CSSProperties & {
   '--scraper-thumbnail-width'?: string;
   '--scraper-thumbnail-height'?: string;
 };
 
-const buildCssUrl = (url: string): string => `url("${url.replace(/"/g, '\\"')}")`;
-
-const isCssSpriteThumbnail = (
-  thumbnail: ScraperRuntimeThumbnail,
-): thumbnail is Extract<ScraperRuntimeThumbnail, { kind: 'css_sprite' }> => (
-  typeof thumbnail !== 'string' && thumbnail.kind === 'css_sprite'
-);
-
-const getThumbnailUrl = (thumbnail: ScraperRuntimeThumbnail): string => (
-  typeof thumbnail === 'string' ? thumbnail : thumbnail.url
-);
-
 const buildThumbnailFrameStyle = (thumbnail: ScraperRuntimeThumbnail): ThumbnailFrameStyle | undefined => {
-  if (!isCssSpriteThumbnail(thumbnail)) {
+  if (!isScraperRuntimeCssSpriteThumbnail(thumbnail)) {
     return undefined;
   }
 
@@ -96,35 +49,6 @@ const buildThumbnailFrameStyle = (thumbnail: ScraperRuntimeThumbnail): Thumbnail
   }
 
   return Object.keys(style).length ? style : undefined;
-};
-
-const renderThumbnail = (
-  thumbnail: ScraperRuntimeThumbnail,
-  alt: string,
-): React.ReactNode => {
-  if (isCssSpriteThumbnail(thumbnail)) {
-    return (
-      <span
-        role="img"
-        aria-label={alt}
-        className="scraper-browser__thumbnail scraper-browser__thumbnail-sprite"
-        style={{
-          backgroundImage: buildCssUrl(thumbnail.url),
-          backgroundPosition: `${thumbnail.positionX ?? 0}px ${thumbnail.positionY ?? 0}px`,
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: thumbnail.backgroundSize,
-        }}
-      />
-    );
-  }
-
-  return (
-    <img
-      src={getThumbnailUrl(thumbnail)}
-      alt={alt}
-      className="scraper-browser__thumbnail"
-    />
-  );
 };
 
 type Props = {
@@ -222,50 +146,11 @@ export default function ScraperDetailsPanel({
   onOpenCorrespondenceSearch,
   onOpenAuthorCorrespondenceSearch,
 }: Props) {
-  const { openModal } = useModal();
-  const potentialActionMatchCount = potentialReadingMatches.length
-    + potentialBookmarkMatches.length
-    + potentialReadingListMatches.length;
-  const potentialActionWarningDetails = useMemo(() => (
-    buildPotentialMatchWarningDetails(
-      potentialReadingMatches,
-      potentialBookmarkMatches,
-      potentialReadingListMatches,
-    )
-  ), [potentialBookmarkMatches, potentialReadingListMatches, potentialReadingMatches]);
-  const confirmBookmarkWithPotentialMatches = useCallback((
-    action: () => void,
-  ) => {
-    if (!potentialActionMatchCount) {
-      action();
-      return;
-    }
-
-    openModal(buildConfirmActionModal({
-      title: "Correspondance potentielle",
-      message: (
-        <>
-          Attention, cette fiche ressemble a un manga deja lu, en cours, bookmarke ou present dans une liste de lecture.
-          {" "}
-          Verifie la correspondance avant de continuer.
-        </>
-      ),
-      details: potentialActionWarningDetails,
-      confirmLabel: "Bookmarker quand meme",
-      onConfirm: action,
-    }));
-  }, [openModal, potentialActionMatchCount, potentialActionWarningDetails]);
-  const handleBookmarkBeforeToggle = useCallback((
-    nextIsBookmarked: boolean,
-    proceed: () => void,
-  ) => {
-    if (!nextIsBookmarked) {
-      proceed();
-      return;
-    }
-
-    confirmBookmarkWithPotentialMatches(proceed);
-  }, [confirmBookmarkWithPotentialMatches]);
+  const { handleBeforeToggle: handleBookmarkBeforeToggle } = usePotentialMangaMatchBookmarkGuard({
+    readingMatches: potentialReadingMatches,
+    bookmarkMatches: potentialBookmarkMatches,
+    readingListMatches: potentialReadingListMatches,
+  });
 
   if (!detailsResult) {
     return null;
@@ -797,10 +682,17 @@ export default function ScraperDetailsPanel({
                   thumbnails.map((thumbnail, index) => {
                     const page = index + 1;
                     const alt = `${detailsResult.title || 'Manga'} - Page ${page}`;
-                    const image = renderThumbnail(thumbnail, alt);
+                    const image = (
+                      <ScraperRuntimeThumbnailImage
+                        thumbnail={thumbnail}
+                        alt={alt}
+                        className="scraper-browser__thumbnail"
+                        spriteClassName="scraper-browser__thumbnail-sprite"
+                      />
+                    );
                     const thumbnailKey = `${getScraperRuntimeThumbnailKey(thumbnail)}-${index}`;
                     const thumbnailClassName = [
-                      isCssSpriteThumbnail(thumbnail) ? 'is-sprite' : '',
+                      isScraperRuntimeCssSpriteThumbnail(thumbnail) ? 'is-sprite' : '',
                     ].join(' ').trim();
                     const frameStyle = buildThumbnailFrameStyle(thumbnail);
 

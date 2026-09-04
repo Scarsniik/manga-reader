@@ -980,6 +980,10 @@
   height: 16px;
 }
 
+.scraper-browser__potential-match.is-bookmark .scraper-browser__potential-match-icon svg {
+  fill: currentColor;
+}
+
 .scraper-browser__potential-match-label {
   min-width: 0;
   overflow: hidden;

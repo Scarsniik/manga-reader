@@ -20,6 +20,27 @@ import {
   normalizeScraperViewHistorySettings,
 } from '@/shared/scraper'
 import { normalizeMangaCorrespondenceSafetyParams } from '@/shared/mangaCorrespondenceSafetySettings'
+import {
+  DEFAULT_QUICK_REVIEW_PREFETCH_COUNT,
+  DEFAULT_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+  DEFAULT_QUICK_REVIEW_THUMBNAIL_SIZE,
+  MAX_QUICK_REVIEW_PREFETCH_COUNT,
+  MAX_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+  MAX_QUICK_REVIEW_THUMBNAIL_SIZE,
+  MIN_QUICK_REVIEW_PREFETCH_COUNT,
+  MIN_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+  MIN_QUICK_REVIEW_THUMBNAIL_SIZE,
+  normalizeQuickReviewDisplaySettings,
+  normalizeQuickReviewPrefetchCount,
+  normalizeQuickReviewThumbnailMaxColumns,
+  normalizeQuickReviewThumbnailSize,
+} from '@/shared/quickReviewSettings'
+import {
+  DEFAULT_SHORTCUT_LONG_PRESS_DELAY_MS,
+  MAX_SHORTCUT_LONG_PRESS_DELAY_MS,
+  MIN_SHORTCUT_LONG_PRESS_DELAY_MS,
+  normalizeShortcutLongPressDelay,
+} from '@/shared/shortcutSettings'
 
 import '@/renderer/components/Modal/style.scss'
 import '@/renderer/components/Modal/modales/settings-style.scss'
@@ -231,6 +252,76 @@ export default function SettingsModalContent() {
         {
           name: 'readingListKeepSourceTabs',
           label: 'Conserver les onglets manga après la création d\'une liste de lecture',
+          type: 'checkbox',
+        },
+      ],
+    },
+    {
+      type: 'section',
+      id: 'interactions',
+      title: 'Interactions',
+      fields: [
+        {
+          name: 'shortcutLongPressDelayMs',
+          label: 'Durée requise pour un appui long (ms)',
+          type: 'number',
+          min: MIN_SHORTCUT_LONG_PRESS_DELAY_MS,
+          max: MAX_SHORTCUT_LONG_PRESS_DELAY_MS,
+          step: 50,
+          placeholder: String(DEFAULT_SHORTCUT_LONG_PRESS_DELAY_MS),
+        },
+      ],
+    },
+    {
+      type: 'section',
+      id: 'quick-review',
+      title: 'Review rapide',
+      description: 'Personnalise le contenu des fiches et la grille de miniatures.',
+      fields: [
+        {
+          name: 'quickReviewPrefetchCount',
+          label: 'Fiches suivantes à précharger',
+          type: 'number',
+          min: MIN_QUICK_REVIEW_PREFETCH_COUNT,
+          max: MAX_QUICK_REVIEW_PREFETCH_COUNT,
+          step: 1,
+          placeholder: String(DEFAULT_QUICK_REVIEW_PREFETCH_COUNT),
+        },
+        { name: 'quickReviewShowThumbnails', label: 'Afficher les miniatures des pages', type: 'checkbox' },
+        {
+          name: 'quickReviewThumbnailSize',
+          label: 'Taille des miniatures (px)',
+          type: 'number',
+          min: MIN_QUICK_REVIEW_THUMBNAIL_SIZE,
+          max: MAX_QUICK_REVIEW_THUMBNAIL_SIZE,
+          step: 4,
+          placeholder: String(DEFAULT_QUICK_REVIEW_THUMBNAIL_SIZE),
+          disabledWhen: { field: 'quickReviewShowThumbnails', equals: false },
+        },
+        {
+          name: 'quickReviewThumbnailMaxColumns',
+          label: 'Miniatures maximum par ligne',
+          type: 'number',
+          min: MIN_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+          max: MAX_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS,
+          step: 1,
+          placeholder: String(DEFAULT_QUICK_REVIEW_THUMBNAIL_MAX_COLUMNS),
+          disabledWhen: { field: 'quickReviewShowThumbnails', equals: false },
+        },
+        { name: 'quickReviewShowCover', label: 'Afficher la couverture', type: 'checkbox' },
+        { name: 'quickReviewShowFacts', label: 'Afficher les informations générales', type: 'checkbox' },
+        { name: 'quickReviewShowDescription', label: 'Afficher la description', type: 'checkbox' },
+        {
+          name: 'quickReviewShowPotentialMatches',
+          label: 'Afficher les correspondances potentielles (lu, bookmark, liste)',
+          type: 'checkbox',
+        },
+        { name: 'quickReviewShowAuthors', label: 'Afficher les auteurs', type: 'checkbox' },
+        { name: 'quickReviewShowTags', label: 'Afficher les tags', type: 'checkbox' },
+        { name: 'quickReviewShowSourceWorks', label: 'Afficher les œuvres sources', type: 'checkbox' },
+        {
+          name: 'quickReviewShowAvailableSources',
+          label: 'Afficher les fiches des sources disponibles',
           type: 'checkbox',
         },
       ],
@@ -724,7 +815,14 @@ export default function SettingsModalContent() {
       persistMangaFilters,
       showSavedLibrarySearches,
       readingListKeepSourceTabs: !!values.readingListKeepSourceTabs,
+      shortcutLongPressDelayMs: normalizeShortcutLongPressDelay(values.shortcutLongPressDelayMs),
       stackMangaInSeries,
+      quickReviewPrefetchCount: normalizeQuickReviewPrefetchCount(values.quickReviewPrefetchCount),
+      quickReviewThumbnailSize: normalizeQuickReviewThumbnailSize(values.quickReviewThumbnailSize),
+      quickReviewThumbnailMaxColumns: normalizeQuickReviewThumbnailMaxColumns(
+        values.quickReviewThumbnailMaxColumns,
+      ),
+      ...normalizeQuickReviewDisplaySettings(values),
       ...(persistMangaFilters ? {} : { mangaListFilters: null }),
     }
     await saveSettings(toSave)

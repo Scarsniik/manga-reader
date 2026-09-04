@@ -57,6 +57,7 @@ Le reader n'est plus porté par un seul fichier. `Reader.tsx` est désormais un 
 - Le reader lit les paramètres d'URL `id` et `page`.
 - Il supporte la lecture locale et la lecture issue d'un scraper.
 - Il gère la navigation clavier/souris, la progression et le passage au chapitre précédent/suivant.
+- Lors d'un changement de page, le lecteur se replace en haut avant l'affichage de la nouvelle image afin de ne pas interrompre le scroll qui suit.
 - En mode liste de lecture, la cible suivante de la liste remplace les transitions de série. La fin intermédiaire affiche
   le prochain manga, tandis que la fin du dernier élément rend le résumé de la liste. Une action dédiée permet aussi
   d'ouvrir cette transition avant la dernière page sans valider le manga courant comme lu.

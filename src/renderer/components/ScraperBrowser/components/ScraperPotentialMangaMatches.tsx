@@ -15,6 +15,7 @@ import {
 } from "@/renderer/components/ScraperBrowser/utils/potentialMatchDisplay";
 import { toLocalImageUrl } from "@/renderer/utils/history";
 import { buildRemoteThumbnailUrl } from "@/renderer/utils/remoteThumbnails";
+import "@/renderer/components/ScraperBrowser/style.scss";
 
 const MIDDLE_BUTTON = 1;
 

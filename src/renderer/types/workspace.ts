@@ -53,6 +53,13 @@ export type ScraperTagWorkspaceTarget = {
   title?: string;
 };
 
+export type ScraperSourceWorkspaceTarget = {
+  kind: "scraper.source";
+  scraperId: string;
+  query: string;
+  title?: string;
+};
+
 export type ScraperBookmarkTagsWorkspaceTarget = {
   kind: "scraper.bookmarkTags";
   filterScraperId?: string | null;
@@ -76,6 +83,7 @@ export type WorkspaceTarget =
   | ScraperDetailsWorkspaceTarget
   | ScraperAuthorWorkspaceTarget
   | ScraperTagWorkspaceTarget
+  | ScraperSourceWorkspaceTarget
   | ScraperBookmarkTagsWorkspaceTarget
   | ReadingListWorkspaceTarget;
 

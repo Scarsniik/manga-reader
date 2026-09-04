@@ -35,6 +35,8 @@ import BlacklistedCardsDisplayToggle, {
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
+import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
+import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -246,6 +248,10 @@ export default function ScraperTagFavoriteResults({
   const visiblePageLabel = pageIndex === visiblePageEndIndex
     ? `Page ${pageIndex + 1}`
     : `Pages ${pageIndex + 1} a ${visiblePageEndIndex + 1} fusionnees`;
+  const quickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromMergedResults(displayedMergedResults),
+    [displayedMergedResults],
+  );
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -355,6 +361,7 @@ export default function ScraperTagFavoriteResults({
             </div>
           </div>
           <div className="multi-search__section-actions">
+            <QuickReviewLauncher items={quickReviewItems} />
             <ScraperPageAppendControl
               loading={loading}
               disabled={!canAppendPages}

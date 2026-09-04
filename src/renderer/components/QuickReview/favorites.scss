@@ -1,0 +1,54 @@
+.quick-review__chip.is-favorite {
+  gap: 5px;
+  font-weight: 600;
+}
+
+.quick-review__chip.is-favorite > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+.quick-review__chip.is-favorite-author {
+  border-color: rgba(245, 191, 76, 0.5);
+  color: #f4cf79;
+  background: rgba(245, 191, 76, 0.14);
+}
+
+.quick-review__chip.is-favorite-tag {
+  border-color: rgba(236, 72, 153, 0.58);
+  color: #f9a8d4;
+  background: rgba(236, 72, 153, 0.18);
+}
+
+.quick-review__bookmark.is-bookmarked {
+  border-color: rgba(245, 191, 76, 0.56) !important;
+  color: #ffe5a3 !important;
+  background: linear-gradient(135deg, rgba(154, 112, 25, 0.38), rgba(111, 83, 33, 0.3)) !important;
+}
+
+.quick-review__bookmark-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.quick-review__bookmark.is-bookmarked .quick-review__bookmark-icon {
+  fill: currentColor;
+}
+
+.quick-review__bookmark-spinner {
+  fill: none;
+  stroke: currentColor;
+  animation: quick-review-spin 0.9s linear infinite;
+}
+
+.quick-review__bookmark-status {
+  border: 1px solid rgba(245, 191, 76, 0.46);
+  color: #ffe09a;
+  background: rgba(154, 112, 25, 0.24) !important;
+  font-weight: 700;
+}

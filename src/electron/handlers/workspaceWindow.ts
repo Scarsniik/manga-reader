@@ -1,5 +1,6 @@
 import { app, BrowserWindow, IpcMainInvokeEvent, shell } from "electron";
 import path from "path";
+import { usesRendererBuild } from "../rendererMode";
 import { attachWindowStateListeners } from "./windowControls";
 import {
     applyInitialWorkspaceWindowState,
@@ -60,6 +61,13 @@ type ScraperTagWorkspaceTarget = {
     title?: string;
 };
 
+type ScraperSourceWorkspaceTarget = {
+    kind: "scraper.source";
+    scraperId: string;
+    query: string;
+    title?: string;
+};
+
 type ScraperBookmarkTagsWorkspaceTarget = {
     kind: "scraper.bookmarkTags";
     filterScraperId?: string | null;
@@ -93,6 +101,7 @@ export type WorkspaceTarget =
     | ScraperDetailsWorkspaceTarget
     | ScraperAuthorWorkspaceTarget
     | ScraperTagWorkspaceTarget
+    | ScraperSourceWorkspaceTarget
     | ScraperBookmarkTagsWorkspaceTarget
     | ReadingListWorkspaceTarget;
 
@@ -318,6 +327,15 @@ const isWorkspaceTarget = (value: unknown): value is WorkspaceTarget => {
         );
     }
 
+    if (candidate.kind === "scraper.source") {
+        return (
+            typeof candidate.scraperId === "string"
+            && candidate.scraperId.trim().length > 0
+            && typeof candidate.query === "string"
+            && candidate.query.trim().length > 0
+        );
+    }
+
     if (candidate.kind === "scraper.bookmarkTags") {
         const bookmarkTagsTarget = candidate as Partial<ScraperBookmarkTagsWorkspaceTarget>;
         return (
@@ -387,7 +405,7 @@ const configureNavigationGuards = (window: BrowserWindow): void => {
 };
 
 const loadWorkspaceWindow = async (window: BrowserWindow): Promise<void> => {
-    if (app.isPackaged) {
+    if (usesRendererBuild()) {
         const indexPath = path.join(app.getAppPath(), "dist", "renderer", "index.html");
         await window.loadFile(indexPath, { hash: "/workspace" });
         return;

@@ -665,3 +665,7 @@ La V1 du multi-search repose sur les choix suivants :
 - Depuis une page auteur ou un auteur favori, une action peut pre-remplir le champ de recherche
   multi-sources avec les noms auteur uniques connus, joints par `, `. Cette action ne lance pas la
   recherche automatiquement.
+- La section de resultats expose une action `Review rapide` construite depuis les cards visibles apres
+  les filtres, le tri et les splits manuels. La liste est figee a l'ouverture de la dialog.
+- Pour une card fusionnee, la review et le bookmark utilisent la source selectionnee par
+  `Langue du titre des cartes fusionnees`, avec la premiere source du groupe en fallback.

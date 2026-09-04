@@ -20,6 +20,8 @@ const Modal: React.FC<{
   onClose?: () => void;
 }> = ({ title, content, actions = [], className, bodyClassName, onClose }) => {
   const backdropPressStarted = useRef(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -34,6 +36,28 @@ const Modal: React.FC<{
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.touchAction = previousBodyTouchAction;
       document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const modal = modalRef.current;
+    if (!overlay || !modal) return undefined;
+
+    const preventOutsideScroll = (event: WheelEvent | TouchEvent) => {
+      const target = event.target;
+      if (target instanceof Node && modal.contains(target)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    overlay.addEventListener('wheel', preventOutsideScroll, { capture: true, passive: false });
+    overlay.addEventListener('touchmove', preventOutsideScroll, { capture: true, passive: false });
+
+    return () => {
+      overlay.removeEventListener('wheel', preventOutsideScroll, true);
+      overlay.removeEventListener('touchmove', preventOutsideScroll, true);
     };
   }, []);
 
@@ -53,11 +77,16 @@ const Modal: React.FC<{
 
   return (
     <div
+      ref={overlayRef}
       className="app-modal-overlay"
       onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
     >
-      <div className={['app-modal', className].filter(Boolean).join(' ')} onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className={['app-modal', className].filter(Boolean).join(' ')}
+        onClick={(e) => e.stopPropagation()}
+      >
         {title ? <div className="app-modal-header">{title}</div> : null}
         <div className={['app-modal-body', bodyClassName].filter(Boolean).join(' ')}>{content}</div>
         {actions.length > 0 ? (

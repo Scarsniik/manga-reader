@@ -317,7 +317,7 @@ const useReaderData = ({
         };
     }, [locationSearch, locationState, query, readerSessionKey]);
 
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
         try {
             if (imgRef.current) {
                 imgRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });

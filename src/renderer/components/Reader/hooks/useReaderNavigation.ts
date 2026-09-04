@@ -618,7 +618,6 @@ const useReaderNavigation = ({
     }, [libraryMangas, openBookmarkRecommendation, openLibraryManga]);
 
     const goTo = React.useCallback((index: number) => {
-        scrollToTopImmediate();
         setTransitionDirection(null);
         setIsCompletionPage(false);
         setIsReadingListSkipTransition(false);
@@ -630,7 +629,7 @@ const useReaderNavigation = ({
 
             return Math.max(0, Math.min(images.length - 1, index));
         });
-    }, [images.length, scrollToTopImmediate, setCurrentIndex]);
+    }, [images.length, setCurrentIndex]);
 
     const continueToAdjacentChapter = React.useCallback(async (direction: 'previous' | 'next') => {
         const target = direction === 'previous' ? previousTarget : nextTarget;

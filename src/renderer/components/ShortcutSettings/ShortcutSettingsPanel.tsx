@@ -1,6 +1,8 @@
 import React from "react";
 import { TrashCanIcon } from "@/renderer/components/icons";
 import useShortcutSettings from "@/renderer/hooks/useShortcutSettings";
+import useParams from "@/renderer/hooks/useParams";
+import { normalizeShortcutLongPressDelay } from "@/shared/shortcutSettings";
 import {
   SHORTCUT_ACTION_GROUPS,
   SHORTCUT_BINDING_SLOT_COUNT,
@@ -25,6 +27,7 @@ const isSameRecordingSlot = (
 );
 
 export default function ShortcutSettingsPanel() {
+  const { params } = useParams();
   const {
     shortcuts,
     loading,
@@ -33,6 +36,7 @@ export default function ShortcutSettingsPanel() {
     updateShortcutBindingSlot,
   } = useShortcutSettings();
   const [recordingSlot, setRecordingSlot] = React.useState<RecordingSlot | null>(null);
+  const longPressDelay = normalizeShortcutLongPressDelay(params?.shortcutLongPressDelayMs);
   const duplicateBindings = React.useMemo(() => {
     const bindingCounts = new Map<string, number>();
 
@@ -59,6 +63,22 @@ export default function ShortcutSettingsPanel() {
       return undefined;
     }
 
+    let pendingKey: {
+      id: string;
+      binding: string;
+      timerId: number;
+    } | null = null;
+    const clearPendingKey = () => {
+      if (pendingKey) window.clearTimeout(pendingKey.timerId);
+      pendingKey = null;
+    };
+    const saveBinding = (binding: string) => {
+      clearPendingKey();
+      void updateShortcutBindingSlot(recordingSlot.actionId, recordingSlot.slotIndex, binding);
+      setRecordingSlot(null);
+    };
+    const getKeyId = (event: KeyboardEvent) => event.code || event.key;
+
     const onKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopPropagation();
@@ -73,8 +93,7 @@ export default function ShortcutSettingsPanel() {
       }
 
       if (event.key === "Backspace" || event.key === "Delete") {
-        void updateShortcutBindingSlot(recordingSlot.actionId, recordingSlot.slotIndex, "");
-        setRecordingSlot(null);
+        saveBinding("");
         return;
       }
 
@@ -83,13 +102,33 @@ export default function ShortcutSettingsPanel() {
         return;
       }
 
-      void updateShortcutBindingSlot(recordingSlot.actionId, recordingSlot.slotIndex, binding);
-      setRecordingSlot(null);
+      clearPendingKey();
+      const keyId = getKeyId(event);
+      pendingKey = {
+        id: keyId,
+        binding,
+        timerId: window.setTimeout(() => {
+          saveBinding(normalizeShortcutBinding(`Hold+${binding}`));
+        }, longPressDelay),
+      };
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!pendingKey || pendingKey.id !== getKeyId(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      saveBinding(pendingKey.binding);
     };
 
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [recordingSlot, updateShortcutBindingSlot]);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", clearPendingKey);
+    return () => {
+      clearPendingKey();
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", clearPendingKey);
+    };
+  }, [longPressDelay, recordingSlot, updateShortcutBindingSlot]);
 
   if (loading) {
     return (
@@ -148,7 +187,7 @@ export default function ShortcutSettingsPanel() {
                           title={isDuplicate ? "Raccourci déjà utilisé ailleurs" : "Modifier ce raccourci"}
                           aria-invalid={isDuplicate}
                         >
-                          {isRecording ? "Appuie sur une touche" : formatShortcutBinding(binding)}
+                          {isRecording ? "Appuie ou maintiens une touche" : formatShortcutBinding(binding)}
                         </button>
 
                         <button

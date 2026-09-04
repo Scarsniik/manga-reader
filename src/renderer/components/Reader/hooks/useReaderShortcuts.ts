@@ -1,9 +1,12 @@
 import React from "react";
 import useShortcutSettings from "@/renderer/hooks/useShortcutSettings";
+import useParams from "@/renderer/hooks/useParams";
 import {
     ShortcutActionId,
+    ShortcutPressType,
     doesKeyboardEventMatchShortcutAction,
 } from "@/renderer/utils/shortcutBindings";
+import { normalizeShortcutLongPressDelay } from "@/shared/shortcutSettings";
 import { findVerticalScrollContainer } from "@/renderer/utils/scrollPosition";
 import { OcrNavigationDirection } from "@/renderer/components/Reader/types";
 import {
@@ -80,6 +83,23 @@ const ORDERED_OCR_NAVIGATION_ACTIONS: Array<{
     },
 ];
 
+const READER_SHORTCUT_ACTION_IDS: ShortcutActionId[] = [
+    "readerScrollUp",
+    "readerScrollDown",
+    "readerPageNext",
+    "readerPagePrevious",
+    "readerFullscreenToggle",
+    ...OCR_NAVIGATION_ACTIONS.map((action) => action.actionId),
+    "readerOcrManualSelection",
+    "readerOcrOrderSelection",
+    ...ORDERED_OCR_NAVIGATION_ACTIONS.map((action) => action.actionId),
+    "readerOcrTogglePanel",
+    "readerOcrTokenNavigation",
+    "readerOcrPlayVoice",
+    "readerOcrPlayVoiceSlower",
+    "readerOcrPlayVoiceFaster",
+];
+
 const useReaderShortcuts = ({
     copyCurrentImage,
     selectedBoxes,
@@ -106,6 +126,8 @@ const useReaderShortcuts = ({
     scrollStartBoost,
 }: Args) => {
     const { shortcuts } = useShortcutSettings();
+    const { params } = useParams();
+    const longPressDelay = normalizeShortcutLongPressDelay(params?.shortcutLongPressDelayMs);
 
     React.useEffect(() => {
         const isEditableTarget = (target: EventTarget | null) => {
@@ -121,8 +143,9 @@ const useReaderShortcuts = ({
             return tagName === "input" || tagName === "textarea" || tagName === "select";
         };
 
+        let activePressType: ShortcutPressType = "short";
         const matchesShortcut = (event: KeyboardEvent, actionId: ShortcutActionId) => (
-            doesKeyboardEventMatchShortcutAction(event, shortcuts, actionId)
+            doesKeyboardEventMatchShortcutAction(event, shortcuts, actionId, activePressType)
         );
 
         const preventShortcutDefault = (event: KeyboardEvent) => {
@@ -277,7 +300,7 @@ const useReaderShortcuts = ({
             return null;
         };
 
-        const onKey = (event: KeyboardEvent) => {
+        const runKeyAction = (event: KeyboardEvent) => {
             if (isEditableTarget(event.target)) {
                 return;
             }
@@ -412,31 +435,97 @@ const useReaderShortcuts = ({
             }
         };
 
+        const pendingLongPresses = new Map<string, {
+            event: KeyboardEvent;
+            fired: boolean;
+            hasShortAction: boolean;
+            timerId: number;
+        }>();
+        const runKeyActionForPress = (event: KeyboardEvent, pressType: ShortcutPressType) => {
+            activePressType = pressType;
+            try {
+                runKeyAction(event);
+            } finally {
+                activePressType = "short";
+            }
+        };
+        const getKeyId = (event: KeyboardEvent) => event.code || event.key;
+        const matchesAnyAction = (event: KeyboardEvent, pressType: ShortcutPressType) => (
+            READER_SHORTCUT_ACTION_IDS.some((actionId) => (
+                doesKeyboardEventMatchShortcutAction(event, shortcuts, actionId, pressType)
+            ))
+        );
+        const clearPendingLongPresses = () => {
+            pendingLongPresses.forEach((pending) => window.clearTimeout(pending.timerId));
+            pendingLongPresses.clear();
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) return;
+
+            const keyId = getKeyId(event);
+            if (event.repeat && pendingLongPresses.has(keyId)) {
+                preventShortcutDefault(event);
+                return;
+            }
+
+            if (!event.repeat && matchesAnyAction(event, "long")) {
+                preventShortcutDefault(event);
+                const pending = {
+                    event,
+                    fired: false,
+                    hasShortAction: matchesAnyAction(event, "short"),
+                    timerId: 0,
+                };
+                pending.timerId = window.setTimeout(() => {
+                    pending.fired = true;
+                    runKeyActionForPress(pending.event, "long");
+                }, longPressDelay);
+                pendingLongPresses.set(keyId, pending);
+                return;
+            }
+
+            runKeyActionForPress(event, "short");
+        };
         const onKeyUp = (event: KeyboardEvent) => {
+            const pending = pendingLongPresses.get(getKeyId(event));
+            if (pending) {
+                preventShortcutDefault(event);
+                window.clearTimeout(pending.timerId);
+                pendingLongPresses.delete(getKeyId(event));
+                if (!pending.fired && pending.hasShortAction) {
+                    runKeyActionForPress(pending.event, "short");
+                }
+            }
             stopScrollKey(event);
+        };
+
+        const stopAllKeyboardActivity = () => {
+            clearPendingLongPresses();
+            stopAllScrollKeys();
         };
 
         const onVisibilityChange = () => {
             if (document.visibilityState === "hidden") {
-                stopAllScrollKeys();
+                stopAllKeyboardActivity();
             }
         };
 
-        window.addEventListener("keydown", onKey);
+        window.addEventListener("keydown", onKeyDown);
         window.addEventListener("keyup", onKeyUp);
-        window.addEventListener("blur", stopAllScrollKeys);
+        window.addEventListener("blur", stopAllKeyboardActivity);
         document.addEventListener("visibilitychange", onVisibilityChange);
         return () => {
-            window.removeEventListener("keydown", onKey);
+            window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("keyup", onKeyUp);
-            window.removeEventListener("blur", stopAllScrollKeys);
+            window.removeEventListener("blur", stopAllKeyboardActivity);
             document.removeEventListener("visibilitychange", onVisibilityChange);
-            stopAllScrollKeys();
+            stopAllKeyboardActivity();
         };
     }, [
         activeOcrEnabled,
         copyCurrentImage,
         fullscreenAvailable,
+        longPressDelay,
         navigateOrderedOcrBox,
         navigateOcrBox,
         next,

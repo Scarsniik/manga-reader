@@ -37,6 +37,8 @@ import {
   filterByScraperViewHistoryNewState,
 } from "@/renderer/utils/scraperViewHistory";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
+import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
+import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
 
 type Props = {
   title: string;
@@ -212,6 +214,10 @@ export default function ScraperAuthorCombinedResults({
     () => countBlacklistedMultiSearchResults(originalFilteredResults, tagBlacklistByScraper),
     [originalFilteredResults, tagBlacklistByScraper],
   );
+  const quickReviewItems = React.useMemo(
+    () => buildQuickReviewItemsFromMergedResults(visibleDisplayedResults),
+    [visibleDisplayedResults],
+  );
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -364,6 +370,7 @@ export default function ScraperAuthorCombinedResults({
               </div>
             </div>
             <div className="multi-search__section-actions">
+              <QuickReviewLauncher items={quickReviewItems} />
               <BlacklistedCardsDisplayToggle
                 blacklistedCardCount={blacklistedResultCount}
                 hideBlacklistedCards={hideBlacklistedCards}
