@@ -70,9 +70,7 @@ ensuite la même normalisation que les merges de cards pour ignorer notamment le
 de langue, puis recherche les numéros de tome, de partie ou de chapitre. Il reconnaît les libellés français et anglais
 courants (`tome`, `volume`, `vol`, `chapitre`, `chapter`, `ch`), les nombres décimaux, les plages, les chiffres romains,
 les numéros placés à la fin d'un titre ainsi que les marqueurs japonais de chapitre et de tome. Le tome est trié avant la
-partie et le chapitre lorsqu'un titre contient plusieurs informations. Les sous-titres de chapitre non numérotés détectés
-par l'analyse de correspondance sont placés après tous les chapitres numérotés de la même série. Leur ordre relatif reste
-celui de la source ou de l'ordre manuel, puisqu'aucun numéro ne permet de les départager. Les titres non reconnus et les séries différentes
+partie et le chapitre lorsqu'un titre contient plusieurs informations. Les titres non reconnus et les séries différentes
 conservent leur emplacement afin de limiter les déplacements erronés ; l'ordre peut ensuite être corrigé manuellement.
 Le bouton indique explicitement lorsque l'ordre détecté était déjà appliqué.
 

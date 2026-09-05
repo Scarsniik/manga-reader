@@ -162,7 +162,7 @@ test("auto sort supports roman numerals and ranges", () => {
   assert.deepEqual(getItemIds(autoSortReadingListItems(items)), ["roman", "range"]);
 });
 
-test("auto sort places named chapters after numbered chapters", () => {
+test("auto sort leaves named subtitle slots untouched", () => {
   const items = [
     createItem(
       "named-student",
@@ -187,10 +187,10 @@ test("auto sort places named chapters after numbered chapters", () => {
   ];
 
   assert.deepEqual(getItemIds(autoSortReadingListItems(items)), [
-    "chapter-1",
-    "chapter-2",
     "named-student",
+    "chapter-1",
     "named-neighbor",
+    "chapter-2",
   ]);
 });
 

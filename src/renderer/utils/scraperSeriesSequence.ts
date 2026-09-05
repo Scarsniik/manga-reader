@@ -17,7 +17,6 @@ export type ScraperSeriesSequence = {
   chapter: ScraperSeriesSequenceValue | null;
   family: ScraperTitleSequenceKind;
   matchTitle: string;
-  namedChapter: string | null;
   part: ScraperSeriesSequenceValue | null;
   seriesTitle: string;
   volume: ScraperSeriesSequenceValue | null;
@@ -110,10 +109,9 @@ const getChapterLabelMarker = (chapterLabel: string): ScraperTitleSequenceMarker
 
 const getSequenceFamily = ({
   chapter,
-  namedChapter,
   part,
   volume,
-}: Pick<ScraperSeriesSequence, "chapter" | "namedChapter" | "part" | "volume">): ScraperTitleSequenceKind | null => {
+}: Pick<ScraperSeriesSequence, "chapter" | "part" | "volume">): ScraperTitleSequenceKind | null => {
   if (volume) {
     return "volume";
   }
@@ -122,7 +120,7 @@ const getSequenceFamily = ({
     return "part";
   }
 
-  return chapter || namedChapter ? "chapter" : null;
+  return chapter ? "chapter" : null;
 };
 
 export const analyzeScraperSeriesSequence = (
@@ -150,10 +148,7 @@ export const analyzeScraperSeriesSequence = (
   const chapter = getMarkerValue(markers, "chapter");
   const part = getMarkerValue(markers, "part");
   const volume = getMarkerValue(markers, "volume");
-  const namedChapter = !chapter && !part && !volume
-    ? String(analysis.chapter ?? "").trim() || null
-    : null;
-  const family = getSequenceFamily({ chapter, namedChapter, part, volume });
+  const family = getSequenceFamily({ chapter, part, volume });
   const matchTitles = uniqueValues([
     analysis.title,
     ...analysis.alternativeTitles,
@@ -174,7 +169,6 @@ export const analyzeScraperSeriesSequence = (
     chapter,
     family,
     matchTitle: matchTitles.join(" | "),
-    namedChapter,
     part,
     seriesTitle: analysis.title || matchTitles[0],
     volume,
@@ -200,7 +194,7 @@ const getSequencePosition = (
     ];
   }
 
-  return [sequence.namedChapter ? Number.MAX_SAFE_INTEGER : sequence.chapter?.[edge] ?? 0];
+  return [sequence.chapter?.[edge] ?? 0];
 };
 
 const comparePositions = (left: number[], right: number[]): number => {
@@ -245,7 +239,7 @@ export const formatScraperSeriesSequence = (
   const labels = [
     sequence.volume ? `volume ${sequence.volume[edge]}` : "",
     sequence.part ? `partie ${sequence.part[edge]}` : "",
-    sequence.chapter ? `chapitre ${sequence.chapter[edge]}` : sequence.namedChapter ?? "",
+    sequence.chapter ? `chapitre ${sequence.chapter[edge]}` : "",
   ].filter(Boolean);
 
   return labels.join(", ");

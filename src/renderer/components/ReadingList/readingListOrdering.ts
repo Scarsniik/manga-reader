@@ -30,7 +30,6 @@ type ReadingListSequence = {
   family: ScraperTitleSequenceKind | "generic";
   generic: SequenceValue | null;
   matchTitle: string;
-  named: boolean;
   part: SequenceValue | null;
   volume: SequenceValue | null;
 };
@@ -139,7 +138,6 @@ const buildSequence = (
     family: volume ? "volume" : part ? "part" : "chapter",
     generic: null,
     matchTitle,
-    named: false,
     part,
     volume,
   };
@@ -191,7 +189,6 @@ const extractGenericSequence = (item: ReadingListItem): ReadingListSequence | nu
         family: "generic",
         generic,
         matchTitle: candidate.title.slice(0, genericMatch.index).trim(),
-        named: false,
         part: null,
         volume: null,
       };
@@ -209,34 +206,20 @@ const extractCorrespondenceSequence = (
     item.metadata.title,
     getItemTitleAnalysisConfig(item, configs),
   );
-  const isNamedChapter = analysis.chapterDetection?.source === "namedChapter";
   const isExplicitChapter = analysis.chapterDetection?.source === "explicitChapter";
-  if (!isNamedChapter && !isExplicitChapter) {
+  if (!isExplicitChapter) {
     return null;
   }
 
   const matchTitle = [analysis.title, ...analysis.alternativeTitles]
     .filter(Boolean)
     .join(" | ");
-  if (!isNamedChapter) {
-    return buildSequence(
-      item,
-      matchTitle,
-      analysis.sequenceMarkers,
-      analysis.authors,
-    );
-  }
-
-  return {
-    authorNames: getItemAuthorNames(item, analysis.authors),
-    chapter: null,
-    family: "chapter",
-    generic: null,
+  return buildSequence(
+    item,
     matchTitle,
-    named: true,
-    part: null,
-    volume: null,
-  };
+    analysis.sequenceMarkers,
+    analysis.authors,
+  );
 };
 
 const extractReadingListSequence = (
@@ -332,8 +315,7 @@ const compareOptionalSequenceValues = (
 };
 
 const compareSequences = (left: IndexedReadingListItem, right: IndexedReadingListItem): number => (
-  Number(left.sequence.named) - Number(right.sequence.named)
-  || compareOptionalSequenceValues(left.sequence.volume, right.sequence.volume)
+  compareOptionalSequenceValues(left.sequence.volume, right.sequence.volume)
   || compareOptionalSequenceValues(left.sequence.part, right.sequence.part)
   || compareOptionalSequenceValues(left.sequence.chapter, right.sequence.chapter)
   || compareOptionalSequenceValues(left.sequence.generic, right.sequence.generic)

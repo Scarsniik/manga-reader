@@ -370,7 +370,7 @@ test("series warning requires a completed current or earlier chapter", () => {
   });
 });
 
-test("named chapters are treated as releases after numbered chapters", () => {
+test("named chapters do not trigger global series alerts", () => {
   const namedChapterInput = {
     ...currentInput,
     title: "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu ~Beit Saki no JK Hen~ [English]",
@@ -393,12 +393,8 @@ test("named chapters are treated as releases after numbered chapters", () => {
   );
 
   assert.equal(matches.seriesReadingWarning, null);
-  assert.deepEqual(matches.seriesProgress, {
-    currentSequenceLabel: "Beit Saki no JK Hen",
-    previousSequenceLabel: "chapitre 2",
-    readingStatus: "read",
-    seriesTitle: "Boku ni SeFri ga Dekita Riyuu",
-  });
+  assert.equal(matches.seriesProgress, null);
+  assert.deepEqual(matches.readingMatches, []);
 });
 
 test("series warning reads chapter labels stored separately from scraper titles", () => {
