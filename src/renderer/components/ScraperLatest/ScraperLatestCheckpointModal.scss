@@ -1,0 +1,307 @@
+.scraper-latest-checkpoints-modal-shell {
+  width: min(94%, 980px);
+  max-width: 980px;
+}
+
+.scraper-latest-checkpoints-modal-body {
+  padding-top: 8px;
+}
+
+.scraper-latest-checkpoints-modal {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scraper-latest-checkpoints-modal__intro {
+  margin: 0;
+  color: #aeb7c1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scraper-latest-checkpoints-modal__tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid #30343a;
+  border-radius: 9px;
+  background: #101216;
+}
+
+.scraper-latest-checkpoints-modal__tabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #98a3af;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scraper-latest-checkpoints-modal__tabs button.is-active {
+  background: rgba(93, 156, 255, 0.18);
+  color: #d9e9ff;
+}
+
+.scraper-latest-checkpoints-modal__feedback {
+  padding: 9px 11px;
+  border: 1px solid rgba(94, 207, 134, 0.32);
+  border-radius: 8px;
+  background: rgba(94, 207, 134, 0.1);
+  color: #bfeccd;
+  font-size: 12px;
+}
+
+.scraper-latest-checkpoints-modal__feedback.is-error {
+  border-color: rgba(223, 107, 107, 0.36);
+  background: rgba(223, 107, 107, 0.1);
+  color: #f1b4b4;
+}
+
+.scraper-latest-checkpoints-modal__list,
+.scraper-latest-checkpoints-modal__sections,
+.scraper-latest-checkpoints-modal__variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scraper-latest-checkpoints-modal__entry,
+.scraper-latest-checkpoints-modal__section {
+  overflow: hidden;
+  border: 1px solid #30343a;
+  border-radius: 9px;
+  background: #12151a;
+}
+
+.scraper-latest-checkpoints-modal__section {
+  border-color: #383d45;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.scraper-latest-checkpoints-modal summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.scraper-latest-checkpoints-modal summary::-webkit-details-marker {
+  display: none;
+}
+
+.scraper-latest-checkpoints-modal summary::before {
+  content: "›";
+  grid-column: 3;
+  grid-row: 1;
+  color: #778390;
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.scraper-latest-checkpoints-modal details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.scraper-latest-checkpoints-modal summary > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.scraper-latest-checkpoints-modal summary strong {
+  overflow: hidden;
+  color: #edf2f7;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scraper-latest-checkpoints-modal summary small {
+  overflow: hidden;
+  color: #84909d;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scraper-latest-checkpoints-modal summary em {
+  grid-column: 2;
+  grid-row: 1;
+  color: #9fb4cc;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.scraper-latest-checkpoints-modal__entry-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.scraper-latest-checkpoints-modal__section > summary {
+  padding: 10px 12px;
+}
+
+.scraper-latest-checkpoints-modal__variants {
+  padding: 0 9px 9px;
+}
+
+.scraper-latest-checkpoints-modal__variant {
+  padding: 10px;
+  border: 1px solid rgba(125, 151, 181, 0.17);
+  border-radius: 7px;
+  background: rgba(11, 13, 16, 0.72);
+}
+
+.scraper-latest-checkpoints-modal__variant-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scraper-latest-checkpoints-modal__variant-head strong {
+  color: #dce8f5;
+  font-size: 11px;
+}
+
+.scraper-latest-checkpoints-modal__variant-head span {
+  color: #9eb0c3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scraper-latest-checkpoints-modal__variant-head span.is-complete {
+  color: #83dfa3;
+}
+
+.scraper-latest-checkpoints-modal dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin: 9px 0 0;
+}
+
+.scraper-latest-checkpoints-modal dl > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 95px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.scraper-latest-checkpoints-modal dt,
+.scraper-latest-checkpoints-modal dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.scraper-latest-checkpoints-modal dt {
+  color: #798592;
+}
+
+.scraper-latest-checkpoints-modal dd {
+  overflow: hidden;
+  color: #bbc5d0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scraper-latest-checkpoints-modal__warning,
+.scraper-latest-checkpoints-modal__empty {
+  margin: 8px 0 0;
+  color: #d7ba70;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.scraper-latest-checkpoints-modal__empty {
+  color: #8e99a5;
+}
+
+.scraper-latest-checkpoints-modal__reset,
+.scraper-latest-checkpoints-modal__confirm button,
+.scraper-latest-checkpoints-modal__footer button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #3a414a;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ccd5de;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.scraper-latest-checkpoints-modal__reset {
+  align-self: flex-end;
+  border-color: rgba(223, 107, 107, 0.38);
+  color: #e5adad;
+}
+
+.scraper-latest-checkpoints-modal__reset.is-section {
+  min-height: 30px;
+  align-self: flex-start;
+  font-size: 10px;
+}
+
+.scraper-latest-checkpoints-modal button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.scraper-latest-checkpoints-modal__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid rgba(223, 107, 107, 0.3);
+  border-radius: 7px;
+  background: rgba(223, 107, 107, 0.07);
+}
+
+.scraper-latest-checkpoints-modal__confirm p {
+  flex: 1 1 280px;
+  margin: 0;
+  color: #d8b5b5;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.scraper-latest-checkpoints-modal__confirm > div {
+  display: flex;
+  gap: 7px;
+}
+
+.scraper-latest-checkpoints-modal__confirm button.danger {
+  border-color: #b95050;
+  background: #8f3030;
+  color: #fff;
+}
+
+.scraper-latest-checkpoints-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 3px;
+}
+
+@media (max-width: 760px) {
+  .scraper-latest-checkpoints-modal dl {
+    grid-template-columns: 1fr;
+  }
+}

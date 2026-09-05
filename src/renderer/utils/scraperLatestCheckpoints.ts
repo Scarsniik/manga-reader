@@ -1,6 +1,8 @@
 import {
   buildScraperLatestCheckpointId,
   buildScraperViewHistoryCardId,
+  type ResetScraperLatestCheckpointsRequest,
+  type ResetScraperLatestCheckpointsResult,
   type SaveScraperLatestCheckpointRequest,
   type ScraperLatestCheckpointKey,
   type ScraperLatestCheckpointModule,
@@ -75,6 +77,18 @@ export const saveScraperLatestCheckpoint = async (
   return api.saveScraperLatestCheckpoint(request) as Promise<ScraperLatestCheckpointRecord>;
 };
 
+export const resetScraperLatestCheckpoints = async (
+  request: ResetScraperLatestCheckpointsRequest,
+): Promise<ResetScraperLatestCheckpointsResult> => {
+  const api = getApi();
+
+  if (!api || typeof api.resetScraperLatestCheckpoints !== "function") {
+    throw new Error("Le reset des scans profonds n'est pas disponible dans cette version.");
+  }
+
+  return api.resetScraperLatestCheckpoints(request) as Promise<ResetScraperLatestCheckpointsResult>;
+};
+
 export const getScraperLatestCheckpointForKey = (
   checkpoints: ScraperLatestCheckpointRecord[],
   key: ScraperLatestCheckpointKey,
@@ -135,6 +149,7 @@ export const buildScraperLatestCursorCheckpointRequest = (options: {
   pageIndex: number;
   page: ScraperRuntimeSearchPageResult;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason | null;
+  reachedEnd?: boolean;
   now?: number;
 }): SaveScraperLatestCheckpointRequest => ({
   scraperId: options.scraper.id,
@@ -149,6 +164,7 @@ export const buildScraperLatestCursorCheckpointRequest = (options: {
   nextPageUrl: options.page.nextPageUrl,
   anchorCardId: null,
   anchorIdentity: null,
+  reachedEnd: options.reachedEnd === true,
   ...(options.quotaUnavailableReason ? {
     quotaUnavailableReason: options.quotaUnavailableReason,
     quotaUnavailableUntil: new Date(

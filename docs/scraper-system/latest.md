@@ -34,6 +34,20 @@ le scraper, le module (`homepage`, `search` ou `tag`), la requete ou l'URL du ta
 incluses, la page, les URLs de pagination et l'identite d'une card d'ancrage. Le runtime verifie
 cette card d'ancrage avant de continuer autour du checkpoint.
 
+Le bouton `Progression des scans profonds`, dans l'en-tete de la vue, ouvre une modale de gestion
+des checkpoints. Elle separe les tags favoris et les scrapers dans deux onglets. Chaque element est
+depliable, puis organise en sous-sections elles aussi depliables : une sous-section par source d'un
+tag favori, ou par couple module/requete d'un scraper. Les variantes de langues affichent la derniere
+page traitee, la prochaine page de reprise, la date de mise a jour, les URLs connues, les blocages
+temporaires et, pour les checkpoints recents, si la fin du catalogue a ete atteinte.
+
+Un reset peut viser tout un tag favori, tout un scraper ou une seule de leurs sous-sections. Il
+supprime tous les checkpoints de langues de la cible apres confirmation. Il ne supprime ni
+l'historique des cards vues ni les favoris. Le prochain scan profond concerne repart donc de la
+zone recente puis reparcourt l'ancien catalogue depuis le debut, en recreant progressivement ses
+checkpoints. Le reset d'un scraper ne supprime pas les checkpoints des tags parcourus avec ce meme
+scraper.
+
 Les checkpoints sont separes par selection de langues. `Toutes les langues`, `ja`, `en` et `ja+en`
 ont donc chacun un point de reprise different.
 

@@ -487,6 +487,9 @@ ipcMain.handle("get-scraper-latest-checkpoints", async (event: IpcMainInvokeEven
 ipcMain.handle("save-scraper-latest-checkpoint", async (event: IpcMainInvokeEvent, request: any) => (
     scrapers.saveScraperLatestCheckpoint(event, request)
 ));
+ipcMain.handle("reset-scraper-latest-checkpoints", async (event: IpcMainInvokeEvent, request: any) => (
+    scrapers.resetScraperLatestCheckpoints(event, request)
+));
 ipcMain.handle("delete-scraper", async (event: IpcMainInvokeEvent, scraperId: string) => {
     const updated = await scrapers.deleteScraper(event, scraperId);
     notifyScrapersUpdated();

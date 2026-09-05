@@ -46,6 +46,7 @@ import ScraperLatestResults from "@/renderer/components/ScraperLatest/ScraperLat
 import buildScraperLatestSessionSettingsModal, {
   type ScraperLatestSessionSettings,
 } from "@/renderer/components/ScraperLatest/ScraperLatestSessionSettingsModal";
+import buildScraperLatestCheckpointModal from "@/renderer/components/ScraperLatest/ScraperLatestCheckpointModal";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { useLocalBlacklistedCardsDisplay } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import "@/renderer/components/History/style.scss";
@@ -1110,6 +1111,13 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
     tagResultLimit,
   ]);
 
+  const handleOpenCheckpointProgress = React.useCallback(() => {
+    openModal(buildScraperLatestCheckpointModal({
+      scrapers,
+      tagFavorites,
+    }));
+  }, [openModal, scrapers, tagFavorites]);
+
   const enqueueLatestBackgroundSearch = React.useCallback(async (
     tab: LatestTabId,
     searchMode: ScraperLatestSearchMode = "quick",
@@ -1407,12 +1415,21 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
           <h2>Nouveautes</h2>
           <p>Cartes non vues trouvees dans les sources incluses.</p>
         </div>
-        <HistoryTabs
-          tabs={LATEST_TABS}
-          activeTab={activeTab}
-          onChange={attachedSearch.attached ? () => {} : setActiveTab}
-          ariaLabel="Sections des nouveautes"
-        />
+        <div className="scraper-latest__header-actions">
+          <button
+            type="button"
+            className="scraper-latest__checkpoint-button"
+            onClick={handleOpenCheckpointProgress}
+          >
+            Progression des scans profonds
+          </button>
+          <HistoryTabs
+            tabs={LATEST_TABS}
+            activeTab={activeTab}
+            onChange={attachedSearch.attached ? () => {} : setActiveTab}
+            ariaLabel="Sections des nouveautes"
+          />
+        </div>
       </div> : null}
 
       {!resultOnly && shouldWarnAboutLimitedViewHistory ? (

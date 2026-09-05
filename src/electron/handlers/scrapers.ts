@@ -65,6 +65,7 @@ export {
 } from "./scrapers/viewHistory";
 export {
   getScraperLatestCheckpoints,
+  resetScraperLatestCheckpoints,
   saveScraperLatestCheckpoint,
 } from "./scrapers/latestCheckpoints";
 export {

@@ -1087,6 +1087,7 @@ export const runListingSearchEngine = async (
                     ? "pageLimitWithoutResults"
                     : null
                 : null,
+              reachedEnd: state.sourceExhausted,
             }),
           );
           run = { ...run, checkpoint: savedCheckpoint ?? run.checkpoint };

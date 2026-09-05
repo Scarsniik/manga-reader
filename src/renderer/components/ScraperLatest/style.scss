@@ -25,6 +25,33 @@
   line-height: 1.5;
 }
 
+.scraper-latest__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.scraper-latest__checkpoint-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(190, 139, 239, 0.42);
+  border-radius: 8px;
+  background: rgba(190, 139, 239, 0.1);
+  color: #dfc5f6;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scraper-latest__checkpoint-button:hover,
+.scraper-latest__checkpoint-button:focus-visible {
+  outline: none;
+  border-color: rgba(207, 164, 247, 0.7);
+  background: rgba(190, 139, 239, 0.18);
+}
+
 .scraper-latest__filters {
   display: flex;
   flex-direction: column;
@@ -455,8 +482,15 @@
   color: #ffffff;
 }
 
+
 @media (max-width: 760px) {
   .scraper-latest__header {
+    flex-direction: column;
+  }
+
+  .scraper-latest__header-actions {
+    width: 100%;
+    align-items: stretch;
     flex-direction: column;
   }
 
@@ -500,5 +534,6 @@
   .scraper-latest-session-settings-modal__field {
     grid-template-columns: 1fr;
   }
+
 }
 .scraper-latest__background-toggle { margin: 4px 2px 10px; }

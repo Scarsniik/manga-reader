@@ -976,6 +976,7 @@ export interface ScraperLatestCheckpointRecord extends ScraperLatestCheckpointKe
   anchorIdentity?: ScraperViewHistoryCardIdentity;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason;
   quotaUnavailableUntil?: string;
+  reachedEnd?: boolean;
   updatedAt: string;
 }
 
@@ -990,6 +991,61 @@ export interface SaveScraperLatestCheckpointRequest extends ScraperLatestCheckpo
   anchorIdentity?: ScraperViewHistoryCardIdentity | null;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason | null;
   quotaUnavailableUntil?: string | null;
+  reachedEnd?: boolean;
+}
+
+export type ResetScraperLatestCheckpointTarget = {
+  kind: "scraper";
+  scraperId: string;
+} | {
+  kind: "tag";
+  sources: Array<{
+    scraperId: string;
+    query: string;
+  }>;
+} | {
+  kind: "source";
+  scraperId: string;
+  module: ScraperLatestCheckpointModule;
+  query: string;
+};
+
+export interface ResetScraperLatestCheckpointsRequest {
+  target: ResetScraperLatestCheckpointTarget;
+}
+
+export interface ResetScraperLatestCheckpointsResult {
+  removedCount: number;
+  checkpoints: ScraperLatestCheckpointRecord[];
+}
+
+export function matchesScraperLatestCheckpointResetTarget(
+  checkpoint: ScraperLatestCheckpointRecord,
+  target: ResetScraperLatestCheckpointTarget,
+): boolean {
+  if (target.kind === "scraper") {
+    const scraperId = normalizeScraperViewHistoryText(target.scraperId);
+    return Boolean(scraperId)
+      && checkpoint.scraperId === scraperId
+      && checkpoint.module !== "tag";
+  }
+
+  if (target.kind === "tag") {
+    return Array.isArray(target.sources) && target.sources.some((source) => (
+      checkpoint.module === "tag"
+      && checkpoint.scraperId === normalizeScraperViewHistoryText(source?.scraperId)
+      && checkpoint.query === normalizeScraperLatestCheckpointQuery(source?.query)
+    ));
+  }
+
+  const scraperId = normalizeScraperViewHistoryText(target.scraperId);
+  const module = target.module === "homepage" || target.module === "search" || target.module === "tag"
+    ? target.module
+    : null;
+  return Boolean(scraperId && module)
+    && checkpoint.scraperId === scraperId
+    && checkpoint.module === module
+    && checkpoint.query === normalizeScraperLatestCheckpointQuery(target.query);
 }
 
 export const DEFAULT_SCRAPER_VIEW_HISTORY_MAX_RECORDS = 5000;

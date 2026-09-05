@@ -3,8 +3,11 @@ import { type IpcMainInvokeEvent } from "electron";
 import {
   buildScraperLatestCheckpointId,
   buildScraperViewHistoryCardId,
+  matchesScraperLatestCheckpointResetTarget,
   normalizeScraperLatestCheckpointLanguageCodes,
   normalizeScraperLatestCheckpointQuery,
+  type ResetScraperLatestCheckpointsRequest,
+  type ResetScraperLatestCheckpointsResult,
   type SaveScraperLatestCheckpointRequest,
   type ScraperLatestCheckpointModule,
   type ScraperLatestCheckpointRecord,
@@ -117,6 +120,7 @@ const sanitizeCheckpointRecord = (
       quotaUnavailableReason,
       quotaUnavailableUntil,
     } : {}),
+    ...(typeof value.reachedEnd === "boolean" ? { reachedEnd: value.reachedEnd } : {}),
     updatedAt: sanitizeIsoDate((value as ScraperLatestCheckpointRecord).updatedAt, now),
   };
 };
@@ -224,5 +228,28 @@ export async function saveScraperLatestCheckpoint(
     recordsById.set(checkpoint.id, checkpoint);
     await writeScraperLatestCheckpointFile(Array.from(recordsById.values()));
     return checkpoint;
+  });
+}
+
+export async function resetScraperLatestCheckpoints(
+  _event: IpcMainInvokeEvent,
+  request: ResetScraperLatestCheckpointsRequest,
+): Promise<ResetScraperLatestCheckpointsResult> {
+  return runScraperLatestCheckpointMutation(async () => {
+    const records = await readScraperLatestCheckpointFile();
+    if (!request?.target || typeof request.target !== "object") {
+      throw new Error("La cible du reset de scan profond est invalide.");
+    }
+
+    const checkpoints = records.filter((record) => (
+      !matchesScraperLatestCheckpointResetTarget(record, request.target)
+    ));
+    const removedCount = records.length - checkpoints.length;
+
+    if (removedCount > 0) {
+      await writeScraperLatestCheckpointFile(checkpoints);
+    }
+
+    return { removedCount, checkpoints };
   });
 }
