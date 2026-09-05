@@ -32,12 +32,14 @@ test("updating an existing list preserves its identity and creation date", () =>
   const result = applyReadingListSave(lists, replacementItems, {
     createId: () => "unused-id",
     createdAt: "2026-07-16T15:00:00.000Z",
+    name: "Updated name",
     savedListId: "saved-list",
   });
 
   assert.equal(result.lists.length, 2);
   assert.equal(result.lists[0].id, "saved-list");
   assert.equal(result.lists[0].createdAt, "2026-07-16T12:29:44.902Z");
+  assert.equal(result.lists[0].name, "Updated name");
   assert.deepEqual(result.lists[0].items, replacementItems);
   assert.equal(result.savedList, result.lists[0]);
   assert.deepEqual(lists[0].items, originalItems);
@@ -54,11 +56,13 @@ test("saving without a list id creates a new list", () => {
   const result = applyReadingListSave([existingList], items, {
     createId: () => "new-list",
     createdAt: "2026-07-16T15:00:00.000Z",
+    name: "New list",
   });
 
   assert.equal(result.lists.length, 2);
   assert.deepEqual(result.savedList, {
     id: "new-list",
+    name: "New list",
     items,
     createdAt: "2026-07-16T15:00:00.000Z",
   });
@@ -70,6 +74,7 @@ test("updating an unknown list fails instead of creating a duplicate", () => {
   assert.throws(() => applyReadingListSave([], [createItem("item", "Item")], {
     createId: () => "new-list",
     createdAt: "2026-07-16T15:00:00.000Z",
+    name: "Missing list",
     savedListId: "missing-list",
   }), /n'existe plus/);
 });

@@ -23,8 +23,10 @@ workspace.
 ## Enregistrement
 
 La page de préparation permet d'enregistrer la liste telle qu'elle est affichée. Une liste enregistrée conserve son
-ordre, ses mangas et les métadonnées utiles à leur affichage et à leur réouverture. Elle n'a pour le moment ni nom ni
-description.
+nom, son ordre, ses mangas et les métadonnées utiles à leur affichage et à leur réouverture. Le nom peut être modifié
+dans la page de préparation. Par défaut, l'application utilise le nom de la série lorsqu'une majorité des mangas est
+reconnue comme appartenant à la même série par le parseur de titres et ses règles propres au scraper. À défaut, elle
+utilise l'auteur présent sur une majorité des mangas, puis le libellé générique `Liste de lecture`.
 
 Lorsqu'une liste enregistrée est rouverte, toute modification suivie d'un nouvel enregistrement met à jour cette même
 liste. Son identifiant et sa date de création sont conservés ; aucune copie supplémentaire n'est créée.
@@ -35,12 +37,12 @@ après la fermeture du workspace ou de l'application.
 La page Bookmarks possède deux onglets :
 
 - `Bookmarks`, ouvert par défaut, conserve la vue et les actions existantes ;
-- `Listes`, affiche une ligne par liste enregistrée avec le nombre de mangas, un aperçu des premières couvertures et la
-  date d'enregistrement.
+- `Listes`, affiche une ligne par liste enregistrée avec son nom, le nombre de mangas, un aperçu des premières couvertures
+  et la date d'enregistrement.
 
 Un clic sur une ligne ouvre la page de préparation de la liste dans le workspace. Le bouton `Lecture` l'ouvre et lance
-directement le premier manga. Le bouton `Supprimer` efface la liste enregistrée sans supprimer ses mangas, leurs
-bookmarks ou leur progression.
+directement le point de reprise déterminé par les options de la liste. Le bouton `Supprimer` efface la liste enregistrée
+sans supprimer ses mangas, leurs bookmarks ou leur progression.
 
 ## Options
 
@@ -48,8 +50,10 @@ La page de liste propose trois options avant le lancement :
 
 - `Lecture aléatoire`, désactivée par défaut, mélange une fois la liste au lancement ;
 - `Retirer le bookmark après lecture`, activée par défaut, retire un bookmark scraper existant lorsque le manga est terminé ;
-- `Reprendre depuis la progression`, activée par défaut, reprend chaque manga à sa progression enregistrée. Une lecture
-  déjà terminée redémarre à la première page.
+- `Reprendre depuis la progression`, activée par défaut, démarre au dernier manga commencé dans l'ordre de la liste et
+  reprend chaque manga à sa progression enregistrée. Une progression restée à la première page n'est pas considérée
+  comme commencée. Si aucun manga n'est commencé, la lecture part du premier. Une lecture déjà terminée redémarre à la
+  première page.
 
 Les éléments peuvent être retirés de la liste avant le lancement.
 Les cards de préparation et de résumé ouvrent leur fiche manga dans un nouvel onglet workspace au clic ou au clavier.

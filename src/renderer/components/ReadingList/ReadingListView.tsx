@@ -4,12 +4,14 @@ import ReadingListCard from "@/renderer/components/ReadingList/ReadingListCard";
 import ReadingListSetup from "@/renderer/components/ReadingList/ReadingListSetup";
 import {
   getReadingListBookmarkTarget,
+  resolveReadingListStartIndex,
   resolveReadingListDetailsTarget,
   resolveReadingListReaderTarget,
 } from "@/renderer/components/ReadingList/readingListReader";
 import { shuffleReadingListItems } from "@/renderer/components/ReadingList/readingListItems";
 import {
   autoSortReadingListItems,
+  inferReadingListSeriesName,
   moveReadingListItem,
   reorderReadingListItems,
   type ReadingListDropEdge,
@@ -17,6 +19,7 @@ import {
 import useReadingListTitleAnalysisConfigs from "@/renderer/components/ReadingList/useReadingListTitleAnalysisConfigs";
 import useSaveReadingList from "@/renderer/components/ReadingList/useSaveReadingList";
 import useAuthors from "@/renderer/hooks/useAuthors";
+import useSeries from "@/renderer/hooks/useSeries";
 import useTags from "@/renderer/hooks/useTags";
 import {
   getScraperBookmarkKey,
@@ -34,11 +37,14 @@ import {
   buildReaderSearch,
   openWorkspaceTarget,
 } from "@/renderer/utils/workspaceTargets";
+import { getDefaultReadingListName } from "@/shared/readingList";
 import "@/renderer/components/ReadingList/style.scss";
 
 type Props = {
   initialItems: ReadingListItem[];
   autoStart?: boolean;
+  initialName?: string;
+  onNameChange?: (name: string) => void;
   savedListId?: string;
 };
 
@@ -50,8 +56,15 @@ const DEFAULT_OPTIONS: ReadingListOptions = {
   resumeProgress: true,
 };
 
-export default function ReadingListView({ initialItems, autoStart = false, savedListId }: Props) {
+export default function ReadingListView({
+  initialItems,
+  autoStart = false,
+  initialName,
+  onNameChange,
+  savedListId,
+}: Props) {
   const { authors } = useAuthors();
+  const { series } = useSeries();
   const { tags } = useTags();
   const [items, setItems] = useState<ReadingListItem[]>(initialItems);
   const [orderedItems, setOrderedItems] = useState<ReadingListItem[]>(initialItems);
@@ -64,8 +77,28 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
   const [statuses, setStatuses] = useState<Record<string, ReadingListItemStatus>>({});
   const requestIdRef = useRef(0);
   const autoStartHandledRef = useRef(false);
-  const readingListSave = useSaveReadingList(items, savedListId);
   const titleAnalysisConfigs = useReadingListTitleAnalysisConfigs();
+  const initialNormalizedName = initialName?.trim() ?? "";
+  const [name, setName] = useState(() => initialNormalizedName || getDefaultReadingListName(
+    initialItems,
+    inferReadingListSeriesName(initialItems, titleAnalysisConfigs.configsByScraperId),
+  ));
+  const nameWasEditedRef = useRef(Boolean(initialNormalizedName));
+  const suggestedName = useMemo(() => getDefaultReadingListName(
+    items,
+    inferReadingListSeriesName(items, titleAnalysisConfigs.configsByScraperId),
+  ), [items, titleAnalysisConfigs.configsByScraperId]);
+  const readingListSave = useSaveReadingList(items, name, savedListId);
+
+  useEffect(() => {
+    if (!nameWasEditedRef.current) {
+      setName(suggestedName);
+    }
+  }, [suggestedName]);
+
+  useEffect(() => {
+    onNameChange?.(name.trim() || "Liste de lecture");
+  }, [name, onNameChange]);
 
   const handleOpenDetails = useCallback(async (item: ReadingListItem) => {
     try {
@@ -99,6 +132,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
       const mangasById = new Map(mangas.map((manga) => [String(manga.id), manga]));
       const tagsById = new Map(tags.map((tag) => [tag.id, tag.name]));
       const authorsById = new Map(authors.map((author) => [author.id, author.name]));
+      const seriesById = new Map(series.map((item) => [item.id, item.title]));
       setItems((currentItems) => currentItems.map((item) => {
         if (item.sourceTarget.kind !== "reader") {
           return item;
@@ -116,6 +150,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
             title: manga.title || item.metadata.title,
             cover: manga.thumbnailPath || item.metadata.cover,
             authors: manga.authorIds.map((authorId) => authorsById.get(authorId)).filter((name): name is string => Boolean(name)),
+            seriesTitle: manga.seriesId ? seriesById.get(manga.seriesId) : item.metadata.seriesTitle,
             tags: manga.tagIds.map((tagId) => tagsById.get(tagId)).filter((name): name is string => Boolean(name)),
             languageCodes: manga.language ? [manga.language] : item.metadata.languageCodes,
           },
@@ -128,7 +163,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
     return () => {
       cancelled = true;
     };
-  }, [authors, tags]);
+  }, [authors, series, tags]);
 
   const loadItem = useCallback(async (index: number, sourceItems = orderedItems) => {
     const item = sourceItems[index];
@@ -168,12 +203,17 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
     }
   }, [options.resumeProgress, orderedItems]);
 
-  const handleStart = useCallback(() => {
+  const handleStart = useCallback(async () => {
     const nextOrderedItems = options.randomOrder ? shuffleReadingListItems(items) : [...items];
     setOrderedItems(nextOrderedItems);
     setStatuses({});
-    void loadItem(0, nextOrderedItems);
-  }, [items, loadItem, options.randomOrder]);
+    setLoading(true);
+    const startIndex = await resolveReadingListStartIndex(
+      nextOrderedItems,
+      options.resumeProgress,
+    );
+    await loadItem(startIndex, nextOrderedItems);
+  }, [items, loadItem, options.randomOrder, options.resumeProgress]);
 
   useEffect(() => {
     if (!autoStart || autoStartHandledRef.current || items.length === 0) {
@@ -181,7 +221,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
     }
 
     autoStartHandledRef.current = true;
-    handleStart();
+    void handleStart();
   }, [autoStart, handleStart, items.length]);
 
   const handleItemCompleted = useCallback(async () => {
@@ -339,7 +379,7 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
       <section className="reading-list-view reading-list-summary">
         <header className="reading-list-view__header">
           <span className="reading-list-view__eyebrow">Liste terminée</span>
-          <h2>Résumé de la lecture</h2>
+          <h2>{name}</h2>
           <p>{Object.values(statuses).filter((status) => status.completed).length} manga(s) lu(s).</p>
         </header>
         <div className="reading-list-grid">
@@ -368,12 +408,17 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
       items={items}
       autoSortLoading={titleAnalysisConfigs.loading}
       loading={loading}
+      name={name}
       options={options}
       saved={readingListSave.saved}
       saving={readingListSave.saving}
       saveError={readingListSave.error}
       onAutoSort={handleAutoSort}
       onMove={handleMove}
+      onNameChange={(nextName) => {
+        nameWasEditedRef.current = true;
+        setName(nextName);
+      }}
       onOpenDetails={(item) => {
         void handleOpenDetails(item);
       }}
@@ -385,7 +430,9 @@ export default function ReadingListView({ initialItems, autoStart = false, saved
         void readingListSave.save();
       }}
       onReorder={handleReorder}
-      onStart={handleStart}
+      onStart={() => {
+        void handleStart();
+      }}
     />
   );
 }

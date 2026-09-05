@@ -32,6 +32,7 @@ import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperVi
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import {
   normalizeQuickReviewDisplaySettings,
+  normalizeQuickReviewKeyboardScrollSpeed,
   normalizeQuickReviewThumbnailMaxColumns,
   normalizeQuickReviewThumbnailSize,
 } from "@/shared/quickReviewSettings";
@@ -74,10 +75,15 @@ export default function QuickReviewDialog({ items }: Props) {
   const [coverIndex, setCoverIndex] = React.useState(0);
   const [previewedThumbnailIndex, setPreviewedThumbnailIndex] = React.useState<number | null>(null);
   const thumbnailScrollRef = React.useRef<HTMLDivElement>(null);
+  const thumbnailScrollAnimationRef = React.useRef<number | null>(null);
+  const thumbnailScrollTargetRef = React.useRef<number | null>(null);
   const lastBlockedThumbnailNextPressRef = React.useRef<number | null>(null);
   const thumbnailSize = normalizeQuickReviewThumbnailSize(params?.quickReviewThumbnailSize);
   const thumbnailMaxColumns = normalizeQuickReviewThumbnailMaxColumns(
     params?.quickReviewThumbnailMaxColumns,
+  );
+  const keyboardScrollSpeed = normalizeQuickReviewKeyboardScrollSpeed(
+    params?.quickReviewKeyboardScrollSpeed,
   );
   const displaySettings = normalizeQuickReviewDisplaySettings(params);
   const { containerRef, wide } = useQuickReviewLayout(
@@ -87,6 +93,12 @@ export default function QuickReviewDialog({ items }: Props) {
   );
   const currentItem = items[currentIndex] ?? null;
   const isComplete = currentIndex >= items.length;
+  const cancelThumbnailScrollAnimation = React.useCallback(() => {
+    if (thumbnailScrollAnimationRef.current === null) return;
+    window.cancelAnimationFrame(thumbnailScrollAnimationRef.current);
+    thumbnailScrollAnimationRef.current = null;
+    thumbnailScrollTargetRef.current = null;
+  }, []);
   const {
     detailsState,
     details,
@@ -104,11 +116,14 @@ export default function QuickReviewDialog({ items }: Props) {
   );
 
   React.useLayoutEffect(() => {
+    cancelThumbnailScrollAnimation();
     setCoverIndex(0);
     setOpenError(null);
     setPreviewedThumbnailIndex(null);
     lastBlockedThumbnailNextPressRef.current = null;
-  }, [currentItem?.id]);
+  }, [cancelThumbnailScrollAnimation, currentItem?.id]);
+
+  React.useEffect(() => cancelThumbnailScrollAnimation, [cancelThumbnailScrollAnimation]);
 
   React.useEffect(() => {
     if (!currentItem) return;
@@ -187,12 +202,15 @@ export default function QuickReviewDialog({ items }: Props) {
     const container = thumbnailScrollRef.current;
     if (!container) return;
     const scrollPosition = wide ? container.scrollTop : container.scrollLeft;
+    const queuedScrollPosition = thumbnailScrollAnimationRef.current !== null
+      ? thumbnailScrollTargetRef.current ?? scrollPosition
+      : scrollPosition;
     const maximumScroll = wide
       ? container.scrollHeight - container.clientHeight
       : container.scrollWidth - container.clientWidth;
     const reachedEdge = direction > 0
-      ? scrollPosition >= maximumScroll - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
-      : scrollPosition <= THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX;
+      ? queuedScrollPosition >= maximumScroll - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
+      : queuedScrollPosition <= THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX;
 
     if (reachedEdge) {
       if (direction > 0 && canLoadMoreThumbnails && !loadingMoreThumbnails) {
@@ -217,17 +235,43 @@ export default function QuickReviewDialog({ items }: Props) {
     const scrollStops = getThumbnailScrollStops(container, wide, scrollPosition);
     const targetStop = direction > 0
       ? scrollStops.find((position) => (
-        position > scrollPosition + THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
+        position > queuedScrollPosition + THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
       )) ?? maximumScroll
       : [...scrollStops].reverse().find((position) => (
-        position < scrollPosition - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
+        position < queuedScrollPosition - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
       )) ?? 0;
     const targetPosition = Math.max(0, Math.min(maximumScroll, targetStop));
+    const startPosition = wide ? container.scrollTop : container.scrollLeft;
+    const distance = targetPosition - startPosition;
+    if (Math.abs(distance) <= THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX) return;
 
-    container.scrollTo(wide
-      ? { top: targetPosition, behavior: "smooth" }
-      : { left: targetPosition, behavior: "smooth" });
-  }, [canLoadMoreThumbnails, loadMoreThumbnails, loadingMoreThumbnails, wide]);
+    cancelThumbnailScrollAnimation();
+    thumbnailScrollTargetRef.current = targetPosition;
+    const startedAt = performance.now();
+    const duration = (Math.abs(distance) / keyboardScrollSpeed) * 1000;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const easedProgress = progress * progress * (3 - (2 * progress));
+      const nextPosition = startPosition + (distance * easedProgress);
+      if (wide) container.scrollTop = nextPosition;
+      else container.scrollLeft = nextPosition;
+
+      if (progress < 1) {
+        thumbnailScrollAnimationRef.current = window.requestAnimationFrame(animate);
+      } else {
+        thumbnailScrollAnimationRef.current = null;
+        thumbnailScrollTargetRef.current = null;
+      }
+    };
+    thumbnailScrollAnimationRef.current = window.requestAnimationFrame(animate);
+  }, [
+    canLoadMoreThumbnails,
+    cancelThumbnailScrollAnimation,
+    keyboardScrollSpeed,
+    loadMoreThumbnails,
+    loadingMoreThumbnails,
+    wide,
+  ]);
   const closeThumbnailPreview = React.useCallback(() => setPreviewedThumbnailIndex(null), []);
 
   const handleBookmark = React.useCallback(async () => {

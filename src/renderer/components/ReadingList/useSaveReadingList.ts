@@ -8,22 +8,29 @@ type ReadingListSaveState = {
   saving: boolean;
 };
 
-const getItemsSignature = (items: ReadingListItem[]): string => JSON.stringify(items);
+const getReadingListSignature = (name: string, items: ReadingListItem[]): string => JSON.stringify({
+  items,
+  name: name.trim(),
+});
 
 export default function useSaveReadingList(
   items: ReadingListItem[],
+  name: string,
   initialSavedListId?: string,
 ): ReadingListSaveState {
-  const itemsSignature = useMemo(() => getItemsSignature(items), [items]);
-  const [savedItemsSignature, setSavedItemsSignature] = useState<string | null>(() => (
-    initialSavedListId ? itemsSignature : null
+  const readingListSignature = useMemo(
+    () => getReadingListSignature(name, items),
+    [items, name],
+  );
+  const [savedReadingListSignature, setSavedReadingListSignature] = useState<string | null>(() => (
+    initialSavedListId ? readingListSignature : null
   ));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestInFlightRef = useRef(false);
   const savedListIdRef = useRef(initialSavedListId);
   const initialSavedListIdRef = useRef(initialSavedListId);
-  const saved = savedItemsSignature === itemsSignature;
+  const saved = savedReadingListSignature === readingListSignature;
 
   useEffect(() => {
     if (initialSavedListIdRef.current === initialSavedListId) {
@@ -32,15 +39,21 @@ export default function useSaveReadingList(
 
     initialSavedListIdRef.current = initialSavedListId;
     savedListIdRef.current = initialSavedListId;
-    setSavedItemsSignature(initialSavedListId ? itemsSignature : null);
-  }, [initialSavedListId, itemsSignature]);
+    setSavedReadingListSignature(initialSavedListId ? readingListSignature : null);
+  }, [initialSavedListId, readingListSignature]);
 
   useEffect(() => {
     setError(null);
-  }, [itemsSignature]);
+  }, [readingListSignature]);
 
   const save = useCallback(async () => {
     if (items.length === 0 || saved || requestInFlightRef.current) {
+      return;
+    }
+
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError("Donnez un nom à la liste de lecture.");
       return;
     }
 
@@ -54,21 +67,22 @@ export default function useSaveReadingList(
     setError(null);
 
     try {
-      const requestItemsSignature = itemsSignature;
+      const requestReadingListSignature = readingListSignature;
       const requestedSavedListId = savedListIdRef.current;
       const savedList = await window.api.saveReadingList({
+        name: normalizedName,
         items,
         ...(requestedSavedListId ? { savedListId: requestedSavedListId } : {}),
       });
       savedListIdRef.current = savedList.id;
-      setSavedItemsSignature(requestItemsSignature);
+      setSavedReadingListSignature(requestReadingListSignature);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d'enregistrer la liste.");
     } finally {
       requestInFlightRef.current = false;
       setSaving(false);
     }
-  }, [items, itemsSignature, saved]);
+  }, [items, name, readingListSignature, saved]);
 
   return {
     error,

@@ -5,6 +5,7 @@ export type ReadingListItemMetadata = {
   cover?: string | null;
   coverCandidates?: string[];
   authors?: string[];
+  seriesTitle?: string;
   tags?: string[];
   languageCodes?: string[];
 };

@@ -59,6 +59,7 @@ export type AppParams = {
     quickReviewPrefetchCount?: number;
     quickReviewThumbnailSize?: number;
     quickReviewThumbnailMaxColumns?: number;
+    quickReviewKeyboardScrollSpeed?: number;
     quickReviewShowCover?: boolean;
     quickReviewShowFacts?: boolean;
     quickReviewShowDescription?: boolean;

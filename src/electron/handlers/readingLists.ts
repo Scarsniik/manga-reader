@@ -7,10 +7,11 @@ import type {
   SavedReadingListItemMetadata,
   SavedReadingListSourceTarget,
 } from "../../shared/readingList";
+import { getDefaultReadingListName } from "../../shared/readingList";
 import { ensureDataDir, savedReadingListsFilePath } from "../utils";
 import { applyReadingListSave } from "./readingListCollection";
 
-const SAVED_READING_LISTS_DOCUMENT_VERSION = 1;
+const SAVED_READING_LISTS_DOCUMENT_VERSION = 2;
 
 type SavedReadingListsDocument = {
   version: typeof SAVED_READING_LISTS_DOCUMENT_VERSION;
@@ -154,6 +155,7 @@ const sanitizeItemMetadata = (value: unknown): SavedReadingListItemMetadata | nu
   const cover = normalizeOptionalTextOrNull(value.cover);
   const coverCandidates = normalizeTextList(value.coverCandidates);
   const authors = normalizeTextList(value.authors);
+  const seriesTitle = normalizeOptionalText(value.seriesTitle);
   const tags = normalizeTextList(value.tags);
   const languageCodes = normalizeTextList(value.languageCodes);
 
@@ -162,6 +164,7 @@ const sanitizeItemMetadata = (value: unknown): SavedReadingListItemMetadata | nu
     ...(cover !== undefined ? { cover } : {}),
     ...(coverCandidates !== undefined ? { coverCandidates } : {}),
     ...(authors !== undefined ? { authors } : {}),
+    ...(seriesTitle ? { seriesTitle } : {}),
     ...(tags !== undefined ? { tags } : {}),
     ...(languageCodes !== undefined ? { languageCodes } : {}),
   };
@@ -223,6 +226,7 @@ const sanitizeSavedReadingList = (
 
   return {
     id,
+    name: normalizeOptionalText(value.name) ?? getDefaultReadingListName(items),
     items,
     createdAt: normalizeCreatedAt(value.createdAt ?? value.savedAt, fallbackCreatedAt),
   };
@@ -338,10 +342,16 @@ export const saveReadingList = async (request: SaveReadingListRequest): Promise<
       throw new Error("L'identifiant de la liste de lecture est invalide.");
     }
 
+    const name = normalizeRequiredText(request.name);
+    if (request.name !== undefined && !name) {
+      throw new Error("Le nom de la liste de lecture est invalide.");
+    }
+
     const lists = await readSavedReadingListsFileUnlocked();
     const result = applyReadingListSave(lists, items, {
       createId: randomUUID,
       createdAt: new Date().toISOString(),
+      name: name ?? getDefaultReadingListName(items),
       ...(savedListId ? { savedListId } : {}),
     });
 

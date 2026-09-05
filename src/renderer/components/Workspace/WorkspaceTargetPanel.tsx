@@ -443,6 +443,8 @@ export default function WorkspaceTargetPanel({
       <ReadingListView
         initialItems={target.items}
         autoStart={target.autoStart}
+        initialName={target.name}
+        onNameChange={handleTitleChange}
         savedListId={target.savedListId}
       />
     );

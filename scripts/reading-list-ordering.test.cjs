@@ -13,16 +13,23 @@ Module._resolveFilename = function resolveWorkspaceAlias(request, parent, isMain
 
 const {
   autoSortReadingListItems,
+  inferReadingListSeriesName,
   moveReadingListItem,
   reorderReadingListItems,
 } = require("../dist/renderer/components/ReadingList/readingListOrdering.js");
+const {
+  findLastStartedReadingListItemIndex,
+} = require("../dist/renderer/components/ReadingList/readingListReader.js");
+const {
+  getDefaultReadingListName,
+} = require("../dist/shared/readingList.js");
 
 const createItem = (id, title, scraperId = null) => ({
   id,
   metadata: { title },
   sourceTarget: scraperId
     ? { kind: "scraper.details", scraperId, sourceUrl: `https://example.test/${id}` }
-    : { kind: "reader" },
+    : { kind: "reader", mangaId: id },
 });
 
 const getItemIds = (items) => items.map(({ id }) => id);
@@ -105,6 +112,10 @@ test("auto sort honors the source title analysis rules", () => {
   assert.deepEqual(
     getItemIds(autoSortReadingListItems(items, new Map([["custom-scraper", config]]))),
     ["chapter-2", "chapter-10"],
+  );
+  assert.equal(
+    inferReadingListSeriesName(items, new Map([["custom-scraper", config]])),
+    "Custom Series",
   );
 });
 
@@ -255,4 +266,73 @@ test("keyboard move respects list boundaries", () => {
   assert.deepEqual(getItemIds(moveReadingListItem(items, "b", -1)), ["b", "a", "c"]);
   assert.deepEqual(getItemIds(moveReadingListItem(items, "a", -1)), ["a", "b", "c"]);
   assert.notStrictEqual(moveReadingListItem(items, "a", -1), items);
+});
+
+test("the title parser suggests a series shared by a strict majority", () => {
+  const items = [
+    createItem("chapter-1", "Parser Series Chapter 1"),
+    createItem("other", "Unrelated manga"),
+    createItem("chapter-2", "Parser Series Chapter 2"),
+  ];
+
+  const seriesName = inferReadingListSeriesName(items);
+
+  assert.equal(seriesName, "Parser Series");
+  assert.equal(getDefaultReadingListName(items, seriesName), "Parser Series");
+});
+
+test("the majority author is used when the parser finds no majority series", () => {
+  const items = [
+    { ...createItem("first", "First"), metadata: { title: "First", authors: ["Alice"] } },
+    { ...createItem("second", "Second"), metadata: { title: "Second", authors: ["Alice", "Bob"] } },
+    { ...createItem("third", "Third"), metadata: { title: "Third", authors: ["Carol"] } },
+  ];
+
+  assert.equal(inferReadingListSeriesName(items), null);
+  assert.equal(getDefaultReadingListName(items), "Alice");
+});
+
+test("resume starts at the last manga progressed beyond page one", () => {
+  const items = [
+    createItem("first", "First"),
+    createItem("second", "Second"),
+    createItem("third", "Third"),
+  ];
+  const mangas = [
+    { id: "first", currentPage: 4, pages: 20 },
+    { id: "second", currentPage: 1, pages: 20 },
+    { id: "third", currentPage: 7, pages: 20 },
+  ];
+
+  assert.equal(findLastStartedReadingListItemIndex(items, mangas, []), 2);
+});
+
+test("page one and completed progress do not count as started", () => {
+  const items = [
+    createItem("first", "First"),
+    createItem("second", "Second"),
+  ];
+  const mangas = [
+    { id: "first", currentPage: 1, pages: 20 },
+    { id: "second", currentPage: 20, pages: 20 },
+  ];
+
+  assert.equal(findLastStartedReadingListItemIndex(items, mangas, []), 0);
+});
+
+test("resume finds scraper progress from the saved source", () => {
+  const items = [
+    createItem("first", "First"),
+    createItem("second", "Second", "source"),
+  ];
+  const progressRecords = [{
+    id: "legacy-id",
+    scraperId: "source",
+    sourceUrl: "https://example.test/second",
+    currentPage: 3,
+    totalPages: 12,
+    updatedAt: "2026-09-05T12:00:00.000Z",
+  }];
+
+  assert.equal(findLastStartedReadingListItemIndex(items, [], progressRecords), 1);
 });

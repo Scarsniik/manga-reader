@@ -90,7 +90,10 @@ export default function useQuickReviewShortcuts(props: Props) {
 
       const keyId = getKeyId(event);
       if (event.repeat) {
-        if (pendingPresses.has(keyId)) consumeKeyboardEvent(event);
+        const matchesReviewAction = pendingPresses.has(keyId)
+          || Boolean(getAction(event, "long"))
+          || Boolean(getAction(event, "short"));
+        if (matchesReviewAction) consumeKeyboardEvent(event);
         return;
       }
 

@@ -41,6 +41,7 @@ natif du navigateur.
 
 Dans `Options > Review rapide`, la largeur cible des miniatures est réglable de `64` à `240` px
 (`112` par défaut), et la grille accepte de `1` à `6` miniatures maximum par ligne (`2` par défaut).
+La vitesse du déplacement au clavier est réglable de `100` à `4000` px/s (`800` px/s par défaut).
 Le nombre réel de colonnes ne dépasse jamais la place disponible. Le numéro de page est affiché dans
 un petit badge superposé en bas à droite de chaque miniature.
 Quand la source indique une page suivante ou davantage de pages que de miniatures chargées, un bouton
@@ -106,6 +107,9 @@ touche enregistre un appui court et la maintenir pendant cette durée enregistre
 `Échap` ferme la dialog. Les raccourcis de review sont capturés par la dialog afin de ne pas déclencher simultanément ceux du lecteur affiché derrière elle.
 Le défilement est vertical dans la galerie latérale et horizontal dans la bande inférieure. Les
 raccourcis s'alignent sur la ligne suivante ou précédente au lieu d'utiliser une distance fixe, sans
-modifier la molette ni l'ascenseur. En fin de galerie, deux appuis `Bas` consécutifs réellement bloqués
+modifier la molette ni l'ascenseur. Leur animation respecte la vitesse configurée dans les options de
+review rapide. Les appuis successifs s'ajoutent à la destination courante sans attendre la fin de
+l'animation : deux appuis descendent donc immédiatement de deux lignes. En fin de galerie, deux
+appuis `Bas` consécutifs réellement bloqués
 par la limite déclenchent `Voir plus`. Les deux positions de scroll reviennent au début dès que la
 fiche courante change.

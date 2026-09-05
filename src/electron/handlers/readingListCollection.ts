@@ -6,6 +6,7 @@ import type {
 type ReadingListCollectionSaveOptions = {
   createId: () => string;
   createdAt: string;
+  name: string;
   savedListId?: string;
 };
 
@@ -22,6 +23,7 @@ export const applyReadingListSave = (
   if (!options.savedListId) {
     const savedList: SavedReadingList = {
       id: options.createId(),
+      name: options.name,
       items,
       createdAt: options.createdAt,
     };
@@ -39,6 +41,7 @@ export const applyReadingListSave = (
 
   const savedList: SavedReadingList = {
     ...lists[savedListIndex],
+    name: options.name,
     items,
   };
   const nextLists = [...lists];

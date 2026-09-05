@@ -148,13 +148,16 @@ type ReadingListWorkspaceTarget = {
         metadata: {
             title: string;
             cover?: string | null;
+            coverCandidates?: string[];
             authors?: string[];
+            seriesTitle?: string;
             tags?: string[];
             languageCodes?: string[];
         };
         sourceTarget: ReaderWorkspaceTarget | ScraperDetailsWorkspaceTarget;
     }>;
     autoStart?: boolean;
+    name?: string;
     savedListId?: string;
     title?: string;
 };

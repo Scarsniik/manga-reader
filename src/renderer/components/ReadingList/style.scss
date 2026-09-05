@@ -16,6 +16,38 @@
   font-size: clamp(1.65rem, 3vw, 2.35rem);
 }
 
+.reading-list-name-field {
+  display: grid;
+  max-width: 560px;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.reading-list-name-field span {
+  color: #aaa;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.reading-list-name-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #f4f4f4;
+  font: inherit;
+  font-size: clamp(1.45rem, 2.7vw, 2.1rem);
+  font-weight: 700;
+}
+
+.reading-list-name-field input:focus {
+  border-color: #e0ad54;
+  background: #191919;
+  outline: 2px solid rgba(224, 173, 84, 0.2);
+}
+
 .reading-list-view__header p {
   margin: 0;
   color: #aaa;

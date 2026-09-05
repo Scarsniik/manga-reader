@@ -41,6 +41,11 @@ type IndexedReadingListItem = {
   sequence: ReadingListSequence;
 };
 
+type ParsedSeriesCandidate = {
+  displayTitle: string;
+  matchTitle: string;
+};
+
 const TRAILING_NUMBER_PATTERN = /([0-9]+(?:[.,][0-9]+)?)\s*[\])}._-]*$/u;
 const ROMAN_NUMERAL_PATTERN = /^[ivxlcdm]+$/iu;
 const ROMAN_NUMERAL_VALUES: Record<string, number> = {
@@ -242,6 +247,74 @@ const extractReadingListSequence = (
   ?? extractCorrespondenceSequence(item, configs)
   ?? extractGenericSequence(item)
 );
+
+const parseReadingListSeriesCandidate = (
+  item: ReadingListItem,
+  configs: ReadingListTitleAnalysisConfigs,
+): ParsedSeriesCandidate | null => {
+  const config = getItemTitleAnalysisConfig(item, configs);
+  if (config?.enabled) {
+    const parsedTitle = analyzeScraperTitle(item.metadata.title, config);
+    if (parsedTitle.matched && parsedTitle.title.trim()) {
+      return {
+        displayTitle: parsedTitle.title.trim(),
+        matchTitle: [parsedTitle.title, ...parsedTitle.alternativeTitles]
+          .filter(Boolean)
+          .join(" | "),
+      };
+    }
+  }
+
+  const parsedTitle = analyzeMangaCorrespondenceTitle(item.metadata.title, config);
+  if (!parsedTitle.title.trim()) {
+    return null;
+  }
+
+  return {
+    displayTitle: parsedTitle.title.trim(),
+    matchTitle: [parsedTitle.title, ...parsedTitle.alternativeTitles]
+      .filter(Boolean)
+      .join(" | "),
+  };
+};
+
+const parsedSeriesCandidatesMatch = (
+  left: ParsedSeriesCandidate,
+  right: ParsedSeriesCandidate,
+): boolean => (
+  getMangaTitleMergeMatchKind(
+    { title: left.matchTitle, authorNames: [] },
+    { title: right.matchTitle, authorNames: [] },
+  ) !== null
+);
+
+export const inferReadingListSeriesName = (
+  items: ReadingListItem[],
+  configs: ReadingListTitleAnalysisConfigs = new Map(),
+): string | null => {
+  const groups: ParsedSeriesCandidate[][] = [];
+
+  items.forEach((item) => {
+    const candidate = parseReadingListSeriesCandidate(item, configs);
+    if (!candidate) {
+      return;
+    }
+
+    const matchingGroup = groups.find((group) => group.some((groupCandidate) => (
+      parsedSeriesCandidatesMatch(groupCandidate, candidate)
+    )));
+    if (matchingGroup) {
+      matchingGroup.push(candidate);
+    } else {
+      groups.push([candidate]);
+    }
+  });
+
+  const majorityGroup = groups
+    .filter((group) => group.length > items.length / 2)
+    .sort((left, right) => right.length - left.length)[0];
+  return majorityGroup?.[0]?.displayTitle ?? null;
+};
 
 const compareOptionalSequenceValues = (
   left: SequenceValue | null,

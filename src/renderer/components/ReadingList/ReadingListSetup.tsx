@@ -14,8 +14,10 @@ type Props = {
   autoSortLoading: boolean;
   items: ReadingListItem[];
   loading: boolean;
+  name: string;
   onAutoSort: () => boolean;
   onMove: (itemId: string, offset: number) => void;
+  onNameChange: (name: string) => void;
   onOpenDetails: (item: ReadingListItem) => void;
   onOptionChange: (option: keyof ReadingListOptions, checked: boolean) => void;
   onRemove: (itemId: string) => void;
@@ -36,8 +38,10 @@ export default function ReadingListSetup({
   autoSortLoading,
   items,
   loading,
+  name,
   onAutoSort,
   onMove,
+  onNameChange,
   onOpenDetails,
   onOptionChange,
   onRemove,
@@ -62,7 +66,16 @@ export default function ReadingListSetup({
     <section className="reading-list-view">
       <header className="reading-list-view__header">
         <span className="reading-list-view__eyebrow">Préparation</span>
-        <h2>Liste de lecture</h2>
+        <label className="reading-list-name-field">
+          <span>Nom de la liste</span>
+          <input
+            type="text"
+            value={name}
+            placeholder="Liste de lecture"
+            required
+            onChange={(event) => onNameChange(event.target.value)}
+          />
+        </label>
         <p>{items.length} manga(s), dans l&apos;ordre de la liste.</p>
       </header>
 
@@ -98,7 +111,7 @@ export default function ReadingListSetup({
           <button
             type="button"
             className="reading-list-secondary-action"
-            disabled={items.length === 0 || saving || saved}
+            disabled={items.length === 0 || !name.trim() || saving || saved}
             onClick={onSave}
           >
             {saving ? "Enregistrement..." : saved ? "Liste enregistrée" : "Enregistrer la liste"}

@@ -72,6 +72,7 @@ export type ReadingListWorkspaceTarget = {
   kind: "reading-list";
   items: ReadingListItem[];
   autoStart?: boolean;
+  name?: string;
   savedListId?: string;
   title?: string;
 };

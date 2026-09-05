@@ -32,18 +32,6 @@ const formatSavedListDate = (createdAt: string): string => {
   }).format(date);
 };
 
-const getSavedListWorkspaceTitle = (list: SavedList): string => {
-  const date = new Date(list.createdAt);
-  if (Number.isNaN(date.getTime())) {
-    return "Liste de lecture enregistrée";
-  }
-
-  const formattedDate = new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "medium",
-  }).format(date);
-  return `Liste de lecture - ${formattedDate}`;
-};
-
 type SavedReadingListRowProps = {
   deleting: boolean;
   list: SavedList;
@@ -67,7 +55,7 @@ function SavedReadingListRow({
         type="button"
         className="saved-reading-list-row__open"
         onClick={() => onOpen(list, false)}
-        aria-label={`Ouvrir la liste de lecture de ${mangaCountLabel}`}
+        aria-label={`Ouvrir la liste ${list.name}, ${mangaCountLabel}`}
       >
         <span className="saved-reading-list-row__covers" aria-hidden="true">
           {previewItems.map((item, index) => {
@@ -86,7 +74,7 @@ function SavedReadingListRow({
         </span>
 
         <span className="saved-reading-list-row__details">
-          <strong>Liste de lecture</strong>
+          <strong>{list.name}</strong>
           <span>{mangaCountLabel}</span>
           <time dateTime={list.createdAt}>Enregistrée le {formatSavedListDate(list.createdAt)}</time>
         </span>
@@ -187,7 +175,8 @@ export default function SavedReadingListsView() {
     void openWorkspaceTarget({
       kind: "reading-list",
       items: list.items,
-      title: getSavedListWorkspaceTitle(list),
+      name: list.name,
+      title: list.name,
       autoStart,
       savedListId: list.id,
     }, { activate: true }).then((opened) => {
