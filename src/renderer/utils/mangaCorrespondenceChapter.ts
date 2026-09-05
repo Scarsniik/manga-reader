@@ -71,10 +71,78 @@ export const compareMangaCorrespondenceChapters = (
 ): number => {
   const leftDescriptor = describeMangaCorrespondenceChapter(left);
   const rightDescriptor = describeMangaCorrespondenceChapter(right);
+  if (leftDescriptor.kind === "other" && rightDescriptor.kind === "other") {
+    return 0;
+  }
+
   return CHAPTER_KIND_SORT_ORDER[leftDescriptor.kind] - CHAPTER_KIND_SORT_ORDER[rightDescriptor.kind]
     || leftDescriptor.start - rightDescriptor.start
     || leftDescriptor.end - rightDescriptor.end
     || left.localeCompare(right);
+};
+
+type MangaCorrespondenceChapterGroup<T> = {
+  aliasKeys: Set<string>;
+  chapter: string;
+  entries: Array<{ entry: T; index: number }>;
+};
+
+const normalizeChapterAliasKey = (value: string): string => (
+  value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+);
+
+const getChapterAliasKeys = (value: string): string[] => {
+  const descriptor = describeMangaCorrespondenceChapter(value);
+  if (descriptor.kind !== "other") {
+    return [`structured:${descriptor.value.toLocaleLowerCase()}`];
+  }
+
+  const normalized = normalizeChapterAliasKey(value);
+  return normalized
+    ? [`named:${normalized}`, `named:${normalized.replace(/\s+/g, "")}`]
+    : [];
+};
+
+export const groupMangaCorrespondenceChapters = <T>(entries: Array<{
+  aliases?: string[];
+  chapter: string;
+  entry: T;
+}>): Array<{ chapter: string; entries: T[] }> => {
+  const groups: Array<MangaCorrespondenceChapterGroup<T>> = [];
+
+  entries.forEach(({ aliases = [], chapter, entry }, index) => {
+    const aliasKeys = new Set(
+      [chapter, ...aliases].flatMap(getChapterAliasKeys),
+    );
+    const matchingGroups = groups.filter((group) => (
+      Array.from(aliasKeys).some((key) => group.aliasKeys.has(key))
+    ));
+    if (!matchingGroups.length) {
+      groups.push({ aliasKeys, chapter, entries: [{ entry, index }] });
+      return;
+    }
+
+    const targetGroup = matchingGroups[0];
+    targetGroup.entries.push({ entry, index });
+    aliasKeys.forEach((key) => targetGroup.aliasKeys.add(key));
+    matchingGroups.slice(1).forEach((group) => {
+      group.entries.forEach((groupEntry) => targetGroup.entries.push(groupEntry));
+      group.aliasKeys.forEach((key) => targetGroup.aliasKeys.add(key));
+      groups.splice(groups.indexOf(group), 1);
+    });
+  });
+
+  return groups.map(({ chapter, entries: groupEntries }) => ({
+    chapter,
+    entries: groupEntries
+      .sort((left, right) => left.index - right.index)
+      .map(({ entry }) => entry),
+  }));
 };
 
 export const doMangaCorrespondenceChaptersOverlap = (

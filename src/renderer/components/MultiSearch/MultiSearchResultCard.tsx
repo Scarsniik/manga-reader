@@ -653,6 +653,8 @@ export default function MultiSearchResultCard({
               readingMatches={potentialMatches.readingMatches}
               bookmarkMatches={potentialMatches.bookmarkMatches}
               readingListMatches={potentialMatches.readingListMatches}
+              seriesProgress={potentialMatches.seriesProgress}
+              seriesReadingWarning={potentialMatches.seriesReadingWarning}
               fallbackCover={activeCoverUrl}
               fallbackCoverReferer={coverSource?.result.detailUrl || coverSource?.scraper.baseUrl}
               loading={potentialMatchesLoading}

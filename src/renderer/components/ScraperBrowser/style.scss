@@ -913,6 +913,53 @@
   min-width: 0;
 }
 
+.scraper-browser__series-progress-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  max-width: 100%;
+  padding: 0 10px;
+  border: 1px solid rgba(103, 178, 205, 0.42);
+  border-radius: 8px;
+  background: rgba(25, 59, 75, 0.54);
+  color: #bfe8f6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scraper-browser__potential-matches.is-combined .scraper-browser__series-progress-tag {
+  width: 100%;
+}
+
+.scraper-browser__series-progress-tag svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.scraper-browser__series-progress-tag span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scraper-browser__series-progress-tag strong {
+  margin-left: auto;
+  color: #ecfaff;
+  white-space: nowrap;
+}
+
+.scraper-browser__series-progress-tag.is-warning {
+  border-color: rgba(235, 173, 72, 0.5);
+  background: rgba(79, 54, 20, 0.62);
+  color: #ffe0a3;
+}
+
+.scraper-browser__series-progress-tag.is-warning strong {
+  color: #fff3d2;
+}
+
 .scraper-browser__potential-match {
   position: relative;
   min-width: min(100%, 260px);

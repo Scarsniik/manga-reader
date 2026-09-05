@@ -19,7 +19,7 @@ permet d'afficher ou de masquer indépendamment :
 - les informations générales (scraper, langues, pages et statut) ;
 - le nombre de pages et le statut quand ils sont disponibles ;
 - la description ;
-- les correspondances potentielles avec un manga lu, bookmarké ou présent dans une liste ;
+- les correspondances potentielles avec un manga lu, bookmarké ou présent dans une liste, ainsi que la progression détectée d'une série ;
 - les auteurs ;
 - les tags ;
 - les œuvres sources ;
@@ -76,6 +76,9 @@ Le workspace prend donc en charge la cible `scraper.source` en plus des cibles f
 - Les correspondances probables sont affichées avec les mêmes boutons détaillés que sur la fiche
   classique. Tenter de bookmarker malgré une correspondance ouvre la même confirmation
   `Bookmarker quand même`, avec le détail Lecture/Bookmark/Liste.
+- Quand le parseur de titre détecte une séquence plus avancée que la lecture connue, la review
+  affiche le tag `Série commencée`. Si aucune entrée actuelle ou antérieure n'est terminée,
+  elle affiche `Précédents non lus` et l'ajout du bookmark demande également confirmation.
 - Après la dernière fiche, un résumé de session permet de recommencer ou de revenir à la dernière fiche.
 
 Les auteurs favoris sont signalés en jaune avec une étoile et les tags favoris en rose avec une

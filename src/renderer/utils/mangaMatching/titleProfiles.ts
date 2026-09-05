@@ -1,5 +1,6 @@
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import { stripTitleLanguageMarkers } from "@/renderer/utils/languageDetection";
+import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
 import {
   buildVariantKindSets,
   getLooseRomajiPhoneticKey,
@@ -73,6 +74,7 @@ type TitleAlternativeMergeProfile = {
   variants: string[];
   variantKindSets: Map<string, Set<TitleMergeVariantKind>>;
   sequenceMarkers: Set<string>;
+  sequenceAgnosticVariants: string[];
   fuzzyVariants: string[];
 };
 
@@ -286,13 +288,58 @@ const getTitleSequenceMarkers = (value: string): Set<string> => {
   return markers;
 };
 
-const hasDifferentSequenceMarkerSets = (
+type SequenceMarkerCompatibility = "contained" | "equal" | "incompatible";
+
+const getSequenceMarkerRange = (marker: string): { end: number; start: number } | null => {
+  const numberMatch = marker.match(/^number:(\d+)$/u);
+  if (numberMatch) {
+    const value = Number(numberMatch[1]);
+    return { start: value, end: value };
+  }
+
+  const rangeMatch = marker.match(/^range:(\d+)-(\d+)$/u);
+  if (!rangeMatch) {
+    return null;
+  }
+
+  return {
+    start: Number(rangeMatch[1]),
+    end: Number(rangeMatch[2]),
+  };
+};
+
+const getSequenceMarkerCompatibility = (
   leftMarkers: Set<string>,
   rightMarkers: Set<string>,
-): boolean => (
-  [...leftMarkers].some((marker) => !rightMarkers.has(marker))
-  || [...rightMarkers].some((marker) => !leftMarkers.has(marker))
-);
+): SequenceMarkerCompatibility => {
+  const equal = leftMarkers.size === rightMarkers.size
+    && [...leftMarkers].every((marker) => rightMarkers.has(marker));
+  if (equal) {
+    return "equal";
+  }
+
+  if (leftMarkers.size !== 1 || rightMarkers.size !== 1) {
+    return "incompatible";
+  }
+
+  const [leftMarker] = leftMarkers;
+  const [rightMarker] = rightMarkers;
+  const leftRange = getSequenceMarkerRange(leftMarker);
+  const rightRange = getSequenceMarkerRange(rightMarker);
+  if (!leftRange || !rightRange) {
+    return "incompatible";
+  }
+
+  const leftIsRange = leftRange.start !== leftRange.end;
+  const rightIsRange = rightRange.start !== rightRange.end;
+  const contained = leftIsRange !== rightIsRange && (
+    leftIsRange
+      ? rightRange.start >= leftRange.start && rightRange.end <= leftRange.end
+      : leftRange.start >= rightRange.start && leftRange.end <= rightRange.end
+  );
+
+  return contained ? "contained" : "incompatible";
+};
 
 const normalizeJapaneseRomajiLongVowels = (value: string): string => (
   value
@@ -518,11 +565,22 @@ const buildTitleAlternativeMergeProfile = (
     advancedRomanizedVariants,
   );
   const variants = uniqueValues(variantEntries.map((variant) => variant.value));
+  const sequenceAnalysis = analyzeMangaCorrespondenceTitle(title, undefined);
+  const sequenceAgnosticVariants = sequenceAnalysis.sequenceMarkers.length
+    ? uniqueValues([
+      sequenceAnalysis.title,
+      ...sequenceAnalysis.alternativeTitles,
+    ].flatMap((sequenceTitle) => getMergeTitleVariants(
+      sequenceTitle,
+      (value, kind) => normalizeTitleVariant(value, kind, options),
+    ).map((variant) => variant.value)))
+    : [];
 
   return {
     variants,
     variantKindSets: buildVariantKindSets(variantEntries),
     sequenceMarkers,
+    sequenceAgnosticVariants,
     fuzzyVariants: variants.filter((variant) => (
       isFuzzyTitleCandidate(variant)
       || (
@@ -701,7 +759,11 @@ const doTitleAlternativeProfilesMatch = (
   right: TitleAlternativeMergeProfile,
   allowFuzzyMatch: boolean,
 ): MangaTitleMatchKind | null => {
-  if (hasDifferentSequenceMarkerSets(left.sequenceMarkers, right.sequenceMarkers)) {
+  const sequenceCompatibility = getSequenceMarkerCompatibility(
+    left.sequenceMarkers,
+    right.sequenceMarkers,
+  );
+  if (sequenceCompatibility === "incompatible") {
     return null;
   }
 
@@ -743,6 +805,13 @@ const doTitleAlternativeProfilesMatch = (
 
       return "base";
     }
+  }
+
+  if (
+    sequenceCompatibility === "contained"
+    && left.sequenceAgnosticVariants.some((variant) => right.sequenceAgnosticVariants.includes(variant))
+  ) {
+    return "base";
   }
 
   return null;
@@ -792,6 +861,26 @@ export const getMangaTitleMergeExactKeys = (
   options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
 ): string[] => (
   uniqueValues(getMangaTitleMergeProfile(manga, options).alternatives.flatMap((alternative) => alternative.variants))
+);
+
+export const getMangaTitleMergeSequenceAgnosticKeys = (
+  manga: MatchableManga,
+  options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
+): string[] => (
+  uniqueValues(getMangaTitleMergeProfile(manga, options).alternatives.flatMap((alternative) => (
+    alternative.sequenceAgnosticVariants
+  )))
+);
+
+export const getMangaTitleMergeRangeSequenceAgnosticKeys = (
+  manga: MatchableManga,
+  options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
+): string[] => (
+  uniqueValues(getMangaTitleMergeProfile(manga, options).alternatives.flatMap((alternative) => (
+    [...alternative.sequenceMarkers].some((marker) => marker.startsWith("range:"))
+      ? alternative.sequenceAgnosticVariants
+      : []
+  )))
 );
 
 export const getMangaTitleMergeFuzzyLengths = (

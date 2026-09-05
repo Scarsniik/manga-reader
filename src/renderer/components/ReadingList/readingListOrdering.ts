@@ -4,6 +4,7 @@ import {
   getMangaTitleRomanizationTargets,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
+import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
 import {
   analyzeScraperTitle,
   extractTitleSequenceMarkers,
@@ -29,6 +30,7 @@ type ReadingListSequence = {
   family: ScraperTitleSequenceKind | "generic";
   generic: SequenceValue | null;
   matchTitle: string;
+  named: boolean;
   part: SequenceValue | null;
   volume: SequenceValue | null;
 };
@@ -132,6 +134,7 @@ const buildSequence = (
     family: volume ? "volume" : part ? "part" : "chapter",
     generic: null,
     matchTitle,
+    named: false,
     part,
     volume,
   };
@@ -183,6 +186,7 @@ const extractGenericSequence = (item: ReadingListItem): ReadingListSequence | nu
         family: "generic",
         generic,
         matchTitle: candidate.title.slice(0, genericMatch.index).trim(),
+        named: false,
         part: null,
         volume: null,
       };
@@ -192,11 +196,51 @@ const extractGenericSequence = (item: ReadingListItem): ReadingListSequence | nu
   return null;
 };
 
+const extractCorrespondenceSequence = (
+  item: ReadingListItem,
+  configs: ReadingListTitleAnalysisConfigs,
+): ReadingListSequence | null => {
+  const analysis = analyzeMangaCorrespondenceTitle(
+    item.metadata.title,
+    getItemTitleAnalysisConfig(item, configs),
+  );
+  const isNamedChapter = analysis.chapterDetection?.source === "namedChapter";
+  const isExplicitChapter = analysis.chapterDetection?.source === "explicitChapter";
+  if (!isNamedChapter && !isExplicitChapter) {
+    return null;
+  }
+
+  const matchTitle = [analysis.title, ...analysis.alternativeTitles]
+    .filter(Boolean)
+    .join(" | ");
+  if (!isNamedChapter) {
+    return buildSequence(
+      item,
+      matchTitle,
+      analysis.sequenceMarkers,
+      analysis.authors,
+    );
+  }
+
+  return {
+    authorNames: getItemAuthorNames(item, analysis.authors),
+    chapter: null,
+    family: "chapter",
+    generic: null,
+    matchTitle,
+    named: true,
+    part: null,
+    volume: null,
+  };
+};
+
 const extractReadingListSequence = (
   item: ReadingListItem,
   configs: ReadingListTitleAnalysisConfigs,
 ): ReadingListSequence | null => (
-  extractConfiguredSequence(item, configs) ?? extractGenericSequence(item)
+  extractConfiguredSequence(item, configs)
+  ?? extractCorrespondenceSequence(item, configs)
+  ?? extractGenericSequence(item)
 );
 
 const compareOptionalSequenceValues = (
@@ -215,7 +259,8 @@ const compareOptionalSequenceValues = (
 };
 
 const compareSequences = (left: IndexedReadingListItem, right: IndexedReadingListItem): number => (
-  compareOptionalSequenceValues(left.sequence.volume, right.sequence.volume)
+  Number(left.sequence.named) - Number(right.sequence.named)
+  || compareOptionalSequenceValues(left.sequence.volume, right.sequence.volume)
   || compareOptionalSequenceValues(left.sequence.part, right.sequence.part)
   || compareOptionalSequenceValues(left.sequence.chapter, right.sequence.chapter)
   || compareOptionalSequenceValues(left.sequence.generic, right.sequence.generic)

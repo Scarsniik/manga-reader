@@ -7,7 +7,11 @@ import {
   FileSelectionIcon,
   OpenBookIcon,
 } from "@/renderer/components/icons";
-import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import type {
+  ScraperPotentialMangaMatch,
+  ScraperPotentialSeriesProgress,
+  ScraperPotentialSeriesReadingWarning,
+} from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import {
   buildPotentialMatchEntries,
   type PotentialMatchCategory as MatchCategory,
@@ -26,6 +30,8 @@ type Props = {
   readingMatches: ScraperPotentialMangaMatch[];
   bookmarkMatches: ScraperPotentialMangaMatch[];
   readingListMatches: ScraperPotentialMangaMatch[];
+  seriesProgress?: ScraperPotentialSeriesProgress | null;
+  seriesReadingWarning?: ScraperPotentialSeriesReadingWarning | null;
   fallbackCover?: string;
   fallbackCoverReferer?: string;
   loading?: boolean;
@@ -379,6 +385,8 @@ export default function ScraperPotentialMangaMatches({
   readingMatches,
   bookmarkMatches,
   readingListMatches,
+  seriesProgress = null,
+  seriesReadingWarning = null,
   fallbackCover,
   fallbackCoverReferer,
   loading = false,
@@ -389,9 +397,39 @@ export default function ScraperPotentialMangaMatches({
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: Props) {
-  if (!readingMatches.length && !bookmarkMatches.length && !readingListMatches.length) {
+  if (
+    !readingMatches.length
+    && !bookmarkMatches.length
+    && !readingListMatches.length
+    && !seriesProgress
+    && !seriesReadingWarning
+  ) {
     return null;
   }
+
+  const seriesProgressTag = seriesProgress ? (
+    <div
+      className="scraper-browser__series-progress-tag"
+      title={`${seriesProgress.seriesTitle} : ${seriesProgress.previousSequenceLabel} → ${seriesProgress.currentSequenceLabel}`}
+    >
+      <OpenBookIcon aria-hidden="true" focusable="false" />
+      <span>Série commencée</span>
+      <strong>
+        {seriesProgress.previousSequenceLabel}
+        {seriesProgress.readingStatus === "inProgress" ? " en cours" : " lu"}
+      </strong>
+    </div>
+  ) : null;
+  const seriesReadingWarningTag = seriesReadingWarning ? (
+    <div
+      className="scraper-browser__series-progress-tag is-warning"
+      title={`${seriesReadingWarning.seriesTitle} : aucune lecture terminée antérieure détectée`}
+    >
+      <OpenBookIcon aria-hidden="true" focusable="false" />
+      <span>Précédents non lus</span>
+      <strong>{seriesReadingWarning.sequenceLabel}</strong>
+    </div>
+  ) : null;
 
   if (mode === "combined") {
     const entries = buildPotentialMatchEntries([
@@ -402,6 +440,8 @@ export default function ScraperPotentialMangaMatches({
 
     return (
       <div className="scraper-browser__potential-matches is-combined">
+        {seriesProgressTag}
+        {seriesReadingWarningTag}
         <PotentialMatchNotice
           kind="combined"
           entries={entries}
@@ -420,6 +460,8 @@ export default function ScraperPotentialMangaMatches({
 
   return (
     <div className="scraper-browser__potential-matches">
+      {seriesProgressTag}
+      {seriesReadingWarningTag}
       <PotentialMatchNotice
         kind="reading"
         entries={buildPotentialMatchEntries([{ category: "reading", matches: readingMatches }])}

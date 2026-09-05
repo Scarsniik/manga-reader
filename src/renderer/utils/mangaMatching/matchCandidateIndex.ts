@@ -2,6 +2,8 @@ import {
   getMangaSourceUrlMergeKey,
   getMangaTitleMergeExactKeys,
   getMangaTitleMergeFuzzyLengths,
+  getMangaTitleMergeRangeSequenceAgnosticKeys,
+  getMangaTitleMergeSequenceAgnosticKeys,
   type MangaMergeOptions,
   type MatchableManga,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
@@ -11,6 +13,8 @@ export type MangaMatchCandidateIndex<T extends MatchableManga> = {
   candidateIndexes: Map<T, number>;
   sourceUrlCandidates: Map<string, Set<T>>;
   exactTitleCandidates: Map<string, Set<T>>;
+  sequenceAgnosticTitleCandidates: Map<string, Set<T>>;
+  rangeSequenceAgnosticTitleCandidates: Map<string, Set<T>>;
   fuzzyLengthCandidates: Map<number, Set<T>>;
   options: MangaMergeOptions;
 };
@@ -38,6 +42,8 @@ export const createMangaMatchCandidateIndex = <T extends MatchableManga>(
     candidateIndexes: new Map(),
     sourceUrlCandidates: new Map(),
     exactTitleCandidates: new Map(),
+    sequenceAgnosticTitleCandidates: new Map(),
+    rangeSequenceAgnosticTitleCandidates: new Map(),
     fuzzyLengthCandidates: new Map(),
     options,
   };
@@ -52,6 +58,12 @@ export const createMangaMatchCandidateIndex = <T extends MatchableManga>(
 
     getMangaTitleMergeExactKeys(candidate, options).forEach((titleKey) => {
       addCandidateToIndex(index.exactTitleCandidates, titleKey, candidate);
+    });
+    getMangaTitleMergeSequenceAgnosticKeys(candidate, options).forEach((titleKey) => {
+      addCandidateToIndex(index.sequenceAgnosticTitleCandidates, titleKey, candidate);
+    });
+    getMangaTitleMergeRangeSequenceAgnosticKeys(candidate, options).forEach((titleKey) => {
+      addCandidateToIndex(index.rangeSequenceAgnosticTitleCandidates, titleKey, candidate);
     });
     getMangaTitleMergeFuzzyLengths(candidate, options).forEach((titleLength) => {
       addCandidateToIndex(index.fuzzyLengthCandidates, titleLength, candidate);
@@ -80,6 +92,16 @@ export const collectIndexedMangaMatchCandidates = <T extends MatchableManga>(
 
   getMangaTitleMergeExactKeys(manga, index.options).forEach((titleKey) => {
     addCandidates(candidates, index.exactTitleCandidates.get(titleKey));
+  });
+  const sequenceAgnosticKeys = getMangaTitleMergeSequenceAgnosticKeys(manga, index.options);
+  const rangeSequenceAgnosticKeys = getMangaTitleMergeRangeSequenceAgnosticKeys(manga, index.options);
+  sequenceAgnosticKeys.forEach((titleKey) => {
+    addCandidates(
+      candidates,
+      rangeSequenceAgnosticKeys.length
+        ? index.sequenceAgnosticTitleCandidates.get(titleKey)
+        : index.rangeSequenceAgnosticTitleCandidates.get(titleKey),
+    );
   });
   getMangaTitleMergeFuzzyLengths(manga, index.options).forEach((titleLength) => {
     addCandidates(candidates, index.fuzzyLengthCandidates.get(titleLength - 1));

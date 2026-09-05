@@ -29,6 +29,7 @@ const DETECTION_LABELS: Record<MangaCorrespondenceChapterDetection["source"], st
   explicitVolume: "marqueur de volume explicite",
   compoundTitle: "premier numéro d’un titre à double numérotation",
   bareTitleNumber: "numéro placé dans le titre",
+  namedChapter: "chapitre nommé dans le titre",
   releaseDescriptor: "descripteur de publication",
 };
 

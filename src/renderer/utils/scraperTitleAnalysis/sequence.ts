@@ -73,7 +73,11 @@ export const extractTitleSequenceMarkers = (
   for (let guard = 0; guard < 6; guard += 1) {
     const matchedPattern = SEQUENCE_PATTERNS
       .map((entry) => ({ ...entry, match: remainingTitle.match(entry.pattern) }))
-      .find((entry) => Boolean(entry.match));
+      .filter((entry) => Boolean(entry.match))
+      .sort((left, right) => (
+        (left.match?.index ?? Number.POSITIVE_INFINITY)
+        - (right.match?.index ?? Number.POSITIVE_INFINITY)
+      ))[0];
     const match = matchedPattern?.match;
 
     if (!matchedPattern || !match?.groups) {

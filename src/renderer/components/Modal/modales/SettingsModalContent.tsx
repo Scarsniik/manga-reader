@@ -313,7 +313,7 @@ export default function SettingsModalContent() {
         { name: 'quickReviewShowDescription', label: 'Afficher la description', type: 'checkbox' },
         {
           name: 'quickReviewShowPotentialMatches',
-          label: 'Afficher les correspondances potentielles (lu, bookmark, liste)',
+          label: 'Afficher les correspondances potentielles (lu, bookmark, liste, série)',
           type: 'checkbox',
         },
         { name: 'quickReviewShowAuthors', label: 'Afficher les auteurs', type: 'checkbox' },
@@ -353,7 +353,7 @@ export default function SettingsModalContent() {
         },
         {
           name: 'scraperCardPotentialMatchesEnabled',
-          label: 'Signaler les cards potentiellement déjà bookmarkées, lues ou présentes dans une liste',
+          label: 'Signaler les doublons et la progression des séries',
           type: 'checkbox',
         },
         {

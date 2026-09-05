@@ -1,6 +1,9 @@
 import React from "react";
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
-import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import type {
+  ScraperPotentialMangaMatch,
+  ScraperPotentialSeriesReadingWarning,
+} from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import { useModal } from "@/renderer/hooks/useModal";
 
 const POTENTIAL_MATCH_WARNING_DETAIL_LIMIT = 4;
@@ -9,6 +12,7 @@ type MatchGroups = {
   readingMatches: ScraperPotentialMangaMatch[];
   bookmarkMatches: ScraperPotentialMangaMatch[];
   readingListMatches: ScraperPotentialMangaMatch[];
+  seriesReadingWarning?: ScraperPotentialSeriesReadingWarning | null;
 };
 
 const getMatchLabel = (match: ScraperPotentialMangaMatch): string => (
@@ -19,6 +23,7 @@ const buildWarningDetails = ({
   readingMatches,
   bookmarkMatches,
   readingListMatches,
+  seriesReadingWarning,
 }: MatchGroups): React.ReactNode => {
   const matches = [
     ...readingMatches.map((match) => ({ label: getMatchLabel(match), kind: "Lecture" })),
@@ -30,15 +35,27 @@ const buildWarningDetails = ({
 
   return (
     <>
-      <ul>
-        {visibleMatches.map((match) => (
-          <li key={`${match.kind}:${match.label}`}>
-            <strong>{match.kind}</strong>
-            {" - "}
-            {match.label}
-          </li>
-        ))}
-      </ul>
+      {seriesReadingWarning ? (
+        <p>
+          <strong>Série</strong>
+          {" - "}
+          Cette fiche semble être le {seriesReadingWarning.sequenceLabel} de
+          {" "}
+          <strong>{seriesReadingWarning.seriesTitle}</strong>, mais aucune lecture terminée antérieure
+          n&apos;a été détectée.
+        </p>
+      ) : null}
+      {visibleMatches.length ? (
+        <ul>
+          {visibleMatches.map((match) => (
+            <li key={`${match.kind}:${match.label}`}>
+              <strong>{match.kind}</strong>
+              {" - "}
+              {match.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {hiddenCount > 0 ? (
         <p>{hiddenCount} autre{hiddenCount > 1 ? "s" : ""} correspondance{hiddenCount > 1 ? "s" : ""}.</p>
       ) : null}
@@ -50,10 +67,16 @@ export default function usePotentialMangaMatchBookmarkGuard(groups: MatchGroups)
   const { openModal } = useModal();
   const matchCount = groups.readingMatches.length
     + groups.bookmarkMatches.length
-    + groups.readingListMatches.length;
+    + groups.readingListMatches.length
+    + (groups.seriesReadingWarning ? 1 : 0);
   const warningDetails = React.useMemo(
     () => buildWarningDetails(groups),
-    [groups.bookmarkMatches, groups.readingListMatches, groups.readingMatches],
+    [
+      groups.bookmarkMatches,
+      groups.readingListMatches,
+      groups.readingMatches,
+      groups.seriesReadingWarning,
+    ],
   );
   const confirmBookmark = React.useCallback((action: () => void) => {
     if (!matchCount) {
@@ -65,9 +88,9 @@ export default function usePotentialMangaMatchBookmarkGuard(groups: MatchGroups)
       title: "Correspondance potentielle",
       message: (
         <>
-          Attention, cette fiche ressemble a un manga deja lu, en cours, bookmarke ou present dans une liste de lecture.
+          Attention, cette fiche ressemble à un manga déjà suivi ou semble appartenir à une série commencée plus loin.
           {" "}
-          Verifie la correspondance avant de continuer.
+          Vérifie la correspondance avant de continuer.
         </>
       ),
       details: warningDetails,

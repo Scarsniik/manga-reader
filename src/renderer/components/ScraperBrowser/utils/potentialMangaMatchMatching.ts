@@ -1,9 +1,20 @@
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import {
   getMangaMergeMatchKind,
+  getMangaTitleMergeMatchKind,
   type MatchableManga,
   type MangaMergeOptions,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
+import type { ScraperTitleAnalysisConfigs } from "@/renderer/utils/scraperTitleAnalysisConfigs";
+import {
+  analyzeScraperSeriesSequence,
+  compareScraperSeriesSequenceProgress,
+  formatScraperSeriesSequence,
+  isScraperSeriesSequenceAfterFirst,
+  isScraperSeriesSequenceEarlier,
+  type ScraperSeriesSequence,
+  type ScraperSeriesSequenceInput,
+} from "@/renderer/utils/scraperSeriesSequence";
 import {
   collectIndexedMangaMatchCandidates,
   createMangaMatchCandidateIndex,
@@ -12,11 +23,17 @@ import {
 import type {
   ScraperPotentialMangaMatch,
   ScraperPotentialReadingStatus,
+  ScraperPotentialSeriesProgress,
+  ScraperPotentialSeriesReadingWarning,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 
 const potentialMatchCandidateIndexCache = new WeakMap<
   ScraperPotentialMangaMatch[],
   Map<string, MangaMatchCandidateIndex<ScraperPotentialMangaMatch>>
+>();
+const potentialSeriesSequenceCache = new WeakMap<
+  ScraperPotentialMangaMatch,
+  WeakMap<object, ScraperSeriesSequence | null>
 >();
 
 const getCandidateIndex = (
@@ -124,3 +141,105 @@ export const matchPotentialMangaCandidates = (
       .filter((candidate) => Boolean(candidate.matchKind)),
   ))
 );
+
+const buildSeriesMatchable = (
+  input: ScraperSeriesSequenceInput,
+  sequence: ScraperSeriesSequence,
+): MatchableManga => ({
+  title: sequence.matchTitle,
+  authorNames: sequence.authorNames,
+  advancedRomanizedAuthorNameVariants: input.advancedRomanizedAuthorNameVariants,
+  advancedRomanizedContextualAuthorNameVariants: input.advancedRomanizedContextualAuthorNameVariants,
+});
+
+const getCandidateSeriesSequence = (
+  candidate: ScraperPotentialMangaMatch,
+  configsByScraperId: ScraperTitleAnalysisConfigs,
+): ScraperSeriesSequence | null => {
+  const configKey = configsByScraperId as object;
+  const cachedByConfig = potentialSeriesSequenceCache.get(candidate);
+  if (cachedByConfig?.has(configKey)) {
+    return cachedByConfig.get(configKey) ?? null;
+  }
+
+  const sequence = analyzeScraperSeriesSequence(candidate, configsByScraperId);
+  if (cachedByConfig) {
+    cachedByConfig.set(configKey, sequence);
+  } else {
+    potentialSeriesSequenceCache.set(candidate, new WeakMap([[configKey, sequence]]));
+  }
+  return sequence;
+};
+
+export type PotentialSeriesReadingState = {
+  seriesProgress: ScraperPotentialSeriesProgress | null;
+  seriesReadingWarning: ScraperPotentialSeriesReadingWarning | null;
+};
+
+export const getPotentialSeriesReadingState = (
+  current: ScraperSeriesSequenceInput,
+  readingCandidates: ScraperPotentialMangaMatch[],
+  options: MangaMergeOptions,
+  configsByScraperId: ScraperTitleAnalysisConfigs = new Map(),
+  currentReadingMatches: ScraperPotentialMangaMatch[] = [],
+): PotentialSeriesReadingState => {
+  const currentSequence = analyzeScraperSeriesSequence(current, configsByScraperId);
+  if (!currentSequence || !isScraperSeriesSequenceAfterFirst(currentSequence)) {
+    return {
+      seriesProgress: null,
+      seriesReadingWarning: null,
+    };
+  }
+
+  const currentSeriesMatchable = buildSeriesMatchable(current, currentSequence);
+  const earlierReadings = readingCandidates.flatMap((candidate) => {
+    if (!candidate.readingStatus) {
+      return [];
+    }
+    const candidateSequence = getCandidateSeriesSequence(candidate, configsByScraperId);
+    if (
+      !candidateSequence
+      || candidateSequence.family !== currentSequence.family
+      || !isScraperSeriesSequenceEarlier(candidateSequence, currentSequence)
+      || !getMangaTitleMergeMatchKind(
+        currentSeriesMatchable,
+        buildSeriesMatchable(candidate, candidateSequence),
+        options,
+      )
+    ) {
+      return [];
+    }
+
+    return [{ candidate, sequence: candidateSequence }];
+  });
+  const latestEarlierReading = [...earlierReadings].sort((left, right) => (
+    compareScraperSeriesSequenceProgress(right.sequence, left.sequence)
+    || getReadingStatusRank(right.candidate.readingStatus)
+      - getReadingStatusRank(left.candidate.readingStatus)
+    || compareDatesDescending(left.candidate.updatedAt, right.candidate.updatedAt)
+  ))[0] ?? null;
+  const hasCurrentCompletedReading = currentReadingMatches.some((candidate) => (
+    candidate.readingStatus === "read"
+  ));
+  const hasCompletedPreviousReading = earlierReadings.some(({ candidate }) => (
+    candidate.readingStatus === "read"
+  ));
+  const seriesProgress = latestEarlierReading
+    ? {
+      currentSequenceLabel: formatScraperSeriesSequence(currentSequence),
+      previousSequenceLabel: formatScraperSeriesSequence(latestEarlierReading.sequence, "end"),
+      readingStatus: latestEarlierReading.candidate.readingStatus as ScraperPotentialReadingStatus,
+      seriesTitle: currentSequence.seriesTitle,
+    }
+    : null;
+
+  return {
+    seriesProgress,
+    seriesReadingWarning: hasCurrentCompletedReading || hasCompletedPreviousReading
+      ? null
+      : {
+        sequenceLabel: formatScraperSeriesSequence(currentSequence),
+        seriesTitle: currentSequence.seriesTitle,
+      },
+  };
+};

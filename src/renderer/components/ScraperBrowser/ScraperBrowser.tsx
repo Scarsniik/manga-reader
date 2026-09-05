@@ -517,22 +517,26 @@ export default function ScraperBrowser({
   const potentialMatchMergeOptions = useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
+  const potentialMatchChecksEnabled = expensiveDetailsChecksEnabled
+    && params?.scraperCardPotentialMatchesEnabled !== false;
   const potentialMatchCandidates = usePotentialMangaMatchCandidates({
     scraper,
     libraryMangas,
-    enabled: expensiveDetailsChecksEnabled,
+    enabled: potentialMatchChecksEnabled,
   });
   const {
     readingMatches: potentialReadingMatches,
     bookmarkMatches: potentialBookmarkMatches,
     readingListMatches: potentialReadingListMatches,
+    seriesProgress: potentialSeriesProgress,
+    seriesReadingWarning: potentialSeriesReadingWarning,
     loading: loadingPotentialMatches,
   } = useScraperPotentialMangaMatches({
     scraperId: scraper.id,
     detailsResult,
     mergeOptions: potentialMatchMergeOptions,
     candidates: potentialMatchCandidates,
-    enabled: expensiveDetailsChecksEnabled,
+    enabled: potentialMatchChecksEnabled,
   });
 
   const clearFeedback = useCallback(() => {
@@ -1214,7 +1218,7 @@ export default function ScraperBrowser({
     inputs: cardPotentialMatchInputs,
     candidates: potentialMatchCandidates,
     mergeOptions: potentialMatchMergeOptions,
-    enabled: expensiveDetailsChecksEnabled && params?.scraperCardPotentialMatchesEnabled !== false,
+    enabled: potentialMatchChecksEnabled,
   });
   const visibleSearchResultHistoryIds = useMemo(
     () => visibleSearchResults
@@ -2805,6 +2809,8 @@ export default function ScraperBrowser({
         potentialReadingMatches={potentialReadingMatches}
         potentialBookmarkMatches={potentialBookmarkMatches}
         potentialReadingListMatches={potentialReadingListMatches}
+        potentialSeriesProgress={potentialSeriesProgress}
+        potentialSeriesReadingWarning={potentialSeriesReadingWarning}
         loadingPotentialMatches={loadingPotentialMatches}
         multiSearchTitle={titleMultiSearchQuery}
         getLinkedMangaForSource={getLinkedMangaForSource}

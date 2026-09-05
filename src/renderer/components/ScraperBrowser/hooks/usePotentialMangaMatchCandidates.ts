@@ -17,6 +17,10 @@ import {
   EMPTY_HISTORY_RECORDS,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchCandidates";
 import type { ScraperPotentialMangaMatch } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
+import {
+  buildScraperTitleAnalysisConfigs,
+  type ScraperTitleAnalysisConfigs,
+} from "@/renderer/utils/scraperTitleAnalysisConfigs";
 
 type SharedPotentialMatchRecordsSnapshot = {
   historyRecords: AppHistoryRecords;
@@ -30,6 +34,7 @@ export type PotentialMangaMatchCandidateCollections = {
   readingCandidates: ScraperPotentialMangaMatch[];
   bookmarkCandidates: ScraperPotentialMangaMatch[];
   readingListCandidates: ScraperPotentialMangaMatch[];
+  titleAnalysisConfigs: ScraperTitleAnalysisConfigs;
   loading: boolean;
 };
 
@@ -274,6 +279,10 @@ export default function usePotentialMangaMatchCandidates({
     (sharedRecords.scrapers.length ? sharedRecords.scrapers : scraper ? [scraper] : [])
       .map((candidate) => [candidate.id, candidate]),
   ), [scraper, sharedRecords.scrapers]);
+  const titleAnalysisConfigs = useMemo(
+    () => buildScraperTitleAnalysisConfigs(Array.from(scrapersById.values())),
+    [scrapersById],
+  );
   const viewHistoryReadRevision = useMemo(
     () => getPotentialMatchReadHistoryRevision(viewHistoryState.records),
     [viewHistoryState.records],
@@ -318,6 +327,7 @@ export default function usePotentialMangaMatchCandidates({
     readingCandidates,
     bookmarkCandidates,
     readingListCandidates,
+    titleAnalysisConfigs,
     loading: active && (
       sharedRecords.loading
       || bookmarkState.loading

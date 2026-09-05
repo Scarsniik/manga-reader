@@ -151,6 +151,38 @@ test("auto sort supports roman numerals and ranges", () => {
   assert.deepEqual(getItemIds(autoSortReadingListItems(items)), ["roman", "range"]);
 });
 
+test("auto sort places named chapters after numbered chapters", () => {
+  const items = [
+    createItem(
+      "named-student",
+      "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu ~Beit Saki no JK Hen~ | How I made sex friends ~Students after work~ [English] {KittyKatMan}",
+      "e-hentai.org",
+    ),
+    createItem(
+      "chapter-2",
+      "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu Ch. 2 [English]",
+      "e-hentai.org",
+    ),
+    createItem(
+      "named-neighbor",
+      "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu ~Otonari no Hitozuma Hen~ | How I Made Sex Friends ~The Neighbor's Wife~ [English] {KittyKatMan}",
+      "e-hentai.org",
+    ),
+    createItem(
+      "chapter-1",
+      "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu Ch. 1 [English]",
+      "e-hentai.org",
+    ),
+  ];
+
+  assert.deepEqual(getItemIds(autoSortReadingListItems(items)), [
+    "chapter-1",
+    "chapter-2",
+    "named-student",
+    "named-neighbor",
+  ]);
+});
+
 test("auto sort does not mix chapter-only and volume-only sequences", () => {
   const items = [
     createItem("chapter-3", "Mixed Chapter 3"),

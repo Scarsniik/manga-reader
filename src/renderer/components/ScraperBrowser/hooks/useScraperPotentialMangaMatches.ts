@@ -20,6 +20,8 @@ const EMPTY_MATCH_STATE: ScraperPotentialMangaMatchState = {
   readingMatches: [],
   bookmarkMatches: [],
   readingListMatches: [],
+  seriesProgress: null,
+  seriesReadingWarning: null,
   loading: false,
 };
 
@@ -75,6 +77,8 @@ export default function useScraperPotentialMangaMatches({
     readingMatches: result?.readingMatches ?? [],
     bookmarkMatches: result?.bookmarkMatches ?? [],
     readingListMatches: result?.readingListMatches ?? [],
+    seriesProgress: result?.seriesProgress ?? null,
+    seriesReadingWarning: result?.seriesReadingWarning ?? null,
     loading: matches.loading || candidates.loading,
   };
 }

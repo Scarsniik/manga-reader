@@ -3,9 +3,13 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import type { ScraperSearchResultItem } from "@/shared/scraper";
 import type { MangaMergeOptions, MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
+import type { ScraperTitleAnalysisConfigs } from "@/renderer/utils/scraperTitleAnalysisConfigs";
 import { enrichMatchableMangasWithJapaneseRomanization } from "@/renderer/utils/mangaMatching/advancedRomanization";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
-import { matchPotentialMangaCandidates } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchMatching";
+import {
+  getPotentialSeriesReadingState,
+  matchPotentialMangaCandidates,
+} from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchMatching";
 import type {
   ScraperPotentialMangaMatch,
   ScraperPotentialMangaMatchState,
@@ -22,6 +26,7 @@ export type ScraperCardPotentialMatchInput = {
     sourceUrl?: string | null;
   }>;
   authorNames?: string[];
+  chapterLabel?: string | null;
 };
 
 export type ScraperCardPotentialMatchResult = Omit<ScraperPotentialMangaMatchState, "loading">;
@@ -111,6 +116,7 @@ export const getScraperCardPotentialMatchInputSignature = (
   input.scraperId.trim(),
   normalizeScraperViewHistorySourceUrl(input.sourceUrl),
   input.title.trim().replace(/\s+/g, " ").toLowerCase(),
+  String(input.chapterLabel ?? "").trim().replace(/\s+/g, " ").toLowerCase(),
   uniqueValues(input.authorNames ?? [])
     .map((authorName) => authorName.trim().replace(/\s+/g, " ").toLowerCase())
     .sort(),
@@ -171,13 +177,30 @@ export const matchScraperCardPotentialMatchInput = (
   bookmarkCandidates: ScraperPotentialMangaMatch[],
   readingListCandidates: ScraperPotentialMangaMatch[],
   mergeOptions: MangaMergeOptions,
-): ScraperCardPotentialMatchResult => ({
-  readingMatches: matchPotentialMangaCandidates(current, readingCandidates, mergeOptions)
-    .filter((match) => !isCurrentSourceMatch(match, input)),
-  bookmarkMatches: matchPotentialMangaCandidates(current, bookmarkCandidates, mergeOptions)
-    .filter((match) => !isCurrentSourceMatch(match, input)),
-  readingListMatches: matchPotentialMangaCandidates(current, readingListCandidates, mergeOptions),
-});
+  titleAnalysisConfigs: ScraperTitleAnalysisConfigs = new Map(),
+): ScraperCardPotentialMatchResult => {
+  const allReadingMatches = matchPotentialMangaCandidates(current, readingCandidates, mergeOptions);
+  const seriesReadingState = getPotentialSeriesReadingState(
+    {
+      ...current,
+      scraperId: input.scraperId,
+      chapterLabel: input.chapterLabel,
+    },
+    readingCandidates,
+    mergeOptions,
+    titleAnalysisConfigs,
+    allReadingMatches,
+  );
+
+  return {
+    readingMatches: allReadingMatches
+      .filter((match) => !isCurrentSourceMatch(match, input)),
+    bookmarkMatches: matchPotentialMangaCandidates(current, bookmarkCandidates, mergeOptions)
+      .filter((match) => !isCurrentSourceMatch(match, input)),
+    readingListMatches: matchPotentialMangaCandidates(current, readingListCandidates, mergeOptions),
+    ...seriesReadingState,
+  };
+};
 
 const yieldToRenderer = (): Promise<void> => new Promise((resolve) => {
   if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
@@ -195,6 +218,7 @@ const buildMatchesByKeyIncrementally = async (
   bookmarkCandidates: ScraperPotentialMangaMatch[],
   readingListCandidates: ScraperPotentialMangaMatch[],
   mergeOptions: MangaMergeOptions,
+  titleAnalysisConfigs: ScraperTitleAnalysisConfigs,
 ): Promise<Map<string, ScraperCardPotentialMatchResult>> => {
   const matchesByKey = new Map<string, ScraperCardPotentialMatchResult>();
   await yieldToRenderer();
@@ -207,6 +231,7 @@ const buildMatchesByKeyIncrementally = async (
       bookmarkCandidates,
       readingListCandidates,
       mergeOptions,
+      titleAnalysisConfigs,
     ));
 
     if ((index + 1) % MATCHING_CHUNK_SIZE === 0) {
@@ -238,7 +263,7 @@ type PreparedInput = {
 };
 
 type MatchCacheEntry = {
-  phase: "standard" | "enriched";
+  phase: "enriched" | "stale" | "standard";
   result: ScraperCardPotentialMatchResult;
   signature: string;
 };
@@ -249,6 +274,7 @@ type MatchCacheRevision = {
   entries: Map<string, MatchCacheEntry>;
   readingCandidates: ScraperPotentialMangaMatch[];
   readingListCandidates: ScraperPotentialMangaMatch[];
+  titleAnalysisConfigs: ScraperTitleAnalysisConfigs;
 };
 
 type EnrichedCandidateCollections = {
@@ -273,6 +299,7 @@ const hasSameMatchCacheRevision = (
   && revision.bookmarkCandidates === candidates.bookmarkCandidates
   && revision.readingCandidates === candidates.readingCandidates
   && revision.readingListCandidates === candidates.readingListCandidates
+  && revision.titleAnalysisConfigs === candidates.titleAnalysisConfigs
   && revision.enableRomajiPhoneticMerge === mergeOptions.enableRomajiPhoneticMerge
 );
 
@@ -288,6 +315,28 @@ const buildMatchesFromCache = (
     }
   });
   return matchesByKey;
+};
+
+const carryForwardMatchCacheEntries = (
+  previousRevision: MatchCacheRevision | null,
+  preparedInputs: PreparedInput[],
+): Map<string, MatchCacheEntry> => {
+  const entries = new Map<string, MatchCacheEntry>();
+  if (!previousRevision) {
+    return entries;
+  }
+
+  // Keep stable badges visible while changed candidate collections are rechecked.
+  preparedInputs.forEach(({ input, signature }) => {
+    const previousEntry = previousRevision.entries.get(input.key);
+    if (previousEntry?.signature === signature) {
+      entries.set(input.key, {
+        ...previousEntry,
+        phase: "stale",
+      });
+    }
+  });
+  return entries;
 };
 
 const haveSameMatches = (
@@ -388,25 +437,36 @@ export default function useScraperCardPotentialMatches({
     }
 
     if (!hasSameMatchCacheRevision(matchCacheRef.current, candidates, mergeOptions)) {
+      const previousRevision = matchCacheRef.current;
       matchCacheRef.current = {
         bookmarkCandidates: candidates.bookmarkCandidates,
         enableRomajiPhoneticMerge: mergeOptions.enableRomajiPhoneticMerge,
-        entries: new Map(),
+        entries: carryForwardMatchCacheEntries(previousRevision, preparedInputs),
         readingCandidates: candidates.readingCandidates,
         readingListCandidates: candidates.readingListCandidates,
+        titleAnalysisConfigs: candidates.titleAnalysisConfigs,
       };
     }
     const revision = matchCacheRef.current;
+    if (candidates.loading) {
+      updateStateIfChanged(setState, {
+        matchesByKey: buildMatchesFromCache(preparedInputs, revision),
+        loading: true,
+        loadingKeys: new Set(preparedInputs.map(({ input }) => input.key)),
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const inputsNeedingStandardPass = preparedInputs.filter(({ input, signature }) => {
       const cached = revision.entries.get(input.key);
-      return !cached || cached.signature !== signature;
+      return !cached || cached.signature !== signature || cached.phase === "stale";
     });
-    const inputsNeedingEnrichedPass = candidates.loading
-      ? []
-      : preparedInputs.filter(({ input, signature }) => {
-        const cached = revision.entries.get(input.key);
-        return !cached || cached.signature !== signature || cached.phase !== "enriched";
-      });
+    const inputsNeedingEnrichedPass = preparedInputs.filter(({ input, signature }) => {
+      const cached = revision.entries.get(input.key);
+      return !cached || cached.signature !== signature || cached.phase !== "enriched";
+    });
     const loadingKeys = new Set([
       ...inputsNeedingStandardPass,
       ...inputsNeedingEnrichedPass,
@@ -438,6 +498,7 @@ export default function useScraperCardPotentialMatches({
           candidates.bookmarkCandidates,
           candidates.readingListCandidates,
           mergeOptions,
+          candidates.titleAnalysisConfigs,
         );
         if (cancelled || matchCacheRef.current !== revision) {
           return;
@@ -454,12 +515,12 @@ export default function useScraperCardPotentialMatches({
         });
         updateStateIfChanged(setState, {
           matchesByKey: buildMatchesFromCache(preparedInputs, revision),
-          loading: !candidates.loading,
-          loadingKeys: candidates.loading ? new Set() : loadingKeys,
+          loading: true,
+          loadingKeys,
         });
       }
 
-      if (candidates.loading || cancelled) {
+      if (cancelled) {
         return;
       }
 
@@ -488,6 +549,7 @@ export default function useScraperCardPotentialMatches({
         enrichedCandidates.bookmarkCandidates,
         enrichedCandidates.readingListCandidates,
         mergeOptions,
+        candidates.titleAnalysisConfigs,
       );
       if (cancelled || matchCacheRef.current !== revision) {
         return;
@@ -531,6 +593,7 @@ export default function useScraperCardPotentialMatches({
     candidates.loading,
     candidates.readingCandidates,
     candidates.readingListCandidates,
+    candidates.titleAnalysisConfigs,
     enabled,
     mergeOptions.enableRomajiPhoneticMerge,
     preparedInputs,

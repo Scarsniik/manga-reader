@@ -15,6 +15,7 @@ const source = `
   export { inferMangaCorrespondenceFirstChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { resolveMangaCorrespondenceMatchChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { compareMangaCorrespondenceChapters } from "@/renderer/utils/mangaCorrespondenceChapter";
+  export { groupMangaCorrespondenceChapters } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { describeMangaCorrespondenceChapter } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { doMangaCorrespondenceChaptersOverlap } from "@/renderer/utils/mangaCorrespondenceChapter";
   export { formatMangaCorrespondenceChapterLabel } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -91,6 +92,7 @@ const {
   inferMangaCorrespondenceFirstChapter,
   resolveMangaCorrespondenceMatchChapter,
   compareMangaCorrespondenceChapters,
+  groupMangaCorrespondenceChapters,
   describeMangaCorrespondenceChapter,
   doMangaCorrespondenceChaptersOverlap,
   formatMangaCorrespondenceChapterLabel,
@@ -701,21 +703,81 @@ test("correspondence removes hyphen-wrapped subtitles without confusing chapter 
   assert.deepEqual(numbered.alternativeTitles, ["Translated Series"]);
   assert.equal(numbered.chapter, "3");
   assert.equal(firstChapter.title, "Example Series");
-  assert.equal(firstChapter.chapter, undefined);
-  assert.equal(inferMangaCorrespondenceFirstChapter(firstChapter, ["Example Series"]), "1");
+  assert.equal(firstChapter.chapter, "The First Encounter");
+  assert.equal(firstChapter.chapterDetection?.source, "namedChapter");
+  assert.equal(inferMangaCorrespondenceFirstChapter(firstChapter, ["Example Series"]), undefined);
   assert.equal(compactRange.chapter, "1-6");
   assert.equal(spacedRange.chapter, "1-6");
 });
 
-test("correspondence infers the first chapter after removing an unnumbered subtitle", () => {
+test("correspondence keeps an unnumbered subtitle as a named chapter", () => {
   const result = analyzeMangaCorrespondenceTitle(
     "[Example Author] Example Series ~The Beginning~ [English]",
     null,
   );
 
   assert.equal(result.title, "Example Series");
-  assert.equal(result.chapter, undefined);
-  assert.equal(inferMangaCorrespondenceFirstChapter(result, ["Example Series"]), "1");
+  assert.equal(result.chapter, "The Beginning");
+  assert.equal(result.chapterDetection?.source, "namedChapter");
+  assert.equal(inferMangaCorrespondenceFirstChapter(result, ["Example Series"]), undefined);
+});
+
+test("correspondence extracts named chapters from bilingual scraper titles", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    [
+      "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu ~Beit Saki no JK Hen~",
+      "| How I made sex friends ~Students after work~ [English] {KittyKatMan}",
+    ].join(" "),
+    null,
+  );
+
+  assert.equal(result.title, "Boku ni SeFri ga Dekita Riyuu");
+  assert.deepEqual(result.alternativeTitles, ["How I made sex friends"]);
+  assert.equal(result.chapter, "Beit Saki no JK Hen");
+  assert.deepEqual(result.namedChapterAliases, [
+    "Beit Saki no JK Hen",
+    "Students after work",
+  ]);
+  assert.equal(result.chapterDetection?.source, "namedChapter");
+});
+
+test("bilingual named chapters bridge translated correspondence groups", () => {
+  const groups = groupMangaCorrespondenceChapters([
+    { chapter: "Beit Saki no JK Hen", entry: "student-romaji" },
+    { chapter: "Students After Work", entry: "student-english" },
+    { chapter: "Otonari no Hitozuma Hen", entry: "neighbor-romaji" },
+    { chapter: "The Neighbor's Wife", entry: "neighbor-english" },
+    { chapter: "Anzangata Oshiri no Hitozuma Hen", entry: "married-romaji" },
+    { chapter: "The Married Woman with Childbearing Hips", entry: "married-english" },
+    {
+      aliases: ["Beit Saki no JK Hen", "Students after work"],
+      chapter: "Beit Saki no JK Hen",
+      entry: "student-bilingual",
+    },
+    {
+      aliases: ["Otonari no Hitozuma Hen", "The Neighbor's Wife"],
+      chapter: "Otonari no Hitozuma Hen",
+      entry: "neighbor-bilingual",
+    },
+    {
+      aliases: [
+        "Anzangata Oshiri no Hitozuma Hen",
+        "The Married Woman with Child-Bearing Hips",
+      ],
+      chapter: "Anzangata Oshiri no Hitozuma Hen",
+      entry: "married-bilingual",
+    },
+    { chapter: "1.1", entry: "decimal" },
+    { chapter: "11", entry: "integer" },
+  ]);
+
+  assert.deepEqual(groups.map(({ entries }) => entries), [
+    ["student-romaji", "student-english", "student-bilingual"],
+    ["neighbor-romaji", "neighbor-english", "neighbor-bilingual"],
+    ["married-romaji", "married-english", "married-bilingual"],
+    ["decimal"],
+    ["integer"],
+  ]);
 });
 
 test("correspondence recognizes generic sequence labels followed by subtitles", () => {
@@ -863,6 +925,10 @@ test("chapter ranges and compilations have explicit labels and stable ordering",
     ["Compilation 2", "1-6", "3", "1"].sort(compareMangaCorrespondenceChapters),
     ["1", "3", "1-6", "Compilation 2"],
   );
+  assert.deepEqual(
+    ["After B", "2", "After A", "1"].sort(compareMangaCorrespondenceChapters),
+    ["1", "2", "After B", "After A"],
+  );
   assert.equal(doMangaCorrespondenceChaptersOverlap("5", "1-6"), true);
   assert.equal(doMangaCorrespondenceChaptersOverlap("7", "1-6"), false);
   assert.equal(doMangaCorrespondenceChaptersOverlap("2", "Compilation 2"), false);
@@ -1006,6 +1072,8 @@ test("multi-search compares structured sequence and edition markers", () => {
   assert.equal(matchKind("Series Part 2", "Series #2"), "base");
   assert.equal(matchKind("Series Part II", "Series #2"), "base");
   assert.equal(matchKind("Series Vol. 1-2", "Series 1–2"), "base");
+  assert.equal(matchKind("Series Chapter 1-8", "Series Chapter 3"), "base");
+  assert.equal(matchKind("Series Chapter 1-8", "Series Chapter 9"), null);
   assert.equal(matchKind("Series (Zenpen)", "Series (前編)"), "base");
   assert.equal(matchKind("Series Part 2", "Series Part 3"), null);
   assert.equal(matchKind("Series (Zenpen)", "Series (Kouhen)"), null);

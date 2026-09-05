@@ -113,3 +113,19 @@ test("the candidate index avoids exhaustive comparisons for large unrelated coll
   assert.equal(indexed.matches.size, 1);
   assert.ok(indexed.comparisons < exhaustiveComparisonCount * 0.01);
 });
+
+test("the candidate index includes chapters contained in a saved range", () => {
+  const records = [
+    { title: "Shared Series Chapter 1-8", authorNames: ["Known Author"] },
+    { title: "Shared Series Chapter 3", authorNames: ["Known Author"] },
+    { title: "Shared Series Chapter 9", authorNames: ["Known Author"] },
+  ];
+  const indexed = findIndexedMatches(records);
+
+  assert.deepEqual(indexed.matches, new Set([getPairKey(0, 1)]));
+  assert.equal(
+    getMangaMergeMatchKind(records[0], records[1], OPTIONS),
+    "base",
+  );
+  assert.equal(getMangaMergeMatchKind(records[0], records[2], OPTIONS), null);
+});

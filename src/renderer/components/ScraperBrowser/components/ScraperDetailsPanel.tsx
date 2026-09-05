@@ -8,7 +8,11 @@ import ScraperRuntimeThumbnailImage, {
   isScraperRuntimeCssSpriteThumbnail,
 } from '@/renderer/components/ScraperRuntimeThumbnail/ScraperRuntimeThumbnailImage';
 import type { ScraperOpenReaderOptions } from '@/renderer/components/ScraperBrowser/types';
-import type { ScraperPotentialMangaMatch } from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
+import type {
+  ScraperPotentialMangaMatch,
+  ScraperPotentialSeriesProgress,
+  ScraperPotentialSeriesReadingWarning,
+} from '@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes';
 import usePotentialMangaMatchBookmarkGuard from '@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchBookmarkGuard';
 import { MagnifyingGlassIcon } from '@/renderer/components/icons';
 import {
@@ -76,6 +80,8 @@ type Props = {
   potentialReadingMatches: ScraperPotentialMangaMatch[];
   potentialBookmarkMatches: ScraperPotentialMangaMatch[];
   potentialReadingListMatches: ScraperPotentialMangaMatch[];
+  potentialSeriesProgress?: ScraperPotentialSeriesProgress | null;
+  potentialSeriesReadingWarning?: ScraperPotentialSeriesReadingWarning | null;
   loadingPotentialMatches?: boolean;
   multiSearchTitle?: string;
   getLinkedMangaForSource: (chapter?: ScraperRuntimeChapterResult) => Manga | null;
@@ -124,6 +130,8 @@ export default function ScraperDetailsPanel({
   potentialReadingMatches,
   potentialBookmarkMatches,
   potentialReadingListMatches,
+  potentialSeriesProgress = null,
+  potentialSeriesReadingWarning = null,
   loadingPotentialMatches = false,
   multiSearchTitle = '',
   getLinkedMangaForSource,
@@ -150,6 +158,7 @@ export default function ScraperDetailsPanel({
     readingMatches: potentialReadingMatches,
     bookmarkMatches: potentialBookmarkMatches,
     readingListMatches: potentialReadingListMatches,
+    seriesReadingWarning: potentialSeriesReadingWarning,
   });
 
   if (!detailsResult) {
@@ -376,6 +385,8 @@ export default function ScraperDetailsPanel({
             readingMatches={potentialReadingMatches}
             bookmarkMatches={potentialBookmarkMatches}
             readingListMatches={potentialReadingListMatches}
+            seriesProgress={potentialSeriesProgress}
+            seriesReadingWarning={potentialSeriesReadingWarning}
             fallbackCover={detailsResult.cover}
             fallbackCoverReferer={sourceUrl}
             loading={loadingPotentialMatches}

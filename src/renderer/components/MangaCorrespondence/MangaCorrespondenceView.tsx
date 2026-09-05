@@ -43,6 +43,7 @@ import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespon
 import {
   compareMangaCorrespondenceChapters,
   formatMangaCorrespondenceChapterLabel,
+  groupMangaCorrespondenceChapters,
   inferMangaCorrespondenceFirstChapter,
   resolveMangaCorrespondenceMatchChapter,
 } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -118,6 +119,7 @@ type RejectedCardGroup = {
   score: number;
 };
 type MatchChapterResolution = {
+  aliases: string[];
   detectedChapter: string;
   effectiveChapter: string;
   detection: ReturnType<typeof analyzeMangaCorrespondenceTitle>["chapterDetection"];
@@ -281,6 +283,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         preferAnalyzedChapter,
       );
       resolutions.set(match.key, {
+        aliases: match.chapterOverride ? [] : titleAnalysis.namedChapterAliases,
         detectedChapter,
         effectiveChapter: resolveMangaCorrespondenceMatchChapter(
           match.chapter,
@@ -315,15 +318,16 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
   const allChapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
-    const byChapter = new Map<string, MangaCorrespondenceMatch[]>();
-    correspondenceMatches.forEach((match) => {
-      const chapter = chapterResolutionByMatchKey.get(match.key)?.effectiveChapter
-        ?? "Non renseigné";
-      byChapter.set(chapter, [...(byChapter.get(chapter) ?? []), match]);
-    });
-    return Array.from(byChapter.entries())
-      .sort(([left], [right]) => compareMangaCorrespondenceChapters(left, right))
-      .map(([chapter, matches]) => ({ chapter, matches }));
+    return groupMangaCorrespondenceChapters(correspondenceMatches.map((match) => {
+      const resolution = chapterResolutionByMatchKey.get(match.key);
+      return {
+        aliases: resolution?.aliases,
+        chapter: resolution?.effectiveChapter ?? "Non renseigné",
+        entry: match,
+      };
+    }))
+      .sort((left, right) => compareMangaCorrespondenceChapters(left.chapter, right.chapter))
+      .map(({ chapter, entries }) => ({ chapter, matches: entries }));
   }, [
     chapterResolutionByMatchKey,
     correspondenceMatches,

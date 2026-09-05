@@ -266,6 +266,8 @@ export default function ScraperSearchResultCard({
               readingMatches={potentialMatches.readingMatches}
               bookmarkMatches={potentialMatches.bookmarkMatches}
               readingListMatches={potentialMatches.readingListMatches}
+              seriesProgress={potentialMatches.seriesProgress}
+              seriesReadingWarning={potentialMatches.seriesReadingWarning}
               fallbackCover={result.thumbnailUrl}
               fallbackCoverReferer={result.detailUrl}
               loading={potentialMatchesLoading}

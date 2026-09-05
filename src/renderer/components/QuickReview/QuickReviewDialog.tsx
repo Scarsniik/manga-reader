@@ -380,6 +380,8 @@ export default function QuickReviewDialog({ items }: Props) {
                   readingMatches={potentialMatches.readingMatches}
                   bookmarkMatches={potentialMatches.bookmarkMatches}
                   readingListMatches={potentialMatches.readingListMatches}
+                  seriesProgress={potentialMatches.seriesProgress}
+                  seriesReadingWarning={potentialMatches.seriesReadingWarning}
                   fallbackCover={activeCoverUrl}
                   fallbackCoverReferer={sourceUrl}
                   loading={potentialMatches.loading}

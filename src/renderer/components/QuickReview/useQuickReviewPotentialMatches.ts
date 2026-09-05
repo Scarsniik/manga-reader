@@ -101,6 +101,8 @@ export default function useQuickReviewPotentialMatches({
     readingMatches: currentMatches?.readingMatches ?? EMPTY_MATCHES.readingMatches,
     bookmarkMatches: currentMatches?.bookmarkMatches ?? EMPTY_MATCHES.bookmarkMatches,
     readingListMatches: currentMatches?.readingListMatches ?? EMPTY_MATCHES.readingListMatches,
+    seriesProgress: currentMatches?.seriesProgress ?? null,
+    seriesReadingWarning: currentMatches?.seriesReadingWarning ?? null,
     loading: enabled && Boolean(input) && (matches.loading || candidates.loading),
     openMatch,
   };

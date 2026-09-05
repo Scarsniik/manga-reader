@@ -181,6 +181,7 @@ const candidate = (overrides) => ({
   id: overrides.id,
   category: overrides.category,
   title: overrides.title || current.title,
+  scraperId: overrides.scraperId || "other-scraper",
   sourceUrl: overrides.sourceUrl,
   authorNames: overrides.authorNames || current.authorNames,
   sourceLabel: "Test source",
@@ -191,6 +192,8 @@ const candidate = (overrides) => ({
     sourceUrl: overrides.sourceUrl,
     title: overrides.title || current.title,
   },
+  chapterLabel: overrides.chapterLabel,
+  readingStatus: overrides.readingStatus,
 });
 
 test("card matching reports bookmarks, reading records and reading lists", () => {
@@ -207,6 +210,304 @@ test("card matching reports bookmarks, reading records and reading lists", () =>
   assert.equal(matches.bookmarkMatches.length, 1);
   assert.equal(matches.readingListMatches.length, 1);
   assert.equal(matches.bookmarkMatches[0].matchKind, "base");
+});
+
+test("a completed chapter range matches a chapter contained in that range", () => {
+  const chapterInput = {
+    ...currentInput,
+    title: "Shared Series Chapter 3",
+  };
+  const chapter = buildScraperPotentialMatchable(chapterInput);
+  const matches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    chapter,
+    [candidate({
+      id: "read-range",
+      category: "reading",
+      title: "Shared Series Chapter 1-8",
+      sourceUrl: "https://read.test/range",
+      readingStatus: "read",
+    })],
+    [],
+    [],
+    options,
+  );
+
+  assert.deepEqual(matches.readingMatches.map((match) => match.id), ["read-range"]);
+  assert.equal(matches.seriesReadingWarning, null);
+
+  const nextChapterInput = {
+    ...chapterInput,
+    title: "Shared Series Chapter 9",
+  };
+  const nextChapterMatches = matchScraperCardPotentialMatchInput(
+    nextChapterInput,
+    buildScraperPotentialMatchable(nextChapterInput),
+    [candidate({
+      id: "read-range",
+      category: "reading",
+      title: "Shared Series Chapter 1-8",
+      sourceUrl: "https://read.test/range",
+      readingStatus: "read",
+    })],
+    [],
+    [],
+    options,
+  );
+
+  assert.equal(nextChapterMatches.seriesProgress.previousSequenceLabel, "chapitre 8");
+});
+
+test("correspondence title analysis powers series checks for noisy scraper titles", () => {
+  const yunaTitle = [
+    "[Yuna] Asa Okitara Imouto ga Hadaka Apron Sugata datta node Hamete Mita",
+    "| I Woke Up to my Naked Apron Sister and Tried Fucking Her Ch. 12",
+    "[English] [1 2 Translations]",
+  ].join(" ");
+  const yunaRangeTitle = yunaTitle.replace("Ch. 12", "Ch. 1-18");
+  const yunaInput = {
+    ...currentInput,
+    title: yunaTitle,
+    authorNames: ["Yuna"],
+  };
+  const yunaMatches = matchScraperCardPotentialMatchInput(
+    yunaInput,
+    buildScraperPotentialMatchable(yunaInput),
+    [],
+    [candidate({
+      id: "yuna-range",
+      category: "bookmark",
+      title: yunaRangeTitle,
+      authorNames: ["Yuna"],
+      sourceUrl: "https://bookmark.test/yuna-range",
+    })],
+    [],
+    options,
+  );
+
+  assert.deepEqual(yunaMatches.bookmarkMatches.map((match) => match.id), ["yuna-range"]);
+  assert.equal(yunaMatches.seriesReadingWarning.sequenceLabel, "chapitre 12");
+
+  const noisySeriesTitles = [
+    {
+      title: "(C104) [M-ya (Mikoyan)] Ogre tai Dark Elf III | Ogre Vs Dark Elf 3 [English]",
+      sequenceLabel: "chapitre 3",
+    },
+    {
+      title: "[DISTANCE] Joshi Luck! ~2 Years Later~ Ch. 6 (COMIC ExE 09) [English] [cedr777] [Digital]",
+      sequenceLabel: "chapitre 6",
+    },
+  ];
+
+  noisySeriesTitles.forEach(({ title, sequenceLabel }) => {
+    const input = { ...currentInput, title, authorNames: [] };
+    const matches = matchScraperCardPotentialMatchInput(
+      input,
+      buildScraperPotentialMatchable(input),
+      [],
+      [],
+      [],
+      options,
+    );
+
+    assert.equal(matches.seriesReadingWarning.sequenceLabel, sequenceLabel);
+  });
+});
+
+test("series warning requires a completed current or earlier chapter", () => {
+  const chapterInput = {
+    ...currentInput,
+    title: "Shared Series Chapter 3",
+  };
+  const chapter = buildScraperPotentialMatchable(chapterInput);
+  const incompletePreviousChapter = candidate({
+    id: "chapter-2-in-progress",
+    category: "reading",
+    title: "Shared Series Chapter 2",
+    sourceUrl: "https://read.test/chapter-2",
+    readingStatus: "inProgress",
+  });
+  const warningMatches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    chapter,
+    [incompletePreviousChapter],
+    [],
+    [],
+    options,
+  );
+
+  assert.deepEqual(warningMatches.seriesReadingWarning, {
+    sequenceLabel: "chapitre 3",
+    seriesTitle: "Shared Series",
+  });
+  assert.deepEqual(warningMatches.seriesProgress, {
+    currentSequenceLabel: "chapitre 3",
+    previousSequenceLabel: "chapitre 2",
+    readingStatus: "inProgress",
+    seriesTitle: "Shared Series",
+  });
+
+  const completedPreviousChapter = {
+    ...incompletePreviousChapter,
+    id: "chapter-2-read",
+    readingStatus: "read",
+  };
+  const completedMatches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    chapter,
+    [completedPreviousChapter],
+    [],
+    [],
+    options,
+  );
+
+  assert.equal(completedMatches.seriesReadingWarning, null);
+  assert.deepEqual(completedMatches.seriesProgress, {
+    currentSequenceLabel: "chapitre 3",
+    previousSequenceLabel: "chapitre 2",
+    readingStatus: "read",
+    seriesTitle: "Shared Series",
+  });
+});
+
+test("named chapters are treated as releases after numbered chapters", () => {
+  const namedChapterInput = {
+    ...currentInput,
+    title: "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu ~Beit Saki no JK Hen~ [English]",
+    authorNames: ["Ail"],
+  };
+  const matches = matchScraperCardPotentialMatchInput(
+    namedChapterInput,
+    buildScraperPotentialMatchable(namedChapterInput),
+    [candidate({
+      id: "boku-chapter-2",
+      category: "reading",
+      title: "[Ailail (Ail)] Boku ni SeFri ga Dekita Riyuu Ch. 2 [English]",
+      authorNames: ["Ail"],
+      sourceUrl: "https://read.test/boku-chapter-2",
+      readingStatus: "read",
+    })],
+    [],
+    [],
+    options,
+  );
+
+  assert.equal(matches.seriesReadingWarning, null);
+  assert.deepEqual(matches.seriesProgress, {
+    currentSequenceLabel: "Beit Saki no JK Hen",
+    previousSequenceLabel: "chapitre 2",
+    readingStatus: "read",
+    seriesTitle: "Boku ni SeFri ga Dekita Riyuu",
+  });
+});
+
+test("series warning reads chapter labels stored separately from scraper titles", () => {
+  const chapterInput = {
+    ...currentInput,
+    title: "Shared Series Chapter 3",
+  };
+  const matches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    buildScraperPotentialMatchable(chapterInput),
+    [candidate({
+      id: "separate-chapter-label",
+      category: "reading",
+      title: "Shared Series",
+      chapterLabel: "Chapter 2",
+      sourceUrl: "https://read.test/series",
+      readingStatus: "read",
+    })],
+    [],
+    [],
+    options,
+  );
+
+  assert.equal(matches.seriesReadingWarning, null);
+  assert.equal(matches.seriesProgress.previousSequenceLabel, "chapitre 2");
+});
+
+test("series comparison honors configured source title parsers", () => {
+  const config = {
+    enabled: true,
+    manualTestTitles: [],
+    suffixMappings: [],
+    variants: [{
+      id: "custom-series",
+      name: "Custom series",
+      enabled: true,
+      blocks: [
+        {
+          id: "series",
+          kind: "bracket",
+          enabled: true,
+          optional: false,
+          field: "title",
+          validation: "none",
+          onValidationFailure: "rejectVariant",
+        },
+        {
+          id: "extra",
+          kind: "title",
+          enabled: true,
+          optional: false,
+          field: "extra",
+          validation: "none",
+          onValidationFailure: "rejectVariant",
+        },
+        {
+          id: "sequence",
+          kind: "suffixes",
+          enabled: true,
+          optional: false,
+          validation: "none",
+          onValidationFailure: "rejectVariant",
+        },
+      ],
+    }],
+  };
+  const chapterInput = {
+    ...currentInput,
+    title: "[Custom Series] Alice [Chapter 3]",
+  };
+  const matches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    buildScraperPotentialMatchable(chapterInput),
+    [candidate({
+      id: "configured-chapter-2",
+      category: "reading",
+      title: "[Custom Series] Bob [Chapter 2]",
+      sourceUrl: "https://read.test/configured-chapter-2",
+      readingStatus: "read",
+    })],
+    [],
+    [],
+    options,
+    new Map([
+      ["current-scraper", config],
+      ["other-scraper", config],
+    ]),
+  );
+
+  assert.equal(matches.seriesReadingWarning, null);
+  assert.equal(matches.seriesProgress.seriesTitle, "Custom Series");
+  assert.equal(matches.seriesProgress.previousSequenceLabel, "chapitre 2");
+});
+
+test("chapter one does not trigger a missing previous reading warning", () => {
+  const chapterInput = {
+    ...currentInput,
+    title: "Shared Series Chapter 1",
+  };
+  const matches = matchScraperCardPotentialMatchInput(
+    chapterInput,
+    buildScraperPotentialMatchable(chapterInput),
+    [],
+    [],
+    [],
+    options,
+  );
+
+  assert.equal(matches.seriesReadingWarning, null);
 });
 
 test("card matching hides the current exact reading and bookmark source", () => {
