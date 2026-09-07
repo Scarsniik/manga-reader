@@ -137,6 +137,7 @@ const runDeepScan = async ({
   checkpoint = buildCheckpoint(),
   initialRuns,
   mode = "foreground",
+  maxPages = 50,
   originalOnly = false,
   searchMode = "deep",
 }) => {
@@ -171,7 +172,7 @@ const runDeepScan = async ({
   };
 
   const result = await runScraperLatestSearch(
-    { ...buildInput(resultLimit), originalOnly, searchMode },
+    { ...buildInput(resultLimit), maxPages, originalOnly, searchMode },
     new AbortController().signal,
     async () => {},
     { mode, initialRuns },
@@ -306,4 +307,28 @@ test("deep scans continue normal pagination after the recent phase when no check
   assert.deepEqual(run.results.map((source) => source.result.title), ["Deep card"]);
   assert.equal(run.checkpointUsed, false);
   assert.equal(run.deepScanPhaseStarted, true);
+});
+
+test("deep scans resume a cached page-limit checkpoint when the page budget is raised", async () => {
+  const knownHistoryId = buildHistoryId("known", "Known card");
+  const checkpoint = {
+    ...buildCheckpoint(),
+    quotaUnavailableReason: "pageLimitWithoutResults",
+    quotaUnavailableLimit: 50,
+    quotaUnavailableUntil: "2099-08-20T00:00:00.000Z",
+  };
+  const { requestedPages, run } = await runDeepScan({
+    resultLimit: 1,
+    maxPages: 100,
+    historyIds: [knownHistoryId],
+    checkpoint,
+    pages: new Map([
+      [1, buildCardHtml("known", "Known card")],
+      [11, buildCardHtml("deep", "Deep card")],
+    ]),
+  });
+
+  assert.deepEqual(requestedPages, [1, 11]);
+  assert.deepEqual(run.results.map((source) => source.result.title), ["Deep card"]);
+  assert.equal(run.checkpointUsed, true);
 });

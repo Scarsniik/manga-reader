@@ -203,6 +203,7 @@ test("filtered quota unavailability is cached for equivalent scans and expires",
       nextPageUrl: "https://example.test/tag/glasses?page=51",
     },
     quotaUnavailableReason: "pageLimitWithoutResults",
+    quotaUnavailableLimit: 50,
     now,
   });
   const checkpoint = {
@@ -217,11 +218,96 @@ test("filtered quota unavailability is cached for equivalent scans and expires",
     resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now),
     "pageLimitWithoutResults",
   );
+  assert.equal(request.quotaUnavailableLimit, 50);
   assert.equal(
     resolveScraperLatestCheckpointQuotaUnavailableReason(
       checkpoint,
       now + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS,
     ),
+    null,
+  );
+});
+
+test("a larger deep page budget overrides a cached page-limit stop", () => {
+  const now = Date.parse("2026-08-05T00:00:00.000Z");
+  const checkpoint = {
+    id: "checkpoint-a",
+    scraperId: "source-a",
+    module: "tag",
+    query: "glasses",
+    includedLanguageCodes: ["en"],
+    pageIndex: 49,
+    cursorVersion: 2,
+    nextPageIndex: 50,
+    quotaUnavailableReason: "pageLimitWithoutResults",
+    quotaUnavailableLimit: 50,
+    quotaUnavailableUntil: new Date(now + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { pageLimit: 50 }),
+    "pageLimitWithoutResults",
+  );
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { pageLimit: 100 }),
+    null,
+  );
+});
+
+test("legacy page-limit stops can be overridden by a clearly larger budget", () => {
+  const now = Date.parse("2026-08-05T00:00:00.000Z");
+  const checkpoint = {
+    id: "checkpoint-a",
+    scraperId: "source-a",
+    module: "tag",
+    query: "glasses",
+    includedLanguageCodes: ["en"],
+    pageIndex: 49,
+    cursorVersion: 2,
+    nextPageIndex: 50,
+    quotaUnavailableReason: "pageLimitWithoutResults",
+    quotaUnavailableUntil: new Date(now + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { pageLimit: 50 }),
+    "pageLimitWithoutResults",
+  );
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { pageLimit: 100_000 }),
+    null,
+  );
+});
+
+test("disabling or raising the language guard overrides its cached stop", () => {
+  const now = Date.parse("2026-08-05T00:00:00.000Z");
+  const checkpoint = {
+    id: "checkpoint-a",
+    scraperId: "source-a",
+    module: "tag",
+    query: "glasses",
+    includedLanguageCodes: ["en"],
+    pageIndex: 1,
+    cursorVersion: 2,
+    nextPageIndex: 2,
+    quotaUnavailableReason: "languageRejectLimit",
+    quotaUnavailableLimit: 40,
+    quotaUnavailableUntil: new Date(now + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { languageRejectLimit: 40 }),
+    "languageRejectLimit",
+  );
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { languageRejectLimit: 80 }),
+    null,
+  );
+  assert.equal(
+    resolveScraperLatestCheckpointQuotaUnavailableReason(checkpoint, now, { languageRejectLimit: 0 }),
     null,
   );
 });

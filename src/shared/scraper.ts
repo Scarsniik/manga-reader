@@ -975,6 +975,7 @@ export interface ScraperLatestCheckpointRecord extends ScraperLatestCheckpointKe
   anchorCardId?: string;
   anchorIdentity?: ScraperViewHistoryCardIdentity;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason;
+  quotaUnavailableLimit?: number;
   quotaUnavailableUntil?: string;
   reachedEnd?: boolean;
   updatedAt: string;
@@ -990,6 +991,7 @@ export interface SaveScraperLatestCheckpointRequest extends ScraperLatestCheckpo
   anchorCardId?: string | null;
   anchorIdentity?: ScraperViewHistoryCardIdentity | null;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason | null;
+  quotaUnavailableLimit?: number | null;
   quotaUnavailableUntil?: string | null;
   reachedEnd?: boolean;
 }

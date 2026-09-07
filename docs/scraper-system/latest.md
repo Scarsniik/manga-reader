@@ -141,7 +141,9 @@ de 20, deux sources commencent donc avec un objectif de 10 chacune ; si elles co
 est retiree et son deficit est redistribue aux sources encore disponibles. Une source qui ne produit
 aucun resultat avant la limite de refus par langue ou le plafond de pages est egalement retiree du
 quota : cette indisponibilite est memorisee 24 heures pour la meme source, le meme tag et les memes
-langues. Un rejet ordinaire, une erreur ou une source qui a deja produit un resultat ne suffit pas a
+langues. Une relance avec un plafond de pages ou de refus de langue plus eleve ignore le blocage
+precedent et reprend le parcours ; desactiver la limite de refus de langue l'ignore egalement. Un rejet
+ordinaire, une erreur ou une source qui a deja produit un resultat ne suffit pas a
 modifier les quotas ; sinon, seule une fin de pagination
 confirmee libere la part manquante d'une source.
 

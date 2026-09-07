@@ -298,6 +298,10 @@ export const runListingSearchEngine = async (
     : input.maxPages === null
       ? 250
       : Math.max(1, input.maxPages);
+  const normalizedLanguageRejectLimit = Math.max(
+    0,
+    Math.floor(Number(input.languageRejectLimit) || 0),
+  );
   const backfillBlacklistedResults = kind === "latestSources"
     && input.excludeBlacklistedTagCards === true;
   const checkpoints: ScraperLatestCheckpointRecord[] = kind === "latestSources" && input.searchMode === "deep"
@@ -613,10 +617,6 @@ export const runListingSearchEngine = async (
     const includedByLanguageCount = Math.max(
       0,
       (run.includedByLanguageCount ?? 0) - excludedByEnrichedLanguageCount,
-    );
-    const normalizedLanguageRejectLimit = Math.max(
-      0,
-      Math.floor(Number(input.languageRejectLimit) || 0),
     );
     return {
       ...run,
@@ -976,6 +976,11 @@ export const runListingSearchEngine = async (
           state.consecutiveSeenResultCount = 0;
           const checkpointUnavailableReason = resolveScraperLatestCheckpointQuotaUnavailableReason(
             run.checkpoint,
+            Date.now(),
+            {
+              pageLimit: configuredMaxPages,
+              languageRejectLimit: normalizedLanguageRejectLimit,
+            },
           );
           const checkpointCursor = checkpointUnavailableReason === null
             ? resolveScraperLatestCheckpointCursor(run.checkpoint)
@@ -1072,6 +1077,13 @@ export const runListingSearchEngine = async (
             ? "search"
             : "homepage";
         try {
+          const quotaUnavailableReason = run.results.length === 0
+            ? run.languageRejectLimitReached
+              ? "languageRejectLimit"
+              : run.safetyLimitReached
+                ? "pageLimitWithoutResults"
+                : null
+            : null;
           const savedCheckpoint = await saveScraperLatestCheckpoint(
             buildScraperLatestCursorCheckpointRequest({
               scraper: run.scraper,
@@ -1080,13 +1092,12 @@ export const runListingSearchEngine = async (
               includedLanguageCodes: input.includedLanguageCodes,
               pageIndex: lastProcessedPage.pageIndex,
               page: lastProcessedPage.page,
-              quotaUnavailableReason: run.results.length === 0
-                ? run.languageRejectLimitReached
-                  ? "languageRejectLimit"
-                  : run.safetyLimitReached
-                    ? "pageLimitWithoutResults"
-                    : null
-                : null,
+              quotaUnavailableReason,
+              quotaUnavailableLimit: quotaUnavailableReason === "languageRejectLimit"
+                ? normalizedLanguageRejectLimit
+                : quotaUnavailableReason === "pageLimitWithoutResults"
+                  ? configuredMaxPages
+                  : null,
               reachedEnd: state.sourceExhausted,
             }),
           );

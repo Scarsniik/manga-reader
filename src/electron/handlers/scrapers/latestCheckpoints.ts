@@ -45,6 +45,11 @@ const sanitizePageIndex = (value: unknown): number => {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 };
 
+const sanitizePositiveInteger = (value: unknown): number | undefined => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+};
+
 const sanitizeOptionalText = (value: unknown): string | undefined => {
   const normalized = normalizeText(value);
   return normalized || undefined;
@@ -92,6 +97,9 @@ const sanitizeCheckpointRecord = (
   const anchorCardId = normalizeText(value.anchorCardId)
     || (anchorIdentity ? buildScraperViewHistoryCardId(anchorIdentity) : "");
   const quotaUnavailableReason = sanitizeQuotaUnavailableReason(value.quotaUnavailableReason);
+  const quotaUnavailableLimit = quotaUnavailableReason
+    ? sanitizePositiveInteger(value.quotaUnavailableLimit)
+    : undefined;
   const quotaUnavailableUntil = quotaUnavailableReason
     ? sanitizeIsoDate(value.quotaUnavailableUntil, "")
     : "";
@@ -118,6 +126,7 @@ const sanitizeCheckpointRecord = (
     ...(anchorIdentity ? { anchorIdentity } : {}),
     ...(quotaUnavailableReason && quotaUnavailableUntil ? {
       quotaUnavailableReason,
+      ...(quotaUnavailableLimit ? { quotaUnavailableLimit } : {}),
       quotaUnavailableUntil,
     } : {}),
     ...(typeof value.reachedEnd === "boolean" ? { reachedEnd: value.reachedEnd } : {}),

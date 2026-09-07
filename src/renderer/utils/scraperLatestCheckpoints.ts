@@ -23,6 +23,10 @@ export const SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS = 24 * 60 * 60 * 1000;
 export const resolveScraperLatestCheckpointQuotaUnavailableReason = (
   checkpoint: ScraperLatestCheckpointRecord | null | undefined,
   now = Date.now(),
+  currentLimits?: {
+    pageLimit?: number;
+    languageRejectLimit?: number;
+  },
 ): ScraperLatestQuotaUnavailableReason | null => {
   if (
     checkpoint?.quotaUnavailableReason !== "languageRejectLimit"
@@ -32,9 +36,37 @@ export const resolveScraperLatestCheckpointQuotaUnavailableReason = (
   }
 
   const unavailableUntil = Date.parse(checkpoint.quotaUnavailableUntil ?? "");
-  return Number.isFinite(unavailableUntil) && unavailableUntil > now
-    ? checkpoint.quotaUnavailableReason
-    : null;
+  if (!Number.isFinite(unavailableUntil) || unavailableUntil <= now) {
+    return null;
+  }
+
+  const cachedLimit = Math.max(0, Math.floor(Number(checkpoint.quotaUnavailableLimit) || 0));
+  if (checkpoint.quotaUnavailableReason === "languageRejectLimit") {
+    const currentLimit = Math.max(0, Math.floor(Number(currentLimits?.languageRejectLimit) || 0));
+    if (currentLimits?.languageRejectLimit !== undefined && (
+      currentLimit === 0
+      || (cachedLimit > 0 && currentLimit > cachedLimit)
+    )) {
+      return null;
+    }
+  }
+
+  if (checkpoint.quotaUnavailableReason === "pageLimitWithoutResults") {
+    const currentLimit = Math.max(0, Math.floor(Number(currentLimits?.pageLimit) || 0));
+    const legacyCachedLimit = checkpoint.cursorVersion === 2
+      ? Math.max(0, Math.floor(Number(checkpoint.nextPageIndex) || 0))
+      : Math.max(0, Math.floor(Number(checkpoint.pageIndex) || 0)) + 1;
+    const effectiveCachedLimit = cachedLimit || legacyCachedLimit;
+    if (
+      currentLimits?.pageLimit !== undefined
+      && effectiveCachedLimit > 0
+      && currentLimit > effectiveCachedLimit
+    ) {
+      return null;
+    }
+  }
+
+  return checkpoint.quotaUnavailableReason;
 };
 
 export const resolveScraperLatestCheckpointCursor = (
@@ -149,6 +181,7 @@ export const buildScraperLatestCursorCheckpointRequest = (options: {
   pageIndex: number;
   page: ScraperRuntimeSearchPageResult;
   quotaUnavailableReason?: ScraperLatestQuotaUnavailableReason | null;
+  quotaUnavailableLimit?: number | null;
   reachedEnd?: boolean;
   now?: number;
 }): SaveScraperLatestCheckpointRequest => ({
@@ -167,6 +200,9 @@ export const buildScraperLatestCursorCheckpointRequest = (options: {
   reachedEnd: options.reachedEnd === true,
   ...(options.quotaUnavailableReason ? {
     quotaUnavailableReason: options.quotaUnavailableReason,
+    ...(Number(options.quotaUnavailableLimit) > 0 ? {
+      quotaUnavailableLimit: Math.floor(Number(options.quotaUnavailableLimit)),
+    } : {}),
     quotaUnavailableUntil: new Date(
       (Number.isFinite(options.now) ? Number(options.now) : Date.now())
       + SCRAPER_LATEST_QUOTA_UNAVAILABLE_TTL_MS,
