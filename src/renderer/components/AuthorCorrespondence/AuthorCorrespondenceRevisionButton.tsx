@@ -7,12 +7,16 @@ import {
   buildAuthorCorrespondenceReplayInput,
   buildInitialAuthorCorrespondenceDiscoveries,
 } from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
-import { resolveAuthorCorrespondenceManualDiscovery } from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
+import {
+  resolveAuthorCorrespondenceManualDiscovery,
+  resolveMangaCorrespondenceManualDiscovery,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceManualDiscoveries";
 import MangaCorrespondenceDiscoveriesDialog from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceDiscoveriesDialog";
 import useModal from "@/renderer/hooks/useModal";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import type {
   AuthorCorrespondenceBackgroundInput,
+  MangaCorrespondenceBackgroundInput,
   MangaCorrespondenceResultDecision,
 } from "@/shared/backgroundSearch";
 import { writeAuthorCorrespondenceInvalidations } from "@/renderer/backgroundSearch/authorCorrespondenceInvalidations";
@@ -39,6 +43,27 @@ export default function AuthorCorrespondenceRevisionButton({
   result,
 }: Props) {
   const { openModal, closeModal } = useModal();
+  const buildManualMangaInput = (): MangaCorrespondenceBackgroundInput => ({
+    reference: input?.mangaSeed?.reference ?? {
+      scraperId: "manual",
+      sourceUrl: "",
+      rawTitle: "",
+      title: "",
+      alternativeTitles: [],
+      authors: [input?.referenceName ?? "", ...(input?.names ?? [])].filter(Boolean),
+      authorUrls: [],
+    },
+    request: "sameManga",
+    strategy: "titleFirst",
+    scraperFilterValues: input?.scraperFilterValues ?? [],
+    scrapers: input?.scrapers ?? [],
+    maxPages: input?.maxPages ?? null,
+    paceMode: input?.paceMode ?? "fast",
+    scrapingConcurrency: input?.scrapingConcurrency ?? 1,
+    scrapeDetailsWithCards: input?.scrapeDetailsWithCards === true,
+    enableRomajiPhoneticMerge: input?.advancedSearch?.enableRomajiPhoneticMerge === true,
+    safety: input?.correspondenceSafety,
+  });
   const discoveries = React.useMemo(
     () => input ? buildInitialAuthorCorrespondenceDiscoveries(input, result) : [],
     [input, result],
@@ -108,9 +133,11 @@ export default function AuthorCorrespondenceRevisionButton({
         <MangaCorrespondenceDiscoveriesDialog
           discoveries={discoveries}
           resultDecisions={resultDecisions}
-          discoveryKinds={["author"]}
-          introduction="Ajoute un nom pour le rechercher sur toutes les sources, ou une URL de page auteur pour interroger directement son scrapper."
-          filterPlaceholder="Filtrer par auteur ou scrapper…"
+          discoveryKinds={["title", "author"]}
+          discoveryLabels={{ title: "Pages manga" }}
+          manualPlaceholders={{ title: "URL d’une fiche manga…" }}
+          introduction="Ajoute un nom ou une page auteur, ou ajoute une fiche manga comme dans la correspondance manga. Les mangas actifs seront traités en priorité lors de la prochaine recherche poussée."
+          filterPlaceholder="Filtrer par manga, auteur ou scrapper…"
           requiredActiveDiscoveryKind="author"
           requiredActiveDiscoveryError="Réactive au moins un auteur avant de rejouer la recherche."
           requiredActiveDiscoveryHint="Aucun auteur actif : le rejeu est bloqué."
@@ -128,7 +155,20 @@ export default function AuthorCorrespondenceRevisionButton({
             if (!opened) throw new Error("La page auteur n’a pas pu être ouverte dans un nouvel onglet.");
           }}
           onResolveManualDiscovery={async (kind, value) => {
-            if (kind !== "author") throw new Error("Seuls les auteurs peuvent être ajoutés à cette recherche.");
+            if (kind === "title") {
+              if (!/^https?:\/\//i.test(value.trim())) {
+                throw new Error("Saisis l’URL HTTP ou HTTPS d’une fiche manga.");
+              }
+              const resolvedDiscoveries = await resolveMangaCorrespondenceManualDiscovery({
+                kind,
+                rawValue: value,
+                input: buildManualMangaInput(),
+                fetchDocument: window.api?.fetchScraperDocument,
+              });
+              return resolvedDiscoveries.filter((discovery) => (
+                discovery.kind === "author" || Boolean(discovery.mangaReference)
+              ));
+            }
             return resolveAuthorCorrespondenceManualDiscovery({
               rawValue: value,
               input,

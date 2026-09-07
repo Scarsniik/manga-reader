@@ -74,6 +74,42 @@ const mergeNameSearchSources = (
   return Array.from(sourcesByKey.values());
 };
 
+export const buildAuthorCorrespondenceManualMangaSources = (
+  input: AuthorCorrespondenceBackgroundInput,
+): MultiSearchSourceResult[] => {
+  const sources = (input.mangaReferences ?? []).flatMap((reference) => {
+    const scraper = input.scrapers.find((candidate) => candidate.id === reference.scraperId);
+    if (!scraper || !reference.sourceUrl.trim() || !reference.title.trim()) return [];
+    return [{
+      scraper,
+      result: {
+        title: reference.rawTitle || reference.title,
+        detailUrl: reference.sourceUrl,
+        detailsMetadataFetched: true,
+        detailsTitle: reference.rawTitle || reference.title,
+        detailsSourceUrl: reference.sourceUrl,
+        authorNames: reference.authors,
+        authorUrls: reference.authorUrls,
+      },
+      searchTerm: reference.title,
+      pageIndex: 1,
+      sourceLanguageCodes: [],
+      detectedLanguageCodes: [],
+      tentativeAuthorNames: reference.authors,
+      contextualAuthorNames: reference.authors,
+      advancedRomanizedTitleVariants: [],
+      advancedRomanizedTentativeAuthorNameVariants: [],
+      advancedRomanizedContextualAuthorNameVariants: [],
+      contentTypes: [],
+      canOpenDetails: true,
+    } satisfies MultiSearchSourceResult];
+  });
+  return Array.from(new Map(sources.map((source) => [
+    buildMultiSearchSourceIdentityKey(source),
+    source,
+  ])).values());
+};
+
 type AdvancedProgressSummary = NonNullable<AuthorCorrespondenceBackgroundResult["advancedSearch"]>;
 
 export const buildAuthorCorrespondenceAdvancedProgressSummary = (options: {
@@ -125,9 +161,13 @@ const collectActiveAuthorSources = (
   const activeRunKeys = new Set(result.matches
     .filter((match) => !invalidatedMatchKeys.has(match.key))
     .map((match) => `${match.scraperId}::${match.authorUrl}`));
-  return cache.runs
+  const sources = cache.runs
     .filter((run) => activeRunKeys.has(run.key))
     .flatMap((run) => run.results);
+  return Array.from(new Map([
+    ...sources,
+    ...buildAuthorCorrespondenceManualMangaSources(input),
+  ].map((source) => [buildMultiSearchSourceIdentityKey(source), source])).values());
 };
 
 export const isAuthorCorrespondenceAdvancedSeedActive = (options: {
@@ -135,6 +175,7 @@ export const isAuthorCorrespondenceAdvancedSeedActive = (options: {
   cache: AuthorCorrespondenceSessionCacheSnapshot;
   matches: AuthorCorrespondenceMatch[];
   invalidatedMatchKeys: ReadonlySet<string>;
+  additionalActiveSourceKeys?: ReadonlySet<string>;
 }): boolean => {
   const activeRunKeys = new Set(options.matches
     .filter((match) => !options.invalidatedMatchKeys.has(match.key))
@@ -142,7 +183,9 @@ export const isAuthorCorrespondenceAdvancedSeedActive = (options: {
   const activeSourceKeys = new Set(options.cache.runs
     .filter((run) => activeRunKeys.has(run.key))
     .flatMap((run) => run.results.map(buildMultiSearchSourceIdentityKey)));
-  return options.seed.anchorSourceKeys.some((sourceKey) => activeSourceKeys.has(sourceKey));
+  return options.seed.anchorSourceKeys.some((sourceKey) => (
+    activeSourceKeys.has(sourceKey) || options.additionalActiveSourceKeys?.has(sourceKey)
+  ));
 };
 
 const mergeMatches = (
@@ -353,6 +396,13 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
   ]);
   const cacheController = createCacheController(executionContext.backgroundJobId);
   let cache = await cacheController.read();
+  const manualMangaSources = buildAuthorCorrespondenceManualMangaSources(input);
+  const manualMangaSourceKeys = new Set(
+    manualMangaSources.map(buildMultiSearchSourceIdentityKey),
+  );
+  const hasUnprocessedManualManga = manualMangaSources.some((source) => (
+    !cache.processedMangaKeys.includes(buildMultiSearchSourceIdentityKey(source))
+  ));
   const cachedAliasAnalysis = analyzeAdvancedAuthorAliases({
     enrichments: cache.mangaEnrichments,
     authorSources: collectActiveAuthorSources(
@@ -432,6 +482,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     && cache.processedMangaKeys.length
     && !hasUnsearchedCachedAlias
     && !hasUnsearchedInputName
+    && !hasUnprocessedManualManga
   ) return result;
   const remainingBatchSize = resolveAuthorCorrespondenceAdvancedBatchSize({
     batchSize: request.batchSize,
@@ -476,6 +527,9 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     mergeOptions,
   );
   const processedMangaKeys = new Set(cache.processedMangaKeys);
+  const unprocessedManualMangaCount = Array.from(manualMangaSourceKeys).filter((sourceKey) => (
+    !processedMangaKeys.has(sourceKey)
+  )).length;
   let completedSeedCount = 0;
   const safetyWarnings: NonNullable<AdvancedProgressSummary["safetyWarnings"]> = [];
   const resolveAdvancedAuthorName = (authorName: string): string | undefined => (
@@ -547,12 +601,24 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
     };
   };
   const unlimitedBatch = Math.floor(request.batchSize) === 0;
-  const seeds = remainingBatchSize
+  const selectionSize = remainingBatchSize === Number.MAX_SAFE_INTEGER
+    ? remainingBatchSize
+    : Math.max(remainingBatchSize, unprocessedManualMangaCount);
+  const prioritizedMergedResults = [...mergedResults].sort((left, right) => {
+    const leftManual = left.sources.some((source) => (
+      manualMangaSourceKeys.has(buildMultiSearchSourceIdentityKey(source))
+    ));
+    const rightManual = right.sources.some((source) => (
+      manualMangaSourceKeys.has(buildMultiSearchSourceIdentityKey(source))
+    ));
+    return Number(rightManual) - Number(leftManual);
+  });
+  const seeds = selectionSize
     ? selectAuthorCorrespondenceAdvancedSeeds(
-      mergedResults,
+      prioritizedMergedResults,
       authorSourceKeys,
       processedMangaKeys,
-      remainingBatchSize,
+      selectionSize,
     )
     : [];
   const scheduledMangaSourceKeys = new Set(seeds.flatMap((seed) => seed.anchorSourceKeys));
@@ -762,6 +828,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       cache,
       matches: result.matches,
       invalidatedMatchKeys: liveInvalidatedMatchKeys,
+      additionalActiveSourceKeys: manualMangaSourceKeys,
     })) {
       result = updateAdvancedProgressResult(false);
       await emitProgress(

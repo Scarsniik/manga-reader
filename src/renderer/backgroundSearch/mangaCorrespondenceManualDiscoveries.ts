@@ -1,6 +1,7 @@
 import type {
   AuthorCorrespondenceBackgroundInput,
   MangaCorrespondenceBackgroundInput,
+  MangaCorrespondenceReference,
 } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
 import type { MangaCorrespondenceDiscovery } from "@/renderer/backgroundSearch/types";
@@ -108,6 +109,7 @@ const buildManualDiscovery = (options: {
   scraperName?: string;
   sourceUrl?: string;
   authorPageUrl?: string;
+  mangaReference?: MangaCorrespondenceReference;
 }): MangaCorrespondenceDiscovery => {
   const value = options.value.trim().replace(/\s+/g, " ");
   const scraperId = options.scraperId ?? MANUAL_SCRAPER_ID;
@@ -121,6 +123,7 @@ const buildManualDiscovery = (options: {
     origin: "manual",
     ...(options.sourceUrl ? { sourceUrl: options.sourceUrl } : {}),
     ...(options.authorPageUrl ? { authorPageUrl: options.authorPageUrl } : {}),
+    ...(options.mangaReference ? { mangaReference: options.mangaReference } : {}),
     parentStepIds: [],
     evidenceCount: 1,
     status: "active",
@@ -226,6 +229,17 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
       knownAuthors: [...options.input.reference.authors, ...details.authors],
       supplementalAuthors: details.authors,
     });
+    const primaryTitle = identity.titles[0] ?? details.title.trim();
+    const mangaReference: MangaCorrespondenceReference = {
+      scraperId: scraper.id,
+      sourceUrl,
+      rawTitle: details.title,
+      title: primaryTitle,
+      alternativeTitles: identity.titles.filter((title) => title !== primaryTitle),
+      authors: identity.authors,
+      authorUrls: details.authorUrls,
+      ...(identity.analysis.chapter ? { chapter: identity.analysis.chapter } : {}),
+    };
     const discoveries = [
       ...identity.titles.map((title, index) => buildManualDiscovery({
         kind: "title",
@@ -233,6 +247,7 @@ export const resolveMangaCorrespondenceManualDiscovery = async (options: {
         scraperId: scraper.id,
         scraperName: scraper.name,
         ...(index === 0 ? { sourceUrl } : {}),
+        ...(index === 0 ? { mangaReference } : {}),
       })),
       ...identity.authors.map((author) => {
         const authorIndex = details.authors.findIndex((value) => (

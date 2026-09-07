@@ -10,6 +10,7 @@ type Props = {
   introduction?: string;
   filterPlaceholder?: string;
   manualPlaceholders?: Partial<Record<MangaCorrespondenceDiscovery["kind"], string>>;
+  discoveryLabels?: Partial<Record<MangaCorrespondenceDiscovery["kind"], string>>;
   requiredActiveDiscoveryKind?: MangaCorrespondenceDiscovery["kind"];
   requiredActiveDiscoveryError?: string;
   requiredActiveDiscoveryHint?: string;
@@ -45,6 +46,7 @@ export default function MangaCorrespondenceDiscoveriesDialog({
   introduction = "Chaque valeur reste séparée par scrapper. Un résultat invalidé sert aussi de contre-exemple : les cards qui lui ressemblent davantage qu’aux références actives restent dans les potentiels.",
   filterPlaceholder = "Filtrer par titre, auteur ou scrapper…",
   manualPlaceholders,
+  discoveryLabels,
   requiredActiveDiscoveryKind = "title",
   requiredActiveDiscoveryError = "Réactive au moins un titre avant de rejouer la recherche.",
   requiredActiveDiscoveryHint = "Aucun titre actif : le rejeu est bloqué.",
@@ -150,10 +152,14 @@ export default function MangaCorrespondenceDiscoveriesDialog({
       <div className="manga-correspondence-discoveries-dialog__tabs" role="tablist">
         <button type="button" className={tab === "result" ? "is-active" : ""} onClick={() => setTab("result")}>Résultats ({resultCount})</button>
         {discoveryKinds.includes("title") ? (
-          <button type="button" className={tab === "title" ? "is-active" : ""} onClick={() => setTab("title")}>Titres ({titleCount})</button>
+          <button type="button" className={tab === "title" ? "is-active" : ""} onClick={() => setTab("title")}>
+            {discoveryLabels?.title ?? "Titres"} ({titleCount})
+          </button>
         ) : null}
         {discoveryKinds.includes("author") ? (
-          <button type="button" className={tab === "author" ? "is-active" : ""} onClick={() => setTab("author")}>Auteurs ({authorCount})</button>
+          <button type="button" className={tab === "author" ? "is-active" : ""} onClick={() => setTab("author")}>
+            {discoveryLabels?.author ?? "Auteurs"} ({authorCount})
+          </button>
         ) : null}
       </div>
       {tab !== "result" ? (

@@ -14,6 +14,7 @@ const source = `
     isAuthorCorrespondenceNameSearchSourceVerified,
   } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
   export {
+    buildAuthorCorrespondenceManualMangaSources,
     buildAuthorCorrespondenceAdvancedMangaInput,
     buildAuthorCorrespondenceAdvancedProgressSummary,
     collectEvidenceBackedAdvancedAuthorAliases,
@@ -76,6 +77,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 
 const {
   analyzeAdvancedAuthorAliases,
+  buildAuthorCorrespondenceManualMangaSources,
   buildAuthorCorrespondenceAdvancedMangaInput,
   buildAuthorCorrespondenceAdvancedProgressSummary,
   buildAuthorCorrespondenceRejectedMangaTargets,
@@ -931,6 +933,16 @@ test("manual titles accept text and resolve compatible detail URLs before replay
   assert.equal(urlDiscovery.value, "Series Two");
   assert.equal(urlDiscovery.scraperId, scraper.id);
   assert.equal(urlDiscovery.sourceUrl, "https://example.test/details/two");
+  assert.deepEqual(urlDiscovery.mangaReference, {
+    scraperId: scraper.id,
+    sourceUrl: "https://example.test/details/two",
+    rawTitle: "Series Two 2",
+    title: "Series Two",
+    alternativeTitles: [],
+    authors: ["YD"],
+    authorUrls: ["https://example.test/authors/yd"],
+    chapter: "2",
+  });
   assert.equal(urlAuthorDiscovery.value, "YD");
   assert.equal(urlAuthorDiscovery.authorPageUrl, "https://example.test/authors/yd");
   await assert.rejects(() => resolveMangaCorrespondenceManualDiscovery({
@@ -1596,6 +1608,46 @@ test("author correspondence replay searches added aliases and keeps their direct
   }]);
   assert.equal(replayInput.replay.revision, 3);
   assert.deepEqual(input.names, ["Author A"]);
+});
+
+test("author correspondence replay keeps active manually added manga pages", () => {
+  const mangaReference = {
+    scraperId: scraper.id,
+    sourceUrl: "https://example.test/details/manual-work",
+    rawTitle: "Manual Work 4",
+    title: "Manual Work",
+    alternativeTitles: [],
+    authors: ["Author A"],
+    authorUrls: ["https://example.test/authors/a"],
+    chapter: "4",
+  };
+  const input = {
+    referenceName: "Author A",
+    names: ["Author A"],
+    referenceSources: [],
+    mangaReferences: [mangaReference],
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  };
+  const discoveries = buildInitialAuthorCorrespondenceDiscoveries(input);
+  const mangaDiscovery = discoveries.find((discovery) => discovery.kind === "title");
+  assert.equal(mangaDiscovery.value, "Manual Work");
+  assert.equal(mangaDiscovery.sourceUrl, mangaReference.sourceUrl);
+
+  const replayInput = buildAuthorCorrespondenceReplayInput(input, discoveries);
+  assert.deepEqual(replayInput.mangaReferences, [mangaReference]);
+
+  const invalidatedInput = buildAuthorCorrespondenceReplayInput(
+    input,
+    discoveries.map((discovery) => discovery.kind === "title"
+      ? { ...discovery, status: "invalidated" }
+      : discovery),
+  );
+  assert.deepEqual(invalidatedInput.mangaReferences, []);
 });
 
 const buildAdvancedSource = (scraperId, title, detailUrl) => ({
@@ -2287,6 +2339,50 @@ test("live author invalidation removes only seeds no longer backed by an active 
     matches: [matchA, matchB],
     invalidatedMatchKeys: new Set([matchA.key, matchB.key]),
   }), false);
+});
+
+test("manually added manga pages become active advanced-search sources", () => {
+  const input = {
+    referenceName: "Author A",
+    names: ["Author A"],
+    referenceSources: [],
+    mangaReferences: [{
+      scraperId: scraper.id,
+      sourceUrl: "https://example.test/details/manual-work",
+      rawTitle: "Manual Work 4",
+      title: "Manual Work",
+      alternativeTitles: [],
+      authors: ["Author A"],
+      authorUrls: ["https://example.test/authors/a"],
+      chapter: "4",
+    }],
+    scraperFilterValues: [],
+    scrapers: [scraper],
+    maxPages: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  };
+  const [source] = buildAuthorCorrespondenceManualMangaSources(input);
+  assert.equal(source.result.title, "Manual Work 4");
+  assert.equal(source.result.detailUrl, "https://example.test/details/manual-work");
+  assert.deepEqual(source.contextualAuthorNames, ["Author A"]);
+
+  const [mergedResult] = mergeMultiSearchResults([source]);
+  const sourceKey = buildMultiSearchSourceIdentityKey(source);
+  const [seed] = selectAuthorCorrespondenceAdvancedSeeds(
+    [mergedResult],
+    new Set([sourceKey]),
+    new Set(),
+    1,
+  );
+  assert.equal(isAuthorCorrespondenceAdvancedSeedActive({
+    seed,
+    cache: createAuthorCorrespondenceSessionCacheSnapshot(),
+    matches: [],
+    invalidatedMatchKeys: new Set(),
+    additionalActiveSourceKeys: new Set([sourceKey]),
+  }), true);
 });
 
 test("a running renderer shares author invalidations even when local storage is unavailable", () => {

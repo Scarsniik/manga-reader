@@ -5,6 +5,7 @@ import type {
   MangaCorrespondenceDiscoveryKind,
   MangaCorrespondenceDiscoveryOrigin,
   MangaCorrespondenceDiscoveryStatus,
+  MangaCorrespondenceReference,
   MangaCorrespondenceRequest,
   MangaCorrespondenceResultDecision,
   MangaCorrespondenceTraceStep,
@@ -21,6 +22,7 @@ export type MangaCorrespondenceDiscovery = {
   sourceUrl?: string;
   authorPageUrl?: string;
   authorTemplateContext?: Record<string, string | undefined>;
+  mangaReference?: MangaCorrespondenceReference;
   parentStepIds: string[];
   evidenceCount: number;
   status: MangaCorrespondenceDiscoveryStatus;

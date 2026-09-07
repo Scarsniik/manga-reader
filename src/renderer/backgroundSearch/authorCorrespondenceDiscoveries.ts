@@ -1,6 +1,7 @@
 import type {
   AuthorCorrespondenceBackgroundInput,
   AuthorCorrespondenceReferenceSource,
+  MangaCorrespondenceReference,
 } from "@/shared/backgroundSearch";
 import type {
   AuthorCorrespondenceBackgroundResult,
@@ -46,6 +47,30 @@ const createAuthorDiscovery = (options: {
     evidenceCount: 1,
     status: "active",
     propagationConfidence: options.origin === "manual" ? "manual" : "reference",
+    foundAt: new Date().toISOString(),
+  };
+};
+
+const createMangaDiscovery = (
+  reference: MangaCorrespondenceReference,
+  scraperName: string,
+): MangaCorrespondenceDiscovery | null => {
+  const value = reference.title.trim().replace(/\s+/g, " ");
+  if (!value || !reference.sourceUrl.trim()) return null;
+  return {
+    key: buildMangaCorrespondenceDiscoveryKey("title", reference.scraperId, value),
+    kind: "title",
+    value,
+    normalizedValue: normalizeMangaCorrespondenceDiscoveryValue(value),
+    scraperId: reference.scraperId,
+    scraperName,
+    origin: "manual",
+    sourceUrl: reference.sourceUrl,
+    mangaReference: reference,
+    parentStepIds: [],
+    evidenceCount: 1,
+    status: "active",
+    propagationConfidence: "manual",
     foundAt: new Date().toISOString(),
   };
 };
@@ -109,6 +134,12 @@ export const buildInitialAuthorCorrespondenceDiscoveries = (
     authorTemplateContext: match.templateContext ?? undefined,
   })));
 
+  (input.mangaReferences ?? []).forEach((reference) => {
+    const scraperName = input.scrapers.find((scraper) => scraper.id === reference.scraperId)?.name
+      ?? reference.scraperId;
+    addDiscovery(discoveries, createMangaDiscovery(reference, scraperName));
+  });
+
   return Array.from(discoveries.values());
 };
 
@@ -132,11 +163,22 @@ export const buildAuthorCorrespondenceReplayInput = (
       }]
       : []
   ));
+  const mangaReferences = Array.from(new Map(discoveries
+    .filter((discovery) => (
+      discovery.kind === "title"
+      && discovery.status === "active"
+      && discovery.mangaReference?.sourceUrl
+    ))
+    .map((discovery) => [
+      `${discovery.mangaReference?.scraperId}::${discovery.mangaReference?.sourceUrl}`,
+      discovery.mangaReference as MangaCorrespondenceReference,
+    ])).values());
   return {
     ...input,
     referenceName: names[0] ?? "",
     names,
     referenceSources: dedupeAuthorCorrespondenceReferenceSources(referenceSources),
+    mangaReferences,
     replay: {
       revision: Math.max(1, Math.floor((input.replay?.revision ?? 0) + 1)),
     },

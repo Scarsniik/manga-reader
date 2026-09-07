@@ -4,6 +4,10 @@ import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendControl/ScraperPageAppendControl";
 import type { AuthorCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
 import { DEFAULT_AUTHOR_CORRESPONDENCE_ADVANCED_BATCH_SIZE } from "@/shared/backgroundSearch";
+import {
+  buildAuthorCorrespondenceReplayInput,
+  buildInitialAuthorCorrespondenceDiscoveries,
+} from "@/renderer/backgroundSearch/authorCorrespondenceDiscoveries";
 
 type Props = {
   active: boolean;
@@ -41,6 +45,10 @@ export default function AuthorCorrespondenceAdvancedButton({
     setPending(true);
     setLaunchError(null);
     try {
+      const revisedInput = buildAuthorCorrespondenceReplayInput(
+        input,
+        buildInitialAuthorCorrespondenceDiscoveries(input, result),
+      );
       const requestedBatchCount = Math.max(
         completedBatchCount,
         input.advancedSearch?.requestedBatchCount ?? 0,
@@ -48,7 +56,7 @@ export default function AuthorCorrespondenceAdvancedButton({
       const replayed = await window.api?.replayBackgroundSearch?.({
         jobId: backgroundSearchJobId,
         input: {
-          ...input,
+          ...revisedInput,
           replay: undefined,
           advancedSearch: {
             enabled: true,
@@ -59,7 +67,7 @@ export default function AuthorCorrespondenceAdvancedButton({
             ) + requestedMangaCount,
             continueFromResult: true,
             invalidatedAuthorMatchKeys: Array.from(invalidatedMatchKeys),
-            enableRomajiPhoneticMerge: input.advancedSearch?.enableRomajiPhoneticMerge === true,
+            enableRomajiPhoneticMerge: revisedInput.advancedSearch?.enableRomajiPhoneticMerge === true,
           },
         },
       });

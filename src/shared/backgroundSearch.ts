@@ -285,6 +285,7 @@ export type AuthorCorrespondenceBackgroundInput = {
   scrapeDetailsWithCards: boolean;
   advancedSearch?: AuthorCorrespondenceAdvancedSearchRequest;
   correspondenceSafety?: MangaCorrespondenceSafetySettings;
+  mangaReferences?: MangaCorrespondenceReference[];
   mangaSeed?: {
     reference: MangaCorrespondenceReference;
     enableRomajiPhoneticMerge: boolean;
