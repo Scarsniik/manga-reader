@@ -12,6 +12,7 @@ import {
   type ScraperRuntimeDetailsResult,
 } from "@/renderer/utils/scraperRuntime";
 import {
+  autoLoadInitialScraperDetailsThumbnails,
   canLoadMoreScraperDetailsThumbnails,
   getLoadMoreScraperDetailsThumbnailsLabel,
   loadMoreScraperDetailsThumbnails,
@@ -147,7 +148,24 @@ export default function useQuickReviewDetails(
             fetchDocument,
             detailsCache: detailsCacheRef.current,
           });
-          return { details, error: null };
+          if (!details || !fetchDocument) {
+            return { details, error: null };
+          }
+
+          const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, "pages"));
+          try {
+            const detailsWithInitialThumbnails = await autoLoadInitialScraperDetailsThumbnails({
+              scraper,
+              details,
+              detailsConfig,
+              pagesConfig,
+              fetchDocument,
+            });
+            return { details: detailsWithInitialThumbnails, error: null };
+          } catch (error) {
+            console.warn("Scraper initial thumbnails fetch failed", error);
+            return { details, error: null };
+          }
         } catch (error) {
           return {
             details: null,

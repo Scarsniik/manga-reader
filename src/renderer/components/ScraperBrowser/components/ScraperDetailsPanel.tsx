@@ -33,6 +33,7 @@ import {
 } from '@/renderer/utils/scraperTagFavorites';
 
 const MIDDLE_BUTTON = 1;
+type DetailsContentTab = 'thumbnails' | 'chapters';
 type ThumbnailFrameStyle = React.CSSProperties & {
   '--scraper-thumbnail-width'?: string;
   '--scraper-thumbnail-height'?: string;
@@ -154,6 +155,13 @@ export default function ScraperDetailsPanel({
   onOpenCorrespondenceSearch,
   onOpenAuthorCorrespondenceSearch,
 }: Props) {
+  const [contentTabSelection, setContentTabSelection] = React.useState<{
+    detailsKey: string;
+    tab: DetailsContentTab;
+  }>({
+    detailsKey: '',
+    tab: 'thumbnails',
+  });
   const { handleBeforeToggle: handleBookmarkBeforeToggle } = usePotentialMangaMatchBookmarkGuard({
     readingMatches: potentialReadingMatches,
     bookmarkMatches: potentialBookmarkMatches,
@@ -166,8 +174,7 @@ export default function ScraperDetailsPanel({
   }
 
   const thumbnails = detailsResult.thumbnails ?? [];
-  const shouldDisplayThumbnails = !usesChapters
-    && displaysThumbnails
+  const shouldDisplayThumbnails = displaysThumbnails
     && Array.isArray(detailsResult.thumbnails);
   const canOpenThumbnailReader = hasPages && !usesChapters;
   const hasStandaloneActions = hasPages && !usesChapters;
@@ -182,6 +189,16 @@ export default function ScraperDetailsPanel({
   const linkedStandaloneManga = getLinkedMangaForSource();
   const linkedStandaloneLocalManga = getLinkedLocalMangaForSource();
   const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+  const hasChapterSection = chapters.length > 0 || (usesChapters && hasPages);
+  const hasThumbnailSection = shouldDisplayThumbnails
+    && (thumbnails.length > 0 || canLoadMoreThumbnails);
+  const hasContentTabs = hasChapterSection && hasThumbnailSection;
+  const activeContentTab = contentTabSelection.detailsKey === sourceUrl
+    ? contentTabSelection.tab
+    : 'thumbnails';
+  const showChapters = hasChapterSection && (!hasContentTabs || activeContentTab === 'chapters');
+  const showThumbnails = shouldDisplayThumbnails
+    && (!hasContentTabs || activeContentTab === 'thumbnails');
   const pageCountLabel = formatScraperPageCountForDisplay(detailsResult.pageCount);
   const languageCodes = detailsResult.languageCodes ?? [];
   const downloadLabel = linkedStandaloneLocalManga
@@ -580,7 +597,32 @@ export default function ScraperDetailsPanel({
             </div>
           ) : null}
 
-          {chapters.length ? (
+          {hasContentTabs ? (
+            <div className="scraper-browser__details-content-tabs" role="tablist" aria-label="Contenu de la fiche">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeContentTab === 'thumbnails'}
+                className={activeContentTab === 'thumbnails' ? 'is-active' : ''}
+                onClick={() => setContentTabSelection({ detailsKey: sourceUrl, tab: 'thumbnails' })}
+              >
+                Vignettes
+                <span>{thumbnails.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeContentTab === 'chapters'}
+                className={activeContentTab === 'chapters' ? 'is-active' : ''}
+                onClick={() => setContentTabSelection({ detailsKey: sourceUrl, tab: 'chapters' })}
+              >
+                Chapitres
+                <span>{chapters.length}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {showChapters && chapters.length ? (
             <div className="scraper-browser__chapters">
               <div className="scraper-browser__chapters-head">
                 <strong>Chapitres</strong>
@@ -604,70 +646,68 @@ export default function ScraperDetailsPanel({
                       key={`${chapter.url}-${chapter.label}`}
                       className={[
                         'scraper-browser__chapter-card',
-                        hasChapterActions ? 'is-with-actions' : '',
+                        chapter.image ? 'is-with-image' : '',
                       ].join(' ').trim()}
                     >
-                      <div className="scraper-browser__chapter-media">
-                        {chapter.image ? (
+                      {chapter.image ? (
+                        <div className="scraper-browser__chapter-media">
                           <img src={chapter.image} alt={chapter.label} />
-                        ) : (
-                          <div className="scraper-browser__chapter-placeholder">Chapitre</div>
-                        )}
-                      </div>
+                        </div>
+                      ) : null}
 
                       <div className="scraper-browser__chapter-body">
                         <strong>{chapter.label}</strong>
                         <span>{formatScraperValueForDisplay(chapter.url)}</span>
-                      </div>
 
-                      {hasChapterActions ? (
-                        <div className="scraper-browser__chapter-actions scraper-browser__chapter-actions--side">
-                          <button
-                            type="button"
-                            className="scraper-browser__read"
-                            onClick={() => onOpenReader({ chapter })}
-                            onMouseDown={(event) => {
-                              if (event.button === MIDDLE_BUTTON) {
-                                event.preventDefault();
-                              }
-                            }}
-                            onAuxClick={(event) => handleOpenReaderAuxClick(event, { chapter })}
-                            disabled={openingReader}
-                            data-prevent-middle-click-autoscroll="true"
-                          >
-                            {openingReader ? 'Ouverture...' : 'Lecteur'}
-                          </button>
-                          <button
-                            type="button"
-                            className={[
-                              'scraper-browser__download',
-                              linkedChapterLocalManga ? 'is-linked' : '',
-                            ].join(' ').trim()}
-                            onClick={() => onDownload(chapter)}
-                            disabled={downloading}
-                            title={linkedChapterLocalManga ? `Deja telecharge sous ${linkedChapterLocalManga.title}. Le telechargement remplacera les images locales.` : undefined}
-                          >
-                            {downloading ? 'Telechargement...' : chapterDownloadLabel}
-                          </button>
-                          <button
-                            type="button"
-                            className="scraper-browser__add-library"
-                            onClick={() => onAddToLibrary(chapter)}
-                            disabled={addingToLibrary}
-                            title={linkedChapterManga ? `Deja present en bibliotheque sous ${linkedChapterManga.title}. Cliquer pour mettre a jour la fiche.` : undefined}
-                          >
-                            {addingToLibrary ? 'Ajout...' : chapterAddToLibraryLabel}
-                          </button>
-                          <button
-                            type="button"
-                            className="scraper-browser__link-source"
-                            onClick={() => onLinkSourceToManga(chapter)}
-                            title={linkedChapterLocalManga ? `Lie a ${linkedChapterLocalManga.title}. Cliquer pour changer.` : undefined}
-                          >
-                            {linkedChapterLocalManga ? 'Changer' : 'Lier'}
-                          </button>
-                        </div>
-                      ) : null}
+                        {hasChapterActions ? (
+                          <div className="scraper-browser__chapter-actions">
+                            <button
+                              type="button"
+                              className="scraper-browser__read"
+                              onClick={() => onOpenReader({ chapter })}
+                              onMouseDown={(event) => {
+                                if (event.button === MIDDLE_BUTTON) {
+                                  event.preventDefault();
+                                }
+                              }}
+                              onAuxClick={(event) => handleOpenReaderAuxClick(event, { chapter })}
+                              disabled={openingReader}
+                              data-prevent-middle-click-autoscroll="true"
+                            >
+                              {openingReader ? 'Ouverture...' : 'Lecteur'}
+                            </button>
+                            <button
+                              type="button"
+                              className={[
+                                'scraper-browser__download',
+                                linkedChapterLocalManga ? 'is-linked' : '',
+                              ].join(' ').trim()}
+                              onClick={() => onDownload(chapter)}
+                              disabled={downloading}
+                              title={linkedChapterLocalManga ? `Deja telecharge sous ${linkedChapterLocalManga.title}. Le telechargement remplacera les images locales.` : undefined}
+                            >
+                              {downloading ? 'Telechargement...' : chapterDownloadLabel}
+                            </button>
+                            <button
+                              type="button"
+                              className="scraper-browser__add-library"
+                              onClick={() => onAddToLibrary(chapter)}
+                              disabled={addingToLibrary}
+                              title={linkedChapterManga ? `Deja present en bibliotheque sous ${linkedChapterManga.title}. Cliquer pour mettre a jour la fiche.` : undefined}
+                            >
+                              {addingToLibrary ? 'Ajout...' : chapterAddToLibraryLabel}
+                            </button>
+                            <button
+                              type="button"
+                              className="scraper-browser__link-source"
+                              onClick={() => onLinkSourceToManga(chapter)}
+                              title={linkedChapterLocalManga ? `Lie a ${linkedChapterLocalManga.title}. Cliquer pour changer.` : undefined}
+                            >
+                              {linkedChapterLocalManga ? 'Changer' : 'Lier'}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </article>
                   );
                 })}
@@ -675,14 +715,14 @@ export default function ScraperDetailsPanel({
             </div>
           ) : null}
 
-          {usesChapters && hasPages && !chapters.length ? (
+          {showChapters && usesChapters && hasPages && !chapters.length ? (
             <div className="scraper-browser__chapters-empty">
               Aucun chapitre n&apos;a ete extrait pour cette fiche. Configure et valide le composant
               `Chapitres` pour ouvrir le lecteur depuis un chapitre.
             </div>
           ) : null}
 
-          {shouldDisplayThumbnails ? (
+          {showThumbnails ? (
             <div className="scraper-browser__thumbnails">
               <div className="scraper-browser__thumbnails-head">
                 <strong>Pages</strong>

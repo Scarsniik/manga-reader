@@ -475,6 +475,14 @@ injectee dans le template.
 Si `thumbnailsListSelector` ou `thumbnailsNextPageSelector` est renseigne, `thumbnailsSelector` est
 obligatoire a l'enregistrement.
 
+Quand la fiche ne contient aucune vignette mais fournit une URL via
+`thumbnailsNextPageSelector`, la premiere page externe de vignettes est chargee automatiquement.
+Les pages suivantes restent accessibles avec l'action `Voir plus`. Les vignettes sont aussi
+affichees comme apercus non cliquables lorsque la lecture du scraper est organisee par chapitres.
+Quand une fiche contient a la fois des vignettes et des chapitres, elle les separe dans deux onglets :
+`Vignettes` est ouvert par defaut et `Chapitres` vient ensuite. Un contenu disponible seul reste
+affiche directement, sans barre d'onglets.
+
 Les vignettes de `Fiche` servent a l'affichage et peuvent ouvrir le lecteur a une page donnee, mais
 la liste definitive des pages lues ou telechargees vient toujours du module `Pages`.
 
@@ -734,6 +742,9 @@ le test du module `Pages` quand celui-ci est lie aux chapitres.
 
 En runtime, les chapitres sont affiches sur la fiche. Si `Pages` est configure pour utiliser les
 chapitres, chaque chapitre expose ses actions `Lecteur` et `Telecharger`.
+Ces actions sont regroupees sous le titre et l'URL du chapitre. L'image du chapitre est affichee
+uniquement quand `chapterImageSelector` en fournit une ; aucune zone de remplacement n'est reservee
+dans le cas contraire.
 
 ## Module Pages
 

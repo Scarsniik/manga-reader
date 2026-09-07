@@ -23,6 +23,14 @@ type Options = {
   fetchDocument: ScraperDocumentFetcher;
 };
 
+export const shouldAutoLoadScraperDetailsThumbnails = (
+  details: ScraperRuntimeDetailsResult | null | undefined,
+): boolean => Boolean(
+  details
+  && (details.thumbnails?.length ?? 0) === 0
+  && details.thumbnailsNextPageUrl,
+);
+
 const mergeUniqueThumbnails = (
   values: ScraperRuntimeThumbnail[],
 ): ScraperRuntimeThumbnail[] => {
@@ -124,3 +132,11 @@ export const loadMoreScraperDetailsThumbnails = async ({
       : thumbnailsPage.nextPageUrl,
   };
 };
+
+export const autoLoadInitialScraperDetailsThumbnails = async (
+  options: Options,
+): Promise<ScraperRuntimeDetailsResult> => (
+  shouldAutoLoadScraperDetailsThumbnails(options.details)
+    ? loadMoreScraperDetailsThumbnails(options)
+    : options.details
+);

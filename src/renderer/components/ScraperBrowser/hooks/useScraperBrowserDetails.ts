@@ -16,7 +16,10 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
-import { loadMoreScraperDetailsThumbnails } from '@/renderer/utils/scraperDetailsThumbnails';
+import {
+  autoLoadInitialScraperDetailsThumbnails,
+  loadMoreScraperDetailsThumbnails,
+} from '@/renderer/utils/scraperDetailsThumbnails';
 import {
   buildReaderWorkspaceTarget,
   buildReaderPath,
@@ -170,14 +173,28 @@ export function useScraperBrowserDetails({
         contentType: documentResult.contentType,
         html: documentResult.html,
       }, async (request) => fetchScraperDocument(request));
+      const detailsWithInitialThumbnails = await (async () => {
+        try {
+          return await autoLoadInitialScraperDetailsThumbnails({
+            scraper,
+            details: extractedDetails,
+            detailsConfig,
+            pagesConfig,
+            fetchDocument: async (request) => fetchScraperDocument(request),
+          });
+        } catch (error) {
+          console.warn('Scraper initial thumbnails fetch failed', error);
+          return extractedDetails;
+        }
+      })();
       const extractedChapters = chaptersConfig
         ? await (async () => {
           try {
             const chaptersResolution = await resolveScraperChapters(
               scraper.baseUrl,
-              extractedDetails.finalUrl || extractedDetails.requestedUrl,
+              detailsWithInitialThumbnails.finalUrl || detailsWithInitialThumbnails.requestedUrl,
               chaptersConfig,
-              buildScraperTemplateContextFromDetails(extractedDetails),
+              buildScraperTemplateContextFromDetails(detailsWithInitialThumbnails),
               async (request) => fetchScraperDocument(request),
             );
 
@@ -198,19 +215,19 @@ export function useScraperBrowserDetails({
         return;
       }
 
-      if (!hasRenderableDetails(extractedDetails)) {
+      if (!hasRenderableDetails(detailsWithInitialThumbnails)) {
         setRuntimeError('La fiche a bien ete chargee, mais aucun contenu exploitable n\'a ete extrait avec la configuration actuelle.');
         return;
       }
 
-      setDetailsResult(extractedDetails);
+      setDetailsResult(detailsWithInitialThumbnails);
       setChaptersResult(extractedChapters);
-      collectScraperDetailsTagsForTagListCacheSafe(scraper, extractedDetails);
+      collectScraperDetailsTagsForTagListCacheSafe(scraper, detailsWithInitialThumbnails);
       void recordDetailsHistorySafe({
         scraperId: scraper.id,
-        sourceUrl: extractedDetails.finalUrl || extractedDetails.requestedUrl || targetUrl,
-        title: extractedDetails.title || targetUrl,
-        cover: extractedDetails.cover,
+        sourceUrl: detailsWithInitialThumbnails.finalUrl || detailsWithInitialThumbnails.requestedUrl || targetUrl,
+        title: detailsWithInitialThumbnails.title || targetUrl,
+        cover: detailsWithInitialThumbnails.cover,
       });
     } catch (error) {
       if (canCommit()) {
@@ -225,6 +242,7 @@ export function useScraperBrowserDetails({
     chaptersConfig,
     clearFeedback,
     detailsConfig,
+    pagesConfig,
     resetDetailsState,
     resetListingState,
     scraper,
