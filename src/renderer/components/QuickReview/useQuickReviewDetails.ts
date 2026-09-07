@@ -4,13 +4,18 @@ import { buildQuickReviewCoverUrls } from "@/renderer/components/QuickReview/qui
 import useParams from "@/renderer/hooks/useParams";
 import {
   createScraperCardDetailsCache,
+  getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
+  isScraperFeatureConfigured,
   resolveScraperCardDetails,
+  resolveScraperChapters,
   getScraperRuntimeThumbnailUrl,
+  type ScraperRuntimeChapterResult,
   type ScraperRuntimeDetailsResult,
 } from "@/renderer/utils/scraperRuntime";
+import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import {
   autoLoadInitialScraperDetailsThumbnails,
   canLoadMoreScraperDetailsThumbnails,
@@ -21,12 +26,15 @@ import { normalizeQuickReviewPrefetchCount } from "@/shared/quickReviewSettings"
 
 export type QuickReviewDetailsLoadState = {
   details: ScraperRuntimeDetailsResult | null;
+  chapters: ScraperRuntimeChapterResult[] | null;
   error: string | null;
 };
 
 type QuickReviewDetailsState = {
   detailsState: QuickReviewDetailsLoadState | null;
   details: ScraperRuntimeDetailsResult | null;
+  chapters: ScraperRuntimeChapterResult[];
+  chapterCount: number | null;
   detailsLoading: boolean;
   loadingMoreThumbnails: boolean;
   canLoadMoreThumbnails: boolean;
@@ -149,26 +157,45 @@ export default function useQuickReviewDetails(
             detailsCache: detailsCacheRef.current,
           });
           if (!details || !fetchDocument) {
-            return { details, error: null };
+            return { details, chapters: null, error: null };
           }
 
           const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, "pages"));
-          try {
-            const detailsWithInitialThumbnails = await autoLoadInitialScraperDetailsThumbnails({
+          const chaptersFeature = getScraperFeature(scraper, "chapters");
+          const chaptersConfig = isScraperFeatureConfigured(chaptersFeature)
+            ? getScraperChaptersFeatureConfig(chaptersFeature)
+            : null;
+          const [detailsWithInitialThumbnails, chapters] = await Promise.all([
+            autoLoadInitialScraperDetailsThumbnails({
               scraper,
               details,
               detailsConfig,
               pagesConfig,
               fetchDocument,
-            });
-            return { details: detailsWithInitialThumbnails, error: null };
-          } catch (error) {
-            console.warn("Scraper initial thumbnails fetch failed", error);
-            return { details, error: null };
-          }
+            }).catch((error) => {
+              console.warn("Scraper initial thumbnails fetch failed", error);
+              return details;
+            }),
+            chaptersConfig
+              ? resolveScraperChapters(
+                scraper.baseUrl,
+                details.finalUrl || details.requestedUrl,
+                chaptersConfig,
+                buildScraperTemplateContextFromDetails(details),
+                fetchDocument,
+              ).then((resolution) => (
+                resolution.sourceResult.ok ? resolution.chapters : null
+              )).catch((error) => {
+                console.warn("Quick review chapters extraction failed", error);
+                return null;
+              })
+              : Promise.resolve(null),
+          ]);
+          return { details: detailsWithInitialThumbnails, chapters, error: null };
         } catch (error) {
           return {
             details: null,
+            chapters: null,
             error: error instanceof Error ? error.message : "Impossible de charger cette fiche.",
           };
         }
@@ -265,7 +292,11 @@ export default function useQuickReviewDetails(
         pagesConfig,
         fetchDocument: fetchScraperDocument,
       });
-      detailsStatesRef.current.set(currentItem.id, { details: nextDetails, error: null });
+      detailsStatesRef.current.set(currentItem.id, {
+        details: nextDetails,
+        chapters: storedState.chapters,
+        error: null,
+      });
       await preloadItemThumbnails(nextDetails);
       setRevision((revision) => revision + 1);
     } catch (error) {
@@ -282,6 +313,8 @@ export default function useQuickReviewDetails(
   return {
     detailsState,
     details: currentDetails,
+    chapters: detailsState?.chapters ?? [],
+    chapterCount: detailsState?.chapters?.length ?? null,
     detailsLoading: loadingItemId === currentItem?.id && !detailsState,
     loadingMoreThumbnails: loadingMoreItemId === currentItem?.id,
     canLoadMoreThumbnails: canLoadMoreScraperDetailsThumbnails(currentDetails, currentPagesConfig),

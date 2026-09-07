@@ -26,6 +26,7 @@ import {
   getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
+  getScraperPagesFeatureConfig,
   hasRenderableDetails,
   isScraperFeatureConfigured,
   resolveScraperChapters,
@@ -33,6 +34,10 @@ import {
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import { recordDetailsHistorySafe } from "@/renderer/utils/history";
 import { collectScraperDetailsTagsForTagListCacheSafe } from "@/renderer/utils/scraperTagListCache";
+import {
+  autoLoadInitialScraperDetailsThumbnails,
+  shouldAutoLoadScraperDetailsThumbnails,
+} from "@/renderer/utils/scraperDetailsThumbnails";
 import {
   buildReaderSearch,
   openWorkspaceTarget as openWorkspaceTargetInNewTab,
@@ -175,7 +180,10 @@ function ScraperDetailsPanel({
       ? null
       : readWorkspaceBrowserTabCache(tabId, targetKey);
 
-    if (cachedState) {
+    if (
+      cachedState
+      && !shouldAutoLoadScraperDetailsThumbnails(cachedState.initialState.detailsResult)
+    ) {
       setScraper(cachedState.scraper);
       setInitialState(cachedState.initialState);
       setError(null);
@@ -252,7 +260,26 @@ function ScraperDetailsPanel({
         html: documentResult.html,
       }, async (request) => api.fetchScraperDocument(request));
 
-      if (!hasRenderableDetails(detailsResult)) {
+      const pagesFeature = getScraperFeature(nextScraper, "pages");
+      const pagesConfig = isScraperFeatureConfigured(pagesFeature)
+        ? getScraperPagesFeatureConfig(pagesFeature)
+        : null;
+      const detailsWithInitialThumbnails = await (async () => {
+        try {
+          return await autoLoadInitialScraperDetailsThumbnails({
+            scraper: nextScraper,
+            details: detailsResult,
+            detailsConfig,
+            pagesConfig,
+            fetchDocument: async (request) => api.fetchScraperDocument(request),
+          });
+        } catch (thumbnailError) {
+          console.warn("Workspace scraper initial thumbnails fetch failed", thumbnailError);
+          return detailsResult;
+        }
+      })();
+
+      if (!hasRenderableDetails(detailsWithInitialThumbnails)) {
         setScraper(nextScraper);
         setInitialState(null);
         setError("La fiche a ete chargee, mais aucun contenu exploitable n'a ete extrait.");
@@ -268,9 +295,9 @@ function ScraperDetailsPanel({
           try {
             const chaptersResolution = await resolveScraperChapters(
               nextScraper.baseUrl,
-              detailsResult.finalUrl || detailsResult.requestedUrl,
+              detailsWithInitialThumbnails.finalUrl || detailsWithInitialThumbnails.requestedUrl,
               chaptersConfig,
-              buildScraperTemplateContextFromDetails(detailsResult),
+              buildScraperTemplateContextFromDetails(detailsWithInitialThumbnails),
               async (request) => api.fetchScraperDocument(request),
             );
 
@@ -290,18 +317,20 @@ function ScraperDetailsPanel({
         return;
       }
 
-      const canonicalDetailsQuery = detailsResult.finalUrl || detailsResult.requestedUrl || sourceUrl;
+      const canonicalDetailsQuery = detailsWithInitialThumbnails.finalUrl
+        || detailsWithInitialThumbnails.requestedUrl
+        || sourceUrl;
       const nextInitialState: ScraperBrowserInitialState = {
         query: canonicalDetailsQuery,
-        detailsResult,
+        detailsResult: detailsWithInitialThumbnails,
         chaptersResult,
         listingReturnState: null,
       };
-      const resolvedTitle = detailsResult.title || title || sourceUrl;
+      const resolvedTitle = detailsWithInitialThumbnails.title || title || sourceUrl;
 
       setScraper(nextScraper);
       setInitialState(nextInitialState);
-      collectScraperDetailsTagsForTagListCacheSafe(nextScraper, detailsResult);
+      collectScraperDetailsTagsForTagListCacheSafe(nextScraper, detailsWithInitialThumbnails);
       writeWorkspaceBrowserTabCache(tabId, {
         targetKey,
         scraper: nextScraper,
@@ -313,7 +342,7 @@ function ScraperDetailsPanel({
         scraperId: nextScraper.id,
         sourceUrl: canonicalDetailsQuery,
         title: resolvedTitle,
-        cover: detailsResult.cover,
+        cover: detailsWithInitialThumbnails.cover,
       });
     } catch (loadError) {
       if (requestId !== requestIdRef.current) {

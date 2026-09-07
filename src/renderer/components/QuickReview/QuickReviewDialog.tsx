@@ -20,6 +20,10 @@ import useQuickReviewBookmark from "@/renderer/components/QuickReview/useQuickRe
 import useQuickReviewLayout from "@/renderer/components/QuickReview/useQuickReviewLayout";
 import useQuickReviewPotentialMatches from "@/renderer/components/QuickReview/useQuickReviewPotentialMatches";
 import useQuickReviewShortcuts from "@/renderer/components/QuickReview/useQuickReviewShortcuts";
+import {
+  canOpenQuickReviewChapterReader,
+  openQuickReviewReader,
+} from "@/renderer/components/QuickReview/quickReviewReader";
 import { LoadingSpinnerIcon } from "@/renderer/components/icons";
 import useModal from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
@@ -102,6 +106,8 @@ export default function QuickReviewDialog({ items }: Props) {
   const {
     detailsState,
     details,
+    chapters,
+    chapterCount,
     detailsLoading,
     loadingMoreThumbnails,
     canLoadMoreThumbnails,
@@ -160,6 +166,9 @@ export default function QuickReviewDialog({ items }: Props) {
   );
   const summary = details?.description || currentItem?.displaySummary || primaryResult?.summary;
   const pageCount = details?.pageCount || currentItem?.displayPageCount || primaryResult?.pageCount;
+  const chapterCountLabel = chapterCount === null
+    ? null
+    : `${chapterCount} chapitre${chapterCount === 1 ? "" : "s"}`;
   const sourceUrl = getQuickReviewSourceUrl(currentItem, details);
   const coverUrls = React.useMemo(
     () => currentItem ? buildQuickReviewCoverUrls(currentItem, details) : [],
@@ -185,8 +194,28 @@ export default function QuickReviewDialog({ items }: Props) {
     enabled: params?.scraperCardPotentialMatchesEnabled !== false,
     onOpenError: setOpenError,
   });
+  const hasEquivalentBookmark = potentialMatches.bookmarkMatches.length > 0;
+  const isBookmarked = bookmark.isBookmarked || hasEquivalentBookmark;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
   const bookmarkVerificationLoading = bookmark.verificationLoading || potentialMatches.loading;
+  const [openingReader, setOpeningReader] = React.useState(false);
+
+  const handleOpenReader = React.useCallback(async () => {
+    if (!currentItem || !details || !chapters.length || openingReader) return;
+    setOpeningReader(true);
+    setOpenError(null);
+    try {
+      const opened = await openQuickReviewReader({ item: currentItem, details, chapters });
+      if (!opened) {
+        throw new Error("Impossible d'ouvrir le lecteur dans un onglet workspace.");
+      }
+      closeModal();
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : "Impossible d'ouvrir le lecteur.");
+    } finally {
+      setOpeningReader(false);
+    }
+  }, [chapters, closeModal, currentItem, details, openingReader]);
 
   const goPrevious = React.useCallback(() => {
     if (bookmark.bookmarking) return;
@@ -276,7 +305,7 @@ export default function QuickReviewDialog({ items }: Props) {
 
   const handleBookmark = React.useCallback(async () => {
     if (bookmark.bookmarking || bookmarkVerificationLoading) return;
-    if (bookmark.isBookmarked) {
+    if (isBookmarked) {
       goNext();
       return;
     }
@@ -291,6 +320,7 @@ export default function QuickReviewDialog({ items }: Props) {
     bookmarkVerificationLoading,
     confirmBookmark,
     goNext,
+    isBookmarked,
   ]);
 
   useQuickReviewShortcuts({
@@ -403,10 +433,15 @@ export default function QuickReviewDialog({ items }: Props) {
                   {displaySettings.quickReviewShowFacts ? <div className="quick-review__facts">
                     <span>{currentItem?.primarySource.scraper.name}</span>
                     {languageCodes.length ? <LanguageFlags languageCodes={languageCodes} /> : null}
+                    {chapterCountLabel ? <span>{chapterCountLabel}</span> : null}
                     {pageCount ? <span>{pageCount}</span> : null}
                     {details?.mangaStatus ? <span>{details.mangaStatus}</span> : null}
-                    {bookmark.isBookmarked ? (
-                      <span className="quick-review__bookmark-status">Déjà bookmarké</span>
+                    {isBookmarked ? (
+                      <span className="quick-review__bookmark-status">
+                        {hasEquivalentBookmark && !bookmark.isBookmarked
+                          ? "Déjà bookmarké sur une autre source"
+                          : "Déjà bookmarké"}
+                      </span>
                     ) : null}
                   </div> : null}
                 </div>
@@ -465,11 +500,14 @@ export default function QuickReviewDialog({ items }: Props) {
           bookmarking={bookmark.bookmarking}
           bookmarkVerificationLoading={bookmarkVerificationLoading}
           currentIndex={currentIndex}
-          isBookmarked={bookmark.isBookmarked}
+          isBookmarked={isBookmarked}
           nextShortcut={nextShortcut}
           onBookmark={() => void handleBookmark()}
           onNext={goNext}
           onPrevious={goPrevious}
+          onRead={() => void handleOpenReader()}
+          readerAvailable={canOpenQuickReviewChapterReader(currentItem, chapters)}
+          readerOpening={openingReader}
           previousShortcut={previousShortcut}
           sourceAvailable={Boolean(sourceUrl)}
         />

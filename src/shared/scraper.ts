@@ -1202,6 +1202,22 @@ export function normalizeScraperViewHistorySourceUrl(value: unknown): string {
   }
 }
 
+export function normalizeScraperBookmarkSourceUrl(value: unknown): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return trimmed.replace(/\/+$/, "") || trimmed;
+  }
+}
+
 const hashScraperViewHistoryIdentity = (value: string): string => {
   let left = 0x811c9dc5;
   let right = 0x9e3779b9;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { normalizeScraperBookmarkSourceUrl } from '@/shared/scraper';
 import type {
   RemoveScraperBookmarkRequest,
   SaveScraperBookmarkRequest,
@@ -92,8 +93,9 @@ const upsertBookmark = (
   records: ScraperBookmarkRecord[],
   bookmark: ScraperBookmarkRecord,
 ): ScraperBookmarkRecord[] => {
-  const next = records.filter((record) => !(
-    record.scraperId === bookmark.scraperId && record.sourceUrl === bookmark.sourceUrl
+  const bookmarkKey = getScraperBookmarkKey(bookmark.scraperId, bookmark.sourceUrl);
+  const next = records.filter((record) => (
+    getScraperBookmarkKey(record.scraperId, record.sourceUrl) !== bookmarkKey
   ));
   next.push(bookmark);
   return sortBookmarks(next);
@@ -103,9 +105,9 @@ const removeBookmark = (
   records: ScraperBookmarkRecord[],
   request: RemoveScraperBookmarkRequest,
 ): ScraperBookmarkRecord[] => (
-  records.filter((record) => !(
-    record.scraperId === String(request.scraperId ?? '').trim()
-    && record.sourceUrl === String(request.sourceUrl ?? '').trim()
+  records.filter((record) => (
+    getScraperBookmarkKey(record.scraperId, record.sourceUrl)
+    !== getScraperBookmarkKey(request.scraperId, request.sourceUrl)
   ))
 );
 
@@ -178,7 +180,7 @@ export const getScraperBookmarkKey = (
   sourceUrl?: string | null,
 ): string => {
   const normalizedScraperId = String(scraperId ?? '').trim();
-  const normalizedSourceUrl = String(sourceUrl ?? '').trim();
+  const normalizedSourceUrl = normalizeScraperBookmarkSourceUrl(sourceUrl);
 
   if (!normalizedScraperId || !normalizedSourceUrl) {
     return '';

@@ -365,6 +365,19 @@ Les resultats sont dedoublonnes par couple `detailUrl + title`.
 La validation reussit si au moins un titre est extrait. Les selecteurs optionnels sans resultat
 remontent comme informations ou warnings, mais ne bloquent pas la validation.
 
+Dans le navigateur de scraper, le chargement indique la phase courante : recuperation de la page,
+extraction des cards, puis enrichissement des fiches lorsque l'option correspondante est active.
+Cette derniere phase affiche aussi le nombre de fiches traitees sur le total de la page.
+
+Une fiche ouverte dans un nouvel onglet workspace charge automatiquement sa premiere page de
+vignettes lorsque celle-ci est externe a la fiche. La review rapide affiche aussi le nombre de
+chapitres lorsque le composant `Chapitres` est configure et resolu. Son statut de bookmark tient
+compte de l'identite de l'URL (avec ou sans slash final), mais aussi des correspondances de titre et
+d'auteur detectees sur les autres scrapers afin de signaler les doublons inter-sources.
+Pour une fiche dont les pages sont liees aux chapitres, l'action `Lecture` reprend le chapitre dont
+la progression a ete mise a jour le plus recemment. Sans progression, elle ouvre le premier chapitre
+dans l'ordre configure, a la premiere page.
+
 Pour la pagination, deux modes existent :
 
 - si `urlTemplate` contient une variable de page, la page suivante est reconstruite avec `pageIndex + 1`

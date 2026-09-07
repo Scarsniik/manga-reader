@@ -20,6 +20,14 @@ const SCRAPER_CARD_DETAILS_CONCURRENCY = 3;
 
 export type ScraperCardDetailsCache = Map<string, Promise<ScraperRuntimeDetailsResult | null>>;
 
+export type ScraperCardDetailsProgress = {
+  completed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+};
+
 export type CardDetailsEnrichmentOptions = {
   enabled: boolean;
   scraper: ScraperRecord;
@@ -27,6 +35,7 @@ export type CardDetailsEnrichmentOptions = {
   fetchDocument: ScraperDocumentFetcher | undefined;
   concurrency?: number;
   detailsCache?: ScraperCardDetailsCache;
+  onProgress?: (progress: ScraperCardDetailsProgress) => void;
 };
 
 const uniqueTextValues = (values: Array<string | null | undefined>): string[] => {
@@ -181,10 +190,22 @@ export const enrichScraperSearchPageWithDetails = async (
   let skipped = 0;
   let succeeded = 0;
   let failed = 0;
+  let completed = 0;
+  const emitProgress = () => options.onProgress?.({
+    completed,
+    total: page.items.length,
+    succeeded,
+    failed,
+    skipped,
+  });
+
+  emitProgress();
 
   const tasks = page.items.map((item, index) => async () => {
     if (!item.detailUrl) {
       skipped += 1;
+      completed += 1;
+      emitProgress();
       return;
     }
 
@@ -204,6 +225,9 @@ export const enrichScraperSearchPageWithDetails = async (
       succeeded += 1;
     } catch {
       failed += 1;
+    } finally {
+      completed += 1;
+      emitProgress();
     }
   });
 

@@ -24,6 +24,9 @@ const source = `
   export {
     mergeScraperCardWithDetails,
   } from "@/renderer/utils/scraperRuntime/cardDetailsEnrichment";
+  export {
+    getScraperBookmarkKey,
+  } from "@/renderer/stores/scraperBookmarks";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "scraper-card-potential-matches-test.ts" },
@@ -51,6 +54,7 @@ const {
   retainScraperCardPotentialMatches,
   buildPotentialMatchEntries,
   mergeScraperCardWithDetails,
+  getScraperBookmarkKey,
 } = bundledModule.exports;
 const options = { enableRomajiPhoneticMerge: false };
 const currentInput = {
@@ -65,6 +69,19 @@ const current = {
   sourceUrl: currentInput.sourceUrl,
   authorNames: currentInput.authorNames,
 };
+
+test("bookmark identity ignores a trailing slash on the same source URL", () => {
+  assert.equal(
+    getScraperBookmarkKey(
+      "593d981d-c15b-4c15-b8d1-f5eb533097f7",
+      "https://hentaihere.com/m/S71527/",
+    ),
+    getScraperBookmarkKey(
+      "593d981d-c15b-4c15-b8d1-f5eb533097f7",
+      "https://hentaihere.com/m/S71527",
+    ),
+  );
+});
 
 test("card cache fingerprints ignore presentation-only rerenders and input ordering", () => {
   const reorderedInput = {
@@ -210,6 +227,37 @@ test("card matching reports bookmarks, reading records and reading lists", () =>
   assert.equal(matches.bookmarkMatches.length, 1);
   assert.equal(matches.readingListMatches.length, 1);
   assert.equal(matches.bookmarkMatches[0].matchKind, "base");
+});
+
+test("an alternate title from another scraper is recognized as an existing bookmark", () => {
+  const hentaiHereInput = {
+    key: "hentaihere-stepmother",
+    scraperId: "hentaihere",
+    title: "If A Stepmother And Her Stepson Lived Together, It Would Be Something Like This!",
+    sourceUrl: "https://hentaihere.test/manga/stepmother",
+    authorNames: ["Shimipan"],
+  };
+  const nhentaiBookmark = candidate({
+    id: "nhentai-stepmother-bookmark",
+    category: "bookmark",
+    scraperId: "nhentai",
+    sourceUrl: "https://nhentai.test/g/633575/",
+    title: "[Pentacle (Shimipan)] Giri no Oyako ga Doukyou Shitereba Kitto kou | If a stepmother and her stepson lived together, it would be something like this. [English] [WaterKujo]",
+    authorNames: ["Shimipan"],
+  });
+  const matches = matchScraperCardPotentialMatchInput(
+    hentaiHereInput,
+    buildScraperPotentialMatchable(hentaiHereInput),
+    [],
+    [nhentaiBookmark],
+    [],
+    options,
+  );
+
+  assert.deepEqual(
+    matches.bookmarkMatches.map((match) => match.id),
+    ["nhentai-stepmother-bookmark"],
+  );
 });
 
 test("a completed chapter range matches a chapter contained in that range", () => {

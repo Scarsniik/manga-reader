@@ -10,6 +10,13 @@ export type ScraperListingMode = 'homepage' | 'search' | 'author' | 'tag' | 'sou
 export type ScraperBrowseMode = ScraperListingMode | 'manga' | 'tagList';
 export type ScraperBrowserHistorySourceKind = ScraperBrowseMode | 'bookmarks';
 
+export type ScraperBrowserLoadingStatus = {
+  title: string;
+  detail?: string;
+  completed?: number;
+  total?: number;
+};
+
 export type ScraperBrowserLocationState = {
   scraperBrowserHistorySource?: {
     kind: ScraperBrowserHistorySourceKind;

@@ -21,6 +21,7 @@ import {
 import {
   ScraperBrowseMode,
   ScraperBrowserLocationState,
+  ScraperBrowserLoadingStatus,
   ScraperListingMode,
   ScraperListingReturnState,
 } from '@/renderer/components/ScraperBrowser/types';
@@ -46,6 +47,7 @@ import {
   resolveScraperTagTargetUrl,
   ScraperRuntimeDetailsResult,
   ScraperRuntimeSearchPageResult,
+  type ScraperListingPageProgress,
 } from '@/renderer/utils/scraperRuntime';
 import {
   parseScraperRouteState,
@@ -128,6 +130,7 @@ type UseScraperBrowserSearchOptions = {
   setRuntimeMessage: Dispatch<SetStateAction<string | null>>;
   setRuntimeError: Dispatch<SetStateAction<string | null>>;
   setLoading: Dispatch<SetStateAction<boolean>>;
+  setLoadingStatus: Dispatch<SetStateAction<ScraperBrowserLoadingStatus | null>>;
   loadDetailsFromTargetUrl: (targetUrl: string) => Promise<void>;
 };
 
@@ -146,6 +149,32 @@ const getListingModeLabel = (mode: ScraperListingMode): string => (
         ? 'homepage'
         : 'recherche'
 );
+
+const buildListingLoadingStatus = (
+  mode: ScraperListingMode,
+  progress: ScraperListingPageProgress,
+): ScraperBrowserLoadingStatus => {
+  if (progress.phase === "extracting") {
+    return {
+      title: "Extraction des cards",
+      detail: `Analyse du HTML de la ${getListingModeLabel(mode)}.`,
+    };
+  }
+
+  if (progress.phase === "enriching") {
+    return {
+      title: "Enrichissement des fiches",
+      detail: "Les cards ne contiennent pas toutes les metadonnees. Scaramanga ouvre chaque fiche pour les completer.",
+      completed: progress.completed,
+      total: progress.total,
+    };
+  }
+
+  return {
+    title: `Chargement de la ${getListingModeLabel(mode)}`,
+    detail: "Recuperation de la page depuis le site source.",
+  };
+};
 
 const formatDuration = (durationMs: number): string => (
   durationMs >= 1000
@@ -351,6 +380,7 @@ export function useScraperBrowserSearch({
   setRuntimeMessage,
   setRuntimeError,
   setLoading,
+  setLoadingStatus,
   loadDetailsFromTargetUrl,
 }: UseScraperBrowserSearchOptions) {
   const authorEngineRunRef = useRef<BackgroundListingRun | null>(null);
@@ -358,6 +388,13 @@ export function useScraperBrowserSearch({
   const authorEngineAbortControllerRef = useRef<AbortController | null>(null);
   const authorDetailsCacheRef = useRef(createScraperCardDetailsCache());
   const authorEngineOriginalOnlyRef = useRef(authorOriginalOnly);
+
+  const handleListingProgress = useCallback((
+    listingMode: ScraperListingMode,
+    progress: ScraperListingPageProgress,
+  ) => {
+    setLoadingStatus(buildListingLoadingStatus(listingMode, progress));
+  }, [setLoadingStatus]);
 
   useEffect(() => () => authorEngineAbortControllerRef.current?.abort(), []);
   const fetchListingPage = useCallback(async (
@@ -404,8 +441,18 @@ export function useScraperBrowserSearch({
         ? 'Impossible de charger la homepage.'
         : `Impossible de charger la ${getListingModeLabel(listingMode)}.`,
       scrapeDetailsWithCards,
+      onProgress: (progress) => handleListingProgress(listingMode, progress),
     });
-  }, [authorConfig, homepageConfig, scrapeDetailsWithCards, scraper, searchConfig, sourceConfig, tagConfig]);
+  }, [
+    authorConfig,
+    handleListingProgress,
+    homepageConfig,
+    scrapeDetailsWithCards,
+    scraper,
+    searchConfig,
+    sourceConfig,
+    tagConfig,
+  ]);
 
   const getUsesTemplatePaging = useCallback((listingMode: ScraperListingMode): boolean => (
     listingMode === 'author'
@@ -697,6 +744,7 @@ export function useScraperBrowserSearch({
     }
 
     setLoading(true);
+    setLoadingStatus(buildListingLoadingStatus(listingMode, { phase: "fetching" }));
 
     try {
       const targetPageIndex = options?.pageIndex ?? 0;
@@ -749,6 +797,7 @@ export function useScraperBrowserSearch({
     } finally {
       if (canCommit()) {
         setLoading(false);
+        setLoadingStatus(null);
       }
     }
   }, [
@@ -773,6 +822,7 @@ export function useScraperBrowserSearch({
     setListingReturnState,
     setListingVisitedPageUrls,
     setLoading,
+    setLoadingStatus,
     setRuntimeError,
     setRuntimeMessage,
   ]);
@@ -846,6 +896,7 @@ export function useScraperBrowserSearch({
     }
 
     setLoading(true);
+    setLoadingStatus(buildListingLoadingStatus(mode, { phase: "fetching" }));
     setRuntimeMessage(null);
     setRuntimeError(null);
 
@@ -913,6 +964,7 @@ export function useScraperBrowserSearch({
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de charger la page suivante.');
     } finally {
       setLoading(false);
+      setLoadingStatus(null);
     }
   }, [
     authorConfig,
@@ -936,6 +988,7 @@ export function useScraperBrowserSearch({
     setListingResults,
     setListingVisitedPageUrls,
     setLoading,
+    setLoadingStatus,
     setRuntimeError,
     setRuntimeMessage,
   ]);
@@ -951,6 +1004,7 @@ export function useScraperBrowserSearch({
     }
 
     setLoading(true);
+    setLoadingStatus(buildListingLoadingStatus(mode, { phase: "fetching" }));
     setRuntimeMessage(null);
     setRuntimeError(null);
 
@@ -990,6 +1044,7 @@ export function useScraperBrowserSearch({
       setRuntimeError(error instanceof Error ? error.message : 'Impossible de revenir a la page precedente.');
     } finally {
       setLoading(false);
+      setLoadingStatus(null);
     }
   }, [
     fetchListingPage,
@@ -1006,6 +1061,7 @@ export function useScraperBrowserSearch({
     setListingResults,
     setListingVisitedPageUrls,
     setLoading,
+    setLoadingStatus,
     setRuntimeError,
     setRuntimeMessage,
   ]);

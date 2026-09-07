@@ -1,5 +1,6 @@
 import { type IpcMainInvokeEvent } from "electron";
 import {
+  normalizeScraperBookmarkSourceUrl,
   type RemoveScraperBookmarkRequest,
   type SaveScraperBookmarkRequest,
   type ScraperBookmarkMetadataField,
@@ -16,6 +17,21 @@ import {
   sanitizeBookmarkMetadataFieldList,
   sanitizeScraperBookmarkRecord,
 } from "./shared";
+
+const findScraperBookmarkBySourceUrl = (
+  scraperId: string,
+  sourceUrl: string,
+): ScraperBookmarkRecord | null => {
+  const exact = getScraperBookmark(scraperId, sourceUrl);
+  if (exact) {
+    return exact;
+  }
+
+  const sourceIdentity = normalizeScraperBookmarkSourceUrl(sourceUrl);
+  return listScraperBookmarks(scraperId).find((bookmark) => (
+    normalizeScraperBookmarkSourceUrl(bookmark.sourceUrl) === sourceIdentity
+  )) ?? null;
+};
 
 const applyExcludedBookmarkFields = <T extends Partial<ScraperBookmarkRecord>>(
   record: T,
@@ -100,7 +116,7 @@ export async function saveScraperBookmark(
 ): Promise<ScraperBookmarkRecord> {
   const normalizedScraperId = String(request.scraperId ?? "").trim();
   const normalizedSourceUrl = normalizeScraperBookmarkUrl(request.sourceUrl);
-  const existing = getScraperBookmark(normalizedScraperId, normalizedSourceUrl);
+  const existing = findScraperBookmarkBySourceUrl(normalizedScraperId, normalizedSourceUrl);
   const merged = mergeScraperBookmarkRecord(existing, request);
 
   if (!merged) {
@@ -122,5 +138,8 @@ export async function removeScraperBookmark(
     return false;
   }
 
-  return removeStoredScraperBookmark(normalizedScraperId, normalizedSourceUrl);
+  const existing = findScraperBookmarkBySourceUrl(normalizedScraperId, normalizedSourceUrl);
+  return existing
+    ? removeStoredScraperBookmark(existing.scraperId, existing.sourceUrl)
+    : false;
 }

@@ -44,6 +44,7 @@ import {
   ScraperBrowseMode,
   ScraperBrowserHistorySourceKind,
   ScraperBrowserInitialState,
+  ScraperBrowserLoadingStatus,
   ScraperBrowserLocationState,
   ScraperCapability,
   ScraperListingMode,
@@ -442,6 +443,7 @@ export default function ScraperBrowser({
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState<ScraperBrowserLoadingStatus | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -576,6 +578,7 @@ export default function ScraperBrowser({
 
   const resetAsyncState = useCallback(() => {
     setLoading(false);
+    setLoadingStatus(null);
     setDownloading(false);
     setOpeningReader(false);
     setLoadingMoreThumbnails(false);
@@ -771,6 +774,7 @@ export default function ScraperBrowser({
     setRuntimeMessage,
     setRuntimeError,
     setLoading,
+    setLoadingStatus,
     loadDetailsFromTargetUrl,
   });
 
@@ -2680,6 +2684,8 @@ export default function ScraperBrowser({
       )}
 
       <ScraperBrowserMessages
+        loading={loading}
+        loadingStatus={loadingStatus}
         runtimeMessage={runtimeMessage}
         runtimeError={runtimeError}
         downloadMessage={downloadMessage}

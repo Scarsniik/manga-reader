@@ -9,6 +9,7 @@ import { appendScraperLatestDiagnosticEvent } from "@/renderer/utils/scraperLate
 import {
   enrichScraperSearchPageWithDetails,
   type ScraperCardDetailsCache,
+  type ScraperCardDetailsProgress,
 } from "@/renderer/utils/scraperRuntime/cardDetailsEnrichment";
 import { getScraperDetailsFeatureConfig, getScraperFeature } from "@/renderer/utils/scraperRuntime/featureConfig";
 import {
@@ -26,7 +27,13 @@ export type ScraperListingDetailsOptions = {
   detailConcurrency?: number;
   diagnostics?: ScraperRequestDiagnosticContext;
   detailsCache?: ScraperCardDetailsCache;
+  onProgress?: (progress: ScraperListingPageProgress) => void;
 };
+
+export type ScraperListingPageProgress =
+  | { phase: "fetching" }
+  | { phase: "extracting" }
+  | ({ phase: "enriching" } & ScraperCardDetailsProgress);
 
 export type FetchResolvedScraperListingPageOptions = ScraperListingDetailsOptions & {
   scraper: ScraperRecord;
@@ -77,9 +84,11 @@ export const fetchResolvedScraperListingPage = async ({
   detailConcurrency,
   diagnostics,
   detailsCache,
+  onProgress,
   fetchDocument,
 }: FetchResolvedScraperListingPageOptions): Promise<ScraperRuntimeSearchPageResult> => {
   const fetchScraperDocument = fetchDocument ?? getFetchScraperDocument();
+  onProgress?.({ phase: "fetching" });
   const documentResult = await fetchScraperDocument(attachScraperRequestDiagnostics({
     scraperId: scraper.id,
     baseUrl: scraper.baseUrl,
@@ -101,6 +110,7 @@ export const fetchResolvedScraperListingPage = async ({
     );
   }
 
+  onProgress?.({ phase: "extracting" });
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(documentResult.html, "text/html");
   const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(documentNode, config, {
@@ -121,6 +131,10 @@ export const fetchResolvedScraperListingPage = async ({
     ),
     concurrency: detailConcurrency,
     detailsCache,
+    onProgress: (progress) => onProgress?.({
+      phase: "enriching",
+      ...progress,
+    }),
   });
 };
 
