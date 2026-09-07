@@ -666,6 +666,7 @@ export default function ScraperAuthorFavoritesView({
         </label> : null}
       <ScraperAuthorFavoriteResults
         favorite={selectedFavorite}
+        scrapers={scrapers}
         runs={effectiveRuns}
         displayedResults={displayedMergedResults}
         visibleResultCount={visibleMergedResults.length}

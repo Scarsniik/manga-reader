@@ -29,6 +29,7 @@
     "test:data-storage": "npm run test:collections-database && npm run test:bookmark-matching-index",
     "test:background-search": "npm run build:electron && node --test scripts/background-listing-blacklist.test.cjs scripts/background-listing-execution.test.cjs scripts/background-search-metadata.test.cjs scripts/background-search-navigation.test.cjs scripts/global-scraper-concurrency.test.cjs scripts/manga-correspondence-matching.test.cjs scripts/manga-correspondence-progressive-details.test.cjs scripts/search-document-cache.test.cjs",
     "test:author-favorite-cache": "npm run prestart && node --test scripts/author-favorite-cache.test.cjs",
+    "test:author-series-grouping": "npm run prestart && node --test scripts/author-series-grouping.test.cjs",
     "test:scraper-latest": "npm run prestart && node --test scripts/scraper-latest-result-limit.test.cjs scripts/scraper-latest-diagnostics.test.cjs scripts/scraper-latest-engine-parity.test.cjs scripts/scraper-latest-deep-scan.test.cjs scripts/scraper-latest-checkpoint-management.test.cjs scripts/background-listing-execution.test.cjs",
     "test:search-runtime": "npm run prestart && node --test scripts/shared-search-runtime.test.cjs scripts/scraper-latest-engine-parity.test.cjs",
     "diagnostics:scraper-latest": "node scripts/analyze-scraper-latest-diagnostics.cjs",

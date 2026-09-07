@@ -89,6 +89,33 @@ La vue combinee reutilise aussi :
 - le filtre multi-choix par etat de lecture, applique a la carte fusionnee entiere
 - les cards de resultat multi-source, avec les badges bibliotheque, bookmark et progression de lecture
 
+La liste des mangas propose deux modes d'affichage :
+
+- `Cartes`, qui conserve la grille fusionnee historique
+- `Par serie`, qui analyse toutes les cards visibles, regroupe les titres d'une meme serie et trie
+  leurs chapitres dans l'ordre
+
+Le regroupement par serie reutilise l'analyse de titre, la construction des cards de chapitre et la
+grille `Chapitres fusionnes` des correspondances manga. Les chapitres d'une serie apparaissent donc
+directement cote a cote sous son en-tete. Les titres alternatifs d'une card fusionnee servent de pont
+entre les traductions d'une meme serie.
+
+Une serie peut ouvrir un vrai job de correspondance manga pre-rempli avec ses cards, sans lancer de
+scraping. La vue complete permet de corriger les numeros, invalider ou ajouter des sources, puis de
+demarrer volontairement la recherche avec le rejeu normal des correspondances. Le job est reutilise
+si la serie est rouverte. Ses resultats et corrections sont reinjectes dans la liste de toutes les
+series, de sorte que la grille globale reste synchronisee avec la vue de correspondance ouverte.
+
+Chaque card de la vue par serie propose aussi `Corriger le classement`. Cette action permet de
+modifier ensemble son chapitre et sa serie, pour toutes les sources de la card fusionnee. Le champ
+serie accepte un texte libre et affiche sous la saisie les series existantes correspondant au texte.
+Une action permet de supprimer cette correction et de revenir a l'analyse automatique des titres.
+Les œuvres isolees sans numero ni categorie de chapitre explicite sont reunies dans un groupe racine
+`One Shot`, au meme niveau que les series. Chaque one-shot reste une entrée distincte dans ce groupe.
+Les cards de ce groupe sont affichees directement : le groupe ne propose pas de sous-vue serie.
+Si d'autres chapitres de la meme serie existent, l'œuvre sans numero reste inferee comme chapitre 1
+et demeure dans sa serie.
+
 La page auteur classique peut aussi utiliser cette vue combinee pour une seule source auteur.
 Elle utilise le meme reglage `Pages a charger a l'ouverture d'un auteur favori` pour son nombre de
 pages initiales. Le reglage global `Afficher les pages auteur en vue combinee` active ce rendu par

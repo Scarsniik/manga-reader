@@ -1,19 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type {
-  MangaCorrespondenceBackgroundInput,
-  MangaCorrespondenceRequest,
-  MangaCorrespondenceStrategy,
-} from "@/shared/backgroundSearch";
+import type { MangaCorrespondenceRequest, MangaCorrespondenceStrategy } from "@/shared/backgroundSearch";
 import type { ScraperRecord } from "@/shared/scraper";
 import { enqueueBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
-import { getDepthPages } from "@/renderer/components/MultiSearch/MultiSearchControls";
-import type { MultiSearchAdvancedPages, MultiSearchDepthMode, MultiSearchPaceMode } from "@/renderer/components/MultiSearch/types";
 import useParams from "@/renderer/hooks/useParams";
-import { buildMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import {
   buildMangaCorrespondenceTitleInput,
   parseMangaCorrespondenceTitleInput,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceTitleInput";
+import { buildMangaCorrespondenceInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceInput";
 import "./style.scss";
 
 type Props = {
@@ -85,14 +79,9 @@ export default function MangaCorrespondenceDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const configuredDepthMode = params?.multiSearchDepthMode;
-      const depthMode = (typeof configuredDepthMode === "string" && ["quick", "extended", "advanced"].includes(configuredDepthMode)
-        ? configuredDepthMode
-        : "quick") as MultiSearchDepthMode;
-      const advancedPages = (params?.multiSearchAdvancedPages ?? 3) as MultiSearchAdvancedPages;
-      const paceMode = (params?.multiSearchPaceMode === "careful" ? "careful" : "fast") as MultiSearchPaceMode;
       const [enteredTitle, ...enteredAlternativeTitles] = enteredTitles;
-      const input: MangaCorrespondenceBackgroundInput = {
+      const input = buildMangaCorrespondenceInput({
+        params,
         reference: {
           scraperId,
           sourceUrl,
@@ -103,17 +92,10 @@ export default function MangaCorrespondenceDialog({
           authorUrls: initialAuthorUrls,
           chapter: chapter.trim() || undefined,
         },
+        scrapers,
         request,
         strategy,
-        scraperFilterValues: params?.multiSearchSelectedScraperIds ?? [],
-        scrapers,
-        maxPages: getDepthPages(depthMode, advancedPages),
-        paceMode,
-        scrapingConcurrency: Math.max(1, Math.floor(params?.scraperLatestConcurrency ?? 3)),
-        scrapeDetailsWithCards: params?.multiSearchScrapeDetailsWithCards === true,
-        enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
-        safety: buildMangaCorrespondenceSafetySettings(params),
-      };
+      });
       await enqueueBackgroundSearch({
         input,
         kind: "mangaCorrespondence",

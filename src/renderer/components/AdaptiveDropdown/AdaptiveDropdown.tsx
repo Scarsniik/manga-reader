@@ -29,6 +29,7 @@ type Props = {
   contentRole?: AriaRole;
   gap?: number;
   horizontalBoundarySelector?: string;
+  matchTriggerWidth?: boolean;
   maxHeight?: number;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -48,6 +49,7 @@ type DropdownLayout = {
   portalBottom: number | null;
   portalLeft: number | null;
   portalTop: number | null;
+  triggerWidth: number | null;
 };
 
 const DEFAULT_VIEWPORT_PADDING = 8;
@@ -63,6 +65,7 @@ export default function AdaptiveDropdown({
   contentRole,
   gap = 0,
   horizontalBoundarySelector,
+  matchTriggerWidth = false,
   maxHeight,
   onOpenChange,
   open,
@@ -86,6 +89,7 @@ export default function AdaptiveDropdown({
     portalBottom: null,
     portalLeft: null,
     portalTop: null,
+    triggerWidth: null,
   });
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
@@ -116,6 +120,7 @@ export default function AdaptiveDropdown({
       horizontalBoundaryRect?.right ?? window.innerWidth - viewportPadding,
     );
     const availableWidth = Math.max(0, Math.floor(horizontalRight - horizontalLeft));
+    const triggerWidth = Math.min(Math.floor(rootRect.width), availableWidth);
     const availableDown = Math.max(
       0,
       window.innerHeight - rootRect.bottom - gap - viewportPadding,
@@ -152,6 +157,7 @@ export default function AdaptiveDropdown({
       )
       && current.portalLeft === (portal ? rootRect.left + horizontalShift : null)
       && current.portalTop === (portal && placement === "down" ? rootRect.bottom + gap : null)
+      && current.triggerWidth === triggerWidth
         ? current
         : {
           availableHeight,
@@ -163,6 +169,7 @@ export default function AdaptiveDropdown({
             : null,
           portalLeft: portal ? rootRect.left + horizontalShift : null,
           portalTop: portal && placement === "down" ? rootRect.bottom + gap : null,
+          triggerWidth,
         }
     ));
   }, [
@@ -197,6 +204,7 @@ export default function AdaptiveDropdown({
         portalBottom: null,
         portalLeft: null,
         portalTop: null,
+        triggerWidth: null,
       });
       return undefined;
     }
@@ -301,6 +309,9 @@ export default function AdaptiveDropdown({
       : layout.placement === "down" ? `calc(100% + ${gap}px)` : "auto",
     translate: !portal && layout.horizontalShift ? `${layout.horizontalShift}px 0` : undefined,
     visibility: portal && layout.portalLeft === null ? "hidden" : undefined,
+    width: matchTriggerWidth && layout.triggerWidth !== null
+      ? `${layout.triggerWidth}px`
+      : undefined,
     zIndex: portal ? portalZIndex : undefined,
   };
   const content = open ? (

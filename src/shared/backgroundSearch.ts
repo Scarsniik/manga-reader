@@ -70,6 +70,7 @@ export type BackgroundSearchJobMetadata = {
   error?: string;
   inputAvailable: boolean;
   resultAvailable: boolean;
+  prefilled?: boolean;
   relation?: BackgroundSearchRelation;
 };
 
@@ -92,13 +93,15 @@ export type BackgroundSearchQueueSummary = {
   };
 };
 
-export type CreateBackgroundSearchRequest<TInput = unknown> = {
+export type CreateBackgroundSearchRequest<TInput = unknown, TResult = unknown> = {
   kind: BackgroundSearchKind;
   title: string;
   primaryTerm: string;
   storageMode: BackgroundSearchStorageMode;
   retentionHours: number;
   input: TInput;
+  initialResult?: TResult;
+  initialProgress?: BackgroundSearchProgress;
   relation?: Omit<BackgroundSearchRelation, "automationStatus">;
 };
 

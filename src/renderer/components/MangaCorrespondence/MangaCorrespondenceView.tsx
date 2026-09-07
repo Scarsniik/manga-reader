@@ -15,6 +15,9 @@ import type {
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
+import ChapterGroupList from "@/renderer/components/ChapterGroups/ChapterGroupList";
+import MergedChapterCardGrid from "@/renderer/components/ChapterGroups/MergedChapterCardGrid";
+import { buildMangaChapterCard } from "@/renderer/components/ChapterGroups/mangaChapterCard";
 import {
   buildMultiSearchResultLanguageFilterCodes,
   filterMultiSearchMergedResultsByLanguage,
@@ -26,7 +29,6 @@ import {
   mergeMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
-import { selectPreferredMultiSearchTitleSource } from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -39,19 +41,7 @@ import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import { writeScraperRouteState } from "@/renderer/utils/scraperBrowserNavigation";
 import useParams from "@/renderer/hooks/useParams";
 import useModal from "@/renderer/hooks/useModal";
-import { analyzeMangaCorrespondenceTitle } from "@/renderer/utils/mangaCorrespondenceTitleAnalysis";
-import {
-  compareMangaCorrespondenceChapters,
-  formatMangaCorrespondenceChapterLabel,
-  groupMangaCorrespondenceChapters,
-  inferMangaCorrespondenceFirstChapter,
-  resolveMangaCorrespondenceMatchChapter,
-} from "@/renderer/utils/mangaCorrespondenceChapter";
 import { getLanguageLabel } from "@/renderer/utils/languageDetection";
-import {
-  getScraperFeature,
-  getScraperTitleAnalysisFeatureConfig,
-} from "@/renderer/utils/scraperRuntime";
 import MangaCorrespondenceReadingListDialog, {
   type MangaCorrespondenceReadingListChapter,
 } from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceReadingListDialog";
@@ -63,7 +53,6 @@ import {
 import type { ReadingListItem } from "@/renderer/types/readingList";
 import {
   isClearlyDerivativeMangaCorrespondenceTitle,
-  stripMangaCorrespondenceTrailingKnownAuthor,
 } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
 import { getMangaCorrespondenceScoreBand } from "@/renderer/backgroundSearch/mangaCorrespondenceRejectedCandidates";
 import MangaCorrespondenceRejectedReviewDialog from "@/renderer/components/MangaCorrespondence/MangaCorrespondenceRejectedReviewDialog";
@@ -96,6 +85,10 @@ import AuthorCorrespondenceDialog from "@/renderer/components/AuthorCorresponden
 import ExistingAuthorSearchDialog from "@/renderer/components/MangaCorrespondence/ExistingAuthorSearchDialog";
 import { filterMangaCorrespondenceRejectedCandidatesByText } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedFilters";
 import { collectMangaCorrespondenceAuthors } from "@/renderer/searchEngines/authorCorrespondenceMangaDiscovery";
+import {
+  resolveMangaCorrespondenceChapterGroups,
+  type MangaCorrespondenceChapterMatchGroup,
+} from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceChapterGroups";
 import useRelatedBackgroundSearchJobs from "@/renderer/backgroundSearch/useRelatedBackgroundSearchJobs";
 import { importLinkedAuthorSearchIntoManga } from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
 import { requestBackgroundSearchOpenInCurrentView } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
@@ -105,10 +98,6 @@ import "./view.scss";
 type Props = { backgroundSearchJobId?: string; resultOnly?: boolean };
 type DisplayMode = "mergedChapters" | "groupedChapters" | "classic";
 type RejectedFilter = "likely" | "possible" | "all" | "accepted" | "dismissed";
-type ChapterMatchGroup = {
-  chapter: string;
-  matches: MangaCorrespondenceMatch[];
-};
 type ChapterCardGroup = {
   chapter: string;
   cards: MultiSearchMergedResult[];
@@ -117,12 +106,6 @@ type RejectedCardGroup = {
   result: MultiSearchMergedResult;
   candidates: MangaCorrespondenceRejectedCandidate[];
   score: number;
-};
-type MatchChapterResolution = {
-  aliases: string[];
-  detectedChapter: string;
-  effectiveChapter: string;
-  detection: ReturnType<typeof analyzeMangaCorrespondenceTitle>["chapterDetection"];
 };
 
 const REJECTED_RESULTS_PAGE_SIZE = 24;
@@ -144,39 +127,6 @@ const LINKED_AUTHOR_STATUS_LABELS: Record<string, string> = {
   completed: "À jour",
   blocked: "Relance automatique bloquée",
   error: "Échec de l’import automatique",
-};
-
-const buildChapterCard = (
-  chapter: string,
-  matches: MangaCorrespondenceMatch[],
-  fallbackTitle: string,
-  mergeOptions: MultiSearchMergeOptions,
-): MultiSearchMergedResult | undefined => {
-  const seenSourceKeys = new Set<string>();
-  const sources = matches.map((match) => match.source).filter((source) => {
-    const key = buildMultiSearchSourceIdentityKey(source);
-    if (seenSourceKeys.has(key)) return false;
-    seenSourceKeys.add(key);
-    return true;
-  });
-  if (!sources.length) return undefined;
-
-  const preferredSource = selectPreferredMultiSearchTitleSource(
-    sources,
-    mergeOptions.preferredTitleLanguageCodes,
-  );
-  return {
-    id: `manga-correspondence::chapter::${chapter}`,
-    title: preferredSource?.result.title || fallbackTitle,
-    coverUrl: preferredSource?.result.thumbnailUrl,
-    summary: sources.find((source) => source.result.summary)?.result.summary,
-    pageCount: sources.find((source) => source.result.pageCount)?.result.pageCount,
-    sources,
-    sourceLanguageCodes: buildMultiSearchResultLanguageFilterCodes(sources),
-    tentativeAuthorNames: Array.from(new Set(sources.flatMap((source) => source.tentativeAuthorNames))),
-    contentTypes: Array.from(new Set(sources.flatMap((source) => source.contentTypes))),
-    preferredTitleLanguageCodes: [...mergeOptions.preferredTitleLanguageCodes],
-  };
 };
 
 export default function MangaCorrespondenceView({ backgroundSearchJobId, resultOnly = false }: Props) {
@@ -257,52 +207,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     )),
     [effectiveMatches],
   );
-  const chapterResolutionByMatchKey = useMemo(() => {
-    const resolutions = new Map<string, MatchChapterResolution>();
-    correspondenceMatches.forEach((match) => {
-      const titleAnalysis = analyzeMangaCorrespondenceTitle(
-        stripMangaCorrespondenceTrailingKnownAuthor(
-          match.source.result.title,
-          input?.reference.authors ?? [],
-        ),
-        getScraperTitleAnalysisFeatureConfig(getScraperFeature(match.source.scraper, "titleAnalysis")),
-      );
-      const inferredFirstChapter = inferMangaCorrespondenceFirstChapter(titleAnalysis, [
-        match.matchedTerm,
-        input?.reference.title ?? "",
-        ...(input?.reference.alternativeTitles ?? []),
-      ]);
-      const preferAnalyzedChapter = titleAnalysis.chapterDetection?.source === "compoundTitle"
-        || titleAnalysis.chapterDetection?.source === "explicitVolume";
-      const detectedChapter = resolveMangaCorrespondenceMatchChapter(
-        match.chapter,
-        titleAnalysis.chapter,
-        inferredFirstChapter,
-        match.acceptedManually,
-        undefined,
-        preferAnalyzedChapter,
-      );
-      resolutions.set(match.key, {
-        aliases: match.chapterOverride ? [] : titleAnalysis.namedChapterAliases,
-        detectedChapter,
-        effectiveChapter: resolveMangaCorrespondenceMatchChapter(
-          match.chapter,
-          titleAnalysis.chapter,
-          inferredFirstChapter,
-          match.acceptedManually,
-          match.chapterOverride?.value,
-          preferAnalyzedChapter,
-        ),
-        detection: titleAnalysis.chapterDetection,
-      });
-    });
-    return resolutions;
-  }, [
-    correspondenceMatches,
-    input?.reference.alternativeTitles,
-    input?.reference.authors,
-    input?.reference.title,
-  ]);
+  const chapterGroupResolution = useMemo(
+    () => resolveMangaCorrespondenceChapterGroups(correspondenceMatches, input?.reference),
+    [correspondenceMatches, input?.reference],
+  );
+  const chapterResolutionByMatchKey = chapterGroupResolution.resolutionByMatchKey;
   const correspondenceMatchBySourceKey = useMemo(() => new Map(
     correspondenceMatches.map((match) => [
       buildMultiSearchSourceIdentityKey(match.source),
@@ -317,22 +226,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   );
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
   const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
-  const allChapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => {
-    return groupMangaCorrespondenceChapters(correspondenceMatches.map((match) => {
-      const resolution = chapterResolutionByMatchKey.get(match.key);
-      return {
-        aliases: resolution?.aliases,
-        chapter: resolution?.effectiveChapter ?? "Non renseigné",
-        entry: match,
-      };
-    }))
-      .sort((left, right) => compareMangaCorrespondenceChapters(left.chapter, right.chapter))
-      .map(({ chapter, entries }) => ({ chapter, matches: entries }));
-  }, [
-    chapterResolutionByMatchKey,
-    correspondenceMatches,
-  ]);
-  const chapterMatchGroups = useMemo<ChapterMatchGroup[]>(() => (
+  const allChapterMatchGroups = chapterGroupResolution.groups;
+  const chapterMatchGroups = useMemo<MangaCorrespondenceChapterMatchGroup[]>(() => (
     allChapterMatchGroups.flatMap((group) => {
       const matches = group.matches.filter((match) => (
         !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(match.source))
@@ -342,23 +237,25 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
   ), [allChapterMatchGroups, excludedSourceKeys]);
   const chapterEntries = useMemo<MangaCorrespondenceReadingListChapter[]>(() => (
     chapterMatchGroups.flatMap(({ chapter, matches }) => {
-      const resultCard = buildChapterCard(
+      const resultCard = buildMangaChapterCard({
         chapter,
-        matches,
-        job?.metadata.primaryTerm || "Manga",
+        fallbackTitle: job?.metadata.primaryTerm || "Manga",
+        idPrefix: "manga-correspondence",
         mergeOptions,
-      );
+        sources: matches.map((match) => match.source),
+      });
       return resultCard ? [{ chapter, result: resultCard }] : [];
     })
   ), [chapterMatchGroups, job?.metadata.primaryTerm, mergeOptions]);
   const groupedChapterCards = useMemo<ChapterCardGroup[]>(() => (
     allChapterMatchGroups.flatMap(({ chapter, matches }) => {
-      const chapterCard = buildChapterCard(
+      const chapterCard = buildMangaChapterCard({
         chapter,
-        matches,
-        job?.metadata.primaryTerm || "Manga",
+        fallbackTitle: job?.metadata.primaryTerm || "Manga",
+        idPrefix: "manga-correspondence",
         mergeOptions,
-      );
+        sources: matches.map((match) => match.source),
+      });
       return chapterCard ? [{
         chapter,
         cards: applyManualMultiSearchSplits(
@@ -898,20 +795,27 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       ),
     });
   };
+  const renderResultCard = (item: MultiSearchMergedResult) => (
+    <MultiSearchResultCard
+      result={item}
+      libraryMangas={[]}
+      bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
+      sourceProgressIndex={EMPTY_PROGRESS_INDEX}
+      viewHistoryRecordsById={EMPTY_HISTORY}
+      newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
+      viewHistoryRecordingDisabled
+      onOpenSource={(source) => openSource(source)}
+      onOpenSourceInWorkspace={(source) => openSource(source, true)}
+      onOpenProgressReader={() => undefined}
+      onSetSourcesRead={() => undefined}
+    />
+  );
   const renderCards = (
     items: MultiSearchMergedResult[],
-    withReadingListPreparation = false,
     withSourceInvalidation = false,
   ) => (
     <div className="manga-correspondence-view__results">
       {items.map((item) => {
-        const chapter = withReadingListPreparation
-          ? chapterByResultId.get(item.id)
-          : undefined;
-        const isReadingListChapter = Boolean(chapter && chapter !== "Non renseigné");
-        const isExcluded = isReadingListChapter && chapter
-          ? excludedReadingListChapters.has(chapter)
-          : false;
         const source = withSourceInvalidation && item.sources.length === 1
           ? item.sources[0]
           : undefined;
@@ -921,16 +825,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         const editableChapter = editableMatch
           ? chapterResolutionByMatchKey.get(editableMatch.key)?.effectiveChapter
           : undefined;
-        const categoryMatches = chapter ? Array.from(new Map(item.sources.flatMap((itemSource) => {
-          const match = correspondenceMatchBySourceKey.get(buildMultiSearchSourceIdentityKey(itemSource));
-          return match ? [[match.key, match] as const] : [];
-        })).values()) : [];
         return (
           <div
             key={item.id}
             className={[
               "manga-correspondence-view__result",
-              isExcluded ? "is-reading-list-excluded" : "",
               isSourceExcluded ? "is-source-excluded" : "",
             ].join(" ").trim()}
           >
@@ -964,74 +863,77 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
                   </button>
                 </div>
               </div>
-            ) : chapter ? (
-              <div
-                className={[
-                  "manga-correspondence-view__list-preparation",
-                  isReadingListChapter ? "" : "is-unassigned",
-                ].join(" ").trim()}
-              >
-                <span>
-                  {isReadingListChapter
-                    ? `Liste de lecture · ${formatMangaCorrespondenceChapterLabel(chapter)}`
-                    : "Hors liste · numéro de chapitre non déterminé"}
-                </span>
-                <div className="manga-correspondence-view__list-preparation-actions">
-                  <button
-                    type="button"
-                    className="is-correction"
-                    disabled={job?.metadata.status !== "completed" || !categoryMatches.length}
-                    onClick={() => openChapterEditor(categoryMatches, "group", chapter)}
-                  >
-                    Corriger
-                  </button>
-                  {isReadingListChapter ? (
-                    <button
-                      type="button"
-                      className={isExcluded ? "is-excluded" : ""}
-                      aria-pressed={isExcluded}
-                      onClick={() => toggleReadingListChapter(chapter)}
-                    >
-                      {isExcluded ? "Réintégrer" : "Invalider"}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
             ) : null}
-            <MultiSearchResultCard
-              result={item}
-              libraryMangas={[]}
-              bookmarkedSourceKeys={EMPTY_SOURCE_KEYS}
-              sourceProgressIndex={EMPTY_PROGRESS_INDEX}
-              viewHistoryRecordsById={EMPTY_HISTORY}
-              newViewHistoryIds={EMPTY_NEW_HISTORY_IDS}
-              viewHistoryRecordingDisabled
-              onOpenSource={(source) => openSource(source)}
-              onOpenSourceInWorkspace={(source) => openSource(source, true)}
-              onOpenProgressReader={() => undefined}
-              onSetSourcesRead={() => undefined}
-            />
+            {renderResultCard(item)}
           </div>
         );
       })}
     </div>
   );
-  const renderGroupedChapterCards = (groups: ChapterCardGroup[]) => (
-    <div className="manga-correspondence-view__chapter-groups">
-      {groups.map(({ chapter, cards }) => {
+  const renderMergedChapterCards = (items: MultiSearchMergedResult[]) => (
+    <MergedChapterCardGrid
+      entries={items.flatMap((result) => {
+        const chapter = chapterByResultId.get(result.id);
+        return chapter ? [{ chapter, result }] : [];
+      })}
+      isExcluded={({ chapter }) => (
+        chapter !== "Non renseigné" && excludedReadingListChapters.has(chapter)
+      )}
+      renderActions={({ chapter, result }) => {
+        const categoryMatches = Array.from(new Map(result.sources.flatMap((source) => {
+          const match = correspondenceMatchBySourceKey.get(buildMultiSearchSourceIdentityKey(source));
+          return match ? [[match.key, match] as const] : [];
+        })).values());
         const isReadingListChapter = chapter !== "Non renseigné";
         const isExcluded = isReadingListChapter && excludedReadingListChapters.has(chapter);
+        return (
+          <>
+            <button
+              type="button"
+              className="is-correction"
+              disabled={job?.metadata.status !== "completed" || !categoryMatches.length}
+              onClick={() => openChapterEditor(categoryMatches, "group", chapter)}
+            >
+              Corriger
+            </button>
+            {isReadingListChapter ? (
+              <button
+                type="button"
+                className={isExcluded ? "is-excluded" : ""}
+                aria-pressed={isExcluded}
+                onClick={() => toggleReadingListChapter(chapter)}
+              >
+                {isExcluded ? "Réintégrer" : "Invalider"}
+              </button>
+            ) : null}
+          </>
+        );
+      }}
+      renderCard={({ result }) => renderResultCard(result)}
+    />
+  );
+  const renderGroupedChapterCards = (groups: ChapterCardGroup[]) => (
+    <ChapterGroupList
+      groups={groups.map(({ chapter, cards }) => ({ chapter, value: cards }))}
+      getSubtitle={({ chapter, value: cards }) => {
         const excludedCardCount = cards.filter((card) => (
           card.sources.length === 1
           && excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
         )).length;
         const activeCardCount = cards.length - excludedCardCount;
-        const displayedGroupCards = showExcludedSources
-          ? cards
-          : cards.filter((card) => (
-            card.sources.length !== 1
-            || !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
-          ));
+        return (
+          <>
+            {activeCardCount} source(s)
+            {excludedCardCount ? ` · ${excludedCardCount} retirée(s)` : ""}
+          </>
+        );
+      }}
+      isMuted={({ chapter }) => (
+        chapter !== "Non renseigné" && excludedReadingListChapters.has(chapter)
+      )}
+      renderActions={({ chapter, value: cards }) => {
+        const isReadingListChapter = chapter !== "Non renseigné";
+        const isExcluded = isReadingListChapter && excludedReadingListChapters.has(chapter);
         const groupMatches = Array.from(new Map(cards.flatMap((card) => (
           card.sources.flatMap((source) => {
             const match = correspondenceMatchBySourceKey.get(buildMultiSearchSourceIdentityKey(source));
@@ -1039,53 +941,42 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           })
         ))).values());
         return (
-          <section
-            key={chapter}
-            className={[
-              "manga-correspondence-view__chapter-group",
-              isExcluded ? "is-reading-list-excluded" : "",
-            ].filter(Boolean).join(" ")}
-          >
-            <header className="manga-correspondence-view__chapter-group-header">
-              <div>
-                <h3>{isReadingListChapter
-                  ? formatMangaCorrespondenceChapterLabel(chapter, true)
-                  : "Chapitre non renseigné"}</h3>
-                <span>
-                  {activeCardCount} source(s)
-                  {excludedCardCount ? ` · ${excludedCardCount} retirée(s)` : ""}
-                </span>
-              </div>
-              <div className="manga-correspondence-view__chapter-group-actions">
-                <button
-                  type="button"
-                  className="is-correction"
-                  disabled={job?.metadata.status !== "completed" || !groupMatches.length}
-                  onClick={() => openChapterEditor(groupMatches, "group", chapter)}
-                >
-                  Corriger la catégorie
-                </button>
-                {isReadingListChapter ? (
-                  <button
-                    type="button"
-                    className={isExcluded ? "is-excluded" : ""}
-                    aria-pressed={isExcluded}
-                    onClick={() => toggleReadingListChapter(chapter)}
-                  >
-                    {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
-                  </button>
-                ) : null}
-              </div>
-            </header>
-            {displayedGroupCards.length ? renderCards(displayedGroupCards, false, true) : (
-              <p className="manga-correspondence-view__chapter-group-empty">
-                Toutes les sources de ce chapitre ont été retirées.
-              </p>
-            )}
-          </section>
+          <>
+            <button
+              type="button"
+              className="is-correction"
+              disabled={job?.metadata.status !== "completed" || !groupMatches.length}
+              onClick={() => openChapterEditor(groupMatches, "group", chapter)}
+            >
+              Corriger la catégorie
+            </button>
+            {isReadingListChapter ? (
+              <button
+                type="button"
+                className={isExcluded ? "is-excluded" : ""}
+                aria-pressed={isExcluded}
+                onClick={() => toggleReadingListChapter(chapter)}
+              >
+                {isExcluded ? "Réintégrer dans la liste" : "Invalider pour la liste"}
+              </button>
+            ) : null}
+          </>
         );
-      })}
-    </div>
+      }}
+      renderContent={({ value: cards }) => {
+        const displayedGroupCards = showExcludedSources
+          ? cards
+          : cards.filter((card) => (
+            card.sources.length !== 1
+            || !excludedSourceKeys.has(buildMultiSearchSourceIdentityKey(card.sources[0]))
+          ));
+        return displayedGroupCards.length ? renderCards(displayedGroupCards, true) : (
+          <p className="manga-correspondence-view__chapter-group-empty">
+            Toutes les sources de ce chapitre ont été retirées.
+          </p>
+        );
+      }}
+    />
   );
   const renderRejectedCards = (groups: RejectedCardGroup[]) => (
     <div className="manga-correspondence-view__results manga-correspondence-view__rejected-grid">
@@ -1149,8 +1040,10 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <p>
             {displayedCardCount} card(s) · {eligibleMatches.length} source(s)
             {excludedSourceCount ? ` · ${excludedSourceCount} retirée(s)` : ""}
-            {` · Passe ${result?.passNumber ?? 1} · ${active
-              ? "Recherche en cours"
+            {` · Passe ${result?.passNumber ?? 1} · ${job.metadata.prefilled
+              ? "Vue préremplie"
+              : active
+                ? "Recherche en cours"
               : job.metadata.status === "cancelled"
                 ? "Recherche arrêtée"
                 : "Recherche terminée"}`}
@@ -1269,7 +1162,8 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
           <button type="button" className={displayMode === "groupedChapters" ? "is-active" : ""} onClick={() => setDisplayMode("groupedChapters")}>Chapitres détaillés</button>
           <button type="button" className={displayMode === "classic" ? "is-active" : ""} onClick={() => setDisplayMode("classic")}>Classique</button>
           <button type="button" onClick={openDiscoveries}>
-            Réviser et rejouer · {eligibleMatches.length} résultat(s) · {rejectedCounts.all} potentiel(s) · {editableDiscoveries.length} piste(s)
+            {job.metadata.prefilled ? "Lancer la recherche" : "Réviser et rejouer"}
+            {` · ${eligibleMatches.length} résultat(s) · ${rejectedCounts.all} potentiel(s) · ${editableDiscoveries.length} piste(s)`}
           </button>
           <button
             type="button"
@@ -1329,7 +1223,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
         visibleGroupedChapterCards.length
           ? renderGroupedChapterCards(visibleGroupedChapterCards)
           : <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
-      ) : displayedCards.length ? renderCards(displayedCards, displayMode === "mergedChapters") : (
+      ) : displayedCards.length ? (
+        displayMode === "mergedChapters"
+          ? renderMergedChapterCards(displayedCards)
+          : renderCards(displayedCards)
+      ) : (
         <div className="empty">Aucun résultat ne correspond aux filtres de langue.</div>
       )}
       {(result?.rejectedCandidateCount ?? 0) > 0 || rejectedCandidates.length > 0 ? (

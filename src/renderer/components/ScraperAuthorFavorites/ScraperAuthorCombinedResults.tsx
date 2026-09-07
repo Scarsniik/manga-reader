@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   ScraperAuthorFavoriteSource,
+  ScraperRecord,
   ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
@@ -26,6 +27,7 @@ import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
+import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
@@ -39,6 +41,26 @@ import {
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
 import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
+import ScraperAuthorSeriesResults from "@/renderer/components/ScraperAuthorFavorites/ScraperAuthorSeriesResults";
+import {
+  buildAuthorSeriesGroups,
+  type AuthorSeriesAssignmentOverride,
+  type AuthorSeriesChapterGroup,
+  type AuthorSeriesGroup,
+} from "@/renderer/components/ScraperAuthorFavorites/authorSeriesGroups";
+import AuthorSeriesCorrespondenceView from "@/renderer/components/ScraperAuthorFavorites/AuthorSeriesCorrespondenceView";
+import {
+  applyAuthorSeriesCorrespondenceSnapshots,
+  buildAuthorSeriesPrefilledCorrespondenceResult,
+  type AuthorSeriesCorrespondenceSnapshot,
+} from "@/renderer/components/ScraperAuthorFavorites/authorSeriesCorrespondence";
+import { createPrefilledBackgroundSearch } from "@/renderer/backgroundSearch/backgroundSearchClient";
+import { buildMangaCorrespondenceInput } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceInput";
+import useParams from "@/renderer/hooks/useParams";
+import useModal from "@/renderer/hooks/useModal";
+import AuthorSeriesAssignmentDialog from "@/renderer/components/ScraperAuthorFavorites/AuthorSeriesAssignmentDialog";
+
+type ResultsViewMode = "cards" | "series";
 
 type Props = {
   title: string;
@@ -56,6 +78,7 @@ type Props = {
   error: string | null;
   canLoadMore: boolean;
   multiSearchQuery: string;
+  scrapers: ScraperRecord[];
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -121,6 +144,7 @@ export default function ScraperAuthorCombinedResults({
   error,
   canLoadMore,
   multiSearchQuery,
+  scrapers,
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -162,6 +186,24 @@ export default function ScraperAuthorCombinedResults({
 }: Props) {
   const [splitResultIds, setSplitResultIds] = React.useState<Set<string>>(() => new Set());
   const [originalOnly, setOriginalOnly] = React.useState(false);
+  const [resultsViewMode, setResultsViewMode] = React.useState<ResultsViewMode>("cards");
+  const [openingSeriesId, setOpeningSeriesId] = React.useState<string | null>(null);
+  const [activeSeriesJob, setActiveSeriesJob] = React.useState<{
+    seriesId: string;
+    jobId: string;
+  } | null>(null);
+  const [seriesJobsById, setSeriesJobsById] = React.useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const [seriesSnapshots, setSeriesSnapshots] = React.useState<
+    Map<string, AuthorSeriesCorrespondenceSnapshot>
+  >(() => new Map());
+  const [seriesAssignments, setSeriesAssignments] = React.useState<
+    Map<string, AuthorSeriesAssignmentOverride>
+  >(() => new Map());
+  const [seriesOpenError, setSeriesOpenError] = React.useState<string | null>(null);
+  const { params } = useParams();
+  const { openModal, closeModal } = useModal();
   const {
     active: showUnseenOnly,
     recordsById: unseenFilterRecordsById,
@@ -218,6 +260,222 @@ export default function ScraperAuthorCombinedResults({
     () => buildQuickReviewItemsFromMergedResults(visibleDisplayedResults),
     [visibleDisplayedResults],
   );
+  const seriesMergeOptions = React.useMemo(() => ({
+    enableRomajiPhoneticMerge: true,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: displayedResults[0]?.preferredTitleLanguageCodes ?? [],
+  }), [displayedResults]);
+  const automaticSeriesGroups = React.useMemo(
+    () => buildAuthorSeriesGroups(visibleDisplayedResults, seriesMergeOptions),
+    [seriesMergeOptions, visibleDisplayedResults],
+  );
+  const synchronizedAutomaticSeriesGroups = React.useMemo(
+    () => applyAuthorSeriesCorrespondenceSnapshots(
+      automaticSeriesGroups,
+      seriesSnapshots,
+      seriesMergeOptions,
+    ),
+    [automaticSeriesGroups, seriesMergeOptions, seriesSnapshots],
+  );
+  const assignedSeriesGroups = React.useMemo(() => (
+    seriesAssignments.size
+      ? buildAuthorSeriesGroups(
+        synchronizedAutomaticSeriesGroups.flatMap((series) => (
+          series.chapters.map((chapter) => chapter.result)
+        )),
+        seriesMergeOptions,
+        seriesAssignments,
+      )
+      : synchronizedAutomaticSeriesGroups
+  ), [seriesAssignments, seriesMergeOptions, synchronizedAutomaticSeriesGroups]);
+  const seriesGroups = React.useMemo(
+    () => applyAuthorSeriesCorrespondenceSnapshots(
+      assignedSeriesGroups,
+      seriesSnapshots,
+      seriesMergeOptions,
+    ),
+    [assignedSeriesGroups, seriesMergeOptions, seriesSnapshots],
+  );
+
+  React.useEffect(() => {
+    setActiveSeriesJob(null);
+    setOpeningSeriesId(null);
+    setSeriesOpenError(null);
+    setSeriesJobsById(new Map());
+    setSeriesSnapshots(new Map());
+    setSeriesAssignments(new Map());
+  }, [multiSearchQuery, title]);
+
+  const handleOpenSeries = React.useCallback(async (seriesId: string) => {
+    const series = seriesGroups.find((candidate) => candidate.id === seriesId);
+    if (!series || series.kind !== "series") return;
+
+    const existingJobId = seriesJobsById.get(seriesId);
+    if (existingJobId) {
+      setActiveSeriesJob({ seriesId, jobId: existingJobId });
+      return;
+    }
+
+    setOpeningSeriesId(seriesId);
+    setSeriesOpenError(null);
+    try {
+      const input = buildMangaCorrespondenceInput({
+        params,
+        reference: series.reference,
+        request: "otherChapters",
+        strategy: "balanced",
+        scrapers,
+      });
+      const result = buildAuthorSeriesPrefilledCorrespondenceResult(series);
+      const metadata = await createPrefilledBackgroundSearch({
+        input,
+        kind: "mangaCorrespondence",
+        params,
+        primaryTerm: series.title,
+        result,
+        resultCount: result.matches.length,
+        title: `Correspondances · ${series.title}`,
+      });
+      setSeriesJobsById((currentJobs) => {
+        const nextJobs = new Map(currentJobs);
+        nextJobs.set(seriesId, metadata.id);
+        return nextJobs;
+      });
+      setActiveSeriesJob({ seriesId, jobId: metadata.id });
+    } catch (openError) {
+      setSeriesOpenError(openError instanceof Error
+        ? openError.message
+        : "Impossible d'ouvrir la correspondance de cette série.");
+    } finally {
+      setOpeningSeriesId(null);
+    }
+  }, [params, scrapers, seriesGroups, seriesJobsById]);
+
+  const handleSeriesSnapshot = React.useCallback((
+    seriesId: string,
+    snapshot: AuthorSeriesCorrespondenceSnapshot,
+  ) => {
+    setSeriesSnapshots((currentSnapshots) => {
+      if (currentSnapshots.get(seriesId) === snapshot) return currentSnapshots;
+      const nextSnapshots = new Map(currentSnapshots);
+      nextSnapshots.set(seriesId, snapshot);
+      return nextSnapshots;
+    });
+  }, []);
+  const handleActiveSeriesSnapshot = React.useCallback((
+    snapshot: AuthorSeriesCorrespondenceSnapshot,
+  ) => {
+    if (activeSeriesJob) handleSeriesSnapshot(activeSeriesJob.seriesId, snapshot);
+  }, [activeSeriesJob, handleSeriesSnapshot]);
+
+  const handleCorrectSeriesAssignment = React.useCallback((
+    series: AuthorSeriesGroup,
+    chapter: AuthorSeriesChapterGroup,
+  ) => {
+    const sourceKeys = chapter.result.sources.map(buildMultiSearchSourceIdentityKey);
+    const existingAssignments = sourceKeys.flatMap((sourceKey) => {
+      const assignment = seriesAssignments.get(sourceKey);
+      return assignment ? [assignment] : [];
+    });
+    const assignedSeriesTitles = new Set(existingAssignments.map((assignment) => (
+      assignment.seriesTitle
+    )));
+    const assignedChapters = new Set(existingAssignments.map((assignment) => assignment.chapter));
+    const currentSeries = assignedSeriesTitles.size === 1
+      ? Array.from(assignedSeriesTitles)[0]
+      : series.kind === "series" ? series.title : "";
+    const currentChapter = assignedChapters.size === 1
+      ? Array.from(assignedChapters)[0]
+      : series.kind === "series" && chapter.chapter !== "Non renseigné"
+        ? chapter.chapter
+        : "";
+    const seriesOptions = seriesGroups.flatMap((candidate) => (
+      candidate.kind === "series" ? [candidate.title] : []
+    ));
+
+    openModal({
+      title: "Corriger le classement",
+      className: "author-series-assignment-modal",
+      content: (
+        <AuthorSeriesAssignmentDialog
+          cardTitle={chapter.result.title}
+          currentSeries={currentSeries}
+          currentChapter={currentChapter}
+          seriesOptions={seriesOptions}
+          canReset={existingAssignments.length > 0}
+          onCancel={closeModal}
+          onReset={async () => {
+            setSeriesAssignments((currentAssignments) => {
+              const nextAssignments = new Map(currentAssignments);
+              sourceKeys.forEach((sourceKey) => nextAssignments.delete(sourceKey));
+              return nextAssignments;
+            });
+            closeModal();
+          }}
+          onSave={async (seriesTitle, chapterValue) => {
+            setSeriesAssignments((currentAssignments) => {
+              const nextAssignments = new Map(currentAssignments);
+              sourceKeys.forEach((sourceKey) => nextAssignments.set(sourceKey, {
+                seriesTitle,
+                chapter: chapterValue,
+              }));
+              return nextAssignments;
+            });
+            closeModal();
+          }}
+        />
+      ),
+    });
+  }, [closeModal, openModal, seriesAssignments, seriesGroups]);
+
+  const renderResultCard = (result: MultiSearchMergedResult) => (
+    <MultiSearchResultCard
+      key={result.id}
+      result={result}
+      libraryMangas={libraryMangas}
+      bookmarkedSourceKeys={bookmarkedSourceKeys}
+      sourceProgressIndex={sourceProgressIndex}
+      viewHistoryRecordsById={viewHistoryRecordsById}
+      newViewHistoryIds={newViewHistoryIds}
+      tagBlacklistByScraper={tagBlacklistByScraper}
+      tagFavorites={tagFavorites}
+      viewHistoryRecordingDisabled={loading}
+      onOpenSource={onOpenSource}
+      onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+      onOpenProgressReader={onOpenProgressReader}
+      onSetSourcesRead={onSetSourcesRead}
+      selectedCoverUrl={selectedCoverUrl}
+      onSelectCover={onSelectCover}
+      onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.add(resultId);
+        return nextIds;
+      })}
+    />
+  );
+
+  const renderResultCards = (results: MultiSearchMergedResult[]) => {
+    const visibleResults = applyManualMultiSearchSplits(results, splitResultIds);
+    return (
+      <div className="multi-search__results-grid">
+        {visibleResults.map((result) => (
+          <React.Fragment key={result.id}>
+            {renderResultCard(result)}
+          </React.Fragment>
+        ))}
+      </div>
+    );
+  };
+
+  if (activeSeriesJob) {
+    return (
+      <AuthorSeriesCorrespondenceView
+        jobId={activeSeriesJob.jobId}
+        onBack={() => setActiveSeriesJob(null)}
+        onSnapshot={handleActiveSeriesSnapshot}
+      />
+    );
+  }
 
   return (
     <section className="scraper-author-favorites-view scraper-browser__panel">
@@ -264,6 +522,9 @@ export default function ScraperAuthorCombinedResults({
       {statusNotice}
       {message ? <div className="multi-search__message is-info">{message}</div> : null}
       {error ? <div className="multi-search__message is-error">{error}</div> : null}
+      {seriesOpenError ? (
+        <div className="multi-search__message is-error">{seriesOpenError}</div>
+      ) : null}
 
       <section className="scraper-author-favorites-view__sources">
         <div className="multi-search__section-head">
@@ -329,6 +590,7 @@ export default function ScraperAuthorCombinedResults({
             <div>
               <h3>{resultsSectionTitle}</h3>
               <p>
+                {resultsViewMode === "series" ? `${seriesGroups.length} série(s), ` : ""}
                 {visibleDisplayedResults.length} carte(s), {loadedSourceCount} source(s) chargee(s)
                 {shouldHideBlacklistedCards && blacklistedResultCount > 0
                   ? `, ${blacklistedResultCount} masquee(s)`
@@ -370,6 +632,24 @@ export default function ScraperAuthorCombinedResults({
               </div>
             </div>
             <div className="multi-search__section-actions">
+              <div className="scraper-author-series-view-mode" aria-label="Mode d’affichage">
+                <button
+                  type="button"
+                  className={resultsViewMode === "cards" ? "is-active" : ""}
+                  aria-pressed={resultsViewMode === "cards"}
+                  onClick={() => setResultsViewMode("cards")}
+                >
+                  Cartes
+                </button>
+                <button
+                  type="button"
+                  className={resultsViewMode === "series" ? "is-active" : ""}
+                  aria-pressed={resultsViewMode === "series"}
+                  onClick={() => setResultsViewMode("series")}
+                >
+                  Par série
+                </button>
+              </div>
               <QuickReviewLauncher items={quickReviewItems} />
               <BlacklistedCardsDisplayToggle
                 blacklistedCardCount={blacklistedResultCount}
@@ -380,33 +660,15 @@ export default function ScraperAuthorCombinedResults({
             </div>
           </div>
 
-          <div className="multi-search__results-grid">
-            {visibleDisplayedResults.map((result) => (
-              <MultiSearchResultCard
-                key={result.id}
-                result={result}
-                libraryMangas={libraryMangas}
-                bookmarkedSourceKeys={bookmarkedSourceKeys}
-                sourceProgressIndex={sourceProgressIndex}
-                viewHistoryRecordsById={viewHistoryRecordsById}
-                newViewHistoryIds={newViewHistoryIds}
-                tagBlacklistByScraper={tagBlacklistByScraper}
-                tagFavorites={tagFavorites}
-                viewHistoryRecordingDisabled={loading}
-                onOpenSource={onOpenSource}
-                onOpenSourceInWorkspace={onOpenSourceInWorkspace}
-                onOpenProgressReader={onOpenProgressReader}
-                onSetSourcesRead={onSetSourcesRead}
-                selectedCoverUrl={selectedCoverUrl}
-                onSelectCover={onSelectCover}
-                onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
-                  const nextIds = new Set(currentIds);
-                  nextIds.add(resultId);
-                  return nextIds;
-                })}
-              />
-            ))}
-          </div>
+          {resultsViewMode === "series" ? (
+            <ScraperAuthorSeriesResults
+              groups={seriesGroups}
+              openingSeriesId={openingSeriesId}
+              onOpenSeries={(seriesId) => void handleOpenSeries(seriesId)}
+              onCorrectAssignment={handleCorrectSeriesAssignment}
+              renderCard={renderResultCard}
+            />
+          ) : renderResultCards(visibleDisplayedResults)}
           {!visibleDisplayedResults.length ? (
             <div className="scraper-browser__message">
               {showUnseenOnly

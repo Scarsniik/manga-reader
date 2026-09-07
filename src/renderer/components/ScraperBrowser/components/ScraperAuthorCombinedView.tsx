@@ -105,6 +105,7 @@ export default function ScraperAuthorCombinedView({
 }: Props) {
   const { params, setParams } = useParams();
   const searchOriginalOnly = params?.scraperAuthorOriginalOnly === true;
+  const [availableScrapers, setAvailableScrapers] = useState<ScraperRecord[]>([scraper]);
   const [readingStatusFilters, setReadingStatusFilters] = useState<MultiSearchReadingStatusFilter[]>([]);
   const [resultTextFilter, setResultTextFilter] = useState("");
   const [debouncedResultTextFilter, setDebouncedResultTextFilter] = useState("");
@@ -211,6 +212,14 @@ export default function ScraperAuthorCombinedView({
   );
 
   useEffect(() => {
+    let disposed = false;
+    void window.api?.getScrapers?.().then((records: ScraperRecord[]) => {
+      if (!disposed && Array.isArray(records) && records.length) setAvailableScrapers(records);
+    }).catch(() => undefined);
+    return () => { disposed = true; };
+  }, [scraper]);
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedResultTextFilter(resultTextFilter);
     }, RESULT_TEXT_FILTER_DELAY_MS);
@@ -250,6 +259,7 @@ export default function ScraperAuthorCombinedView({
       error={error || openError}
       canLoadMore={canLoadMore}
       multiSearchQuery={authorMultiSearchQuery}
+      scrapers={availableScrapers}
       libraryMangas={libraryMangas}
       bookmarkedSourceKeys={bookmarkedSourceKeys}
       sourceProgressIndex={sourceProgressIndex}

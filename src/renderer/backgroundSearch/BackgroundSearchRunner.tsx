@@ -256,7 +256,7 @@ export default function BackgroundSearchRunner() {
     try {
       const job = await window.api.getBackgroundSearchJob(jobId) as BackgroundSearchJob | null;
       if (!job || job.metadata.status !== "completed") return;
-      if (job.metadata.kind === "mangaCorrespondence") {
+      if (job.metadata.kind === "mangaCorrespondence" && job.metadata.prefilled !== true) {
         await automaticallyReuseExistingAuthorSearch(jobId);
       } else if (job.metadata.kind === "authorCorrespondence") {
         await refreshMangaSearchesUsingAuthor(jobId);

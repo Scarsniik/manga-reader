@@ -265,22 +265,30 @@ export const createBackgroundSearch = async (
 ): Promise<BackgroundSearchJobMetadata> => serializeMutation(async () => {
   await initialize();
   const timestamp = nowIso();
+  const prefilled = request.initialResult !== undefined;
   const jobMetadata: BackgroundSearchJobMetadata = {
     id: randomUUID(),
     schemaVersion: BACKGROUND_SEARCH_SCHEMA_VERSION,
     kind: request.kind,
     title: String(request.title || request.primaryTerm || "Recherche").trim(),
     primaryTerm: String(request.primaryTerm || request.title || "Recherche").trim(),
-    status: "queued",
+    status: prefilled ? "completed" : "queued",
     storageMode: request.storageMode,
     retentionHours: normalizeRetentionHours(request.retentionHours),
     createdAt: timestamp,
     openedAt: null,
     updatedAt: timestamp,
     revision: 1,
-    progress: { completedUnits: 0, resultCount: 0 },
+    progress: request.initialProgress ?? { completedUnits: 0, resultCount: 0 },
     inputAvailable: true,
-    resultAvailable: false,
+    resultAvailable: prefilled,
+    ...(prefilled ? {
+      prefilled: true,
+      completedAt: timestamp,
+      expiresAt: request.storageMode === "temporaryFile"
+        ? getExpiresAt(request.retentionHours)
+        : undefined,
+    } : {}),
     ...(request.relation ? {
       relation: {
         ...request.relation,
@@ -288,7 +296,11 @@ export const createBackgroundSearch = async (
       },
     } : {}),
   };
-  const job: BackgroundSearchJob = { metadata: jobMetadata, input: request.input };
+  const job: BackgroundSearchJob = {
+    metadata: jobMetadata,
+    input: request.input,
+    ...(prefilled ? { result: request.initialResult } : {}),
+  };
   metadata = [jobMetadata, ...metadata];
   await persistJobPayload(job);
   await writeBackgroundSearchInput(jobMetadata.id, request.input);
@@ -475,6 +487,7 @@ export const continueBackgroundSearch = async (
         : "Préparation de la passe suivante",
     },
     error: undefined,
+    prefilled: undefined,
     inputAvailable: true,
     resultAvailable: true,
     ...(current.relation ? {
@@ -521,6 +534,7 @@ export const replayBackgroundSearch = async (
       currentLabel: "Préparation du recalcul",
     },
     error: undefined,
+    prefilled: undefined,
     inputAvailable: true,
     resultAvailable: true,
     ...(current.relation ? {

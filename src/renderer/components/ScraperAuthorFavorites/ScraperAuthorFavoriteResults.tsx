@@ -2,6 +2,7 @@ import React from "react";
 import type {
   ScraperAuthorFavoriteRecord,
   ScraperAuthorFavoriteSource,
+  ScraperRecord,
   ScraperTagFavoriteRecord,
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
@@ -34,6 +35,7 @@ type Props = {
   error: string | null;
   canLoadMore: boolean;
   selectedFavoriteMultiSearchQuery: string;
+  scrapers: ScraperRecord[];
   libraryMangas: Manga[];
   bookmarkedSourceKeys: Set<string>;
   sourceProgressIndex: MultiSearchProgressIndex;
@@ -95,6 +97,7 @@ export default function ScraperAuthorFavoriteResults({
   error,
   canLoadMore,
   selectedFavoriteMultiSearchQuery,
+  scrapers,
   libraryMangas,
   bookmarkedSourceKeys,
   sourceProgressIndex,
@@ -148,6 +151,7 @@ export default function ScraperAuthorFavoriteResults({
       error={error}
       canLoadMore={canLoadMore}
       multiSearchQuery={selectedFavoriteMultiSearchQuery}
+      scrapers={scrapers}
       libraryMangas={libraryMangas}
       bookmarkedSourceKeys={bookmarkedSourceKeys}
       sourceProgressIndex={sourceProgressIndex}
