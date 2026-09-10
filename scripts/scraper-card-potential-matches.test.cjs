@@ -27,6 +27,9 @@ const source = `
   export {
     getScraperBookmarkKey,
   } from "@/renderer/stores/scraperBookmarks";
+  export {
+    buildQuickReviewPotentialMatchInputs,
+  } from "@/renderer/components/QuickReview/quickReviewPotentialMatches";
 `;
 const built = esbuild.buildSync({
   stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "scraper-card-potential-matches-test.ts" },
@@ -55,6 +58,7 @@ const {
   buildPotentialMatchEntries,
   mergeScraperCardWithDetails,
   getScraperBookmarkKey,
+  buildQuickReviewPotentialMatchInputs,
 } = bundledModule.exports;
 const options = { enableRomajiPhoneticMerge: false };
 const currentInput = {
@@ -81,6 +85,43 @@ test("bookmark identity ignores a trailing slash on the same source URL", () => 
       "https://hentaihere.com/m/S71527",
     ),
   );
+});
+
+test("quick review preloads potential matches with the configured upcoming cards", () => {
+  const scraper = { id: "scraper" };
+  const buildItem = (id) => ({
+    id,
+    primarySource: {
+      scraper,
+      result: {
+        title: `Listing ${id}`,
+        detailUrl: `https://example.test/${id}`,
+        authorNames: [`Listing author ${id}`],
+      },
+    },
+    availableSources: [],
+  });
+  const items = ["first", "current", "next", "later"].map(buildItem);
+  const detailsByItemId = new Map([
+    ["next", {
+      title: "Detailed next title",
+      requestedUrl: "https://example.test/next/requested",
+      finalUrl: "https://example.test/next/final",
+      authors: ["Detailed author"],
+    }],
+  ]);
+
+  const inputs = buildQuickReviewPotentialMatchInputs({
+    currentIndex: 1,
+    detailsByItemId,
+    items,
+    prefetchCount: 1,
+  });
+
+  assert.deepEqual(inputs.map((input) => input.key), ["current", "next"]);
+  assert.match(inputs[1].title, /^Detailed next title/);
+  assert.equal(inputs[1].sourceUrl, "https://example.test/next/final");
+  assert.ok(inputs[1].authorNames.includes("Detailed author"));
 });
 
 test("card cache fingerprints ignore presentation-only rerenders and input ordering", () => {

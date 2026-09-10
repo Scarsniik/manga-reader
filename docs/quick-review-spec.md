@@ -53,9 +53,11 @@ bornes de zoom, le pas, la molette, les contrôles et les comportements de ferme
 
 Les métadonnées de la fiche détaillée sont chargées à la demande. Les couvertures déjà connues des
 fiches suivantes sont préchargées en priorité, décodées puis conservées en mémoire pendant la session ;
-les détails et les miniatures suivent ensuite. Le réglage `Fiches suivantes à précharger` choisit
-cette profondeur de `0` à `20` (`2` par défaut). Si un chargement échoue, les informations déjà
-présentes dans la card restent utilisables.
+les détails, les miniatures et les correspondances potentielles suivent ensuite. Les correspondances
+sont d'abord calculées avec les informations de la card, puis affinées dès que les détails préchargés
+sont disponibles. Le réglage `Fiches suivantes à précharger` choisit cette profondeur de `0` à `20`
+(`2` par défaut). Si un chargement échoue, les informations déjà présentes dans la card restent
+utilisables.
 
 Les actions internes ouvrent toujours un nouvel onglet workspace en arrière-plan :
 

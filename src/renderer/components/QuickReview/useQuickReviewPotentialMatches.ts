@@ -1,24 +1,23 @@
 import React from "react";
 import usePotentialMangaMatchCandidates from "@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates";
-import useScraperCardPotentialMatches, {
-  type ScraperCardPotentialMatchInput,
-} from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
+import useScraperCardPotentialMatches from "@/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches";
 import type {
   ScraperPotentialMangaMatch,
   ScraperPotentialMangaMatchState,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import { buildPotentialMangaMatchWorkspaceTarget } from "@/renderer/components/ScraperBrowser/utils/potentialMatchWorkspaceTarget";
-import { buildQuickReviewSourceUrls } from "@/renderer/components/QuickReview/quickReviewImages";
+import { buildQuickReviewPotentialMatchInputs } from "@/renderer/components/QuickReview/quickReviewPotentialMatches";
 import type { QuickReviewItem } from "@/renderer/components/QuickReview/types";
-import { uniqueQuickReviewText } from "@/renderer/components/QuickReview/quickReviewText";
 import useParams from "@/renderer/hooks/useParams";
 import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import { normalizeQuickReviewPrefetchCount } from "@/shared/quickReviewSettings";
 
 type Options = {
-  item: QuickReviewItem | null;
-  details: ScraperRuntimeDetailsResult | null;
+  currentIndex: number;
+  detailsByItemId: ReadonlyMap<string, ScraperRuntimeDetailsResult | null>;
   enabled: boolean;
+  items: QuickReviewItem[];
   onOpenError: (message: string | null) => void;
 };
 
@@ -36,44 +35,24 @@ const EMPTY_MATCHES: Pick<
 };
 
 export default function useQuickReviewPotentialMatches({
-  item,
-  details,
+  currentIndex,
+  detailsByItemId,
   enabled,
+  items,
   onOpenError,
 }: Options): Result {
   const { params } = useParams();
+  const item = items[currentIndex] ?? null;
   const scraper = item?.primarySource.scraper ?? null;
   const candidates = usePotentialMangaMatchCandidates({ scraper, enabled });
-  const input = React.useMemo<ScraperCardPotentialMatchInput | null>(() => {
-    if (!item) return null;
-
-    const result = item.primarySource.result;
-    const sourceUrls = buildQuickReviewSourceUrls(item, details);
-    const titles = uniqueQuickReviewText([
-      details?.title,
-      item.displayTitle,
-      result.detailsTitle,
-      result.title,
-    ]);
-    const title = titles.join(" | ");
-    if (!title) return null;
-
-    return {
-      key: item.id,
-      scraperId: item.primarySource.scraper.id,
-      title,
-      sourceUrl: sourceUrls[0],
-      sourceIdentities: sourceUrls.map((sourceUrl) => ({
-        scraperId: item.primarySource.scraper.id,
-        sourceUrl,
-      })),
-      authorNames: uniqueQuickReviewText([
-        ...(details?.authors ?? []),
-        ...(result.authorNames ?? []),
-      ]),
-    };
-  }, [details, item]);
-  const inputs = React.useMemo(() => input ? [input] : [], [input]);
+  const prefetchCount = normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
+  const inputs = React.useMemo(() => buildQuickReviewPotentialMatchInputs({
+    currentIndex,
+    detailsByItemId,
+    items,
+    prefetchCount,
+  }), [currentIndex, detailsByItemId, items, prefetchCount]);
+  const input = item ? inputs.find((candidate) => candidate.key === item.id) ?? null : null;
   const mergeOptions = React.useMemo(() => ({
     enableRomajiPhoneticMerge: params?.multiSearchEnableRomajiPhoneticMerge === true,
   }), [params?.multiSearchEnableRomajiPhoneticMerge]);
@@ -83,7 +62,8 @@ export default function useQuickReviewPotentialMatches({
     mergeOptions,
     enabled,
   });
-  const currentMatches = input ? matches.matchesByKey.get(input.key) : null;
+  const currentInputKey = input?.key;
+  const currentMatches = currentInputKey ? matches.matchesByKey.get(currentInputKey) : null;
   const openMatch = React.useCallback((match: ScraperPotentialMangaMatch) => {
     onOpenError(null);
     void openWorkspaceTarget(buildPotentialMangaMatchWorkspaceTarget(match), { activate: false })
@@ -96,6 +76,9 @@ export default function useQuickReviewPotentialMatches({
         onOpenError(error instanceof Error ? error.message : "Impossible d'ouvrir cette correspondance.");
       });
   }, [onOpenError]);
+  const loading = enabled && currentInputKey
+    ? candidates.loading || !currentMatches || matches.loadingKeys.has(currentInputKey)
+    : false;
 
   return {
     readingMatches: currentMatches?.readingMatches ?? EMPTY_MATCHES.readingMatches,
@@ -103,7 +86,7 @@ export default function useQuickReviewPotentialMatches({
     readingListMatches: currentMatches?.readingListMatches ?? EMPTY_MATCHES.readingListMatches,
     seriesProgress: currentMatches?.seriesProgress ?? null,
     seriesReadingWarning: currentMatches?.seriesReadingWarning ?? null,
-    loading: enabled && Boolean(input) && (matches.loading || candidates.loading),
+    loading,
     openMatch,
   };
 }

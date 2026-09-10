@@ -20,6 +20,7 @@ import useQuickReviewBookmark from "@/renderer/components/QuickReview/useQuickRe
 import useQuickReviewLayout from "@/renderer/components/QuickReview/useQuickReviewLayout";
 import useQuickReviewPotentialMatches from "@/renderer/components/QuickReview/useQuickReviewPotentialMatches";
 import useQuickReviewShortcuts from "@/renderer/components/QuickReview/useQuickReviewShortcuts";
+import useQuickReviewThumbnailScroll from "@/renderer/components/QuickReview/useQuickReviewThumbnailScroll";
 import { EyeIcon, LoadingSpinnerIcon } from "@/renderer/components/icons";
 import useModal from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
@@ -45,31 +46,6 @@ import "@/renderer/components/QuickReview/style.scss";
 
 type Props = { items: QuickReviewItem[] };
 
-const THUMBNAIL_END_DOUBLE_PRESS_DELAY_MS = 550;
-const THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX = 2;
-
-const getThumbnailScrollStops = (
-  container: HTMLDivElement,
-  vertical: boolean,
-  scrollPosition: number,
-): number[] => {
-  const containerRect = container.getBoundingClientRect();
-  const positions = Array.from(container.children)
-    .filter((child): child is HTMLElement => child instanceof HTMLElement && child.offsetParent !== null)
-    .map((child) => {
-      const childRect = child.getBoundingClientRect();
-      return scrollPosition + (vertical
-        ? childRect.top - containerRect.top
-        : childRect.left - containerRect.left);
-    })
-    .sort((first, second) => first - second);
-
-  return positions.filter((position, index) => (
-    index === 0
-    || position - positions[index - 1] > THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
-  ));
-};
-
 export default function QuickReviewDialog({ items }: Props) {
   const { closeModal } = useModal();
   const { params } = useParams();
@@ -80,10 +56,6 @@ export default function QuickReviewDialog({ items }: Props) {
   const [previewedThumbnailIndex, setPreviewedThumbnailIndex] = React.useState<number | null>(null);
   const [markingRead, setMarkingRead] = React.useState(false);
   const [potentialMatchesToggleRequest, setPotentialMatchesToggleRequest] = React.useState(0);
-  const thumbnailScrollRef = React.useRef<HTMLDivElement>(null);
-  const thumbnailScrollAnimationRef = React.useRef<number | null>(null);
-  const thumbnailScrollTargetRef = React.useRef<number | null>(null);
-  const lastBlockedThumbnailNextPressRef = React.useRef<number | null>(null);
   const thumbnailSize = normalizeQuickReviewThumbnailSize(params?.quickReviewThumbnailSize);
   const thumbnailMaxColumns = normalizeQuickReviewThumbnailMaxColumns(
     params?.quickReviewThumbnailMaxColumns,
@@ -114,17 +86,12 @@ export default function QuickReviewDialog({ items }: Props) {
   const isMarkedRead = Boolean(
     primaryViewIdentity && viewHistory.getRecord(primaryViewIdentity)?.readAt,
   );
-  const cancelThumbnailScrollAnimation = React.useCallback(() => {
-    if (thumbnailScrollAnimationRef.current === null) return;
-    window.cancelAnimationFrame(thumbnailScrollAnimationRef.current);
-    thumbnailScrollAnimationRef.current = null;
-    thumbnailScrollTargetRef.current = null;
-  }, []);
   const {
     detailsState,
     details,
     chapterCount,
     detailsLoading,
+    detailsByItemId,
     loadingMoreThumbnails,
     canLoadMoreThumbnails,
     loadMoreThumbnailsLabel,
@@ -138,14 +105,10 @@ export default function QuickReviewDialog({ items }: Props) {
   );
 
   React.useLayoutEffect(() => {
-    cancelThumbnailScrollAnimation();
     setCoverIndex(0);
     setOpenError(null);
     setPreviewedThumbnailIndex(null);
-    lastBlockedThumbnailNextPressRef.current = null;
-  }, [cancelThumbnailScrollAnimation, currentItem?.id]);
-
-  React.useEffect(() => cancelThumbnailScrollAnimation, [cancelThumbnailScrollAnimation]);
+  }, [currentItem?.id]);
 
   React.useEffect(() => {
     if (!currentItem) return;
@@ -205,13 +168,13 @@ export default function QuickReviewDialog({ items }: Props) {
     onError: setOpenError,
   });
   const potentialMatches = useQuickReviewPotentialMatches({
-    item: currentItem,
-    details,
+    currentIndex,
+    detailsByItemId,
     enabled: params?.scraperCardPotentialMatchesEnabled !== false,
+    items,
     onOpenError: setOpenError,
   });
-  const hasEquivalentBookmark = potentialMatches.bookmarkMatches.length > 0;
-  const isBookmarked = bookmark.isBookmarked || hasEquivalentBookmark;
+  const isBookmarked = bookmark.isBookmarked;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
   const bookmarkVerificationLoading = bookmark.verificationLoading || potentialMatches.loading;
   const potentialMatchesAvailable = Boolean(
@@ -250,80 +213,14 @@ export default function QuickReviewDialog({ items }: Props) {
     setCurrentIndex((index) => Math.min(items.length, index + 1));
   }, [bookmark.bookmarking, items.length]);
 
-  const scrollThumbnails = React.useCallback((direction: -1 | 1) => {
-    const container = thumbnailScrollRef.current;
-    if (!container) return;
-    const scrollPosition = wide ? container.scrollTop : container.scrollLeft;
-    const queuedScrollPosition = thumbnailScrollAnimationRef.current !== null
-      ? thumbnailScrollTargetRef.current ?? scrollPosition
-      : scrollPosition;
-    const maximumScroll = wide
-      ? container.scrollHeight - container.clientHeight
-      : container.scrollWidth - container.clientWidth;
-    const reachedEdge = direction > 0
-      ? queuedScrollPosition >= maximumScroll - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
-      : queuedScrollPosition <= THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX;
-
-    if (reachedEdge) {
-      if (direction > 0 && canLoadMoreThumbnails && !loadingMoreThumbnails) {
-        const now = performance.now();
-        const previousBlockedPress = lastBlockedThumbnailNextPressRef.current;
-        if (
-          previousBlockedPress !== null
-          && now - previousBlockedPress <= THUMBNAIL_END_DOUBLE_PRESS_DELAY_MS
-        ) {
-          lastBlockedThumbnailNextPressRef.current = null;
-          void loadMoreThumbnails();
-        } else {
-          lastBlockedThumbnailNextPressRef.current = now;
-        }
-      } else {
-        lastBlockedThumbnailNextPressRef.current = null;
-      }
-      return;
-    }
-
-    lastBlockedThumbnailNextPressRef.current = null;
-    const scrollStops = getThumbnailScrollStops(container, wide, scrollPosition);
-    const targetStop = direction > 0
-      ? scrollStops.find((position) => (
-        position > queuedScrollPosition + THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
-      )) ?? maximumScroll
-      : [...scrollStops].reverse().find((position) => (
-        position < queuedScrollPosition - THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX
-      )) ?? 0;
-    const targetPosition = Math.max(0, Math.min(maximumScroll, targetStop));
-    const startPosition = wide ? container.scrollTop : container.scrollLeft;
-    const distance = targetPosition - startPosition;
-    if (Math.abs(distance) <= THUMBNAIL_SCROLL_EDGE_TOLERANCE_PX) return;
-
-    cancelThumbnailScrollAnimation();
-    thumbnailScrollTargetRef.current = targetPosition;
-    const startedAt = performance.now();
-    const duration = (Math.abs(distance) / keyboardScrollSpeed) * 1000;
-    const animate = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / duration);
-      const easedProgress = progress * progress * (3 - (2 * progress));
-      const nextPosition = startPosition + (distance * easedProgress);
-      if (wide) container.scrollTop = nextPosition;
-      else container.scrollLeft = nextPosition;
-
-      if (progress < 1) {
-        thumbnailScrollAnimationRef.current = window.requestAnimationFrame(animate);
-      } else {
-        thumbnailScrollAnimationRef.current = null;
-        thumbnailScrollTargetRef.current = null;
-      }
-    };
-    thumbnailScrollAnimationRef.current = window.requestAnimationFrame(animate);
-  }, [
-    canLoadMoreThumbnails,
-    cancelThumbnailScrollAnimation,
+  const { scrollRef: thumbnailScrollRef, scrollThumbnails } = useQuickReviewThumbnailScroll({
+    canLoadMore: canLoadMoreThumbnails,
     keyboardScrollSpeed,
-    loadMoreThumbnails,
-    loadingMoreThumbnails,
-    wide,
-  ]);
+    loadingMore: loadingMoreThumbnails,
+    onLoadMore: loadMoreThumbnails,
+    resetKey: currentItem?.id ?? String(currentIndex),
+    vertical: wide,
+  });
   const closeThumbnailPreview = React.useCallback(() => setPreviewedThumbnailIndex(null), []);
 
   const handleBookmark = React.useCallback(async () => {
@@ -468,11 +365,7 @@ export default function QuickReviewDialog({ items }: Props) {
                     {pageCount ? <span>{pageCount}</span> : null}
                     {details?.mangaStatus ? <span>{details.mangaStatus}</span> : null}
                     {isBookmarked ? (
-                      <span className="quick-review__bookmark-status">
-                        {hasEquivalentBookmark && !bookmark.isBookmarked
-                          ? "Déjà bookmarké sur une autre source"
-                          : "Déjà bookmarké"}
-                      </span>
+                      <span className="quick-review__bookmark-status">Déjà bookmarké</span>
                     ) : null}
                   </div> : null}
                 </div>

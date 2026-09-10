@@ -34,6 +34,7 @@ type QuickReviewDetailsState = {
   details: ScraperRuntimeDetailsResult | null;
   chapterCount: number | null;
   detailsLoading: boolean;
+  detailsByItemId: ReadonlyMap<string, ScraperRuntimeDetailsResult | null>;
   loadingMoreThumbnails: boolean;
   canLoadMoreThumbnails: boolean;
   loadMoreThumbnailsLabel: string;
@@ -49,7 +50,7 @@ export default function useQuickReviewDetails(
 ): QuickReviewDetailsState {
   const { params } = useParams();
   const prefetchCount = normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
-  const [, setRevision] = React.useState(0);
+  const [revision, setRevision] = React.useState(0);
   const [loadingItemId, setLoadingItemId] = React.useState<string | null>(null);
   const [loadingMoreItemId, setLoadingMoreItemId] = React.useState<string | null>(null);
   const detailsCacheRef = React.useRef(createScraperCardDetailsCache());
@@ -260,6 +261,13 @@ export default function useQuickReviewDetails(
     ? detailsStatesRef.current.get(currentItem.id) ?? null
     : null;
   const currentDetails = detailsState?.details ?? null;
+  const detailsByItemId = React.useMemo(
+    () => new Map(Array.from(detailsStatesRef.current, ([itemId, state]) => [
+      itemId,
+      state.details,
+    ])),
+    [revision],
+  );
   const currentPagesConfig = currentItem
     ? getScraperPagesFeatureConfig(getScraperFeature(currentItem.primarySource.scraper, "pages"))
     : null;
@@ -313,6 +321,7 @@ export default function useQuickReviewDetails(
     details: currentDetails,
     chapterCount: detailsState?.chapterCount ?? null,
     detailsLoading: loadingItemId === currentItem?.id && !detailsState,
+    detailsByItemId,
     loadingMoreThumbnails: loadingMoreItemId === currentItem?.id,
     canLoadMoreThumbnails: canLoadMoreScraperDetailsThumbnails(currentDetails, currentPagesConfig),
     loadMoreThumbnailsLabel: getLoadMoreScraperDetailsThumbnailsLabel(currentDetails),
