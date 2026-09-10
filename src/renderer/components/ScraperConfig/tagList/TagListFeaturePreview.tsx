@@ -1,9 +1,10 @@
 import React from "react";
-import type { ScraperTagListItem } from "@/shared/scraper";
+import type { ScraperEntityListItem, ScraperEntityListKind } from "@/shared/scraper";
 import type { ScraperRuntimeTagListPageResult } from "@/renderer/utils/scraperRuntime";
 
 type Props = {
-  previewTags: ScraperTagListItem[];
+  entityKind: ScraperEntityListKind;
+  previewItems: ScraperEntityListItem[];
   previewPage: ScraperRuntimeTagListPageResult | null;
   previewPageIndex: number;
   usesTemplatePaging: boolean;
@@ -13,7 +14,8 @@ type Props = {
 };
 
 export default function TagListFeaturePreview({
-  previewTags,
+  entityKind,
+  previewItems,
   previewPage,
   previewPageIndex,
   usesTemplatePaging,
@@ -21,7 +23,7 @@ export default function TagListFeaturePreview({
   onPreviousPage,
   onNextPage,
 }: Props) {
-  if (!previewTags.length) {
+  if (!previewItems.length) {
     return null;
   }
 
@@ -69,14 +71,17 @@ export default function TagListFeaturePreview({
       ) : null}
 
       <div className="scraper-tag-list-preview">
-        {previewTags.map((tag) => (
+        <span className="sr-only">
+          Apercu des {entityKind === "author" ? "auteurs" : "tags"} extraits
+        </span>
+        {previewItems.map((item) => (
           <div
-            key={`${tag.url ?? tag.name}-${tag.name}`}
+            key={`${item.url ?? item.name}-${item.name}`}
             className="scraper-tag-list-preview__item"
           >
-            <span>{tag.name}</span>
-            {tag.count ? <small>{tag.count}</small> : null}
-            {tag.url ? <code>{tag.url}</code> : null}
+            <span>{item.name}</span>
+            {item.count ? <small>{item.count}</small> : null}
+            {item.url ? <code>{item.url}</code> : null}
           </div>
         ))}
       </div>

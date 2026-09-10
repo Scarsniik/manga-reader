@@ -197,6 +197,20 @@ export const resolveBackgroundQuickSeenProgress = (
   return { consecutiveSeenCount, boundaryReached };
 };
 
+export const resolveBackgroundEligibleQuickSeenProgress = (
+  results: Array<{ seen: boolean; eligible: boolean }>,
+  previousConsecutiveSeenCount: number,
+  threshold = DEFAULT_BACKGROUND_QUICK_SEEN_STOP_THRESHOLD,
+): { consecutiveSeenCount: number; boundaryReached: boolean } => (
+  resolveBackgroundQuickSeenProgress(
+    results.flatMap(({ seen, eligible }) => (
+      seen || eligible ? [seen] : []
+    )),
+    previousConsecutiveSeenCount,
+    threshold,
+  )
+);
+
 type BackgroundLanguageProgress = {
   excludedCount: number;
   includedCount: number;

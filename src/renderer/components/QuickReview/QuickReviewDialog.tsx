@@ -20,14 +20,18 @@ import useQuickReviewBookmark from "@/renderer/components/QuickReview/useQuickRe
 import useQuickReviewLayout from "@/renderer/components/QuickReview/useQuickReviewLayout";
 import useQuickReviewPotentialMatches from "@/renderer/components/QuickReview/useQuickReviewPotentialMatches";
 import useQuickReviewShortcuts from "@/renderer/components/QuickReview/useQuickReviewShortcuts";
-import { LoadingSpinnerIcon } from "@/renderer/components/icons";
+import { EyeIcon, LoadingSpinnerIcon } from "@/renderer/components/icons";
 import useModal from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
 import useShortcutSettings from "@/renderer/hooks/useShortcutSettings";
 import {
   getScraperSingleSourceLanguageCodes,
 } from "@/renderer/utils/scraperBookmarkMetadata";
-import { recordScraperCardsSeen } from "@/renderer/stores/scraperViewHistory";
+import {
+  recordScraperCardsSeen,
+  setScraperCardRead,
+  useScraperViewHistory,
+} from "@/renderer/stores/scraperViewHistory";
 import { buildSearchResultViewHistoryIdentity } from "@/renderer/utils/scraperViewHistory";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import {
@@ -74,6 +78,8 @@ export default function QuickReviewDialog({ items }: Props) {
   const [openError, setOpenError] = React.useState<string | null>(null);
   const [coverIndex, setCoverIndex] = React.useState(0);
   const [previewedThumbnailIndex, setPreviewedThumbnailIndex] = React.useState<number | null>(null);
+  const [markingRead, setMarkingRead] = React.useState(false);
+  const [potentialMatchesToggleRequest, setPotentialMatchesToggleRequest] = React.useState(0);
   const thumbnailScrollRef = React.useRef<HTMLDivElement>(null);
   const thumbnailScrollAnimationRef = React.useRef<number | null>(null);
   const thumbnailScrollTargetRef = React.useRef<number | null>(null);
@@ -93,6 +99,21 @@ export default function QuickReviewDialog({ items }: Props) {
   );
   const currentItem = items[currentIndex] ?? null;
   const isComplete = currentIndex >= items.length;
+  const primaryViewIdentity = React.useMemo(() => (
+    currentItem
+      ? buildSearchResultViewHistoryIdentity(
+        currentItem.primarySource.scraper.id,
+        currentItem.primarySource.result,
+      )
+      : null
+  ), [currentItem]);
+  const viewHistory = useScraperViewHistory({
+    scraperId: currentItem?.primarySource.scraper.id,
+    enabled: Boolean(currentItem),
+  });
+  const isMarkedRead = Boolean(
+    primaryViewIdentity && viewHistory.getRecord(primaryViewIdentity)?.readAt,
+  );
   const cancelThumbnailScrollAnimation = React.useCallback(() => {
     if (thumbnailScrollAnimationRef.current === null) return;
     window.cancelAnimationFrame(thumbnailScrollAnimationRef.current);
@@ -193,6 +214,31 @@ export default function QuickReviewDialog({ items }: Props) {
   const isBookmarked = bookmark.isBookmarked || hasEquivalentBookmark;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
   const bookmarkVerificationLoading = bookmark.verificationLoading || potentialMatches.loading;
+  const potentialMatchesAvailable = Boolean(
+    potentialMatches.readingMatches.length
+    || potentialMatches.bookmarkMatches.length
+    || potentialMatches.readingListMatches.length
+  );
+
+  const handleToggleRead = React.useCallback(async () => {
+    if (!primaryViewIdentity || markingRead) return;
+    setMarkingRead(true);
+    setOpenError(null);
+    try {
+      await setScraperCardRead({
+        ...primaryViewIdentity,
+        read: !isMarkedRead,
+      });
+    } catch (error) {
+      setOpenError(
+        error instanceof Error
+          ? error.message
+          : "Impossible de mettre à jour l'état de lecture.",
+      );
+    } finally {
+      setMarkingRead(false);
+    }
+  }, [isMarkedRead, markingRead, primaryViewIdentity]);
 
   const goPrevious = React.useCallback(() => {
     if (bookmark.bookmarking) return;
@@ -307,7 +353,11 @@ export default function QuickReviewDialog({ items }: Props) {
     goPrevious,
     handleBookmark,
     isComplete,
+    markingRead,
     onClosePreview: closeThumbnailPreview,
+    onTogglePotentialMatches: () => setPotentialMatchesToggleRequest((request) => request + 1),
+    onToggleRead: handleToggleRead,
+    potentialMatchesAvailable,
     previewOpen: previewedThumbnailIndex !== null,
     scrollThumbnails,
     shortcuts,
@@ -335,6 +385,10 @@ export default function QuickReviewDialog({ items }: Props) {
   const previousShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewPrevious);
   const nextShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewNext);
   const bookmarkShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewBookmark);
+  const potentialMatchesShortcut = getQuickReviewShortcutLabel(
+    shortcuts.quickReviewPotentialMatchesToggle,
+  );
+  const markReadShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewMarkRead);
   const thumbnailsPanel = displaySettings.quickReviewShowThumbnails ? (
     <QuickReviewThumbnails
       large={wide}
@@ -422,7 +476,26 @@ export default function QuickReviewDialog({ items }: Props) {
                     ) : null}
                   </div> : null}
                 </div>
-                {detailsLoading ? <LoadingSpinnerIcon className="quick-review__details-spinner" aria-hidden="true" /> : null}
+                <div className="quick-review__title-actions">
+                  <button
+                    type="button"
+                    className={[
+                      "quick-review__read-toggle",
+                      isMarkedRead ? "is-read" : "",
+                    ].filter(Boolean).join(" ")}
+                    onClick={() => void handleToggleRead()}
+                    disabled={markingRead || viewHistory.loading || !primaryViewIdentity}
+                    title={`${isMarkedRead ? "Marquer comme non lu" : "Marquer comme lu"}${markReadShortcut ? ` (${markReadShortcut})` : ""}`}
+                    aria-label={`${isMarkedRead ? "Marquer comme non lu" : "Marquer comme lu"} ${title}`}
+                    aria-pressed={isMarkedRead}
+                    aria-busy={markingRead}
+                  >
+                    {markingRead
+                      ? <LoadingSpinnerIcon aria-hidden="true" />
+                      : <EyeIcon aria-hidden="true" focusable="false" />}
+                  </button>
+                  {detailsLoading ? <LoadingSpinnerIcon className="quick-review__details-spinner" aria-hidden="true" /> : null}
+                </div>
               </div>
 
               {displaySettings.quickReviewShowDescription && summary
@@ -443,6 +516,8 @@ export default function QuickReviewDialog({ items }: Props) {
                   loading={potentialMatches.loading}
                   portalMenus
                   horizontalBoundarySelector=".quick-review-modal"
+                  toggleOpenRequest={potentialMatchesToggleRequest}
+                  toggleShortcutLabel={potentialMatchesShortcut}
                   onOpenMatch={potentialMatches.openMatch}
                   onOpenMatchInWorkspace={potentialMatches.openMatch}
                 />

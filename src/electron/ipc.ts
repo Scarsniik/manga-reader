@@ -63,6 +63,12 @@ const notifyScraperTagListCacheUpdated = (scraperId: string) => {
     }
 };
 
+const notifyScraperEntityListCacheUpdated = (scraperId: string, entityKind: "author" | "tag") => {
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("scraper-entity-list-cache-updated", { scraperId, entityKind });
+    }
+};
+
 const notifyScraperViewHistoryUpdated = (change?: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send("scraper-view-history-updated", change);
@@ -457,6 +463,19 @@ ipcMain.handle("save-scraper-tag-list-cache", async (_event: IpcMainInvokeEvent,
 ipcMain.handle("add-scraper-tag-list-cache-items", async (_event: IpcMainInvokeEvent, request: any) => {
     const updated = await scrapers.addScraperTagListCacheItems(request);
     notifyScraperTagListCacheUpdated(updated.scraperId);
+    return updated;
+});
+ipcMain.handle("get-scraper-entity-list-cache", async (_event: IpcMainInvokeEvent, request: any) => (
+    scrapers.getScraperEntityListCache(request)
+));
+ipcMain.handle("save-scraper-entity-list-cache", async (_event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.saveScraperEntityListCache(request);
+    notifyScraperEntityListCacheUpdated(updated.scraperId, updated.entityKind);
+    return updated;
+});
+ipcMain.handle("add-scraper-entity-list-cache-items", async (_event: IpcMainInvokeEvent, request: any) => {
+    const updated = await scrapers.addScraperEntityListCacheItems(request);
+    notifyScraperEntityListCacheUpdated(updated.scraperId, updated.entityKind);
     return updated;
 });
 ipcMain.handle("get-scraper-author-favorite-cache", async (event: IpcMainInvokeEvent, favoriteId: string) => (

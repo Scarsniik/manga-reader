@@ -6,12 +6,12 @@ import {
   resolveScraperUrl,
   type ScraperAuthorFeatureConfig,
   type ScraperDetailsFeatureConfig,
+  type ScraperEntityListFeatureConfig,
   type ScraperHomepageFeatureConfig,
   type ScraperRequestConfig,
   type ScraperSearchFeatureConfig,
   type ScraperSourceFeatureConfig,
   type ScraperTagFeatureConfig,
-  type ScraperTagListFeatureConfig,
 } from "@/shared/scraper";
 import { normalizeRequestConfig } from "@/renderer/utils/scraperRuntime/featureConfig";
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
@@ -311,13 +311,15 @@ export const resolveScraperSourceTargetUrl = (
   return resolveScraperUrl(baseUrl, trimmedQuery);
 };
 
-export const resolveScraperTagListTargetUrl = (
+export const resolveScraperEntityListTargetUrl = (
   baseUrl: string,
-  config: ScraperTagListFeatureConfig,
+  config: ScraperEntityListFeatureConfig,
   options?: {
     pageIndex?: number;
   },
 ): string => buildScraperSearchUrl(baseUrl, config.urlTemplate || "", "", options);
+
+export const resolveScraperTagListTargetUrl = resolveScraperEntityListTargetUrl;
 
 export const resolveScraperSearchRequestConfig = (
   config: ScraperSearchFeatureConfig | ScraperHomepageFeatureConfig,

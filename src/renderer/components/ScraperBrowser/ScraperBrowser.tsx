@@ -22,7 +22,7 @@ import ScraperDetailsPanel from '@/renderer/components/ScraperBrowser/components
 import ScraperAuthorCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperAuthorCombinedView';
 import ScraperTagCombinedView from '@/renderer/components/ScraperBrowser/components/ScraperTagCombinedView';
 import ScraperSearchResultsSection from '@/renderer/components/ScraperBrowser/components/ScraperSearchResultsSection';
-import ScraperTagListView from '@/renderer/components/ScraperBrowser/components/ScraperTagListView';
+import ScraperEntityListView from '@/renderer/components/ScraperBrowser/components/ScraperTagListView';
 import MangaCorrespondenceDialog from '@/renderer/components/MangaCorrespondence/MangaCorrespondenceDialog';
 import AuthorCorrespondenceDialog from '@/renderer/components/AuthorCorrespondence/AuthorCorrespondenceDialog';
 import useScraperBrowserDetails from '@/renderer/components/ScraperBrowser/hooks/useScraperBrowserDetails';
@@ -114,12 +114,12 @@ import {
   getScraperSearchFeatureConfig,
   getScraperSourceFeatureConfig,
   getScraperTagFeatureConfig,
-  getScraperTagListFeatureConfig,
+  getScraperEntityListFeatureConfig,
   getScraperTitleAnalysisFeatureConfig,
   hasAuthorPagePlaceholder,
   hasSearchPagePlaceholder,
   hasSourcePagePlaceholder,
-  hasTagListPagePlaceholder,
+  hasEntityListPagePlaceholder,
   hasTagPagePlaceholder,
   isScraperFeatureConfigured,
   ScraperRuntimeChapterResult,
@@ -185,6 +185,10 @@ const buildBackLabel = (
 
   if (sourceKind === 'tagList') {
     return 'Retour a la liste de tags';
+  }
+
+  if (sourceKind === 'authorList') {
+    return 'Retour a la liste d\'auteurs';
   }
 
   if (sourceKind === 'bookmarks') {
@@ -294,6 +298,7 @@ export default function ScraperBrowser({
   const authorFeature = useMemo(() => getScraperFeature(scraper, 'author'), [scraper]);
   const tagFeature = useMemo(() => getScraperFeature(scraper, 'tag'), [scraper]);
   const sourceFeature = useMemo(() => getScraperFeature(scraper, 'source'), [scraper]);
+  const authorListFeature = useMemo(() => getScraperFeature(scraper, 'authorList'), [scraper]);
   const tagListFeature = useMemo(() => getScraperFeature(scraper, 'tagList'), [scraper]);
   const chaptersFeature = useMemo(() => getScraperFeature(scraper, 'chapters'), [scraper]);
   const pagesFeature = useMemo(() => getScraperFeature(scraper, 'pages'), [scraper]);
@@ -304,7 +309,8 @@ export default function ScraperBrowser({
   const authorConfig = useMemo(() => getScraperAuthorFeatureConfig(authorFeature), [authorFeature]);
   const tagConfig = useMemo(() => getScraperTagFeatureConfig(tagFeature), [tagFeature]);
   const sourceConfig = useMemo(() => getScraperSourceFeatureConfig(sourceFeature), [sourceFeature]);
-  const tagListConfig = useMemo(() => getScraperTagListFeatureConfig(tagListFeature), [tagListFeature]);
+  const authorListConfig = useMemo(() => getScraperEntityListFeatureConfig(authorListFeature), [authorListFeature]);
+  const tagListConfig = useMemo(() => getScraperEntityListFeatureConfig(tagListFeature), [tagListFeature]);
   const chaptersConfig = useMemo(() => getScraperChaptersFeatureConfig(chaptersFeature), [chaptersFeature]);
   const pagesConfig = useMemo(() => getScraperPagesFeatureConfig(pagesFeature), [pagesFeature]);
   const titleAnalysisConfig = useMemo(
@@ -318,6 +324,7 @@ export default function ScraperBrowser({
   const hasAuthor = isScraperFeatureConfigured(authorFeature);
   const hasTag = isScraperFeatureConfigured(tagFeature);
   const hasSource = isScraperFeatureConfigured(sourceFeature);
+  const hasAuthorList = isScraperFeatureConfigured(authorListFeature);
   const hasTagList = isScraperFeatureConfigured(tagListFeature);
   const hasChapters = isScraperFeatureConfigured(chaptersFeature);
   const hasPages = isScraperFeatureConfigured(pagesFeature);
@@ -342,11 +349,14 @@ export default function ScraperBrowser({
     if (hasSource) {
       nextModes.push('source');
     }
+    if (hasAuthorList) {
+      nextModes.push('authorList');
+    }
     if (hasTagList) {
       nextModes.push('tagList');
     }
     return nextModes;
-  }, [hasAuthor, hasDetails, hasHomepage, hasSearch, hasSource, hasTag, hasTagList]);
+  }, [hasAuthor, hasAuthorList, hasDetails, hasHomepage, hasSearch, hasSource, hasTag, hasTagList]);
 
   const defaultMode = useMemo<ScraperBrowseMode>(() => {
     if (initialState?.listingMode && availableModes.includes(initialState.listingMode)) {
@@ -377,6 +387,10 @@ export default function ScraperBrowser({
       return 'source';
     }
 
+    if (availableModes.includes('authorList')) {
+      return 'authorList';
+    }
+
     if (availableModes.includes('tagList')) {
       return 'tagList';
     }
@@ -402,7 +416,8 @@ export default function ScraperBrowser({
   const usesAuthorTemplatePaging = hasAuthorPagePlaceholder(authorConfig);
   const usesTagTemplatePaging = hasTagPagePlaceholder(tagConfig);
   const usesSourceTemplatePaging = hasSourcePagePlaceholder(sourceConfig);
-  const usesTagListTemplatePaging = hasTagListPagePlaceholder(tagListConfig);
+  const usesAuthorListTemplatePaging = hasEntityListPagePlaceholder(authorListConfig);
+  const usesTagListTemplatePaging = hasEntityListPagePlaceholder(tagListConfig);
   const hasConfiguredHomeSearch = useMemo(
     () => Boolean(scraper.globalConfig.homeSearch.enabled && hasSearch),
     [hasSearch, scraper.globalConfig.homeSearch.enabled],
@@ -824,6 +839,7 @@ export default function ScraperBrowser({
     hasAuthor,
     hasTag,
     hasSource,
+    hasAuthorList,
     hasTagList,
     hasDetails,
     hasConfiguredHomeSearch,
@@ -959,7 +975,7 @@ export default function ScraperBrowser({
       return;
     }
 
-    if (mode === 'tagList') {
+    if (mode === 'authorList' || mode === 'tagList') {
       return;
     }
 
@@ -1107,12 +1123,14 @@ export default function ScraperBrowser({
       tagConfig?.urlStrategy ?? null,
       hasSource,
       sourceConfig?.urlStrategy ?? null,
+      hasAuthorList,
       hasTagList,
     ),
     [
       authorConfig?.urlStrategy,
       detailsConfig?.urlStrategy,
       hasAuthor,
+      hasAuthorList,
       hasDetails,
       hasTag,
       hasSource,
@@ -1130,6 +1148,7 @@ export default function ScraperBrowser({
     authorFeature,
     tagFeature,
     sourceFeature,
+    authorListFeature,
     tagListFeature,
     chaptersFeature,
     pagesFeature,
@@ -1139,17 +1158,20 @@ export default function ScraperBrowser({
     hasAuthor,
     hasTag,
     hasSource,
+    hasAuthorList,
     hasTagList,
     hasChapters,
     hasPages,
   }), [
     authorFeature,
+    authorListFeature,
     tagFeature,
     sourceFeature,
     tagListFeature,
     chaptersFeature,
     detailsFeature,
     hasAuthor,
+    hasAuthorList,
     hasTag,
     hasSource,
     hasTagList,
@@ -1169,7 +1191,9 @@ export default function ScraperBrowser({
     usesAuthorTemplatePaging,
     usesTagTemplatePaging,
     usesSourceTemplatePaging,
+    usesAuthorListTemplatePaging,
     usesTagListTemplatePaging,
+    authorListCollectFromDetails: authorListConfig?.collectFromDetails === true,
     tagListCollectFromDetails: tagListConfig?.collectFromDetails === true,
     hasSearchNextPageSelector: hasScraperFieldSelectorValue(
       mode === 'homepage' ? homepageConfig?.nextPageSelector : searchConfig?.nextPageSelector,
@@ -1183,12 +1207,14 @@ export default function ScraperBrowser({
     hasAuthor,
     hasTag,
     hasSource,
+    hasAuthorList,
     hasTagList,
   }), [
     authorConfig?.nextPageSelector,
     canOpenSearchResultsAsAuthor,
     canOpenSearchResultsAsDetails,
     hasAuthor,
+    hasAuthorList,
     hasDetails,
     hasTag,
     hasSource,
@@ -1198,10 +1224,12 @@ export default function ScraperBrowser({
     searchConfig?.nextPageSelector,
     tagConfig?.nextPageSelector,
     sourceConfig?.nextPageSelector,
+    authorListConfig?.collectFromDetails,
     tagListConfig?.collectFromDetails,
     usesAuthorTemplatePaging,
     usesHomepageTemplatePaging,
     usesSearchTemplatePaging,
+    usesAuthorListTemplatePaging,
     usesTagListTemplatePaging,
     usesTagTemplatePaging,
     usesSourceTemplatePaging,
@@ -1977,6 +2005,7 @@ export default function ScraperBrowser({
       authorActive: true,
       authorQuery: nextAuthorQuery,
       authorPage: 1,
+      authorListQuery: routeState.authorListQuery ?? '',
       mangaQuery: '',
       bookmarksFilterScraperId: routeState.bookmarksFilterScraperId,
     });
@@ -1990,7 +2019,7 @@ export default function ScraperBrowser({
         state: {
           ...(locationState ?? {}),
           scraperBrowserHistorySource: {
-            kind: 'manga',
+            kind: mode === 'authorList' ? 'authorList' : 'manga',
           },
           scraperBrowserListingReturnState: null,
           scraperBrowserAuthorTemplateContext: templateContext,
@@ -2002,6 +2031,7 @@ export default function ScraperBrowser({
     location.pathname,
     location.search,
     locationState,
+    mode,
     navigate,
     routeSyncEnabled,
     runAuthorLookup,
@@ -2692,16 +2722,31 @@ export default function ScraperBrowser({
         downloadError={downloadError}
       />
 
-      {mode === 'tagList' && tagListConfig ? (
-        <ScraperTagListView
+      {mode === 'authorList' && authorListConfig ? (
+        <ScraperEntityListView
+          scraper={scraper}
+          config={authorListConfig}
+          entityKind="author"
+          searchQuery={query}
+          hasTargetFeature={hasAuthor}
+          onOpen={(value, title) => {
+            handleOpenAuthorFromDetails(value, title);
+          }}
+          onOpenInWorkspace={handleOpenAuthorFromDetailsInWorkspace}
+          onRuntimeMessage={setRuntimeMessage}
+          onRuntimeError={setRuntimeError}
+        />
+      ) : mode === 'tagList' && tagListConfig ? (
+        <ScraperEntityListView
           scraper={scraper}
           config={tagListConfig}
+          entityKind="tag"
           searchQuery={query}
-          hasTag={hasTag}
-          onOpenTag={(value, title) => {
+          hasTargetFeature={hasTag}
+          onOpen={(value, title) => {
             handleOpenTagFromDetails(value, title);
           }}
-          onOpenTagInWorkspace={handleOpenTagFromDetailsInWorkspace}
+          onOpenInWorkspace={handleOpenTagFromDetailsInWorkspace}
           onRuntimeMessage={setRuntimeMessage}
           onRuntimeError={setRuntimeError}
         />

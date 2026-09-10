@@ -134,6 +134,7 @@ export const buildQueryPlaceholder = (
   tagMode: 'template' | 'result_url' | null = null,
   hasSource = false,
   sourceMode: 'template' | 'result_url' | null = null,
+  hasAuthorList = false,
   hasTagList = false,
 ): string => {
   if (mode === 'homepage') {
@@ -144,6 +145,12 @@ export const buildQueryPlaceholder = (
     return hasTagList
       ? 'Filtrer la liste de tags enregistree'
       : 'La liste de tags n\'est pas encore configuree.';
+  }
+
+  if (mode === 'authorList') {
+    return hasAuthorList
+      ? 'Filtrer la liste d\'auteurs enregistree'
+      : 'La liste d\'auteurs n\'est pas encore configuree.';
   }
 
   if (mode === 'search') {
@@ -220,7 +227,9 @@ export const buildScraperBrowserHelperText = (options: {
   usesAuthorTemplatePaging: boolean;
   usesTagTemplatePaging?: boolean;
   usesSourceTemplatePaging?: boolean;
+  usesAuthorListTemplatePaging?: boolean;
   usesTagListTemplatePaging?: boolean;
+  authorListCollectFromDetails?: boolean;
   tagListCollectFromDetails?: boolean;
   hasSearchNextPageSelector: boolean;
   hasAuthorNextPageSelector: boolean;
@@ -232,6 +241,7 @@ export const buildScraperBrowserHelperText = (options: {
   hasAuthor: boolean;
   hasTag?: boolean;
   hasSource?: boolean;
+  hasAuthorList?: boolean;
   hasTagList?: boolean;
 }): string | undefined => {
   const {
@@ -241,7 +251,9 @@ export const buildScraperBrowserHelperText = (options: {
     usesAuthorTemplatePaging,
     usesTagTemplatePaging,
     usesSourceTemplatePaging,
+    usesAuthorListTemplatePaging,
     usesTagListTemplatePaging,
+    authorListCollectFromDetails,
     tagListCollectFromDetails,
     hasAuthorNextPageSelector,
     hasTagNextPageSelector,
@@ -250,6 +262,7 @@ export const buildScraperBrowserHelperText = (options: {
     hasAuthor,
     hasTag,
     hasSource,
+    hasAuthorList,
     hasTagList,
   } = options;
 
@@ -345,6 +358,18 @@ export const buildScraperBrowserHelperText = (options: {
     return 'Cette vue charge la liste de tags enregistree pour ce scrapper. Le bouton d\'actualisation rescrape toutes les pages detectees.';
   }
 
+  if (mode === 'authorList' && hasAuthorList) {
+    if (authorListCollectFromDetails) {
+      return 'Cette vue charge la liste d\'auteurs enregistree pour ce scrapper. Elle est alimentee automatiquement par les auteurs rencontres quand des fiches sont ouvertes.';
+    }
+
+    if (usesAuthorListTemplatePaging) {
+      return 'Cette vue charge la liste d\'auteurs enregistree pour ce scrapper. Le scraping parcourt le template `{{page}}` et les liens de pagination detectes.';
+    }
+
+    return 'Cette vue charge la liste d\'auteurs enregistree pour ce scrapper. Le bouton d\'actualisation rescrape toutes les pages detectees.';
+  }
+
   return undefined;
 };
 
@@ -355,6 +380,7 @@ export const buildScraperCapabilities = (options: {
   authorFeature: ScraperFeatureDefinition | null;
   tagFeature?: ScraperFeatureDefinition | null;
   sourceFeature?: ScraperFeatureDefinition | null;
+  authorListFeature?: ScraperFeatureDefinition | null;
   tagListFeature?: ScraperFeatureDefinition | null;
   chaptersFeature: ScraperFeatureDefinition | null;
   pagesFeature: ScraperFeatureDefinition | null;
@@ -364,6 +390,7 @@ export const buildScraperCapabilities = (options: {
   hasAuthor: boolean;
   hasTag?: boolean;
   hasSource?: boolean;
+  hasAuthorList?: boolean;
   hasTagList?: boolean;
   hasChapters: boolean;
   hasPages: boolean;
@@ -375,6 +402,7 @@ export const buildScraperCapabilities = (options: {
     authorFeature,
     tagFeature = null,
     sourceFeature = null,
+    authorListFeature = null,
     tagListFeature = null,
     chaptersFeature,
     pagesFeature,
@@ -384,6 +412,7 @@ export const buildScraperCapabilities = (options: {
     hasAuthor,
     hasTag = false,
     hasSource = false,
+    hasAuthorList = false,
     hasTagList = false,
     hasChapters,
     hasPages,
@@ -396,6 +425,7 @@ export const buildScraperCapabilities = (options: {
     { label: 'Auteur', feature: authorFeature, enabled: hasAuthor },
     { label: 'Tag', feature: tagFeature, enabled: hasTag },
     { label: 'Source', feature: sourceFeature, enabled: hasSource },
+    { label: 'Liste d\'auteurs', feature: authorListFeature, enabled: hasAuthorList },
     { label: 'Liste de tags', feature: tagListFeature, enabled: hasTagList },
     { label: 'Chapitres', feature: chaptersFeature, enabled: hasChapters },
     { label: 'Pages', feature: pagesFeature, enabled: hasPages },

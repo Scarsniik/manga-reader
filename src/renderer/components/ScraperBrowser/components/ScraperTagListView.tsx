@@ -3,13 +3,18 @@ import {
   hasScraperFieldSelectorValue,
   type FetchScraperDocumentRequest,
   type FetchScraperDocumentResult,
-  type SaveScraperTagListCacheRequest,
+  type GetScraperEntityListCacheRequest,
+  type SaveScraperEntityListCacheRequest,
+  type ScraperAuthorFavoriteRecord,
+  type ScraperAuthorFavoriteSource,
+  type ScraperEntityListCacheRecord,
+  type ScraperEntityListFeatureConfig,
+  type ScraperEntityListItem,
+  type ScraperEntityListKind,
   type ScraperRecord,
   type ScraperTagFavoriteRecord,
-  type ScraperTagListCacheRecord,
-  type ScraperTagListFeatureConfig,
-  type ScraperTagListItem,
 } from "@/shared/scraper";
+import ScraperAuthorFavoriteDialog from "@/renderer/components/ScraperAuthorFavoriteButton/ScraperAuthorFavoriteDialog";
 import ScraperSourceFavoriteDialog from "@/renderer/components/ScraperSourceFavoriteDialog/ScraperSourceFavoriteDialog";
 import { CloseXIcon, DownloadArrowIcon, FilterRemoveIcon, StarIcon } from "@/renderer/components/icons";
 import { useModal } from "@/renderer/hooks/useModal";
@@ -19,15 +24,19 @@ import useParams, {
   type ScraperTagListViewSettings,
 } from "@/renderer/hooks/useParams";
 import {
+  removeScraperAuthorFavoriteSource,
+  useScraperAuthorFavorites,
+} from "@/renderer/stores/scraperAuthorFavorites";
+import {
   removeScraperTagFavoriteSource,
   saveScraperTagFavorite,
   useScraperTagFavorites,
 } from "@/renderer/stores/scraperTagFavorites";
 import {
-  extractScraperTagListPageFromDocument,
-  hasTagListPagePlaceholder,
-  resolveScraperTagListTargetUrl,
-  type ScraperRuntimeTagListPageResult,
+  extractScraperEntityListPageFromDocument,
+  hasEntityListPagePlaceholder,
+  resolveScraperEntityListTargetUrl,
+  type ScraperRuntimeEntityListPageResult,
 } from "@/renderer/utils/scraperRuntime";
 import {
   buildScraperTagBlacklistEntry,
@@ -39,31 +48,40 @@ import {
 import {
   findScraperTagFavoriteSource,
   getScraperTagFavoriteSources,
-  type ScraperTagFavoriteSourceTarget,
 } from "@/renderer/utils/scraperTagFavorites";
 import VirtualizedTagGrid from "@/renderer/components/ScraperBrowser/components/VirtualizedTagGrid";
 
 type Props = {
   scraper: ScraperRecord;
-  config: ScraperTagListFeatureConfig;
+  config: ScraperEntityListFeatureConfig;
+  entityKind: ScraperEntityListKind;
   searchQuery: string;
-  hasTag: boolean;
-  onOpenTag: (value: string, title: string) => void;
-  onOpenTagInWorkspace: (value: string, title: string) => void;
+  hasTargetFeature: boolean;
+  onOpen: (value: string, title: string) => void;
+  onOpenInWorkspace: (value: string, title: string) => void;
   onRuntimeMessage: (message: string | null) => void;
   onRuntimeError: (message: string | null) => void;
 };
 
-type TagListApi = {
+type EntityListApi = {
   fetchScraperDocument?: (request: FetchScraperDocumentRequest) => Promise<FetchScraperDocumentResult>;
-  getScraperTagListCache?: (scraperId: string) => Promise<ScraperTagListCacheRecord | null>;
-  saveScraperTagListCache?: (request: SaveScraperTagListCacheRequest) => Promise<ScraperTagListCacheRecord>;
+  getScraperEntityListCache?: (
+    request: GetScraperEntityListCacheRequest,
+  ) => Promise<ScraperEntityListCacheRecord | null>;
+  saveScraperEntityListCache?: (
+    request: SaveScraperEntityListCacheRequest,
+  ) => Promise<ScraperEntityListCacheRecord>;
 };
 
 type ContextMenuState = {
-  tag: ScraperTagListItem;
+  item: ScraperEntityListItem;
   x: number;
   y: number;
+};
+
+type AuthorFavoriteSourceTarget = {
+  favorite: ScraperAuthorFavoriteRecord;
+  source: ScraperAuthorFavoriteSource;
 };
 
 type TagListSortOption = "alpha-asc" | "alpha-desc" | "count-desc" | "count-asc";
@@ -80,8 +98,8 @@ const DEFAULT_TAG_LIST_VIEW_SETTINGS: Required<ScraperTagListViewSettings> = {
 class ScraperTagListPageNotFoundError extends Error {
   readonly status = TAG_LIST_PAGINATION_END_STATUS;
 
-  constructor() {
-    super(`La liste de tags a repondu avec le code HTTP ${TAG_LIST_PAGINATION_END_STATUS}.`);
+  constructor(entityPluralLabel: string) {
+    super(`La liste de ${entityPluralLabel} a repondu avec le code HTTP ${TAG_LIST_PAGINATION_END_STATUS}.`);
     this.name = "ScraperTagListPageNotFoundError";
   }
 }
@@ -90,8 +108,8 @@ const isScraperTagListPageNotFoundError = (
   error: unknown,
 ): error is ScraperTagListPageNotFoundError => error instanceof ScraperTagListPageNotFoundError;
 
-const getTagListApi = (): TagListApi => (
-  (window.api ?? {}) as TagListApi
+const getEntityListApi = (): EntityListApi => (
+  (window.api ?? {}) as EntityListApi
 );
 
 const normalizeText = (value: unknown): string => (
@@ -120,19 +138,31 @@ const normalizeVisitedUrl = (value: string): string => {
   }
 };
 
-const normalizeTagIdentity = (tag: ScraperTagListItem): string => (
+const normalizeTagIdentity = (tag: ScraperEntityListItem): string => (
   normalizeSearchText(tag.url || tag.name)
 );
 
-const getTagMatchKeys = (tag: ScraperTagListItem): string[] => (
+const getTagMatchKeys = (tag: ScraperEntityListItem): string[] => (
   [tag.url, tag.name]
     .map(normalizeSearchText)
     .filter(Boolean)
 );
 
-const getTagTargetValue = (tag: ScraperTagListItem): string => (
+const getTagTargetValue = (tag: ScraperEntityListItem): string => (
   normalizeText(tag.url) || normalizeText(tag.name)
 );
+
+const findAuthorFavoriteSource = (
+  sources: AuthorFavoriteSourceTarget[],
+  item: ScraperEntityListItem,
+): AuthorFavoriteSourceTarget | null => {
+  const itemKeys = new Set(getTagMatchKeys(item));
+  return sources.find(({ favorite, source }) => (
+    [source.authorUrl, source.name, favorite.name]
+      .map(normalizeSearchText)
+      .some((key) => key && itemKeys.has(key))
+  )) ?? null;
+};
 
 const normalizeCountFilterValue = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") {
@@ -222,14 +252,14 @@ const hasCustomTagListViewSettings = (settings: Required<ScraperTagListViewSetti
   || settings.maxCount !== DEFAULT_TAG_LIST_VIEW_SETTINGS.maxCount
 );
 
-const sortTagsByName = (tags: ScraperTagListItem[]): ScraperTagListItem[] => (
+const sortTagsByName = (tags: ScraperEntityListItem[]): ScraperEntityListItem[] => (
   [...tags].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }))
 );
 
 const sortTagsForView = (
-  tags: ScraperTagListItem[],
+  tags: ScraperEntityListItem[],
   settings: Required<ScraperTagListViewSettings>,
-): ScraperTagListItem[] => (
+): ScraperEntityListItem[] => (
   [...tags].sort((left, right) => {
     if (settings.sortMode === "count") {
       const leftCount = parseTagOccurrenceCount(left.count);
@@ -254,8 +284,8 @@ const sortTagsForView = (
 );
 
 const mergeTagItems = (
-  tagsByKey: Map<string, ScraperTagListItem>,
-  items: ScraperTagListItem[],
+  tagsByKey: Map<string, ScraperEntityListItem>,
+  items: ScraperEntityListItem[],
 ): number => {
   let addedCount = 0;
 
@@ -265,7 +295,7 @@ const mergeTagItems = (
       return;
     }
 
-    const nextItem: ScraperTagListItem = {
+    const nextItem: ScraperEntityListItem = {
       name,
       url: normalizeText(item.url) || undefined,
       count: normalizeText(item.count) || undefined,
@@ -316,29 +346,31 @@ const getContextMenuPosition = (state: ContextMenuState): React.CSSProperties =>
   };
 };
 
-const isConfigRunnable = (config: ScraperTagListFeatureConfig): boolean => (
+const isConfigRunnable = (config: ScraperEntityListFeatureConfig): boolean => (
   Boolean(
     config.urlTemplate.trim()
-    && config.tagItemSelector.trim()
-    && hasScraperFieldSelectorValue(config.tagNameSelector),
+    && config.itemSelector.trim()
+    && hasScraperFieldSelectorValue(config.nameSelector),
   )
 );
 
-export default function ScraperTagListView({
+export default function ScraperEntityListView({
   scraper,
   config,
+  entityKind,
   searchQuery,
-  hasTag,
-  onOpenTag,
-  onOpenTagInWorkspace,
+  hasTargetFeature,
+  onOpen,
+  onOpenInWorkspace,
   onRuntimeMessage,
   onRuntimeError,
 }: Props) {
   const { params, setParams } = useParams();
   const { openModal, closeModal } = useModal();
-  const { favorites, loading: favoritesLoading } = useScraperTagFavorites();
-  const [tags, setTags] = useState<ScraperTagListItem[]>([]);
-  const [cacheRecord, setCacheRecord] = useState<ScraperTagListCacheRecord | null>(null);
+  const { favorites: tagFavorites, loading: tagFavoritesLoading } = useScraperTagFavorites();
+  const { favorites: authorFavorites, loading: authorFavoritesLoading } = useScraperAuthorFavorites();
+  const [tags, setTags] = useState<ScraperEntityListItem[]>([]);
+  const [cacheRecord, setCacheRecord] = useState<ScraperEntityListCacheRecord | null>(null);
   const [cacheLoading, setCacheLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -346,9 +378,16 @@ export default function ScraperTagListView({
   const requestIdRef = useRef(0);
 
   const tagFavoriteSources = useMemo(
-    () => getScraperTagFavoriteSources(favorites, scraper.id),
-    [favorites, scraper.id],
+    () => entityKind === "tag" ? getScraperTagFavoriteSources(tagFavorites, scraper.id) : [],
+    [entityKind, scraper.id, tagFavorites],
   );
+  const authorFavoriteSources = useMemo(() => (
+    entityKind === "author"
+      ? authorFavorites.flatMap((favorite) => favorite.sources
+        .filter((source) => source.scraperId === scraper.id)
+        .map((source) => ({ favorite, source })))
+      : []
+  ), [authorFavorites, entityKind, scraper.id]);
   const scraperTagBlacklistEntries = useMemo(
     () => getScraperTagBlacklistEntries(params?.scraperBlacklistedTagsByScraper, scraper.id),
     [params?.scraperBlacklistedTagsByScraper, scraper.id],
@@ -357,9 +396,10 @@ export default function ScraperTagListView({
     () => normalizeSearchText(searchQuery),
     [searchQuery],
   );
+  const viewSettingsKey = entityKind === "tag" ? scraper.id : `${scraper.id}:author`;
   const tagListViewSettings = useMemo(
-    () => normalizeTagListViewSettings(params?.scraperTagListViewSettingsByScraper?.[scraper.id]),
-    [params?.scraperTagListViewSettingsByScraper, scraper.id],
+    () => normalizeTagListViewSettings(params?.scraperTagListViewSettingsByScraper?.[viewSettingsKey]),
+    [params?.scraperTagListViewSettingsByScraper, viewSettingsKey],
   );
   const hasTagOccurrenceCounts = useMemo(
     () => tags.some((tag) => parseTagOccurrenceCount(tag.count) !== null),
@@ -394,23 +434,34 @@ export default function ScraperTagListView({
 
     return sortTagsForView(countFilteredTags, tagListViewSettings);
   }, [activeCountFilter, hasTagOccurrenceCounts, normalizedSearchQuery, tagListViewSettings, tags]);
-  const favoriteTagItems = useMemo<ScraperTagListItem[]>(() => (
-    tagFavoriteSources.map(({ favorite, source }) => ({
-      name: source.name || favorite.name,
-      url: source.tagUrl,
-    }))
-  ), [tagFavoriteSources]);
-  const blacklistedTagItems = useMemo<ScraperTagListItem[]>(() => (
-    scraperTagBlacklistEntries.map((entry) => ({
-      name: entry.label || entry.value,
-      url: entry.value,
-    }))
-  ), [scraperTagBlacklistEntries]);
+  const favoriteTagItems = useMemo<ScraperEntityListItem[]>(() => (
+    entityKind === "author"
+      ? authorFavoriteSources.map(({ favorite, source }) => ({
+        name: source.name || favorite.name,
+        url: source.authorUrl,
+      }))
+      : tagFavoriteSources.map(({ favorite, source }) => ({
+        name: source.name || favorite.name,
+        url: source.tagUrl,
+      }))
+  ), [authorFavoriteSources, entityKind, tagFavoriteSources]);
+  const blacklistedTagItems = useMemo<ScraperEntityListItem[]>(() => (
+    entityKind === "tag"
+      ? scraperTagBlacklistEntries.map((entry) => ({
+        name: entry.label || entry.value,
+        url: entry.value,
+      }))
+      : []
+  ), [entityKind, scraperTagBlacklistEntries]);
   const favoriteTagKeySet = useMemo(() => new Set(
-    tagFavoriteSources.flatMap(({ source }) => (
-      [source.tagUrl, source.name].map(normalizeSearchText).filter(Boolean)
-    )),
-  ), [tagFavoriteSources]);
+    entityKind === "author"
+      ? authorFavoriteSources.flatMap(({ source }) => (
+        [source.authorUrl, source.name].map(normalizeSearchText).filter(Boolean)
+      ))
+      : tagFavoriteSources.flatMap(({ source }) => (
+        [source.tagUrl, source.name].map(normalizeSearchText).filter(Boolean)
+      )),
+  ), [authorFavoriteSources, entityKind, tagFavoriteSources]);
   const blacklistedTagKeySet = useMemo(() => new Set(
     scraperTagBlacklistEntries.flatMap((entry) => (
       [entry.value, entry.label].map(normalizeSearchText).filter(Boolean)
@@ -418,19 +469,27 @@ export default function ScraperTagListView({
   ), [scraperTagBlacklistEntries]);
   const contextFavoriteSource = useMemo(
     () => contextMenu
-      ? findScraperTagFavoriteSource(tagFavoriteSources, contextMenu.tag.name, contextMenu.tag.url)
+      ? findScraperTagFavoriteSource(tagFavoriteSources, contextMenu.item.name, contextMenu.item.url)
       : null,
     [contextMenu, tagFavoriteSources],
   );
+  const contextAuthorFavoriteSource = useMemo(
+    () => contextMenu ? findAuthorFavoriteSource(authorFavoriteSources, contextMenu.item) : null,
+    [authorFavoriteSources, contextMenu],
+  );
   const contextBlacklistEntry = useMemo<ScraperTagBlacklistEntry | null>(
     () => contextMenu
-      ? findScraperTagBlacklistEntry(scraperTagBlacklistEntries, contextMenu.tag.name, contextMenu.tag.url)
+      ? findScraperTagBlacklistEntry(scraperTagBlacklistEntries, contextMenu.item.name, contextMenu.item.url)
       : null,
     [contextMenu, scraperTagBlacklistEntries],
   );
   const cacheSavedAtLabel = formatSavedAt(cacheRecord?.savedAt);
   const runnable = isConfigRunnable(config);
   const collectFromDetails = config.collectFromDetails === true;
+  const entityLabel = entityKind === "author" ? "auteur" : "tag";
+  const entityPluralLabel = entityKind === "author" ? "auteurs" : "tags";
+  const entityComponentLabel = entityKind === "author" ? "Auteur" : "Tag";
+  const favoritesLoading = entityKind === "author" ? authorFavoritesLoading : tagFavoritesLoading;
   const refreshButtonLabel = collectFromDetails
     ? "Auto actif"
     : scraping
@@ -446,10 +505,10 @@ export default function ScraperTagListView({
     setParams({
       scraperTagListViewSettingsByScraper: {
         ...currentSettingsByScraper,
-        [scraper.id]: nextSettings,
+        [viewSettingsKey]: nextSettings,
       },
     }, { remount: false });
-  }, [params?.scraperTagListViewSettingsByScraper, scraper.id, setParams]);
+  }, [params?.scraperTagListViewSettingsByScraper, setParams, viewSettingsKey]);
 
   const updateTagListViewSettings = useCallback((patch: Partial<ScraperTagListViewSettings>) => {
     saveTagListViewSettings(normalizeTagListViewSettings({
@@ -479,8 +538,8 @@ export default function ScraperTagListView({
   }, [saveTagListViewSettings]);
 
   const loadCache = useCallback(async () => {
-    const api = getTagListApi();
-    if (typeof api.getScraperTagListCache !== "function") {
+    const api = getEntityListApi();
+    if (typeof api.getScraperEntityListCache !== "function") {
       setTags([]);
       setCacheRecord(null);
       return;
@@ -491,16 +550,16 @@ export default function ScraperTagListView({
     setCacheLoading(true);
 
     try {
-      const record = await api.getScraperTagListCache(scraper.id);
+      const record = await api.getScraperEntityListCache({ scraperId: scraper.id, entityKind });
       if (requestId !== requestIdRef.current) {
         return;
       }
 
       setCacheRecord(record);
-      setTags(record ? sortTagsByName(record.tags) : []);
+      setTags(record ? sortTagsByName(record.items) : []);
     } catch (error) {
       if (requestId === requestIdRef.current) {
-        onRuntimeError(error instanceof Error ? error.message : "Impossible de charger la liste de tags enregistree.");
+        onRuntimeError(error instanceof Error ? error.message : `Impossible de charger la liste de ${entityPluralLabel} enregistree.`);
         setCacheRecord(null);
         setTags([]);
       }
@@ -509,7 +568,7 @@ export default function ScraperTagListView({
         setCacheLoading(false);
       }
     }
-  }, [onRuntimeError, scraper.id]);
+  }, [entityKind, entityPluralLabel, onRuntimeError, scraper.id]);
 
   useEffect(() => {
     void loadCache();
@@ -521,19 +580,22 @@ export default function ScraperTagListView({
 
   useEffect(() => {
     const handleCacheUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<{ scraperId?: string }>).detail;
-      if (detail?.scraperId && detail.scraperId !== scraper.id) {
+      const detail = (event as CustomEvent<{ scraperId?: string; entityKind?: ScraperEntityListKind }>).detail;
+      if (
+        (detail?.scraperId && detail.scraperId !== scraper.id)
+        || (detail?.entityKind && detail.entityKind !== entityKind)
+      ) {
         return;
       }
 
       void loadCache();
     };
 
-    window.addEventListener("scraper-tag-list-cache-updated", handleCacheUpdated);
+    window.addEventListener("scraper-entity-list-cache-updated", handleCacheUpdated);
     return () => {
-      window.removeEventListener("scraper-tag-list-cache-updated", handleCacheUpdated);
+      window.removeEventListener("scraper-entity-list-cache-updated", handleCacheUpdated);
     };
-  }, [loadCache, scraper.id]);
+  }, [entityKind, loadCache, scraper.id]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -557,8 +619,8 @@ export default function ScraperTagListView({
     };
   }, [contextMenu]);
 
-  const fetchTagListPage = useCallback(async (targetUrl: string): Promise<ScraperRuntimeTagListPageResult> => {
-    const api = getTagListApi();
+  const fetchTagListPage = useCallback(async (targetUrl: string): Promise<ScraperRuntimeEntityListPageResult> => {
+    const api = getEntityListApi();
     if (typeof api.fetchScraperDocument !== "function") {
       throw new Error("Le runtime du scrapper n'est pas disponible dans cette version.");
     }
@@ -569,50 +631,50 @@ export default function ScraperTagListView({
     });
 
     if (documentResult?.status === TAG_LIST_PAGINATION_END_STATUS) {
-      throw new ScraperTagListPageNotFoundError();
+      throw new ScraperTagListPageNotFoundError(entityPluralLabel);
     }
 
     if (!documentResult?.ok || !documentResult.html) {
       throw new Error(
         documentResult?.error
         || (typeof documentResult?.status === "number"
-          ? `La liste de tags a repondu avec le code HTTP ${documentResult.status}.`
-          : "Impossible de charger la liste de tags."),
+          ? `La liste de ${entityPluralLabel} a repondu avec le code HTTP ${documentResult.status}.`
+          : `Impossible de charger la liste de ${entityPluralLabel}.`),
       );
     }
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(documentResult.html, "text/html");
-    return extractScraperTagListPageFromDocument(documentNode, config, {
+    return extractScraperEntityListPageFromDocument(documentNode, config, {
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
     });
-  }, [config, scraper.baseUrl]);
+  }, [config, entityPluralLabel, scraper.baseUrl]);
 
   const scrapeAndSaveTags = useCallback(async () => {
     if (collectFromDetails) {
-      onRuntimeError("L'alimentation automatique depuis les fiches est activee pour cette liste de tags.");
+      onRuntimeError(`L'alimentation automatique depuis les fiches est activee pour cette liste de ${entityPluralLabel}.`);
       return;
     }
 
     if (!runnable) {
-      onRuntimeError("Le composant Liste de tags n'est pas encore suffisamment configure.");
+      onRuntimeError(`Le composant Liste de ${entityPluralLabel} n'est pas encore suffisamment configure.`);
       return;
     }
 
-    const api = getTagListApi();
-    if (typeof api.saveScraperTagListCache !== "function") {
-      onRuntimeError("L'enregistrement de la liste de tags n'est pas disponible dans cette version.");
+    const api = getEntityListApi();
+    if (typeof api.saveScraperEntityListCache !== "function") {
+      onRuntimeError(`L'enregistrement de la liste de ${entityPluralLabel} n'est pas disponible dans cette version.`);
       return;
     }
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    const tagsByKey = new Map<string, ScraperTagListItem>();
+    const tagsByKey = new Map<string, ScraperEntityListItem>();
     const visitedUrls = new Set<string>();
     const queuedUrls: string[] = [];
     const queuedKeys = new Set<string>();
-    const usesTemplatePaging = hasTagListPagePlaceholder(config);
+    const usesTemplatePaging = hasEntityListPagePlaceholder(config);
     let firstSourceUrl = "";
     let pageLimitReached = false;
     let paginationEndedWithNotFound = false;
@@ -641,7 +703,7 @@ export default function ScraperTagListView({
 
       visitedUrls.add(normalizedUrl);
       queuedKeys.delete(normalizedUrl);
-      onRuntimeMessage(`Scraping des tags : ${visitedUrls.size} page(s), ${tagsByKey.size} tag(s).`);
+      onRuntimeMessage(`Scraping des ${entityPluralLabel} : ${visitedUrls.size} page(s), ${tagsByKey.size} ${entityLabel}(s).`);
 
       const page = await fetchTagListPage(normalizedUrl);
       successfulPageCount += 1;
@@ -654,12 +716,12 @@ export default function ScraperTagListView({
 
     setScraping(true);
     onRuntimeError(null);
-    onRuntimeMessage("Scraping de la liste de tags en cours...");
+    onRuntimeMessage(`Scraping de la liste de ${entityPluralLabel} en cours...`);
 
     try {
       if (usesTemplatePaging) {
         for (let pageIndex = 0; pageIndex < MAX_TAG_LIST_PAGES; pageIndex += 1) {
-          const targetUrl = resolveScraperTagListTargetUrl(scraper.baseUrl, config, { pageIndex });
+          const targetUrl = resolveScraperEntityListTargetUrl(scraper.baseUrl, config, { pageIndex });
 
           try {
             const result = await processTargetUrl(targetUrl);
@@ -691,7 +753,7 @@ export default function ScraperTagListView({
           }
         }
       } else {
-        enqueueUrl(resolveScraperTagListTargetUrl(scraper.baseUrl, config, { pageIndex: 0 }));
+        enqueueUrl(resolveScraperEntityListTargetUrl(scraper.baseUrl, config, { pageIndex: 0 }));
       }
 
       while (
@@ -729,14 +791,15 @@ export default function ScraperTagListView({
         setTags([]);
         setCacheRecord(null);
         onRuntimeMessage(null);
-        onRuntimeError("Aucun tag exploitable n'a ete extrait avec la configuration actuelle.");
+        onRuntimeError(`Aucun ${entityLabel} exploitable n'a ete extrait avec la configuration actuelle.`);
         return;
       }
 
-      const savedRecord = await api.saveScraperTagListCache({
+      const savedRecord = await api.saveScraperEntityListCache({
         scraperId: scraper.id,
+        entityKind,
         sourceUrl: firstSourceUrl,
-        tags: scrapedTags,
+        items: scrapedTags,
       });
 
       if (requestId !== requestIdRef.current) {
@@ -744,16 +807,16 @@ export default function ScraperTagListView({
       }
 
       setCacheRecord(savedRecord);
-      setTags(sortTagsByName(savedRecord.tags));
+      setTags(sortTagsByName(savedRecord.items));
       onRuntimeMessage([
-        `Liste de tags enregistree : ${savedRecord.tags.length} tag(s) depuis ${successfulPageCount} page(s).`,
+        `Liste de ${entityPluralLabel} enregistree : ${savedRecord.items.length} ${entityLabel}(s) depuis ${successfulPageCount} page(s).`,
         paginationEndedWithNotFound ? "Fin de pagination detectee (HTTP 404)." : "",
         pageLimitReached ? `Limite de ${MAX_TAG_LIST_PAGES} pages atteinte.` : "",
       ].filter(Boolean).join(" "));
     } catch (error) {
       if (requestId === requestIdRef.current) {
         onRuntimeMessage(null);
-        onRuntimeError(error instanceof Error ? error.message : "Impossible de scraper la liste de tags.");
+        onRuntimeError(error instanceof Error ? error.message : `Impossible de scraper la liste de ${entityPluralLabel}.`);
       }
     } finally {
       if (requestId === requestIdRef.current) {
@@ -763,6 +826,9 @@ export default function ScraperTagListView({
   }, [
     collectFromDetails,
     config,
+    entityKind,
+    entityLabel,
+    entityPluralLabel,
     fetchTagListPage,
     onRuntimeError,
     onRuntimeMessage,
@@ -771,42 +837,42 @@ export default function ScraperTagListView({
     scraper.id,
   ]);
 
-  const openTag = useCallback((tag: ScraperTagListItem) => {
+  const openTag = useCallback((tag: ScraperEntityListItem) => {
     const targetValue = getTagTargetValue(tag);
     if (!targetValue) {
       return;
     }
 
-    if (!hasTag) {
-      onRuntimeError("Configure le composant Tag pour ouvrir les tags depuis cette liste.");
+    if (!hasTargetFeature) {
+      onRuntimeError(`Configure le composant ${entityComponentLabel} pour ouvrir les ${entityPluralLabel} depuis cette liste.`);
       return;
     }
 
     onRuntimeError(null);
-    onOpenTag(targetValue, tag.name);
-  }, [hasTag, onOpenTag, onRuntimeError]);
+    onOpen(targetValue, tag.name);
+  }, [entityComponentLabel, entityPluralLabel, hasTargetFeature, onOpen, onRuntimeError]);
 
-  const openTagInWorkspace = useCallback((tag: ScraperTagListItem) => {
+  const openTagInWorkspace = useCallback((tag: ScraperEntityListItem) => {
     const targetValue = getTagTargetValue(tag);
     if (!targetValue) {
       return;
     }
 
-    if (!hasTag) {
-      onRuntimeError("Configure le composant Tag pour ouvrir les tags dans un onglet workspace.");
+    if (!hasTargetFeature) {
+      onRuntimeError(`Configure le composant ${entityComponentLabel} pour ouvrir les ${entityPluralLabel} dans un onglet workspace.`);
       return;
     }
 
     onRuntimeError(null);
-    onOpenTagInWorkspace(targetValue, tag.name);
-  }, [hasTag, onOpenTagInWorkspace, onRuntimeError]);
+    onOpenInWorkspace(targetValue, tag.name);
+  }, [entityComponentLabel, entityPluralLabel, hasTargetFeature, onOpenInWorkspace, onRuntimeError]);
 
-  const handleTagClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, tag: ScraperTagListItem) => {
+  const handleTagClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, tag: ScraperEntityListItem) => {
     event.preventDefault();
     openTag(tag);
   }, [openTag]);
 
-  const handleTagAuxClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, tag: ScraperTagListItem) => {
+  const handleTagAuxClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, tag: ScraperEntityListItem) => {
     if (event.button !== 1) {
       return;
     }
@@ -815,18 +881,38 @@ export default function ScraperTagListView({
     openTagInWorkspace(tag);
   }, [openTagInWorkspace]);
 
-  const handleTagContextMenu = useCallback((event: React.MouseEvent<HTMLElement>, tag: ScraperTagListItem) => {
+  const handleTagContextMenu = useCallback((event: React.MouseEvent<HTMLElement>, tag: ScraperEntityListItem) => {
     event.preventDefault();
     setContextMenu({
-      tag,
+      item: tag,
       x: event.clientX,
       y: event.clientY,
     });
   }, []);
 
-  const openFavoriteDialog = useCallback((tag: ScraperTagListItem) => {
+  const openFavoriteDialog = useCallback((tag: ScraperEntityListItem) => {
     const tagTarget = getTagTargetValue(tag);
     if (!tagTarget) {
+      return;
+    }
+
+    if (entityKind === "author") {
+      openModal({
+        title: "Ajouter un auteur favori",
+        content: (
+          <ScraperAuthorFavoriteDialog
+            defaultFavoriteName={tag.name}
+            defaultSourceName={tag.name}
+            source={{
+              scraperId: scraper.id,
+              authorUrl: tagTarget,
+            }}
+            onCancel={closeModal}
+            onSaved={() => closeModal()}
+          />
+        ),
+        className: "scraper-author-favorite-modal",
+      });
       return;
     }
 
@@ -834,7 +920,7 @@ export default function ScraperTagListView({
       title: "Ajouter un tag favori",
       content: (
         <ScraperSourceFavoriteDialog<ScraperTagFavoriteRecord>
-          favorites={favorites}
+          favorites={tagFavorites}
           loading={favoritesLoading}
           labels={{
             existingMode: "Tag existant",
@@ -866,32 +952,43 @@ export default function ScraperTagListView({
       ),
       className: "scraper-author-favorite-modal",
     });
-  }, [closeModal, favorites, favoritesLoading, openModal, scraper.id]);
+  }, [closeModal, entityKind, favoritesLoading, openModal, scraper.id, tagFavorites]);
 
-  const handleToggleFavorite = useCallback(async (tag: ScraperTagListItem) => {
-    const favoriteSource = findScraperTagFavoriteSource(tagFavoriteSources, tag.name, tag.url);
+  const handleToggleFavorite = useCallback(async (tag: ScraperEntityListItem) => {
+    const tagFavoriteSource = findScraperTagFavoriteSource(tagFavoriteSources, tag.name, tag.url);
+    const authorFavoriteSource = findAuthorFavoriteSource(authorFavoriteSources, tag);
     setContextMenu(null);
 
-    if (!favoriteSource) {
+    if (!tagFavoriteSource && !authorFavoriteSource) {
       openFavoriteDialog(tag);
       return;
     }
 
     setPendingAction(true);
     try {
-      await removeScraperTagFavoriteSource({
-        favoriteId: favoriteSource.favorite.id,
-        scraperId: scraper.id,
-        tagUrl: favoriteSource.source.tagUrl,
-      });
+      if (entityKind === "author" && authorFavoriteSource) {
+        await removeScraperAuthorFavoriteSource({
+          favoriteId: authorFavoriteSource.favorite.id,
+          scraperId: scraper.id,
+          authorUrl: authorFavoriteSource.source.authorUrl,
+        });
+      } else if (tagFavoriteSource) {
+        await removeScraperTagFavoriteSource({
+          favoriteId: tagFavoriteSource.favorite.id,
+          scraperId: scraper.id,
+          tagUrl: tagFavoriteSource.source.tagUrl,
+        });
+      }
     } catch (error) {
-      onRuntimeError(error instanceof Error ? error.message : "Impossible de retirer ce tag des favoris.");
+      onRuntimeError(error instanceof Error
+        ? error.message
+        : `Impossible de retirer ${entityKind === "author" ? "cet auteur" : "ce tag"} des favoris.`);
     } finally {
       setPendingAction(false);
     }
-  }, [openFavoriteDialog, onRuntimeError, scraper.id, tagFavoriteSources]);
+  }, [authorFavoriteSources, entityKind, entityLabel, openFavoriteDialog, onRuntimeError, scraper.id, tagFavoriteSources]);
 
-  const handleToggleBlacklist = useCallback((tag: ScraperTagListItem) => {
+  const handleToggleBlacklist = useCallback((tag: ScraperEntityListItem) => {
     const tagTarget = getTagTargetValue(tag);
     if (!tagTarget) {
       return;
@@ -922,16 +1019,16 @@ export default function ScraperTagListView({
   }, [params?.scraperBlacklistedTagsByScraper, scraper.id, setParams]);
 
   const renderTag = useCallback((
-    tag: ScraperTagListItem,
+    tag: ScraperEntityListItem,
     options?: {
-      favoriteSource?: ScraperTagFavoriteSourceTarget | null;
+      favorite?: boolean;
       compact?: boolean;
     },
   ) => {
     const tagTarget = getTagTargetValue(tag);
     const tagMatchKeys = getTagMatchKeys(tag);
     const blacklisted = tagMatchKeys.some((key) => blacklistedTagKeySet.has(key));
-    const favorite = Boolean(options?.favoriteSource) || tagMatchKeys.some((key) => favoriteTagKeySet.has(key));
+    const favorite = Boolean(options?.favorite) || tagMatchKeys.some((key) => favoriteTagKeySet.has(key));
 
     return (
       <a
@@ -964,10 +1061,10 @@ export default function ScraperTagListView({
     <section className="scraper-browser__results scraper-tag-list">
       <div className="scraper-browser__results-head">
         <div>
-          <h3>Liste de tags</h3>
+          <h3>Liste d{entityKind === "author" ? "'auteurs" : "e tags"}</h3>
           <p>
             {cacheRecord
-              ? `${tags.length} tag(s) enregistres${cacheSavedAtLabel ? ` - ${cacheSavedAtLabel}` : ""}.`
+              ? `${tags.length} ${entityLabel}(s) enregistres${cacheSavedAtLabel ? ` - ${cacheSavedAtLabel}` : ""}.`
               : cacheLoading
                 ? "Chargement de la liste enregistree..."
                 : "Aucune liste enregistree pour ce scrapper."}
@@ -982,7 +1079,7 @@ export default function ScraperTagListView({
             disabled={scraping || cacheLoading || !runnable || collectFromDetails}
             title={collectFromDetails
               ? "Alimentation automatique activee depuis les fiches"
-              : "Scraper et enregistrer la liste de tags"}
+              : `Scraper et enregistrer la liste de ${entityPluralLabel}`}
           >
             <DownloadArrowIcon aria-hidden="true" focusable="false" />
             <span>{refreshButtonLabel}</span>
@@ -998,8 +1095,8 @@ export default function ScraperTagListView({
             <span>{favoriteTagItems.length}</span>
           </div>
           <div className="scraper-tag-list__favorite-list">
-            {favoriteTagItems.map((tag, index) => renderTag(tag, {
-              favoriteSource: tagFavoriteSources[index] ?? null,
+            {favoriteTagItems.map((tag) => renderTag(tag, {
+              favorite: true,
               compact: true,
             }))}
           </div>
@@ -1071,38 +1168,38 @@ export default function ScraperTagListView({
         ) : null}
       </div>
 
-      {!hasTag ? (
+      {!hasTargetFeature ? (
         <div className="scraper-browser__message is-warning">
-          Le composant Tag n&apos;est pas configure. La liste peut etre scrapee, mais les tags ne pourront pas
+          Le composant {entityComponentLabel} n&apos;est pas configure. La liste peut etre scrapee, mais les {entityPluralLabel} ne pourront pas
           ouvrir leur page de resultats.
         </div>
       ) : null}
 
       {collectFromDetails ? (
         <div className="scraper-browser__message is-info">
-          Alimentation automatique activee : les tags extraits des fiches ouvertes sont ajoutes a cette liste.
+          Alimentation automatique activee : les {entityPluralLabel} extraits des fiches ouvertes sont ajoutes a cette liste.
         </div>
       ) : null}
 
       {!runnable && !collectFromDetails ? (
         <div className="scraper-browser__message is-warning">
-          La liste de tags n&apos;est pas assez configuree pour etre scrapee.
+          La liste de {entityPluralLabel} n&apos;est pas assez configuree pour etre scrapee.
         </div>
       ) : null}
 
       {cacheLoading ? (
-        <div className="scraper-browser__message is-info">Chargement du cache de tags...</div>
+        <div className="scraper-browser__message is-info">Chargement du cache de {entityPluralLabel}...</div>
       ) : visibleTags.length > 0 ? (
         <VirtualizedTagGrid
           tags={visibleTags}
           renderTag={renderTag}
         />
       ) : tags.length > 0 ? (
-        <div className="scraper-browser__message is-info">Aucun tag ne correspond au filtre actuel.</div>
+        <div className="scraper-browser__message is-info">Aucun {entityLabel} ne correspond au filtre actuel.</div>
       ) : (
         <div className="scraper-browser__message is-info">
           {collectFromDetails
-            ? "Ouvre des fiches de ce scrapper pour alimenter automatiquement cette liste de tags."
+            ? `Ouvre des fiches de ce scrapper pour alimenter automatiquement cette liste de ${entityPluralLabel}.`
             : "Scrape la liste une premiere fois pour l'enregistrer et pouvoir rechercher dedans sans relancer le scraping."}
         </div>
       )}
@@ -1115,20 +1212,22 @@ export default function ScraperTagListView({
         >
           <button
             type="button"
-            onClick={() => void handleToggleFavorite(contextMenu.tag)}
+            onClick={() => void handleToggleFavorite(contextMenu.item)}
             disabled={pendingAction}
           >
             <StarIcon aria-hidden="true" focusable="false" />
-            <span>{contextFavoriteSource ? "Retirer des favoris" : "Ajouter aux favoris"}</span>
+            <span>{contextFavoriteSource || contextAuthorFavoriteSource ? "Retirer des favoris" : "Ajouter aux favoris"}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => handleToggleBlacklist(contextMenu.tag)}
-            disabled={pendingAction}
-          >
-            <FilterRemoveIcon aria-hidden="true" focusable="false" />
-            <span>{contextBlacklistEntry ? "Retirer de la blacklist" : "Ajouter a la blacklist"}</span>
-          </button>
+          {entityKind === "tag" ? (
+            <button
+              type="button"
+              onClick={() => handleToggleBlacklist(contextMenu.item)}
+              disabled={pendingAction}
+            >
+              <FilterRemoveIcon aria-hidden="true" focusable="false" />
+              <span>{contextBlacklistEntry ? "Retirer de la blacklist" : "Ajouter a la blacklist"}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

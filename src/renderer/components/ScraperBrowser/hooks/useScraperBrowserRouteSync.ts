@@ -132,6 +132,7 @@ type UseScraperBrowserRouteSyncOptions = {
   hasAuthor: boolean;
   hasTag: boolean;
   hasSource: boolean;
+  hasAuthorList: boolean;
   hasTagList: boolean;
   hasDetails: boolean;
   hasConfiguredHomeSearch: boolean;
@@ -183,6 +184,7 @@ export function useScraperBrowserRouteSync({
   hasAuthor,
   hasTag,
   hasSource,
+  hasAuthorList,
   hasTagList,
   hasDetails,
   hasConfiguredHomeSearch,
@@ -412,6 +414,7 @@ export function useScraperBrowserRouteSync({
         && !routeState.authorActive
         && !routeState.tagActive
         && !routeState.sourceActive
+        && routeState.mode !== 'authorList'
         && routeState.mode !== 'tagList'
         && !routeState.mangaQuery
         && !routeState.mangaUrl
@@ -520,6 +523,15 @@ export function useScraperBrowserRouteSync({
       return;
     }
 
+    if (nextMode === 'authorList' && hasAuthorList) {
+      setQuery(routeState.authorListQuery ?? '');
+      setListingReturnState(null);
+      resetDetailsState();
+      resetListingState();
+      clearFeedback();
+      return;
+    }
+
     if (nextMode === 'tagList' && hasTagList) {
       setQuery(routeState.tagListQuery ?? '');
       setListingReturnState(null);
@@ -564,6 +576,7 @@ export function useScraperBrowserRouteSync({
     hasAuthor,
     hasTag,
     hasSource,
+    hasAuthorList,
     hasTagList,
     hasHomepage,
     hasConfiguredHomeSearch,
@@ -763,6 +776,7 @@ export function useScraperBrowserRouteSync({
       sourceActive: persistedSourceState.active,
       sourceQuery: persistedSourceState.query,
       sourcePage: persistedSourceState.page,
+      authorListQuery: mode === 'authorList' ? query : routeState.authorListQuery ?? '',
       tagListQuery: mode === 'tagList' ? query : routeState.tagListQuery ?? '',
       mangaQuery: mode === 'manga' ? query : '',
       mangaUrl: mode === 'manga'
@@ -802,6 +816,7 @@ export function useScraperBrowserRouteSync({
     mode,
     navigate,
     query,
+    routeState.authorListQuery,
     routeState.tagListQuery,
     scraperId,
     urlRestoreReady,

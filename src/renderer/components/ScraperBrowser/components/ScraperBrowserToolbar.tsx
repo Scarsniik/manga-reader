@@ -46,10 +46,11 @@ export default function ScraperBrowserToolbar({
     author: 'Auteur',
     tag: 'Tag',
     source: 'Source',
+    authorList: 'Auteurs',
     tagList: 'Tags',
   };
   const isHomepageMode = mode === 'homepage';
-  const isTagListMode = mode === 'tagList';
+  const isEntityListMode = mode === 'authorList' || mode === 'tagList';
 
   return (
     <div className="scraper-browser__panel">
@@ -92,7 +93,7 @@ export default function ScraperBrowserToolbar({
         ) : null}
 
         <button type="submit" className="scraper-browser__submit" disabled={loading || backgroundAttached}>
-          {backgroundAttached ? 'Attaché' : loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : isTagListMode ? 'Filtrer' : 'Lancer'}
+          {backgroundAttached ? 'Attaché' : loading ? 'Chargement...' : mode === 'manga' ? 'Ouvrir' : isHomepageMode ? 'Charger' : isEntityListMode ? 'Filtrer' : 'Lancer'}
         </button>
       </form>
 

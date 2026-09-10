@@ -5,6 +5,8 @@ export type ShortcutActionId =
   | "quickReviewPrevious"
   | "quickReviewNext"
   | "quickReviewBookmark"
+  | "quickReviewPotentialMatchesToggle"
+  | "quickReviewMarkRead"
   | "quickReviewThumbnailsPrevious"
   | "quickReviewThumbnailsNext"
   | "readerScrollUp"
@@ -55,6 +57,14 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
       {
         id: "quickReviewBookmark",
         label: "Bookmark et fiche suivante",
+      },
+      {
+        id: "quickReviewPotentialMatchesToggle",
+        label: "Ouvrir/fermer les correspondances potentielles",
+      },
+      {
+        id: "quickReviewMarkRead",
+        label: "Basculer l'état lu",
       },
       {
         id: "quickReviewThumbnailsPrevious",
@@ -156,6 +166,8 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   quickReviewPrevious: ["ArrowLeft", "", ""],
   quickReviewNext: ["ArrowRight", "", ""],
   quickReviewBookmark: ["Hold+ArrowRight", "", ""],
+  quickReviewPotentialMatchesToggle: ["E", "", ""],
+  quickReviewMarkRead: ["R", "", ""],
   quickReviewThumbnailsPrevious: ["ArrowUp", "", ""],
   quickReviewThumbnailsNext: ["ArrowDown", "", ""],
   readerScrollUp: ["Z", "ArrowUp", "U"],

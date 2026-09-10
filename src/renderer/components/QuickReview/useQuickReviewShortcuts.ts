@@ -15,7 +15,11 @@ type Props = {
   goPrevious: () => void;
   handleBookmark: () => Promise<void>;
   isComplete: boolean;
+  markingRead: boolean;
   onClosePreview: () => void;
+  onTogglePotentialMatches: () => void;
+  onToggleRead: () => void | Promise<void>;
+  potentialMatchesAvailable: boolean;
   previewOpen: boolean;
   scrollThumbnails: (direction: -1 | 1) => void;
   shortcuts: ShortcutBindingsByAction;
@@ -71,6 +75,13 @@ export default function useQuickReviewShortcuts(props: Props) {
       if (current.thumbnailsVisible && matches("quickReviewThumbnailsNext")) {
         return () => current.scrollThumbnails(1);
       }
+      if (
+        current.potentialMatchesAvailable
+        && matches("quickReviewPotentialMatchesToggle")
+      ) {
+        return () => current.onTogglePotentialMatches();
+      }
+      if (matches("quickReviewMarkRead")) return () => current.onToggleRead();
       if (matches("quickReviewBookmark")) return () => current.handleBookmark();
       if (matches("quickReviewPrevious")) return () => current.goPrevious();
       if (matches("quickReviewNext")) return () => current.goNext();
@@ -86,7 +97,7 @@ export default function useQuickReviewShortcuts(props: Props) {
         else current.closeModal();
         return;
       }
-      if (current.bookmarking) return;
+      if (current.bookmarking || current.markingRead) return;
 
       const keyId = getKeyId(event);
       if (event.repeat) {

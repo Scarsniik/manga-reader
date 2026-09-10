@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from "electron";
 import type {
+    AddScraperEntityListCacheItemsRequest,
     AddScraperTagListCacheItemsRequest,
     DownloadScraperMangaRequest,
     FetchScraperDocumentRequest,
+    GetScraperEntityListCacheRequest,
     RecordScraperCardsSeenRequest,
     ResetScraperLatestCheckpointsRequest,
     RemoveScraperAuthorFavoriteRequest,
@@ -14,6 +16,7 @@ import type {
     RemoveScraperReaderProgressRequest,
     SaveScraperAuthorFavoriteRequest,
     SaveScraperAuthorFavoriteCacheRequest,
+    SaveScraperEntityListCacheRequest,
     SaveScraperTagFavoriteRequest,
     SaveScraperTagListCacheRequest,
     SaveScraperBookmarkRequest,
@@ -314,6 +317,14 @@ ipcRenderer.on('scraper-tag-list-cache-updated', (_event: IpcRendererEvent, scra
     }
 });
 
+ipcRenderer.on('scraper-entity-list-cache-updated', (_event: IpcRendererEvent, detail: unknown) => {
+    try {
+        window.dispatchEvent(new CustomEvent('scraper-entity-list-cache-updated', { detail }));
+    } catch (error) {
+        console.warn('preload: failed to dispatch scraper-entity-list-cache-updated event', error);
+    }
+});
+
 ipcRenderer.on('scraper-view-history-updated', (_event: IpcRendererEvent, change: unknown) => {
     try {
         window.dispatchEvent(new CustomEvent('scraper-view-history-updated', { detail: change }));
@@ -544,6 +555,9 @@ contextBridge.exposeInMainWorld('api', {
     getScraperTagListCache: (scraperId: string) => ipcRenderer.invoke('get-scraper-tag-list-cache', scraperId),
     saveScraperTagListCache: (request: SaveScraperTagListCacheRequest) => ipcRenderer.invoke('save-scraper-tag-list-cache', request),
     addScraperTagListCacheItems: (request: AddScraperTagListCacheItemsRequest) => ipcRenderer.invoke('add-scraper-tag-list-cache-items', request),
+    getScraperEntityListCache: (request: GetScraperEntityListCacheRequest) => ipcRenderer.invoke('get-scraper-entity-list-cache', request),
+    saveScraperEntityListCache: (request: SaveScraperEntityListCacheRequest) => ipcRenderer.invoke('save-scraper-entity-list-cache', request),
+    addScraperEntityListCacheItems: (request: AddScraperEntityListCacheItemsRequest) => ipcRenderer.invoke('add-scraper-entity-list-cache-items', request),
     getScraperAuthorFavoriteCache: (favoriteId: string) => ipcRenderer.invoke('get-scraper-author-favorite-cache', favoriteId),
     saveScraperAuthorFavoriteCache: (request: SaveScraperAuthorFavoriteCacheRequest) => ipcRenderer.invoke('save-scraper-author-favorite-cache', request),
     getScraperViewHistory: (scraperId?: string | null) => ipcRenderer.invoke('get-scraper-view-history', scraperId),

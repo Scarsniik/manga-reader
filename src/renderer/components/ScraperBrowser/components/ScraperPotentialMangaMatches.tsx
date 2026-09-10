@@ -39,6 +39,8 @@ type Props = {
   showCategoryLabels?: boolean;
   portalMenus?: boolean;
   horizontalBoundarySelector?: string;
+  toggleOpenRequest?: number;
+  toggleShortcutLabel?: string;
   onOpenMatch: (match: ScraperPotentialMangaMatch) => void;
   onOpenMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
 };
@@ -52,6 +54,9 @@ type NoticeProps = {
   showCategoryLabels?: boolean;
   portalMenu?: boolean;
   horizontalBoundarySelector?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  toggleShortcutLabel?: string;
   onOpenMatch: (match: ScraperPotentialMangaMatch) => void;
   onOpenMatchInWorkspace: (match: ScraperPotentialMangaMatch) => void;
 };
@@ -240,10 +245,20 @@ function PotentialMatchNotice({
   showCategoryLabels = false,
   portalMenu = false,
   horizontalBoundarySelector = ".scraper-browser__details-body",
+  open: controlledOpen,
+  onOpenChange,
+  toggleShortcutLabel,
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: NoticeProps) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (nextOpen: boolean) => {
+    if (controlledOpen === undefined) {
+      setLocalOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
   const matchListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -332,6 +347,9 @@ function PotentialMatchNotice({
           aria-controls={contentId}
           aria-expanded={isOpen}
           aria-haspopup="menu"
+          title={toggleShortcutLabel
+            ? `Ouvrir ou fermer les correspondances (${toggleShortcutLabel})`
+            : undefined}
         >
           <span className="scraper-browser__potential-match-icon">{icon}</span>
           <span className="scraper-browser__potential-match-label">{noticeTitle}</span>
@@ -394,9 +412,48 @@ export default function ScraperPotentialMangaMatches({
   showCategoryLabels = false,
   portalMenus = false,
   horizontalBoundarySelector,
+  toggleOpenRequest,
+  toggleShortcutLabel,
   onOpenMatch,
   onOpenMatchInWorkspace,
 }: Props) {
+  const availableNoticeKinds = mode === "combined"
+    ? (readingMatches.length || bookmarkMatches.length || readingListMatches.length
+      ? ["combined" as NoticeKind]
+      : [])
+    : ([
+      readingMatches.length ? "reading" as NoticeKind : null,
+      bookmarkMatches.length ? "bookmark" as NoticeKind : null,
+      readingListMatches.length ? "readingList" as NoticeKind : null,
+    ].filter((kind): kind is NoticeKind => Boolean(kind)));
+  const [activeNoticeKind, setActiveNoticeKind] = useState<NoticeKind | null>(null);
+  const previousToggleRequestRef = useRef(toggleOpenRequest);
+  const availableNoticeSignature = availableNoticeKinds.join("|");
+
+  useEffect(() => {
+    if (
+      toggleOpenRequest === undefined
+      || previousToggleRequestRef.current === toggleOpenRequest
+    ) {
+      return;
+    }
+
+    previousToggleRequestRef.current = toggleOpenRequest;
+    setActiveNoticeKind((currentKind) => (
+      currentKind ? null : availableNoticeKinds[0] ?? null
+    ));
+  }, [availableNoticeSignature, toggleOpenRequest]);
+
+  const buildControlledNoticeProps = (kind: NoticeKind) => (
+    toggleOpenRequest === undefined
+      ? {}
+      : {
+        open: activeNoticeKind === kind,
+        onOpenChange: (nextOpen: boolean) => setActiveNoticeKind(nextOpen ? kind : null),
+        toggleShortcutLabel,
+      }
+  );
+
   if (
     !readingMatches.length
     && !bookmarkMatches.length
@@ -444,6 +501,7 @@ export default function ScraperPotentialMangaMatches({
         {seriesReadingWarningTag}
         <PotentialMatchNotice
           kind="combined"
+          {...buildControlledNoticeProps("combined")}
           entries={entries}
           fallbackCover={fallbackCover}
           fallbackCoverReferer={fallbackCoverReferer}
@@ -464,6 +522,7 @@ export default function ScraperPotentialMangaMatches({
       {seriesReadingWarningTag}
       <PotentialMatchNotice
         kind="reading"
+        {...buildControlledNoticeProps("reading")}
         entries={buildPotentialMatchEntries([{ category: "reading", matches: readingMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
@@ -473,6 +532,7 @@ export default function ScraperPotentialMangaMatches({
       />
       <PotentialMatchNotice
         kind="bookmark"
+        {...buildControlledNoticeProps("bookmark")}
         entries={buildPotentialMatchEntries([{ category: "bookmark", matches: bookmarkMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}
@@ -482,6 +542,7 @@ export default function ScraperPotentialMangaMatches({
       />
       <PotentialMatchNotice
         kind="readingList"
+        {...buildControlledNoticeProps("readingList")}
         entries={buildPotentialMatchEntries([{ category: "readingList", matches: readingListMatches }])}
         fallbackCover={fallbackCover}
         fallbackCoverReferer={fallbackCoverReferer}

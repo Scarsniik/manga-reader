@@ -1,10 +1,10 @@
 import {
   normalizeScraperFieldSelector,
+  type ScraperEntityListFeatureConfig,
+  type ScraperEntityListItem,
   type ScraperFieldSelector,
-  type ScraperTagListFeatureConfig,
-  type ScraperTagListItem,
 } from "@/shared/scraper";
-import type { ScraperRuntimeTagListPageResult } from "@/renderer/utils/scraperRuntime/types";
+import type { ScraperRuntimeEntityListPageResult } from "@/renderer/utils/scraperRuntime/types";
 import {
   extractFieldSelectorValuesFromRoot,
   extractRegexValuesFromRoot,
@@ -158,7 +158,7 @@ const extractTagTargetValuesIncludingSelf = (
   );
 };
 
-const uniqueTagListItems = (items: ScraperTagListItem[]): ScraperTagListItem[] => {
+const uniqueEntityListItems = (items: ScraperEntityListItem[]): ScraperEntityListItem[] => {
   const seen = new Set<string>();
 
   return items.filter((item) => {
@@ -172,34 +172,34 @@ const uniqueTagListItems = (items: ScraperTagListItem[]): ScraperTagListItem[] =
   });
 };
 
-const getTagListItems = (
+const getEntityListItems = (
   doc: Document,
-  config: ScraperTagListFeatureConfig,
+  config: ScraperEntityListFeatureConfig,
 ): Element[] => {
-  const roots = config.tagListSelector
-    ? Array.from(doc.querySelectorAll(config.tagListSelector))
+  const roots = config.listSelector
+    ? Array.from(doc.querySelectorAll(config.listSelector))
     : [doc];
 
   return Array.from(
-    new Set(roots.flatMap((root) => Array.from(root.querySelectorAll(config.tagItemSelector)))),
+    new Set(roots.flatMap((root) => Array.from(root.querySelectorAll(config.itemSelector)))),
   );
 };
 
-const buildTagListItem = (
+const buildEntityListItem = (
   item: Element,
-  config: ScraperTagListFeatureConfig,
+  config: ScraperEntityListFeatureConfig,
   documentUrl: string,
-): ScraperTagListItem | null => {
-  const name = extractFieldValuesIncludingSelf(item, config.tagNameSelector, "text")[0];
+): ScraperEntityListItem | null => {
+  const name = extractFieldValuesIncludingSelf(item, config.nameSelector, "text")[0];
   if (!name) {
     return null;
   }
 
-  const rawUrl = config.tagUrlSelector
-    ? extractTagTargetValuesIncludingSelf(item, config.tagUrlSelector, documentUrl)[0]
+  const rawUrl = config.urlSelector
+    ? extractTagTargetValuesIncludingSelf(item, config.urlSelector, documentUrl)[0]
     : "";
-  const count = config.tagCountSelector
-    ? extractFieldValuesIncludingSelf(item, config.tagCountSelector, "text")[0]
+  const count = config.countSelector
+    ? extractFieldValuesIncludingSelf(item, config.countSelector, "text")[0]
     : "";
 
   return {
@@ -209,14 +209,14 @@ const buildTagListItem = (
   };
 };
 
-export const extractScraperTagListPageFromDocument = (
+export const extractScraperEntityListPageFromDocument = (
   doc: Document,
-  config: ScraperTagListFeatureConfig,
+  config: ScraperEntityListFeatureConfig,
   requestMeta: {
     requestedUrl: string;
     finalUrl?: string;
   },
-): ScraperRuntimeTagListPageResult => {
+): ScraperRuntimeEntityListPageResult => {
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
   const nextPageValue = config.nextPageSelector
     ? extractUrlFieldSelectorValuesFromRoot(doc, config.nextPageSelector)[0]
@@ -224,14 +224,16 @@ export const extractScraperTagListPageFromDocument = (
   const paginationValues = config.paginationLinkSelector
     ? extractUrlFieldSelectorValuesFromRoot(doc, config.paginationLinkSelector)
     : [];
-  const items = getTagListItems(doc, config)
-    .map((item) => buildTagListItem(item, config, documentUrl))
-    .filter((item): item is ScraperTagListItem => Boolean(item));
+  const items = getEntityListItems(doc, config)
+    .map((item) => buildEntityListItem(item, config, documentUrl))
+    .filter((item): item is ScraperEntityListItem => Boolean(item));
 
   return {
     currentPageUrl: documentUrl,
     nextPageUrl: nextPageValue ? toAbsoluteScraperUrl(nextPageValue, documentUrl) : undefined,
     paginationUrls: uniqueValues(paginationValues.map((value) => toAbsoluteScraperUrl(value, documentUrl))),
-    items: uniqueTagListItems(items),
+    items: uniqueEntityListItems(items),
   };
 };
+
+export const extractScraperTagListPageFromDocument = extractScraperEntityListPageFromDocument;

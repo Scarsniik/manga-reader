@@ -1,8 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
 import type {
+  AddScraperEntityListCacheItemsRequest,
   AddScraperTagListCacheItemsRequest,
+  GetScraperEntityListCacheRequest,
+  SaveScraperEntityListCacheRequest,
   SaveScraperTagListCacheRequest,
+  ScraperEntityListCacheRecord,
   ScraperTagListCacheRecord,
   ScraperTagListItem,
 } from "../../scraper";
@@ -10,6 +14,26 @@ import {
   ensureScraperTagListCacheDir,
   scraperTagListCacheDir,
 } from "../../utils";
+
+const getEntityListStorageId = ({
+  scraperId,
+  entityKind,
+}: GetScraperEntityListCacheRequest): string => (
+  entityKind === "tag" ? scraperId : `author_${scraperId}`
+);
+
+const toEntityListCacheRecord = (
+  record: ScraperTagListCacheRecord | null,
+  request: GetScraperEntityListCacheRequest,
+): ScraperEntityListCacheRecord | null => record
+  ? {
+    scraperId: request.scraperId,
+    entityKind: request.entityKind,
+    sourceUrl: record.sourceUrl,
+    items: record.tags,
+    savedAt: record.savedAt,
+  }
+  : null;
 
 const normalizeText = (value: unknown): string => (
   String(value ?? "").trim().replace(/\s+/g, " ")
@@ -265,4 +289,35 @@ export async function addScraperTagListCacheItems(
     await fs.writeFile(getCacheFilePath(normalizedScraperId), JSON.stringify(record, null, 2));
     return record;
   });
+}
+
+export async function getScraperEntityListCache(
+  request: GetScraperEntityListCacheRequest,
+): Promise<ScraperEntityListCacheRecord | null> {
+  const record = await getScraperTagListCache(getEntityListStorageId(request));
+  return toEntityListCacheRecord(record, request);
+}
+
+export async function saveScraperEntityListCache(
+  request: SaveScraperEntityListCacheRequest,
+): Promise<ScraperEntityListCacheRecord> {
+  const record = await saveScraperTagListCache({
+    scraperId: getEntityListStorageId(request),
+    sourceUrl: request.sourceUrl,
+    tags: request.items,
+  });
+
+  return toEntityListCacheRecord(record, request) as ScraperEntityListCacheRecord;
+}
+
+export async function addScraperEntityListCacheItems(
+  request: AddScraperEntityListCacheItemsRequest,
+): Promise<ScraperEntityListCacheRecord> {
+  const record = await addScraperTagListCacheItems({
+    scraperId: getEntityListStorageId(request),
+    sourceUrl: request.sourceUrl,
+    tags: request.items,
+  });
+
+  return toEntityListCacheRecord(record, request) as ScraperEntityListCacheRecord;
 }

@@ -49,6 +49,7 @@ import {
 } from "@/renderer/backgroundSearch/backgroundListingBlacklist";
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import { isAuthorCorrespondenceNameSearchSourceVerified } from "@/renderer/searchEngines/authorCorrespondenceNameSearchSources";
+import { getCachedScraperAuthors } from "@/renderer/utils/scraperAuthorListCache";
 
 const formatProgressSubject = (value: string, maxLength = 80): string => {
   const normalized = value.trim().replace(/\s+/g, " ");
@@ -261,6 +262,26 @@ export const runAuthorCorrespondenceSearch = async (
     });
   });
 
+  await emit("Verification des listes d'auteurs enregistrees");
+  await runWithConcurrency(scrapers.map((scraper) => async () => {
+    const cachedAuthors = await getCachedScraperAuthors(scraper, names).catch(() => []);
+    cachedAuthors.forEach((author) => {
+      const matchedName = findMatchedName(author.name, names);
+      if (!author.url || !matchedName) {
+        return;
+      }
+
+      addCandidate(candidates, {
+        scraperId: scraper.id,
+        scraperName: scraper.name,
+        authorName: author.name,
+        authorUrl: author.url,
+        matchedName,
+        discoveryMethod: "authorList",
+      });
+    });
+  }), concurrency);
+
   const loadSearchSources = async (
     scraper: ScraperRecord,
     name: string,
@@ -373,7 +394,10 @@ export const runAuthorCorrespondenceSearch = async (
       await emit(`Préparation · ${scraper.name} · « ${formatProgressSubject(name)} »`);
       const hasDirectCandidate = Array.from(candidates.values()).some((candidate) => (
         candidate.scraperId === scraper.id
-        && candidate.discoveryMethods.includes("reference")
+        && (
+          candidate.discoveryMethods.includes("reference")
+          || candidate.discoveryMethods.includes("authorList")
+        )
         && Boolean(findMatchedName(candidate.matchedName, [name]))
       ));
       await loadSearchSources(scraper, name, !hasDirectCandidate);

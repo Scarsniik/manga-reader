@@ -184,7 +184,7 @@ export type AuthorCorrespondenceMatch = {
   authorUrl: string;
   templateContext?: Record<string, string | undefined> | null;
   matchedName: string;
-  discoveryMethods: Array<"reference" | "search" | "authorModule">;
+  discoveryMethods: Array<"reference" | "search" | "authorList" | "authorModule">;
   previewSources: MultiSearchSourceResult[];
 };
 

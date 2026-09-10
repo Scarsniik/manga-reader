@@ -1559,6 +1559,82 @@ test("author correspondence keeps name-search cards even with a reliable direct 
   assert.deepEqual(result.nameSearchSources[0].contextualAuthorNames, ["Author A"]);
 });
 
+test("author correspondence checks the saved author list before scraper searches", async () => {
+  const authorScraper = {
+    ...scraper,
+    features: [...scraper.features, {
+      kind: "authorList",
+      label: "Author list",
+      description: "",
+      status: "validated",
+      config: {
+        collectFromDetails: false,
+        urlTemplate: "/authors",
+        itemSelector: ".author",
+        nameSelector: { kind: "css", value: ".name" },
+        urlSelector: { kind: "css", value: "a@href" },
+      },
+    }, {
+      kind: "author",
+      label: "Author",
+      description: "",
+      status: "validated",
+      config: {
+        urlStrategy: "result_url",
+        resultItemSelector: ".card",
+        titleSelector: ".title",
+        detailUrlSelector: ".title@href",
+        authorNameSelector: ".author-name",
+        languageDetection: { detectFromTitle: false },
+      },
+    }],
+  };
+  const operations = [];
+  global.window = {
+    setTimeout,
+    api: {
+      getScraperEntityListCache: async (request) => {
+        operations.push(`cache:${request.scraperId}:${request.entityKind}`);
+        return {
+          scraperId: request.scraperId,
+          entityKind: request.entityKind,
+          items: [{ name: "Author A", url: "https://example.test/authors/a" }],
+          savedAt: "2026-09-07T00:00:00.000Z",
+        };
+      },
+      fetchScraperDocument: async (request) => {
+        operations.push(`fetch:${request.targetUrl}`);
+        return {
+          ok: true,
+          requestedUrl: request.targetUrl,
+          finalUrl: request.targetUrl,
+          html: request.targetUrl.includes("/authors/a")
+            ? '<h1 class="author-name">Author A</h1>'
+            : "<main></main>",
+        };
+      },
+    },
+  };
+
+  const result = await runAuthorCorrespondenceSearch({
+    referenceName: "Author A",
+    names: ["Author A"],
+    referenceSources: [],
+    scraperFilterValues: [],
+    scrapers: [authorScraper],
+    maxPages: 1,
+    authorPageCount: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 1,
+    scrapeDetailsWithCards: false,
+  }, new AbortController().signal, async () => {});
+
+  assert.equal(operations[0], "cache:source-a:author");
+  assert.ok(operations.includes("fetch:https://example.test/authors/a"));
+  assert.equal(result.matches.length, 1);
+  assert.deepEqual(result.matches[0].discoveryMethods, ["authorList"]);
+});
+
 test("author correspondence replay searches added aliases and keeps their direct page targets", () => {
   const input = {
     referenceName: "Author A",

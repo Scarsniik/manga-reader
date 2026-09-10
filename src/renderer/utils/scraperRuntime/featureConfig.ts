@@ -6,6 +6,7 @@ import {
   type ScraperChaptersFeatureConfig,
   type ScraperDetailsDerivedValueConfig,
   type ScraperDetailsFeatureConfig,
+  type ScraperEntityListFeatureConfig,
   type ScraperFeatureDefinition,
   type ScraperFeatureKind,
   type ScraperFieldSelector,
@@ -271,9 +272,9 @@ export const getScraperSourceFeatureConfig = (
   };
 };
 
-export const getScraperTagListFeatureConfig = (
+export const getScraperEntityListFeatureConfig = (
   feature: ScraperFeatureDefinition | null | undefined,
-): ScraperTagListFeatureConfig | null => {
+): ScraperEntityListFeatureConfig | null => {
   const raw = getFeatureConfigRecord(feature);
   if (!raw) {
     return null;
@@ -282,15 +283,19 @@ export const getScraperTagListFeatureConfig = (
   return {
     collectFromDetails: Boolean(raw.collectFromDetails),
     urlTemplate: trimOptional(raw.urlTemplate) ?? "",
-    tagListSelector: trimOptionalBlockSelector(raw.tagListSelector),
-    tagItemSelector: normalizeSelectorInput(String(raw.tagItemSelector ?? "")),
-    tagNameSelector: normalizeRequiredFieldSelector(raw.tagNameSelector),
-    tagUrlSelector: trimOptionalFieldSelector(raw.tagUrlSelector),
-    tagCountSelector: trimOptionalFieldSelector(raw.tagCountSelector),
+    listSelector: trimOptionalBlockSelector(raw.listSelector ?? raw.tagListSelector),
+    itemSelector: normalizeSelectorInput(String(raw.itemSelector ?? raw.tagItemSelector ?? "")),
+    nameSelector: normalizeRequiredFieldSelector(raw.nameSelector ?? raw.tagNameSelector),
+    urlSelector: trimOptionalFieldSelector(raw.urlSelector ?? raw.tagUrlSelector),
+    countSelector: trimOptionalFieldSelector(raw.countSelector ?? raw.tagCountSelector),
     nextPageSelector: trimOptionalFieldSelector(raw.nextPageSelector),
     paginationLinkSelector: trimOptionalFieldSelector(raw.paginationLinkSelector),
   };
 };
+
+export const getScraperTagListFeatureConfig = (
+  feature: ScraperFeatureDefinition | null | undefined,
+): ScraperTagListFeatureConfig | null => getScraperEntityListFeatureConfig(feature);
 
 export const isScraperFeatureConfigured = (feature: ScraperFeatureDefinition | null | undefined): boolean =>
   Boolean(feature?.config && feature.status !== "not_configured");

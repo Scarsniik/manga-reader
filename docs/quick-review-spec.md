@@ -72,6 +72,9 @@ Le workspace prend donc en charge la cible `scraper.source` en plus des cibles f
 - `Suivant` ignore la fiche courante et avance.
 - `Bookmark et suivant` enregistre la fiche, puis avance uniquement si l'enregistrement réussit.
 - Si la fiche est déjà bookmarkée, l'action avance sans retirer le bookmark.
+- Le bouton discret en forme d'œil, à côté du titre, permet de marquer explicitement la fiche comme
+  lue ou de retirer cet état. Il réutilise l'historique de lecture des cards et reflète immédiatement
+  l'état enregistré.
 - L'état exact tient compte des URL demandée, finale et issue du résultat afin de rester visible après
   une redirection de la source.
 - Les correspondances probables sont affichées avec les mêmes boutons détaillés que sur la fiche
@@ -96,6 +99,8 @@ Les paramètres contiennent une catégorie dédiée `Review rapide`. Chaque acti
 - fiche précédente : `Flèche gauche` par défaut ;
 - fiche suivante : `Flèche droite` par défaut ;
 - bookmark et fiche suivante : appui long sur `Flèche droite` par défaut ;
+- ouvrir ou fermer les correspondances potentielles disponibles : `E` par défaut ;
+- basculer l'état lu de la fiche : `R` par défaut ;
 - défilement des miniatures en arrière : `Flèche haut` par défaut ;
 - défilement des miniatures en avant : `Flèche bas` par défaut.
 

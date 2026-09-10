@@ -385,7 +385,26 @@ Pour la pagination, deux modes existent :
 
 Si les deux sont presents, la pagination par template est prioritaire.
 
-## Module Liste de tags
+## Modules Liste d'auteurs et Liste de tags
+
+`Liste d'auteurs` et `Liste de tags` partagent le meme moteur d'extraction, de pagination,
+d'affichage et de cache. Chaque liste conserve toutefois son propre cache par scraper. Une entree
+de la liste d'auteurs ouvre le module `Auteur` et peut etre ajoutee aux auteurs favoris. Une entree
+de la liste de tags ouvre le module `Tag` et conserve en plus les actions de favoris et de blacklist.
+
+La configuration commune utilise les champs neutres `listSelector`, `itemSelector`, `nameSelector`,
+`urlSelector` et `countSelector`. Les anciens champs `tagListSelector`, `tagItemSelector`,
+`tagNameSelector`, `tagUrlSelector` et `tagCountSelector` restent lus pour assurer la compatibilite
+des configurations existantes.
+
+### Liste d'auteurs
+
+Le module peut scraper une page d'index et suivre les liens de pagination ou de lettres. En mode
+`collectFromDetails`, il ajoute progressivement les noms et URLs d'auteurs extraits par le module
+`Fiche`. La vue obtenue filtre et trie localement les auteurs, puis ouvre leurs resultats avec le
+module `Auteur`. Les auteurs favoris lies au scraper sont affiches en raccourci en haut de la liste.
+
+### Liste de tags
 
 `Liste de tags` peut soit charger une ou plusieurs pages d'index de tags, soit alimenter le cache
 progressivement depuis les tags rencontres dans les fiches. Dans les deux cas, le resultat est
@@ -396,10 +415,10 @@ le module `Tag`.
 
 | Champ | Description |
 | --- | --- |
-| `collectFromDetails` | quand `true`, les tags extraits par le module `Fiche` sont ajoutes au cache au fur et a mesure, sans doublons. Dans l'editeur, le mode auto masque le formulaire de scraping manuel. |
+| `collectFromDetails` | quand `true`, les auteurs ou tags extraits par le module `Fiche` sont ajoutes au cache au fur et a mesure, sans doublons. Dans l'editeur, le mode auto masque le formulaire de scraping manuel. |
 
-Ce mode est utile pour les sites qui n'exposent pas de page de liste de tags. Quand il est actif, le
-bouton d'actualisation manuelle de la vue `Liste de tags` est desactive : la liste affiche le cache
+Ce mode est utile pour les sites qui n'exposent pas de page de liste. Quand il est actif, le
+bouton d'actualisation manuelle de la vue correspondante est desactive : la liste affiche le cache
 comme une liste scrapee, mais elle se remplit en ouvrant des fiches du scraper. Comme il n'y a pas
 de validation manuelle dans ce mode, l'enregistrement marque le module comme valide.
 
@@ -407,7 +426,7 @@ de validation manuelle dans ce mode, l'enregistrement marque le module comme val
 
 | Champ | Requis | Description |
 | --- | --- | --- |
-| `urlTemplate` | oui, sauf `collectFromDetails` | URL ou chemin de la page de tags ; les variables `{{page}}` et `{{pageIndex}}` permettent une pagination par template |
+| `urlTemplate` | oui, sauf `collectFromDetails` | URL ou chemin de la page de liste ; les variables `{{page}}` et `{{pageIndex}}` permettent une pagination par template |
 | `nextPageSelector` | non | lien HTML vers la page suivante |
 | `paginationLinkSelector` | non | liens HTML de pagination ou de lettres ; chaque URL detectee est parcourue une fois |
 
@@ -415,19 +434,19 @@ Au runtime, le bouton d'actualisation scrape toutes les pages detectees jusqu'a 
 la limite de securite de 1000 pages. Si `urlTemplate` contient une variable de page, le runtime teste
 les pages successives et suit aussi les liens trouves dans `nextPageSelector` et `paginationLinkSelector`.
 Apres au moins une page extraite, une reponse HTTP 404 sur une page suivante est consideree comme une
-fin normale de pagination : les tags deja recuperes sont conserves et enregistres dans le cache.
+fin normale de pagination : les items deja recuperes sont conserves et enregistres dans le cache.
 
 ### Selecteurs
 
 | Selecteur | Requis | Zone | Description |
 | --- | --- | --- | --- |
-| `tagListSelector` | non | document | limite la recherche a un ou plusieurs conteneurs de tags |
-| `tagItemSelector` | oui, sauf `collectFromDetails` | conteneur ou document | detecte chaque tag |
-| `tagNameSelector` | oui, sauf `collectFromDetails` | tag | extrait le nom affiche ; un tag sans nom est ignore |
-| `tagUrlSelector` | non | tag | extrait l'URL d'ouverture du tag ou une valeur brute a injecter dans le template du module `Tag` |
-| `tagCountSelector` | non | tag | extrait le compteur affiche par le site |
+| `listSelector` | non | document | limite la recherche a un ou plusieurs conteneurs |
+| `itemSelector` | oui, sauf `collectFromDetails` | conteneur ou document | detecte chaque auteur ou tag |
+| `nameSelector` | oui, sauf `collectFromDetails` | item | extrait le nom affiche ; un item sans nom est ignore |
+| `urlSelector` | non | item | extrait l'URL d'ouverture ou une valeur brute a injecter dans le template du module cible |
+| `countSelector` | non | item | extrait le compteur affiche par le site |
 
-Les items sont dedoublonnes par cible tag quand elle existe, sinon par nom. Les URLs absolues,
+Les items sont dedoublonnes par URL cible quand elle existe, sinon par nom. Les URLs absolues,
 les chemins explicites (`/tag/x`, `./tag/x`, `../tag/x`) et les valeurs `src` ou `action` sont
 resolus depuis la page courante. Un `href` ou un texte contenant seulement un slug, par exemple
 `animal-bond`, reste brut : a l'ouverture du tag, le module `Tag` l'utilise comme valeur de
@@ -435,18 +454,24 @@ template si sa strategie d'URL est `template`.
 
 ### Runtime
 
-Quand une liste est enregistree, l'ouverture du scraper charge `scraper-tag-list-cache/<scraperId>.json`
-et la recherche de la toolbar filtre localement tous les tags, sans pagination UI. Le clic gauche
-ouvre le tag dans la page scraper courante, le clic molette ouvre un onglet workspace `scraper.tag`.
-Le clic droit ouvre un menu permettant d'ajouter ou retirer le tag des favoris et de la blacklist du
-scraper. Les favoris et la blacklist du scraper courant sont aussi affiches en haut de la liste complete.
+Quand une liste est enregistree, l'ouverture du scraper charge son cache local et la recherche de la
+toolbar filtre tous les items, sans pagination UI. Le clic gauche ouvre l'auteur ou le tag dans la page
+scraper courante ; le clic molette ouvre l'onglet workspace correspondant. Le clic droit permet
+d'ajouter ou retirer l'item des favoris. La liste de tags ajoute aussi l'action de blacklist. Les favoris,
+ainsi que la blacklist pour les tags, sont affiches en haut de la liste complete.
 Entre ces raccourcis et la liste globale, la vue expose des options persistantes par scraper pour
 trier alphabetiquement ou par compteur d'occurrences, et pour filtrer par compteur min/max quand un
 compteur exploitable existe.
 
+Avant de resoudre une recherche d'auteur, le navigateur et la recherche de correspondances consultent
+d'abord le cache `Liste d'auteurs` de chaque scraper configure. Une correspondance exacte apres
+normalisation reutilise directement l'URL enregistree ; la page auteur reste validee par le moteur
+habituel. La recherche par nom continue d'alimenter les cards de la correspondance sans remplacer
+cette cible prioritaire.
+
 En mode `collectFromDetails`, le cache est mis a jour quand une fiche chargee par le navigateur
-scraper, par un onglet workspace ou par un enrichissement de card extrait des tags. Les doublons
-sont evites par URL quand elle existe, sinon par nom de tag.
+scraper, par un onglet workspace ou par un enrichissement de card extrait des auteurs ou des tags.
+Les doublons sont evites par URL quand elle existe, sinon par nom.
 
 ## Module Fiche
 

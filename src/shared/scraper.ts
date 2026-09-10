@@ -6,6 +6,7 @@ export type ScraperFeatureKind =
   | 'author'
   | 'tag'
   | 'source'
+  | 'authorList'
   | 'tagList'
   | 'chapters'
   | 'pages'
@@ -447,23 +448,50 @@ export interface ScraperSourceFeatureConfig extends ScraperCardListConfig {
   sourceNameSelector?: ScraperFieldSelector;
 }
 
-export interface ScraperTagListFeatureConfig {
+export type ScraperEntityListKind = 'author' | 'tag';
+
+export interface ScraperEntityListFeatureConfig {
   collectFromDetails?: boolean;
   urlTemplate: string;
-  tagListSelector?: string;
-  tagItemSelector: string;
-  tagNameSelector: ScraperFieldSelector;
-  tagUrlSelector?: ScraperFieldSelector;
-  tagCountSelector?: ScraperFieldSelector;
+  listSelector?: string;
+  itemSelector: string;
+  nameSelector: ScraperFieldSelector;
+  urlSelector?: ScraperFieldSelector;
+  countSelector?: ScraperFieldSelector;
   nextPageSelector?: ScraperFieldSelector;
   paginationLinkSelector?: ScraperFieldSelector;
 }
 
-export interface ScraperTagListItem {
+export type ScraperAuthorListFeatureConfig = ScraperEntityListFeatureConfig;
+export type ScraperTagListFeatureConfig = ScraperEntityListFeatureConfig;
+
+export interface ScraperEntityListItem {
   name: string;
   url?: string;
   count?: string;
 }
+
+export type ScraperTagListItem = ScraperEntityListItem;
+
+export interface ScraperEntityListCacheRecord {
+  scraperId: string;
+  entityKind: ScraperEntityListKind;
+  sourceUrl?: string;
+  items: ScraperEntityListItem[];
+  savedAt: string;
+}
+
+export interface GetScraperEntityListCacheRequest {
+  scraperId: string;
+  entityKind: ScraperEntityListKind;
+}
+
+export interface SaveScraperEntityListCacheRequest extends GetScraperEntityListCacheRequest {
+  sourceUrl?: string;
+  items: ScraperEntityListItem[];
+}
+
+export type AddScraperEntityListCacheItemsRequest = SaveScraperEntityListCacheRequest;
 
 export interface ScraperTagListCacheRecord {
   scraperId: string;
@@ -1326,6 +1354,11 @@ export const SCRAPER_FEATURE_TEMPLATES: ReadonlyArray<{
     kind: 'source',
     label: 'Source',
     description: 'Definir comment ouvrir la page d\'une oeuvre source et extraire la liste de cards retournee.',
+  },
+  {
+    kind: 'authorList',
+    label: 'Liste d\'auteurs',
+    description: 'Definir comment recuperer la liste complete des auteurs disponibles sur la source.',
   },
   {
     kind: 'tagList',

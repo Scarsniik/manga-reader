@@ -57,6 +57,7 @@ import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateCon
 import type { BackgroundListingRun } from '@/renderer/backgroundSearch/types';
 import { runScraperAuthorSearchEngine } from '@/renderer/searchEngines/listingSearchEngine';
 import { buildScraperAuthorListingSearchInput } from '@/renderer/searchEngines/authorListingSearchInput';
+import { resolveCachedScraperAuthorTarget } from '@/renderer/utils/scraperAuthorListCache';
 
 export type ListingLookupOptions = {
   pageIndex?: number;
@@ -283,6 +284,9 @@ const getRouteStateForNavigation = (options: {
   const persistedTagListQuery = sourceMode === 'tagList'
     ? sourceQuery
     : currentRouteState.tagListQuery ?? '';
+  const persistedAuthorListQuery = sourceMode === 'authorList'
+    ? sourceQuery
+    : currentRouteState.authorListQuery ?? '';
 
   return writeScraperRouteState(routeSearch, {
     scraperId,
@@ -319,6 +323,7 @@ const getRouteStateForNavigation = (options: {
     sourcePage: nextMode === 'source'
       ? 1
       : persistedSourceState.page,
+    authorListQuery: nextMode === 'authorList' ? sourceQuery : persistedAuthorListQuery,
     tagListQuery: nextMode === 'tagList' ? sourceQuery : persistedTagListQuery,
     mangaQuery: '',
     mangaUrl,
@@ -388,6 +393,7 @@ export function useScraperBrowserSearch({
   const authorEngineAbortControllerRef = useRef<AbortController | null>(null);
   const authorDetailsCacheRef = useRef(createScraperCardDetailsCache());
   const authorEngineOriginalOnlyRef = useRef(authorOriginalOnly);
+  const authorEngineTargetRef = useRef<{ displayQuery: string; target: string } | null>(null);
 
   const handleListingProgress = useCallback((
     listingMode: ScraperListingMode,
@@ -579,7 +585,10 @@ export function useScraperBrowserSearch({
     items: ScraperSearchResultItem[];
   }> => {
     const normalizedTargetPageIndex = Math.max(0, Math.floor(targetPageIndex));
-    const sourceKey = `${scraper.id}::${nextQuery}`;
+    const cachedTarget = !forceReset && authorEngineTargetRef.current?.displayQuery === nextQuery
+      ? authorEngineTargetRef.current.target
+      : (await resolveCachedScraperAuthorTarget(scraper, nextQuery).catch(() => null))?.url || nextQuery;
+    const sourceKey = `${scraper.id}::${cachedTarget}`;
     const currentRun = !forceReset
       && authorEngineOriginalOnlyRef.current === authorOriginalOnly
       && authorEngineRunRef.current?.key === sourceKey
@@ -617,13 +626,14 @@ export function useScraperBrowserSearch({
     authorEngineAbortControllerRef.current = controller;
     if (!currentRun) {
       authorEngineOriginalOnlyRef.current = authorOriginalOnly;
+      authorEngineTargetRef.current = { displayQuery: nextQuery, target: cachedTarget };
       authorEnginePageUrlsRef.current = new Map();
       authorDetailsCacheRef.current = createScraperCardDetailsCache();
     }
     const pageCount = currentRun
       ? Math.max(1, normalizedTargetPageIndex + 1 - currentRun.loadedPages)
       : normalizedTargetPageIndex + 1;
-    const input = buildScraperAuthorListingSearchInput(scraper, nextQuery, {
+    const input = buildScraperAuthorListingSearchInput(scraper, cachedTarget, {
       maxPages: pageCount,
       concurrency: scrapingConcurrency,
       scrapeDetailsWithCards,
@@ -1443,13 +1453,13 @@ export function useScraperBrowserSearch({
       return;
     }
 
-    if (nextMode === 'tagList') {
+    if (nextMode === 'authorList' || nextMode === 'tagList') {
       clearFeedback();
       resetAsyncState();
       resetDetailsState();
       resetListingState();
       setListingReturnState(null);
-      setMode('tagList');
+      setMode(nextMode);
       setQuery('');
       return;
     }

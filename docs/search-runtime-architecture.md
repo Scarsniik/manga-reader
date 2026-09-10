@@ -2,7 +2,7 @@
 
 ## Types couverts
 
-Les modules primitifs sont `homepage`, `search`, `author`, `tag`, `tagList` et `details`. Ils alimentent les recherches composées suivantes :
+Les modules primitifs sont `homepage`, `search`, `author`, `tag`, `authorList`, `tagList` et `details`. Ils alimentent les recherches composées suivantes :
 
 - multi-recherche ;
 - favoris de tags et d'auteurs ;
@@ -73,4 +73,4 @@ Le réglage global de l'onglet Développeur active les diagnostics pour tous les
 
 Les réglages fonctionnels du scraping vivent dans l'onglet `Scraping` des paramètres. Les protections anti-emballement y possèdent un interrupteur global et des interrupteurs/seuils indépendants. L'alerte générique d'absence de progression est calculée par le hook commun des jobs et s'applique à tous les types de recherche en arrière-plan.
 
-La collecte `tagList` et les assistants de configuration restent volontairement hors du moteur de recherche : ils testent ou éditent des sélecteurs et n'exécutent pas une recherche utilisateur paginée.
+Les collectes `authorList` et `tagList`, ainsi que les assistants de configuration, restent volontairement hors du moteur de recherche : ils testent ou éditent des sélecteurs et n'exécutent pas une recherche utilisateur paginée. Le cache `authorList` est toutefois consulté avant la résolution d'une recherche d'auteur, séparément pour chaque scraper configuré, afin de réutiliser une URL d'auteur déjà enregistrée avant les stratégies de découverte réseau.

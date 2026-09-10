@@ -42,8 +42,11 @@ export {
   saveScraperTagFavorite,
 } from "./scrapers/tagFavorites";
 export {
+  addScraperEntityListCacheItems,
   addScraperTagListCacheItems,
+  getScraperEntityListCache,
   getScraperTagListCache,
+  saveScraperEntityListCache,
   saveScraperTagListCache,
 } from "./scrapers/tagListCache";
 export {

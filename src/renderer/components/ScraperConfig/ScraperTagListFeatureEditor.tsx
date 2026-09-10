@@ -7,7 +7,8 @@ import {
   ScraperFeatureValidationCheckKey,
   ScraperFeatureValidationResult,
   ScraperFieldSelector,
-  ScraperTagListItem,
+  ScraperEntityListItem,
+  ScraperEntityListKind,
 } from "@/shared/scraper";
 import ScraperConfigField from "@/renderer/components/ScraperConfig/shared/ScraperConfigField";
 import ScraperFeatureEditorHeader from "@/renderer/components/ScraperConfig/shared/ScraperFeatureEditorHeader";
@@ -36,22 +37,23 @@ import {
   getInitialConfig,
   getSaveFieldErrors,
   getValidationFieldErrors,
-  SCRAPING_FIELDS,
+  getEntityListScrapingFields,
+  getEntityListSourceModeField,
+  getEntityListUrlTemplateField,
   TAG_LIST_FIELD_SELECTOR_NAMES,
-  TAG_LIST_SOURCE_MODE_FIELD,
   TagListSourceMode,
   TagListFeatureFormState,
-  URL_TEMPLATE_FIELD,
 } from "@/renderer/components/ScraperConfig/tagList/tagListFeatureEditor.utils";
 import {
-  extractScraperTagListPageFromDocument,
-  hasTagListPagePlaceholder,
-  resolveScraperTagListTargetUrl,
+  extractScraperEntityListPageFromDocument,
+  hasEntityListPagePlaceholder,
+  resolveScraperEntityListTargetUrl,
   ScraperRuntimeTagListPageResult,
 } from "@/renderer/utils/scraperRuntime";
 
 type Props = {
   feature: ScraperFeatureDefinition;
+  entityKind: ScraperEntityListKind;
   actionSurface?: ScraperFeatureActionSurface;
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   onBack: () => void;
@@ -102,8 +104,9 @@ const buildAutoCollectionValidation = (): ScraperFeatureValidationResult => ({
   derivedValues: [],
 });
 
-export default function ScraperTagListFeatureEditor({
+export default function ScraperEntityListFeatureEditor({
   feature,
+  entityKind,
   actionSurface = "inline",
   onUnsavedChangesChange,
   onBack,
@@ -113,7 +116,7 @@ export default function ScraperTagListFeatureEditor({
   const [previewPage, setPreviewPage] = useState<ScraperRuntimeTagListPageResult | null>(null);
   const [previewVisitedPageUrls, setPreviewVisitedPageUrls] = useState<string[]>([]);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
-  const [previewTags, setPreviewTags] = useState<ScraperTagListItem[]>([]);
+  const [previewTags, setPreviewTags] = useState<ScraperEntityListItem[]>([]);
   const {
     formValues,
     setFormValues,
@@ -162,9 +165,15 @@ export default function ScraperTagListFeatureEditor({
   );
   const hasUnsavedChanges = currentConfigSignature !== savedConfigSignature;
   const { requestLeave } = useScraperUnsavedChangesGuard({ hasUnsavedChanges });
-  const usesTemplatePaging = hasTagListPagePlaceholder(currentConfig);
+  const usesTemplatePaging = hasEntityListPagePlaceholder(currentConfig);
   const tagListSourceMode: TagListSourceMode = formValues.collectFromDetails === true ? "collect" : "scrape";
   const isAutoCollectionMode = tagListSourceMode === "collect";
+  const entityLabel = entityKind === "author" ? "auteur" : "tag";
+  const entityPluralLabel = entityKind === "author" ? "auteurs" : "tags";
+  const entityListLabel = entityKind === "author" ? "liste d'auteurs" : "liste de tags";
+  const scrapingFields = useMemo(() => getEntityListScrapingFields(entityKind), [entityKind]);
+  const sourceModeField = useMemo(() => getEntityListSourceModeField(entityKind), [entityKind]);
+  const urlTemplateField = useMemo(() => getEntityListUrlTemplateField(entityKind), [entityKind]);
 
   useEffect(() => {
     onUnsavedChangesChange?.(hasUnsavedChanges);
@@ -180,7 +189,7 @@ export default function ScraperTagListFeatureEditor({
     }
 
     try {
-      return resolveScraperTagListTargetUrl(scraper.baseUrl, currentConfig, {
+      return resolveScraperEntityListTargetUrl(scraper.baseUrl, currentConfig, {
         pageIndex: 0,
       });
     } catch {
@@ -190,7 +199,7 @@ export default function ScraperTagListFeatureEditor({
 
   const validationPresentation = useMemo(
     () => validationResult
-      ? buildValidationPresentation(validationResult, previewTags, previewPage)
+      ? buildValidationPresentation(validationResult, previewTags, previewPage, entityKind)
       : null,
     [previewPage, previewTags, validationResult],
   );
@@ -211,18 +220,18 @@ export default function ScraperTagListFeatureEditor({
       throw new Error(
         typedDocumentResult.error
           || (typeof typedDocumentResult.status === "number"
-            ? `La liste de tags a repondu avec le code HTTP ${typedDocumentResult.status}.`
-            : "Impossible de charger la liste de tags."),
+            ? `La ${entityListLabel} a repondu avec le code HTTP ${typedDocumentResult.status}.`
+            : `Impossible de charger la ${entityListLabel}.`),
       );
     }
 
     const parser = new DOMParser();
     const documentNode = parser.parseFromString(typedDocumentResult.html, "text/html");
-    return extractScraperTagListPageFromDocument(documentNode, config, {
+    return extractScraperEntityListPageFromDocument(documentNode, config, {
       requestedUrl: typedDocumentResult.requestedUrl,
       finalUrl: typedDocumentResult.finalUrl,
     });
-  }, [currentConfig, scraper.baseUrl]);
+  }, [currentConfig, entityListLabel, scraper.baseUrl]);
 
   const handleBack = useCallback(() => {
     requestLeave(onBack);
@@ -272,21 +281,21 @@ export default function ScraperTagListFeatureEditor({
   }, [clearFieldFeedback, setFormValues]);
 
   const selectorAssistantFields = useMemo(() => buildSelectorAssistantFields({
-    fields: SCRAPING_FIELDS,
+    fields: scrapingFields,
     valueFieldNames: TAG_LIST_FIELD_SELECTOR_NAMES,
     values: getFormValueRecord(formValues),
     scopeByFieldName: {
-      tagItemSelector: "tagListSelector",
-      tagNameSelector: "tagItemSelector",
-      tagUrlSelector: "tagItemSelector",
-      tagCountSelector: "tagItemSelector",
+      itemSelector: "listSelector",
+      nameSelector: "itemSelector",
+      urlSelector: "itemSelector",
+      countSelector: "itemSelector",
     },
     valueModeByFieldName: {
-      tagUrlSelector: "url",
+      urlSelector: "url",
       nextPageSelector: "url",
       paginationLinkSelector: "url",
     },
-  }), [formValues]);
+  }), [formValues, scrapingFields]);
   const handleSelectorAssistantApply = useCallback((fieldName: string, selector: string) => {
     if ((TAG_LIST_FIELD_SELECTOR_NAMES as readonly string[]).includes(fieldName)) {
       handleFieldSelectorChange(fieldName as keyof TagListFeatureFormState & string)(
@@ -302,7 +311,7 @@ export default function ScraperTagListFeatureEditor({
       ? {
         scraperName: scraper.name,
         featureKind: feature.kind,
-        featureLabel: "Configurer la liste de tags",
+        featureLabel: `Configurer la ${entityListLabel}`,
         pageRequest: {
           baseUrl: scraper.baseUrl,
           targetUrl: resolvedTestUrl || scraper.baseUrl,
@@ -310,7 +319,7 @@ export default function ScraperTagListFeatureEditor({
         fields: selectorAssistantFields,
         urlPattern: {
           fieldName: "urlTemplate",
-          label: "Pattern d'URL de la liste de tags",
+          label: `Pattern d'URL de la ${entityListLabel}`,
           value: formValues.urlTemplate,
         },
       }
@@ -326,7 +335,7 @@ export default function ScraperTagListFeatureEditor({
       return;
     }
 
-    const errors = getValidationFieldErrors(config);
+    const errors = getValidationFieldErrors(config, entityKind);
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -335,17 +344,17 @@ export default function ScraperTagListFeatureEditor({
     }
 
     if (!(window as any).api || typeof (window as any).api.fetchScraperDocument !== "function") {
-      setValidationUiError("La validation de la liste de tags n'est pas disponible dans cette version.");
+      setValidationUiError(`La validation de la ${entityListLabel} n'est pas disponible dans cette version.`);
       return;
     }
 
     let targetUrl = "";
     try {
-      targetUrl = resolveScraperTagListTargetUrl(scraper.baseUrl, config, {
+      targetUrl = resolveScraperEntityListTargetUrl(scraper.baseUrl, config, {
         pageIndex: 0,
       });
     } catch (error) {
-      setValidationUiError(error instanceof Error ? error.message : "Impossible de construire l'URL de liste de tags.");
+      setValidationUiError(error instanceof Error ? error.message : `Impossible de construire l'URL de la ${entityListLabel}.`);
       return;
     }
 
@@ -372,7 +381,7 @@ export default function ScraperTagListFeatureEditor({
 
       const parser = new DOMParser();
       const documentNode = parser.parseFromString(typedDocumentResult.html, "text/html");
-      const extractedPage = extractScraperTagListPageFromDocument(documentNode, config, {
+      const extractedPage = extractScraperEntityListPageFromDocument(documentNode, config, {
         requestedUrl: typedDocumentResult.requestedUrl,
         finalUrl: typedDocumentResult.finalUrl,
       });
@@ -386,12 +395,12 @@ export default function ScraperTagListFeatureEditor({
       ];
 
       const checks: ScraperFeatureValidationCheck[] = [
-        buildSelectorCheck("tags", config.tagNameSelector, true, tagNames),
-        ...(config.tagUrlSelector
-          ? [buildSelectorCheck("tagUrl", config.tagUrlSelector, false, tagUrls)]
+        buildSelectorCheck(entityKind === "author" ? "authors" : "tags", config.nameSelector, true, tagNames),
+        ...(config.urlSelector
+          ? [buildSelectorCheck(entityKind === "author" ? "authorUrl" : "tagUrl", config.urlSelector, false, tagUrls)]
           : []),
-        ...(config.tagCountSelector
-          ? [buildSelectorCheck("pageCount", config.tagCountSelector, false, tagCounts)]
+        ...(config.countSelector
+          ? [buildSelectorCheck("pageCount", config.countSelector, false, tagCounts)]
           : []),
         ...(config.nextPageSelector || config.paginationLinkSelector
           ? [buildSelectorCheck(
@@ -430,7 +439,7 @@ export default function ScraperTagListFeatureEditor({
       setPreviewVisitedPageUrls([]);
       setPreviewPageIndex(0);
       setPreviewTags([]);
-      setValidationUiError(error instanceof Error ? error.message : "Echec de la validation de la liste de tags.");
+      setValidationUiError(error instanceof Error ? error.message : `Echec de la validation de la ${entityListLabel}.`);
     } finally {
       setValidating(false);
     }
@@ -456,7 +465,7 @@ export default function ScraperTagListFeatureEditor({
 
     const nextPageIndex = previewPageIndex + 1;
     const nextTargetUrl = usesTemplatePaging
-      ? resolveScraperTagListTargetUrl(scraper.baseUrl, currentConfig, {
+      ? resolveScraperEntityListTargetUrl(scraper.baseUrl, currentConfig, {
         pageIndex: nextPageIndex,
       })
       : getNextPaginationPreviewUrl(previewPage, previewVisitedPageUrls);
@@ -471,7 +480,7 @@ export default function ScraperTagListFeatureEditor({
     try {
       const nextPage = await fetchPreviewPage(nextTargetUrl);
       if (!nextPage.items.length) {
-        setValidationUiError("Aucun tag exploitable n'a ete trouve sur la page suivante.");
+        setValidationUiError(`Aucun ${entityLabel} exploitable n'a ete trouve sur la page suivante.`);
         return;
       }
 
@@ -533,7 +542,7 @@ export default function ScraperTagListFeatureEditor({
     const config = buildTagListConfig(formValues);
     return {
       config,
-      errors: getSaveFieldErrors(config),
+      errors: getSaveFieldErrors(config, entityKind),
       signature: getConfigSignature(config),
     };
   }, [formValues]);
@@ -563,11 +572,11 @@ export default function ScraperTagListFeatureEditor({
   return (
     <section className="scraper-config-step">
       <ScraperFeatureEditorHeader
-        title="Configurer la liste de tags"
-        description="Choisis si les tags viennent d'une page de liste scrapee ou des tags rencontres automatiquement dans les fiches."
+        title={`Configurer la ${entityListLabel}`}
+        description={`Choisis si les ${entityPluralLabel} viennent d'une page de liste scrapee ou des ${entityPluralLabel} rencontres automatiquement dans les fiches.`}
         noteTitle={isAutoCollectionMode ? "Alimentation depuis les fiches" : "Pagination complete"}
         noteText={isAutoCollectionMode
-          ? "Quand une fiche est ouverte, ses tags sont ajoutes au cache sans doublons. Le bouton de scraping manuel est masque cote navigateur."
+          ? `Quand une fiche est ouverte, ses ${entityPluralLabel} sont ajoutes au cache sans doublons. Le bouton de scraping manuel est masque cote navigateur.`
           : "La sauvegarde runtime parcourt toutes les pages detectables via le template, le lien suivant et les liens de pagination ou de lettres."}
         statusClassName={currentStatusMeta.className}
         statusLabel={currentStatusMeta.label}
@@ -580,12 +589,12 @@ export default function ScraperTagListFeatureEditor({
           <div className="scraper-config-section__header">
             <h4>Mode d'alimentation</h4>
             <p>
-              Selectionne comment le cache de tags de ce scrapper doit etre rempli.
+              Selectionne comment le cache de {entityPluralLabel} de ce scrapper doit etre rempli.
             </p>
           </div>
 
           <ScraperConfigField
-            field={TAG_LIST_SOURCE_MODE_FIELD}
+            field={sourceModeField}
             value={tagListSourceMode}
             error={fieldErrors.tagListSourceMode}
             onChange={handleSourceModeChange}
@@ -596,7 +605,7 @@ export default function ScraperTagListFeatureEditor({
           <ScraperFeatureActions
             validating={validating}
             saving={saving}
-            validateLabel="Valider la liste de tags"
+            validateLabel={`Valider la ${entityListLabel}`}
             showValidate={false}
             actionSurface={actionSurface}
             hasUnsavedChanges={hasUnsavedChanges}
@@ -610,14 +619,14 @@ export default function ScraperTagListFeatureEditor({
               <div className="scraper-config-section__header">
                 <h4>URL de liste</h4>
                 <p>
-                  Indique la page d&apos;entree de la liste de tags. Si la pagination est numerique,
+                  Indique la page d&apos;entree de la {entityListLabel}. Si la pagination est numerique,
                   ajoute un placeholder comme <code>{"{{page}}"}</code>.
                 </p>
               </div>
 
               <div className="scraper-config-section__grid">
                 <ScraperConfigField
-                  field={URL_TEMPLATE_FIELD}
+                  field={urlTemplateField}
                   value={formValues.urlTemplate}
                   error={fieldErrors.urlTemplate}
                   onChange={handleFieldChange("urlTemplate")}
@@ -635,7 +644,7 @@ export default function ScraperTagListFeatureEditor({
               <div className="scraper-config-section__header">
                 <h4>Scraping</h4>
                 <p>
-                  Definis les selecteurs pour extraire le nom, le lien et le compteur de chaque tag.
+                  Definis les selecteurs pour extraire le nom, le lien et le compteur de chaque {entityLabel}.
                 </p>
               </div>
 
@@ -647,7 +656,7 @@ export default function ScraperTagListFeatureEditor({
               />
 
               <ScraperConfigFieldGrid
-                fields={SCRAPING_FIELDS}
+                fields={scrapingFields}
                 fieldSelectorNames={TAG_LIST_FIELD_SELECTOR_NAMES}
                 getValue={(fieldName) => getFormValueRecord(formValues)[fieldName]}
                 getError={(fieldName) => fieldErrors[fieldName]}
@@ -662,7 +671,7 @@ export default function ScraperTagListFeatureEditor({
               <div className="scraper-config-section__header">
                 <h4>Test</h4>
                 <p>
-                  Charge la premiere page de liste puis verifie les tags et les liens de pagination detectes.
+                  Charge la premiere page de liste puis verifie les {entityPluralLabel} et les liens de pagination detectes.
                 </p>
               </div>
 
@@ -674,7 +683,7 @@ export default function ScraperTagListFeatureEditor({
               <ScraperFeatureActions
                 validating={validating}
                 saving={saving}
-                validateLabel="Valider la liste de tags"
+                validateLabel={`Valider la ${entityListLabel}`}
                 actionSurface={actionSurface}
                 hasUnsavedChanges={hasUnsavedChanges}
                 onBack={onBack}
@@ -688,7 +697,8 @@ export default function ScraperTagListFeatureEditor({
               />
 
               <TagListFeaturePreview
-                previewTags={previewItems}
+                entityKind={entityKind}
+                previewItems={previewItems}
                 previewPage={previewPage}
                 previewPageIndex={previewPageIndex}
                 usesTemplatePaging={usesTemplatePaging}

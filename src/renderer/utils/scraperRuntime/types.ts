@@ -4,7 +4,7 @@ import type {
   ScraperChapterItem,
   ScraperFeatureValidationCheckKey,
   ScraperSearchResultItem,
-  ScraperTagListItem,
+  ScraperEntityListItem,
 } from "@/shared/scraper";
 
 export type DetailsFieldKey = Extract<
@@ -84,12 +84,14 @@ export type ScraperRuntimeSearchPageResult = {
   items: ScraperSearchResultItem[];
 };
 
-export type ScraperRuntimeTagListPageResult = {
+export type ScraperRuntimeEntityListPageResult = {
   currentPageUrl: string;
   nextPageUrl?: string;
   paginationUrls: string[];
-  items: ScraperTagListItem[];
+  items: ScraperEntityListItem[];
 };
+
+export type ScraperRuntimeTagListPageResult = ScraperRuntimeEntityListPageResult;
 
 export type ScraperDocumentFetcher = (
   request: FetchScraperDocumentRequest,

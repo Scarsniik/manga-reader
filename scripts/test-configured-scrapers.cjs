@@ -11,7 +11,7 @@ const DEFAULT_MAX_TEMPLATE_PAGES = 8;
 const DEFAULT_MAX_CHAPTER_PAGES = 5;
 const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 const USER_AGENT = "Scaramanga Scraper Test/1.0";
-const FEATURE_ORDER = ["homepage", "search", "details", "author", "tag", "tagList", "chapters", "pages"];
+const FEATURE_ORDER = ["homepage", "search", "details", "author", "tag", "authorList", "tagList", "chapters", "pages"];
 const DETAILS_FIELD_KEYS = ["title", "cover", "description", "authors", "tags", "status", "pageCount"];
 
 function normalizeToken(value) {
@@ -353,12 +353,13 @@ function getTagListConfig(feature) {
   if (!isFeatureConfigured(feature)) return null;
   const raw = feature.config || {};
   return {
+    collectFromDetails: raw.collectFromDetails === true,
     urlTemplate: trimOptional(raw.urlTemplate) || "",
-    tagListSelector: trimOptional(normalizeSelectorInput(raw.tagListSelector)),
-    tagItemSelector: normalizeSelectorInput(raw.tagItemSelector),
-    tagNameSelector: requiredFieldSelector(raw.tagNameSelector),
-    tagUrlSelector: normalizeFieldSelector(raw.tagUrlSelector),
-    tagCountSelector: normalizeFieldSelector(raw.tagCountSelector),
+    listSelector: trimOptional(normalizeSelectorInput(raw.listSelector ?? raw.tagListSelector)),
+    itemSelector: normalizeSelectorInput(raw.itemSelector ?? raw.tagItemSelector),
+    nameSelector: requiredFieldSelector(raw.nameSelector ?? raw.tagNameSelector),
+    urlSelector: normalizeFieldSelector(raw.urlSelector ?? raw.tagUrlSelector),
+    countSelector: normalizeFieldSelector(raw.countSelector ?? raw.tagCountSelector),
     nextPageSelector: normalizeFieldSelector(raw.nextPageSelector),
     paginationLinkSelector: normalizeFieldSelector(raw.paginationLinkSelector),
   };
@@ -1311,15 +1312,15 @@ function usesPagesLinkedPages(config) {
 
 function extractTagListPage(doc, config, requestMeta) {
   const documentUrl = requestMeta.finalUrl || requestMeta.requestedUrl;
-  const roots = config.tagListSelector ? Array.from(doc.querySelectorAll(config.tagListSelector)) : [doc];
-  const items = Array.from(new Set(roots.flatMap((root) => Array.from(root.querySelectorAll(config.tagItemSelector)))));
+  const roots = config.listSelector ? Array.from(doc.querySelectorAll(config.listSelector)) : [doc];
+  const items = Array.from(new Set(roots.flatMap((root) => Array.from(root.querySelectorAll(config.itemSelector)))));
   const tags = [];
   const seen = new Set();
   for (const item of items) {
-    const name = extractFieldValuesIncludingSelf(item, config.tagNameSelector, "text")[0];
+    const name = extractFieldValuesIncludingSelf(item, config.nameSelector, "text")[0];
     if (!name) continue;
-    const rawUrl = config.tagUrlSelector ? extractFieldValuesIncludingSelf(item, config.tagUrlSelector, "url")[0] : "";
-    const count = config.tagCountSelector ? extractFieldValuesIncludingSelf(item, config.tagCountSelector, "text")[0] : "";
+    const rawUrl = config.urlSelector ? extractFieldValuesIncludingSelf(item, config.urlSelector, "url")[0] : "";
+    const count = config.countSelector ? extractFieldValuesIncludingSelf(item, config.countSelector, "text")[0] : "";
     const tag = { name, url: rawUrl ? toAbsoluteScraperUrl(rawUrl, documentUrl) : undefined, count: count || undefined };
     const key = (tag.url || tag.name).trim().toLowerCase();
     if (!seen.has(key)) {
@@ -1365,7 +1366,7 @@ class ScraperTestRunner {
       else if (feature.kind === "details") result = await this.testDetails(scraper, feature);
       else if (feature.kind === "author") result = await this.testAuthor(scraper, feature);
       else if (feature.kind === "tag") result = await this.testTag(scraper, feature);
-      else if (feature.kind === "tagList") result = await this.testTagList(scraper, feature);
+      else if (feature.kind === "authorList" || feature.kind === "tagList") result = await this.testTagList(scraper, feature);
       else if (feature.kind === "chapters") result = await this.testChapters(scraper, feature);
       else if (feature.kind === "pages") result = await this.testPages(scraper, feature);
       else result = { ok: true, skipped: true, message: "Unsupported feature kind." };
@@ -1621,6 +1622,16 @@ class ScraperTestRunner {
 
   async testTagList(scraper, feature) {
     const config = getTagListConfig(feature);
+    if (config.collectFromDetails) {
+      const isAuthorList = feature.kind === "authorList";
+      return {
+        ok: true,
+        message: `Automatic ${isAuthorList ? "author" : "tag"} collection from details`,
+        checks: [],
+        samples: [],
+      };
+    }
+
     const targetUrl = resolveSearchTargetUrl(scraper.baseUrl, config, "", { pageIndex: 0 });
     const documentResult = await this.fetch({ baseUrl: scraper.baseUrl, targetUrl });
     if (!documentResult.ok || !documentResult.html) return buildDocumentFailure(documentResult);
@@ -1630,23 +1641,26 @@ class ScraperTestRunner {
       finalUrl: documentResult.finalUrl,
     });
     const tagNames = page.items.map((tag) => tag.name).filter(Boolean);
+    const isAuthorList = feature.kind === "authorList";
     const checks = [
-      buildSelectorCheck("tags", config.tagNameSelector, true, tagNames),
-      ...(config.tagUrlSelector ? [buildSelectorCheck("tagUrl", config.tagUrlSelector, false, page.items.map((tag) => tag.url).filter(Boolean))] : []),
-      ...(config.tagCountSelector ? [buildSelectorCheck("pageCount", config.tagCountSelector, false, page.items.map((tag) => tag.count).filter(Boolean))] : []),
+      buildSelectorCheck(isAuthorList ? "authors" : "tags", config.nameSelector, true, tagNames),
+      ...(config.urlSelector ? [buildSelectorCheck(isAuthorList ? "authorUrl" : "tagUrl", config.urlSelector, false, page.items.map((tag) => tag.url).filter(Boolean))] : []),
+      ...(config.countSelector ? [buildSelectorCheck("pageCount", config.countSelector, false, page.items.map((tag) => tag.count).filter(Boolean))] : []),
     ];
     const resourceChecks = await this.validateResources(scraper, [
       ...page.items
         .map((tag) => tag.url)
         .filter(looksLikeHttpResourceUrl)
-        .map((url) => ({ type: "link", label: "tagUrl", url })),
+        .map((url) => ({ type: "link", label: isAuthorList ? "authorUrl" : "tagUrl", url })),
       ...page.paginationUrls.map((url) => ({ type: "link", label: "pagination", url })),
       { type: "link", label: "nextPage", url: page.nextPageUrl },
     ]);
 
     return this.applyResourceChecks({
       ok: tagNames.length > 0,
-      message: tagNames.length > 0 ? `${tagNames.length} tag(s)` : "No tag name found.",
+      message: tagNames.length > 0
+        ? `${tagNames.length} ${isAuthorList ? "author" : "tag"}(s)`
+        : `No ${isAuthorList ? "author" : "tag"} name found.`,
       requestedUrl: documentResult.requestedUrl,
       finalUrl: documentResult.finalUrl,
       status: documentResult.status,

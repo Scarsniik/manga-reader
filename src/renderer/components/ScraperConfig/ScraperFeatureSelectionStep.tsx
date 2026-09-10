@@ -144,10 +144,11 @@ export default function ScraperFeatureSelectionStep({
       );
     }
 
-    if (activeFeature.kind === 'tagList') {
+    if (activeFeature.kind === 'authorList' || activeFeature.kind === 'tagList') {
       return (
         <ScraperTagListFeatureEditor
           feature={activeFeature}
+          entityKind={activeFeature.kind === 'authorList' ? 'author' : 'tag'}
           actionSurface={actionSurface}
           onUnsavedChangesChange={onUnsavedChangesChange}
           onBack={() => setActiveFeatureKind(null)}

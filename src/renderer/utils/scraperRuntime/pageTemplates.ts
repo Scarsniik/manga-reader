@@ -6,7 +6,7 @@ import {
   type ScraperSearchFeatureConfig,
   type ScraperSourceFeatureConfig,
   type ScraperTagFeatureConfig,
-  type ScraperTagListFeatureConfig,
+  type ScraperEntityListFeatureConfig,
 } from "@/shared/scraper";
 import {
   buildScraperTemplateContextFromDetails,
@@ -38,8 +38,10 @@ export const hasTagPagePlaceholder = (config: ScraperTagFeatureConfig | null | u
 export const hasSourcePagePlaceholder = (config: ScraperSourceFeatureConfig | null | undefined): boolean =>
   hasPagePlaceholder(config?.urlTemplate);
 
-export const hasTagListPagePlaceholder = (config: ScraperTagListFeatureConfig | null | undefined): boolean =>
+export const hasEntityListPagePlaceholder = (config: ScraperEntityListFeatureConfig | null | undefined): boolean =>
   hasPagePlaceholder(config?.urlTemplate);
+
+export const hasTagListPagePlaceholder = hasEntityListPagePlaceholder;
 
 const normalizePositiveInteger = (value: unknown): number | null => {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? "").match(/\d+/)?.[0] ?? "", 10);

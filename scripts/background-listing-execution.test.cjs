@@ -11,6 +11,7 @@ const source = `
     resolveBackgroundLanguageProgress,
     resolveBackgroundListingConcurrency,
     resolveBackgroundListingResultLimit,
+    resolveBackgroundEligibleQuickSeenProgress,
     resolveBackgroundQuickSeenProgress,
     usesBackgroundQuickSeenBoundary,
   } from "@/renderer/backgroundSearch/backgroundListingExecution";
@@ -46,6 +47,7 @@ const {
   resolveBackgroundLanguageProgress,
   resolveBackgroundListingConcurrency,
   resolveBackgroundListingResultLimit,
+  resolveBackgroundEligibleQuickSeenProgress,
   resolveBackgroundQuickSeenProgress,
   usesBackgroundQuickSeenBoundary,
   buildScraperLatestCursorCheckpointRequest,
@@ -355,6 +357,26 @@ test("quick listing progress detects the configured consecutive seen boundary", 
   assert.deepEqual(resolveBackgroundQuickSeenProgress([true, false, true], 2, 2), {
     consecutiveSeenCount: 1,
     boundaryReached: true,
+  });
+});
+
+test("filtered unseen results do not keep latest scans open", () => {
+  assert.deepEqual(resolveBackgroundEligibleQuickSeenProgress([
+    { seen: false, eligible: false },
+    { seen: true, eligible: false },
+  ], 2, 2), {
+    consecutiveSeenCount: 3,
+    boundaryReached: true,
+  });
+});
+
+test("eligible unseen results still reset the latest scan boundary", () => {
+  assert.deepEqual(resolveBackgroundEligibleQuickSeenProgress([
+    { seen: false, eligible: true },
+    { seen: true, eligible: false },
+  ], 2, 2), {
+    consecutiveSeenCount: 1,
+    boundaryReached: false,
   });
 });
 

@@ -50,7 +50,7 @@ import {
   resolveBackgroundListingResultLimit,
   resolveBackgroundListingTotalGroupKey,
   resolveScraperLatestSourcePageLimit,
-  resolveBackgroundQuickSeenProgress,
+  resolveBackgroundEligibleQuickSeenProgress,
   runBackgroundListingTotalGroup,
   usesBackgroundQuickSeenBoundary,
 } from "@/renderer/backgroundSearch/backgroundListingExecution";
@@ -782,12 +782,6 @@ export const runListingSearchEngine = async (
         const includedPageSources = newPageSources.filter((item) => (
           includedPageSourceKeys.has(normalizeResultUrl(item))
         ));
-        const quickSeenProgress = resolveBackgroundQuickSeenProgress(
-          includedPageSources.map((item) => isKnownResult(knownHistoryIds, run.scraper.id, item.result)),
-          state.consecutiveSeenResultCount,
-          input.quickConsecutiveSeenStopThreshold,
-        );
-        state.consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
         const rawUnseenSources = includedPageSources
           .filter((item) => !filterHistory || !isKnownResult(knownHistoryIds, run.scraper.id, item.result));
         const sourceHasNextPage = sourceMode === "homepage"
@@ -799,25 +793,9 @@ export const runListingSearchEngine = async (
               : resolveHasNextAuthorPage(getAuthorConfig(run.scraper), page);
         const paginationStalled = isBackgroundListingPaginationStalled(requestedPageUrl, page.nextPageUrl);
         const duplicatePage = pageSources.length > 0 && newPageSources.length === 0;
-        const quickHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
-          && (input.searchMode === "quick" || input.searchMode === "continuous")
-          && quickSeenProgress.boundaryReached
-          && !(pageIndex === 0 && rawUnseenSources.length > 0);
-        const deepRecentHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
-          && input.searchMode === "deep"
-          && !state.deepScanPhaseStarted
-          && (
-            rawUnseenSources.length === 0
-            || (
-              quickSeenProgress.boundaryReached
-              && !(pageIndex === 0 && rawUnseenSources.length > 0)
-            )
-          );
         const canPreloadFollowingPage = sourceHasNextPage
           && !paginationStalled
           && !duplicatePage
-          && !quickHistoryBoundaryReached
-          && !deepRecentHistoryBoundaryReached
           && pageIndex + 1 < executionPageLimits[runIndex];
         const preloadFollowingPage = () => {
           if (canPreloadFollowingPage) {
@@ -880,7 +858,10 @@ export const runListingSearchEngine = async (
             },
             maxBatchSize: concurrency,
             onProgress: ({ acceptedCandidateCount, remainingCandidateCount, targetCount }) => {
-              if (acceptedCandidateCount + remainingCandidateCount < targetCount) {
+              if (
+                kind !== "latestSources"
+                && acceptedCandidateCount + remainingCandidateCount < targetCount
+              ) {
                 preloadFollowingPage();
               }
             },
@@ -894,7 +875,35 @@ export const runListingSearchEngine = async (
           newEligibleSources = blacklistFilter.accepted;
           excludedByBlacklistedTagCount = blacklistFilter.excludedCount;
         }
-        if (newEligibleSources.length < remainingResultSlots) {
+        const eligibleUnseenResultKeys = new Set(newEligibleSources.map(normalizeResultUrl));
+        const quickSeenProgress = resolveBackgroundEligibleQuickSeenProgress(
+          includedPageSources.map((item) => ({
+            seen: isKnownResult(knownHistoryIds, run.scraper.id, item.result),
+            eligible: eligibleUnseenResultKeys.has(normalizeResultUrl(item)),
+          })),
+          state.consecutiveSeenResultCount,
+          input.quickConsecutiveSeenStopThreshold,
+        );
+        state.consecutiveSeenResultCount = quickSeenProgress.consecutiveSeenCount;
+        const quickHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
+          && (input.searchMode === "quick" || input.searchMode === "continuous")
+          && quickSeenProgress.boundaryReached
+          && !(pageIndex === 0 && newEligibleSources.length > 0);
+        const deepRecentHistoryBoundaryReached = usesBackgroundQuickSeenBoundary(kind)
+          && input.searchMode === "deep"
+          && !state.deepScanPhaseStarted
+          && (
+            newEligibleSources.length === 0
+            || (
+              quickSeenProgress.boundaryReached
+              && !(pageIndex === 0 && newEligibleSources.length > 0)
+            )
+          );
+        if (
+          !quickHistoryBoundaryReached
+          && !deepRecentHistoryBoundaryReached
+          && newEligibleSources.length < remainingResultSlots
+        ) {
           preloadFollowingPage();
         }
         const languageProgress = resolveBackgroundLanguageProgress(
