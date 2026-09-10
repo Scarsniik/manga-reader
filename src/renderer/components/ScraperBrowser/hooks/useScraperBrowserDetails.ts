@@ -2,6 +2,7 @@ import { Dispatch, SetStateAction, useCallback, useMemo } from 'react';
 import { NavigateFunction } from 'react-router-dom';
 import {
   hasScraperFieldSelectorValue,
+  type ScraperReaderProgressRecord,
   ScraperChaptersFeatureConfig,
   ScraperDetailsFeatureConfig,
   ScraperPagesFeatureConfig,
@@ -16,6 +17,7 @@ import { buildScraperTemplateContextFromDetails } from '@/renderer/utils/scraper
 import { recordDetailsHistorySafe } from '@/renderer/utils/history';
 import { collectScraperDetailsTagsForTagListCacheSafe } from '@/renderer/utils/scraperTagListCache';
 import { resolveScraperReaderPageUrls } from '@/renderer/utils/scraperReaderPages';
+import { selectScraperChapterReaderTarget } from '@/renderer/utils/scraperChapterReaderProgress';
 import {
   autoLoadInitialScraperDetailsThumbnails,
   loadMoreScraperDetailsThumbnails,
@@ -428,7 +430,7 @@ export function useScraperBrowserDetails({
       return;
     }
 
-    const normalizedChapter = isScraperRuntimeChapterResult(options?.chapter) ? options?.chapter : undefined;
+    let normalizedChapter = isScraperRuntimeChapterResult(options?.chapter) ? options.chapter : undefined;
 
     if (!pagesConfig) {
       setRuntimeError('Le composant Pages n\'est pas encore configure pour ce scrapper.');
@@ -444,16 +446,40 @@ export function useScraperBrowserDetails({
         throw new Error('Le runtime du scrapper n\'est pas disponible dans cette version.');
       }
 
-      const sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
-      const readerMangaId = createScraperMangaId(
-        scraper.id,
-        sourceUrl,
-        usesChaptersForPages ? normalizedChapter?.url : null,
-      );
-      const savedProgress = (window as any).api
-        && typeof (window as any).api.getScraperReaderProgress === 'function'
-        ? await (window as any).api.getScraperReaderProgress(readerMangaId)
-        : null;
+      let sourceUrl = detailsResult.finalUrl || detailsResult.requestedUrl;
+      let readerMangaId = '';
+      let savedProgress: ScraperReaderProgressRecord | null = null;
+
+      if (usesChaptersForPages && !normalizedChapter) {
+        const progressRecords = typeof (window as any).api?.getScraperReaderProgressRecords === 'function'
+          ? await (window as any).api.getScraperReaderProgressRecords(scraper.id)
+          : [];
+        const selection = selectScraperChapterReaderTarget({
+          scraperId: scraper.id,
+          sourceUrls: [detailsResult.finalUrl, detailsResult.requestedUrl]
+            .filter((value): value is string => Boolean(value)),
+          chapters: chaptersResult,
+          progressRecords: Array.isArray(progressRecords) ? progressRecords : [],
+        });
+        if (!selection) {
+          throw new Error('Aucun chapitre n\'est disponible pour ouvrir le lecteur.');
+        }
+
+        normalizedChapter = selection.chapter;
+        sourceUrl = selection.sourceUrl;
+        readerMangaId = selection.mangaId;
+        savedProgress = selection.progress;
+      } else {
+        readerMangaId = createScraperMangaId(
+          scraper.id,
+          sourceUrl,
+          usesChaptersForPages ? normalizedChapter?.url : null,
+        );
+        savedProgress = (window as any).api
+          && typeof (window as any).api.getScraperReaderProgress === 'function'
+          ? await (window as any).api.getScraperReaderProgress(readerMangaId)
+          : null;
+      }
       const preferredInitialPage = options?.page ?? savedProgress?.currentPage ?? 1;
       const pageUrls = await resolveScraperReaderPageUrls(
         scraper,

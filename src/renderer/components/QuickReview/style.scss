@@ -254,10 +254,6 @@ button.quick-review__chip.is-clickable:hover {
   gap: 10px;
 }
 
-.quick-review__actions.has-reader {
-  grid-template-columns: minmax(125px, 0.9fr) minmax(210px, 1.3fr) minmax(155px, 1fr) minmax(125px, 0.9fr);
-}
-
 .quick-review__actions button {
   display: flex;
   align-items: center;
@@ -300,12 +296,6 @@ button.quick-review__chip.is-clickable:hover {
   border-color: rgba(126, 232, 199, 0.38) !important;
   color: #e5fff7 !important;
   background: linear-gradient(135deg, rgba(39, 143, 112, 0.34), rgba(52, 121, 112, 0.25)) !important;
-}
-
-.quick-review__reader {
-  border-color: rgba(124, 166, 255, 0.42) !important;
-  color: #edf3ff !important;
-  background: linear-gradient(135deg, rgba(52, 92, 178, 0.38), rgba(72, 74, 155, 0.28)) !important;
 }
 
 .quick-review__navigate.is-next svg {
@@ -379,10 +369,6 @@ button.quick-review__chip.is-clickable:hover {
 
   .quick-review__actions {
     grid-template-columns: 1fr 1.35fr 1fr;
-  }
-
-  .quick-review__actions.has-reader {
-    grid-template-columns: 1fr 1.35fr;
   }
 
   .quick-review__actions button {

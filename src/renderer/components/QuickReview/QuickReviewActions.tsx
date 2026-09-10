@@ -3,7 +3,6 @@ import {
   BookmarkRibbonIcon,
   ChevronLeftIcon,
   LoadingSpinnerIcon,
-  OpenBookIcon,
 } from "@/renderer/components/icons";
 
 type Props = {
@@ -16,10 +15,7 @@ type Props = {
   onBookmark: () => void;
   onNext: () => void;
   onPrevious: () => void;
-  onRead: () => void;
   previousShortcut: string;
-  readerAvailable: boolean;
-  readerOpening: boolean;
   sourceAvailable: boolean;
 };
 
@@ -33,19 +29,16 @@ export default function QuickReviewActions({
   onBookmark,
   onNext,
   onPrevious,
-  onRead,
   previousShortcut,
-  readerAvailable,
-  readerOpening,
   sourceAvailable,
 }: Props) {
   return (
-    <div className={["quick-review__actions", readerAvailable ? "has-reader" : ""].filter(Boolean).join(" ")}>
+    <div className="quick-review__actions">
       <button
         type="button"
         className="quick-review__navigate is-previous"
         onClick={onPrevious}
-        disabled={bookmarking || readerOpening || currentIndex === 0}
+        disabled={bookmarking || currentIndex === 0}
         title={previousShortcut}
       >
         <ChevronLeftIcon aria-hidden="true" />
@@ -58,7 +51,7 @@ export default function QuickReviewActions({
           isBookmarked ? "is-bookmarked" : "",
         ].filter(Boolean).join(" ")}
         onClick={onBookmark}
-        disabled={bookmarking || bookmarkVerificationLoading || readerOpening || !sourceAvailable}
+        disabled={bookmarking || bookmarkVerificationLoading || !sourceAvailable}
         title={isBookmarked
           ? `Déjà bookmarké · passer au suivant (${bookmarkShortcut})`
           : `Bookmarker et passer au suivant (${bookmarkShortcut})`}
@@ -75,29 +68,11 @@ export default function QuickReviewActions({
           <small>{bookmarkShortcut}</small>
         </span>
       </button>
-      {readerAvailable ? (
-        <button
-          type="button"
-          className="quick-review__reader"
-          onClick={onRead}
-          disabled={bookmarking || readerOpening}
-          aria-busy={readerOpening}
-          title="Reprendre la lecture ou commencer au premier chapitre"
-        >
-          {readerOpening
-            ? <LoadingSpinnerIcon aria-hidden="true" />
-            : <OpenBookIcon aria-hidden="true" />}
-          <span>
-            {readerOpening ? "Ouverture…" : "Lecture"}
-            <small>Reprendre ou commencer</small>
-          </span>
-        </button>
-      ) : null}
       <button
         type="button"
         className="quick-review__navigate is-next"
         onClick={onNext}
-        disabled={bookmarking || readerOpening}
+        disabled={bookmarking}
         title={nextShortcut}
       >
         <span>Suivant<small>{nextShortcut}</small></span>

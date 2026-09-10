@@ -20,10 +20,6 @@ import useQuickReviewBookmark from "@/renderer/components/QuickReview/useQuickRe
 import useQuickReviewLayout from "@/renderer/components/QuickReview/useQuickReviewLayout";
 import useQuickReviewPotentialMatches from "@/renderer/components/QuickReview/useQuickReviewPotentialMatches";
 import useQuickReviewShortcuts from "@/renderer/components/QuickReview/useQuickReviewShortcuts";
-import {
-  canOpenQuickReviewChapterReader,
-  openQuickReviewReader,
-} from "@/renderer/components/QuickReview/quickReviewReader";
 import { LoadingSpinnerIcon } from "@/renderer/components/icons";
 import useModal from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
@@ -106,7 +102,6 @@ export default function QuickReviewDialog({ items }: Props) {
   const {
     detailsState,
     details,
-    chapters,
     chapterCount,
     detailsLoading,
     loadingMoreThumbnails,
@@ -198,24 +193,6 @@ export default function QuickReviewDialog({ items }: Props) {
   const isBookmarked = bookmark.isBookmarked || hasEquivalentBookmark;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
   const bookmarkVerificationLoading = bookmark.verificationLoading || potentialMatches.loading;
-  const [openingReader, setOpeningReader] = React.useState(false);
-
-  const handleOpenReader = React.useCallback(async () => {
-    if (!currentItem || !details || !chapters.length || openingReader) return;
-    setOpeningReader(true);
-    setOpenError(null);
-    try {
-      const opened = await openQuickReviewReader({ item: currentItem, details, chapters });
-      if (!opened) {
-        throw new Error("Impossible d'ouvrir le lecteur dans un onglet workspace.");
-      }
-      closeModal();
-    } catch (error) {
-      setOpenError(error instanceof Error ? error.message : "Impossible d'ouvrir le lecteur.");
-    } finally {
-      setOpeningReader(false);
-    }
-  }, [chapters, closeModal, currentItem, details, openingReader]);
 
   const goPrevious = React.useCallback(() => {
     if (bookmark.bookmarking) return;
@@ -505,9 +482,6 @@ export default function QuickReviewDialog({ items }: Props) {
           onBookmark={() => void handleBookmark()}
           onNext={goNext}
           onPrevious={goPrevious}
-          onRead={() => void handleOpenReader()}
-          readerAvailable={canOpenQuickReviewChapterReader(currentItem, chapters)}
-          readerOpening={openingReader}
           previousShortcut={previousShortcut}
           sourceAvailable={Boolean(sourceUrl)}
         />

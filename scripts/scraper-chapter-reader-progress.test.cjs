@@ -4,11 +4,11 @@ const test = require("node:test");
 const esbuild = require("esbuild");
 
 const source = `
-  export { selectQuickReviewReaderChapter } from "@/renderer/components/QuickReview/quickReviewReader";
+  export { selectScraperChapterReaderTarget } from "@/renderer/utils/scraperChapterReaderProgress";
   export { createScraperMangaId } from "@/renderer/utils/scraperRuntime";
 `;
 const built = esbuild.buildSync({
-  stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "quick-review-reader-test.ts" },
+  stdin: { contents: source, resolveDir: process.cwd(), sourcefile: "scraper-chapter-reader-progress-test.ts" },
   bundle: true,
   write: false,
   format: "cjs",
@@ -24,7 +24,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 
 const {
   createScraperMangaId,
-  selectQuickReviewReaderChapter,
+  selectScraperChapterReaderTarget,
 } = bundledModule.exports;
 
 const scraperId = "hentaihere";
@@ -34,8 +34,8 @@ const chapters = [
   { label: "Chapitre 2", url: "https://hentaihere.com/m/S71527/2/1/" },
 ];
 
-test("quick review starts at the first chapter when no progress exists", () => {
-  const selection = selectQuickReviewReaderChapter({
+test("the manga details reader starts at the first chapter without progress", () => {
+  const selection = selectScraperChapterReaderTarget({
     scraperId,
     sourceUrls: [sourceUrl],
     chapters,
@@ -46,7 +46,7 @@ test("quick review starts at the first chapter when no progress exists", () => {
   assert.equal(selection.progress, null);
 });
 
-test("quick review resumes the most recently updated chapter progress", () => {
+test("the manga details reader resumes the most recently updated chapter", () => {
   const older = {
     id: createScraperMangaId(scraperId, `${sourceUrl}/`, chapters[0].url),
     scraperId,
@@ -62,7 +62,7 @@ test("quick review resumes the most recently updated chapter progress", () => {
     currentPage: 7,
     updatedAt: "2026-09-06T10:00:00.000Z",
   };
-  const selection = selectQuickReviewReaderChapter({
+  const selection = selectScraperChapterReaderTarget({
     scraperId,
     sourceUrls: [sourceUrl],
     chapters,

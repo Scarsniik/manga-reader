@@ -178,6 +178,7 @@ export default function ScraperDetailsPanel({
     && Array.isArray(detailsResult.thumbnails);
   const canOpenThumbnailReader = hasPages && !usesChapters;
   const hasStandaloneActions = hasPages && !usesChapters;
+  const hasPrimaryReaderAction = hasPages && (!usesChapters || chapters.length > 0);
   const totalPageCount = Number.parseInt(String(detailsResult.pageCount ?? '').match(/\d+/)?.[0] ?? '', 10);
   const canLoadMoreFromPages = canOpenThumbnailReader
     && Number.isFinite(totalPageCount)
@@ -290,25 +291,30 @@ export default function ScraperDetailsPanel({
               />
             </div>
           </div>
-          {hasStandaloneActions || sourceUrl ? (
+          {hasPrimaryReaderAction || sourceUrl ? (
             <div className="scraper-browser__details-head-actions">
+              {hasPrimaryReaderAction ? (
+                <button
+                  type="button"
+                  className="scraper-browser__read"
+                  onClick={() => onOpenReader()}
+                  onMouseDown={(event) => {
+                    if (event.button === MIDDLE_BUTTON) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onAuxClick={(event) => handleOpenReaderAuxClick(event)}
+                  disabled={openingReader}
+                  title={usesChapters
+                    ? 'Reprendre le dernier chapitre lu ou commencer au premier chapitre'
+                    : undefined}
+                  data-prevent-middle-click-autoscroll="true"
+                >
+                  {openingReader ? 'Ouverture...' : 'Lecteur'}
+                </button>
+              ) : null}
               {hasStandaloneActions ? (
                 <>
-                  <button
-                    type="button"
-                    className="scraper-browser__read"
-                    onClick={() => onOpenReader()}
-                    onMouseDown={(event) => {
-                      if (event.button === MIDDLE_BUTTON) {
-                        event.preventDefault();
-                      }
-                    }}
-                    onAuxClick={(event) => handleOpenReaderAuxClick(event)}
-                    disabled={openingReader}
-                    data-prevent-middle-click-autoscroll="true"
-                  >
-                    {openingReader ? 'Ouverture...' : 'Lecteur'}
-                  </button>
                   <button
                     type="button"
                     className={[

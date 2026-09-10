@@ -12,7 +12,6 @@ import {
   resolveScraperCardDetails,
   resolveScraperChapters,
   getScraperRuntimeThumbnailUrl,
-  type ScraperRuntimeChapterResult,
   type ScraperRuntimeDetailsResult,
 } from "@/renderer/utils/scraperRuntime";
 import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
@@ -26,14 +25,13 @@ import { normalizeQuickReviewPrefetchCount } from "@/shared/quickReviewSettings"
 
 export type QuickReviewDetailsLoadState = {
   details: ScraperRuntimeDetailsResult | null;
-  chapters: ScraperRuntimeChapterResult[] | null;
+  chapterCount: number | null;
   error: string | null;
 };
 
 type QuickReviewDetailsState = {
   detailsState: QuickReviewDetailsLoadState | null;
   details: ScraperRuntimeDetailsResult | null;
-  chapters: ScraperRuntimeChapterResult[];
   chapterCount: number | null;
   detailsLoading: boolean;
   loadingMoreThumbnails: boolean;
@@ -157,7 +155,7 @@ export default function useQuickReviewDetails(
             detailsCache: detailsCacheRef.current,
           });
           if (!details || !fetchDocument) {
-            return { details, chapters: null, error: null };
+            return { details, chapterCount: null, error: null };
           }
 
           const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, "pages"));
@@ -165,7 +163,7 @@ export default function useQuickReviewDetails(
           const chaptersConfig = isScraperFeatureConfigured(chaptersFeature)
             ? getScraperChaptersFeatureConfig(chaptersFeature)
             : null;
-          const [detailsWithInitialThumbnails, chapters] = await Promise.all([
+          const [detailsWithInitialThumbnails, chapterCount] = await Promise.all([
             autoLoadInitialScraperDetailsThumbnails({
               scraper,
               details,
@@ -184,18 +182,18 @@ export default function useQuickReviewDetails(
                 buildScraperTemplateContextFromDetails(details),
                 fetchDocument,
               ).then((resolution) => (
-                resolution.sourceResult.ok ? resolution.chapters : null
+                resolution.sourceResult.ok ? resolution.chapters.length : null
               )).catch((error) => {
                 console.warn("Quick review chapters extraction failed", error);
                 return null;
               })
               : Promise.resolve(null),
           ]);
-          return { details: detailsWithInitialThumbnails, chapters, error: null };
+          return { details: detailsWithInitialThumbnails, chapterCount, error: null };
         } catch (error) {
           return {
             details: null,
-            chapters: null,
+            chapterCount: null,
             error: error instanceof Error ? error.message : "Impossible de charger cette fiche.",
           };
         }
@@ -294,7 +292,7 @@ export default function useQuickReviewDetails(
       });
       detailsStatesRef.current.set(currentItem.id, {
         details: nextDetails,
-        chapters: storedState.chapters,
+        chapterCount: storedState.chapterCount,
         error: null,
       });
       await preloadItemThumbnails(nextDetails);
@@ -313,8 +311,7 @@ export default function useQuickReviewDetails(
   return {
     detailsState,
     details: currentDetails,
-    chapters: detailsState?.chapters ?? [],
-    chapterCount: detailsState?.chapters?.length ?? null,
+    chapterCount: detailsState?.chapterCount ?? null,
     detailsLoading: loadingItemId === currentItem?.id && !detailsState,
     loadingMoreThumbnails: loadingMoreItemId === currentItem?.id,
     canLoadMoreThumbnails: canLoadMoreScraperDetailsThumbnails(currentDetails, currentPagesConfig),

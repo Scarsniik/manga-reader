@@ -374,9 +374,9 @@ vignettes lorsque celle-ci est externe a la fiche. La review rapide affiche auss
 chapitres lorsque le composant `Chapitres` est configure et resolu. Son statut de bookmark tient
 compte de l'identite de l'URL (avec ou sans slash final), mais aussi des correspondances de titre et
 d'auteur detectees sur les autres scrapers afin de signaler les doublons inter-sources.
-Pour une fiche dont les pages sont liees aux chapitres, l'action `Lecture` reprend le chapitre dont
-la progression a ete mise a jour le plus recemment. Sans progression, elle ouvre le premier chapitre
-dans l'ordre configure, a la premiere page.
+Dans la fiche manga normale, lorsque les pages sont liees aux chapitres, l'action globale `Lecteur`
+reprend le chapitre dont la progression a ete mise a jour le plus recemment. Sans progression, elle
+ouvre le premier chapitre dans l'ordre configure, a la premiere page.
 
 Pour la pagination, deux modes existent :
 
