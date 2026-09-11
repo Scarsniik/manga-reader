@@ -87,6 +87,16 @@ type MangaCorrespondenceChapterGroup<T> = {
   entries: Array<{ entry: T; index: number }>;
 };
 
+const selectMoreSpecificChapter = (current: string, candidate: string): string => {
+  const currentDescriptor = describeMangaCorrespondenceChapter(current);
+  const candidateDescriptor = describeMangaCorrespondenceChapter(candidate);
+  if (currentDescriptor.kind === "other" && candidateDescriptor.kind !== "other") {
+    return candidate;
+  }
+
+  return current;
+};
+
 const normalizeChapterAliasKey = (value: string): string => (
   value
     .normalize("NFKC")
@@ -129,10 +139,12 @@ export const groupMangaCorrespondenceChapters = <T>(entries: Array<{
 
     const targetGroup = matchingGroups[0];
     targetGroup.entries.push({ entry, index });
+    targetGroup.chapter = selectMoreSpecificChapter(targetGroup.chapter, chapter);
     aliasKeys.forEach((key) => targetGroup.aliasKeys.add(key));
     matchingGroups.slice(1).forEach((group) => {
       group.entries.forEach((groupEntry) => targetGroup.entries.push(groupEntry));
       group.aliasKeys.forEach((key) => targetGroup.aliasKeys.add(key));
+      targetGroup.chapter = selectMoreSpecificChapter(targetGroup.chapter, group.chapter);
       groups.splice(groups.indexOf(group), 1);
     });
   });

@@ -4,17 +4,14 @@ import { buildQuickReviewCoverUrls } from "@/renderer/components/QuickReview/qui
 import useParams from "@/renderer/hooks/useParams";
 import {
   createScraperCardDetailsCache,
-  getScraperChaptersFeatureConfig,
   getScraperDetailsFeatureConfig,
   getScraperFeature,
   getScraperPagesFeatureConfig,
-  isScraperFeatureConfigured,
   resolveScraperCardDetails,
-  resolveScraperChapters,
+  resolveScraperDetailsChapterCount,
   getScraperRuntimeThumbnailUrl,
   type ScraperRuntimeDetailsResult,
 } from "@/renderer/utils/scraperRuntime";
-import { buildScraperTemplateContextFromDetails } from "@/renderer/utils/scraperTemplateContext";
 import {
   autoLoadInitialScraperDetailsThumbnails,
   canLoadMoreScraperDetailsThumbnails,
@@ -47,9 +44,11 @@ export default function useQuickReviewDetails(
   currentItem: QuickReviewItem | null,
   preloadCover: boolean,
   preloadThumbnails: boolean,
+  prefetchCountOverride?: number,
 ): QuickReviewDetailsState {
   const { params } = useParams();
-  const prefetchCount = normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
+  const prefetchCount = prefetchCountOverride
+    ?? normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
   const [revision, setRevision] = React.useState(0);
   const [loadingItemId, setLoadingItemId] = React.useState<string | null>(null);
   const [loadingMoreItemId, setLoadingMoreItemId] = React.useState<string | null>(null);
@@ -160,10 +159,6 @@ export default function useQuickReviewDetails(
           }
 
           const pagesConfig = getScraperPagesFeatureConfig(getScraperFeature(scraper, "pages"));
-          const chaptersFeature = getScraperFeature(scraper, "chapters");
-          const chaptersConfig = isScraperFeatureConfigured(chaptersFeature)
-            ? getScraperChaptersFeatureConfig(chaptersFeature)
-            : null;
           const [detailsWithInitialThumbnails, chapterCount] = await Promise.all([
             autoLoadInitialScraperDetailsThumbnails({
               scraper,
@@ -175,20 +170,14 @@ export default function useQuickReviewDetails(
               console.warn("Scraper initial thumbnails fetch failed", error);
               return details;
             }),
-            chaptersConfig
-              ? resolveScraperChapters(
-                scraper.baseUrl,
-                details.finalUrl || details.requestedUrl,
-                chaptersConfig,
-                buildScraperTemplateContextFromDetails(details),
-                fetchDocument,
-              ).then((resolution) => (
-                resolution.sourceResult.ok ? resolution.chapters.length : null
-              )).catch((error) => {
+            resolveScraperDetailsChapterCount({
+              scraper,
+              details,
+              fetchDocument,
+            }).catch((error) => {
                 console.warn("Quick review chapters extraction failed", error);
                 return null;
-              })
-              : Promise.resolve(null),
+              }),
           ]);
           return { details: detailsWithInitialThumbnails, chapterCount, error: null };
         } catch (error) {

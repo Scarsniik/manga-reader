@@ -20,6 +20,7 @@ import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import useParams from "@/renderer/hooks/useParams";
+import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "@/renderer/components/ScraperAuthorFavorites/style.scss";
@@ -142,13 +143,18 @@ export default function ScraperTagCombinedView({
     () => mergeMultiSearchResults(visibleSources, mergeOptions),
     [mergeOptions, visibleSources],
   );
+  const { mergedResults: visuallyMergedResults } = useVisualMultiSearchMerge(
+    mergedResults,
+    mergeOptions,
+    params?.scraperVisualCoverMatchingEnabled !== false,
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],
   );
   const languageFilteredResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-    [languageFilterModes, mergedResults],
+    () => filterMultiSearchMergedResultsByLanguage(visuallyMergedResults, languageFilterModes),
+    [languageFilterModes, visuallyMergedResults],
   );
   const visibleMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByText(

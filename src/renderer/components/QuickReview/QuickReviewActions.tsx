@@ -12,10 +12,12 @@ type Props = {
   currentIndex: number;
   isBookmarked: boolean;
   nextShortcut: string;
+  nextLabel?: string;
   onBookmark: () => void;
   onNext: () => void;
   onPrevious: () => void;
   previousShortcut: string;
+  previousLabel?: string;
   sourceAvailable: boolean;
 };
 
@@ -26,10 +28,12 @@ export default function QuickReviewActions({
   currentIndex,
   isBookmarked,
   nextShortcut,
+  nextLabel = "Suivant",
   onBookmark,
   onNext,
   onPrevious,
   previousShortcut,
+  previousLabel = "Précédent",
   sourceAvailable,
 }: Props) {
   return (
@@ -42,7 +46,7 @@ export default function QuickReviewActions({
         title={previousShortcut}
       >
         <ChevronLeftIcon aria-hidden="true" />
-        <span>Précédent<small>{previousShortcut}</small></span>
+        <span>{previousLabel}<small>{previousShortcut}</small></span>
       </button>
       <button
         type="button"
@@ -75,7 +79,7 @@ export default function QuickReviewActions({
         disabled={bookmarking}
         title={nextShortcut}
       >
-        <span>Suivant<small>{nextShortcut}</small></span>
+        <span>{nextLabel}<small>{nextShortcut}</small></span>
         <ChevronLeftIcon aria-hidden="true" />
       </button>
     </div>

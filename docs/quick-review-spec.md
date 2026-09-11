@@ -59,6 +59,25 @@ sont disponibles. Le réglage `Fiches suivantes à précharger` choisit cette pr
 (`2` par défaut). Si un chargement échoue, les informations déjà présentes dans la card restent
 utilisables.
 
+### Review depuis une vue auteur par série
+
+Quand la review est lancée depuis une vue auteur actuellement affichée en mode `Par série`, chaque
+vraie série ajoute un contexte compact au-dessus de la fiche sans remplacer la galerie de
+miniatures : titre de la série, position dans la liste, nombre de chapitres et de sources, couverture
+par langue et accès direct à chaque chapitre. Les flèches gauche et droite parcourent alors les
+chapitres dans leur ordre d'affichage. Des actions séparées permettent de passer à la série
+précédente ou suivante et d'ouvrir sa correspondance dans un nouvel onglet workspace en
+arrière-plan.
+
+Le résumé des langues est construit à partir des cards déjà chargées. Dans ce mode, seule la fiche
+courante charge ses détails, sa couverture, ses miniatures et ses correspondances potentielles ; les
+fiches suivantes ne sont pas préchargées, quelle que soit la profondeur configurée. Une fiche déjà
+visitée reste en cache pendant la session.
+
+Le groupe racine `One Shot` n'est pas une série. Ses œuvres sont injectées comme fiches indépendantes
+dans la review et conservent donc l'affichage et la navigation classiques, sans en-tête, résumé de
+langues ni commandes de série.
+
 Les actions internes ouvrent toujours un nouvel onglet workspace en arrière-plan :
 
 - fiche manga ;
@@ -98,11 +117,14 @@ Une fiche devient vue dès qu'elle est affichée par la review. Pour un résulta
 
 Les paramètres contiennent une catégorie dédiée `Review rapide`. Chaque action accepte jusqu'à trois raccourcis :
 
-- fiche précédente : `Flèche gauche` par défaut ;
-- fiche suivante : `Flèche droite` par défaut ;
+- fiche ou chapitre précédent : `Flèche gauche` par défaut ;
+- fiche ou chapitre suivant : `Flèche droite` par défaut ;
 - bookmark et fiche suivante : appui long sur `Flèche droite` par défaut ;
 - ouvrir ou fermer les correspondances potentielles disponibles : `E` par défaut ;
 - basculer l'état lu de la fiche : `R` par défaut ;
+- série précédente : `Maj + Flèche gauche` par défaut ;
+- série suivante : `Maj + Flèche droite` par défaut ;
+- ouvrir la série dans un nouvel onglet : `O` par défaut ;
 - défilement des miniatures en arrière : `Flèche haut` par défaut ;
 - défilement des miniatures en avant : `Flèche bas` par défaut.
 

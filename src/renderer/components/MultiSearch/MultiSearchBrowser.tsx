@@ -603,6 +603,7 @@ export default function MultiSearchBrowser({
     allSources,
     mergeRefreshKey,
     mergeOptions,
+    params?.scraperVisualCoverMatchingEnabled !== false,
   );
   const mergedResults = useMemo(
     () => applyManualMultiSearchSplits(automaticallyMergedResults, splitMergedResultIds),

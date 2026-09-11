@@ -3,7 +3,11 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import { selectPreferredMultiSearchTitleSource } from "@/renderer/components/MultiSearch/multiSearchTitleSelection";
-import type { QuickReviewItem, QuickReviewSource } from "@/renderer/components/QuickReview/types";
+import type {
+  QuickReviewItem,
+  QuickReviewSeriesSession,
+  QuickReviewSource,
+} from "@/renderer/components/QuickReview/types";
 import type { ScraperRecord, ScraperSearchResultItem } from "@/shared/scraper";
 import type { ScraperRuntimeDetailsResult } from "@/renderer/utils/scraperRuntime";
 
@@ -133,3 +137,16 @@ export const cloneQuickReviewItems = (items: QuickReviewItem[]): QuickReviewItem
     };
   })
 );
+
+export const cloneQuickReviewSeriesSession = (
+  session: QuickReviewSeriesSession | undefined,
+): QuickReviewSeriesSession | undefined => session ? ({
+  ...session,
+  groups: session.groups.map((group) => ({
+    ...group,
+    chapters: group.chapters.map((chapter) => ({ ...chapter })),
+    languageAvailability: group.languageAvailability.map((availability) => ({
+      ...availability,
+    })),
+  })),
+}) : undefined;

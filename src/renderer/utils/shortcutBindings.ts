@@ -7,6 +7,9 @@ export type ShortcutActionId =
   | "quickReviewBookmark"
   | "quickReviewPotentialMatchesToggle"
   | "quickReviewMarkRead"
+  | "quickReviewSeriesPrevious"
+  | "quickReviewSeriesNext"
+  | "quickReviewOpenSeries"
   | "quickReviewThumbnailsPrevious"
   | "quickReviewThumbnailsNext"
   | "readerScrollUp"
@@ -48,11 +51,11 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
     actions: [
       {
         id: "quickReviewPrevious",
-        label: "Fiche précédente",
+        label: "Fiche ou chapitre précédent",
       },
       {
         id: "quickReviewNext",
-        label: "Fiche suivante",
+        label: "Fiche ou chapitre suivant",
       },
       {
         id: "quickReviewBookmark",
@@ -65,6 +68,18 @@ export const SHORTCUT_ACTION_GROUPS: ShortcutActionGroup[] = [
       {
         id: "quickReviewMarkRead",
         label: "Basculer l'état lu",
+      },
+      {
+        id: "quickReviewSeriesPrevious",
+        label: "Série précédente",
+      },
+      {
+        id: "quickReviewSeriesNext",
+        label: "Série suivante",
+      },
+      {
+        id: "quickReviewOpenSeries",
+        label: "Ouvrir la série dans un onglet",
       },
       {
         id: "quickReviewThumbnailsPrevious",
@@ -168,6 +183,9 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindingsByAction = {
   quickReviewBookmark: ["Hold+ArrowRight", "", ""],
   quickReviewPotentialMatchesToggle: ["E", "", ""],
   quickReviewMarkRead: ["R", "", ""],
+  quickReviewSeriesPrevious: ["Shift+ArrowLeft", "", ""],
+  quickReviewSeriesNext: ["Shift+ArrowRight", "", ""],
+  quickReviewOpenSeries: ["O", "", ""],
   quickReviewThumbnailsPrevious: ["ArrowUp", "", ""],
   quickReviewThumbnailsNext: ["ArrowDown", "", ""],
   readerScrollUp: ["Z", "ArrowUp", "U"],

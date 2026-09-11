@@ -44,7 +44,7 @@ async function loadShortcutBindings() {
   return module.exports;
 }
 
-test("quick review exposes configurable shortcuts for matches and read state", async () => {
+test("quick review exposes configurable shortcuts for card and series actions", async () => {
   const {
     DEFAULT_SHORTCUT_BINDINGS,
     SHORTCUT_ACTION_GROUPS,
@@ -64,11 +64,35 @@ test("quick review exposes configurable shortcuts for matches and read state", a
       (action) => action.id === "quickReviewMarkRead",
     ),
   );
+  assert.ok(
+    quickReviewGroup.actions.some(
+      (action) => action.id === "quickReviewSeriesPrevious",
+    ),
+  );
+  assert.ok(
+    quickReviewGroup.actions.some(
+      (action) => action.id === "quickReviewSeriesNext",
+    ),
+  );
+  assert.ok(
+    quickReviewGroup.actions.some(
+      (action) => action.id === "quickReviewOpenSeries",
+    ),
+  );
   assert.deepEqual(
     DEFAULT_SHORTCUT_BINDINGS.quickReviewPotentialMatchesToggle,
     ["E", "", ""],
   );
   assert.deepEqual(DEFAULT_SHORTCUT_BINDINGS.quickReviewMarkRead, ["R", "", ""]);
+  assert.deepEqual(
+    DEFAULT_SHORTCUT_BINDINGS.quickReviewSeriesPrevious,
+    ["Shift+ArrowLeft", "", ""],
+  );
+  assert.deepEqual(
+    DEFAULT_SHORTCUT_BINDINGS.quickReviewSeriesNext,
+    ["Shift+ArrowRight", "", ""],
+  );
+  assert.deepEqual(DEFAULT_SHORTCUT_BINDINGS.quickReviewOpenSeries, ["O", "", ""]);
 });
 
 test("quick review shortcut overrides are normalized", async () => {
@@ -77,9 +101,11 @@ test("quick review shortcut overrides are normalized", async () => {
     shortcuts: {
       quickReviewPotentialMatchesToggle: ["T", "", ""],
       quickReviewMarkRead: ["Ctrl+R", "", ""],
+      quickReviewOpenSeries: ["Ctrl+O", "", ""],
     },
   });
 
   assert.deepEqual(settings.quickReviewPotentialMatchesToggle, ["T", "", ""]);
   assert.deepEqual(settings.quickReviewMarkRead, ["Ctrl+R", "", ""]);
+  assert.deepEqual(settings.quickReviewOpenSeries, ["Ctrl+O", "", ""]);
 });

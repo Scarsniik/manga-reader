@@ -17,6 +17,10 @@ import {
   normalizeTitleAnalysisText,
   splitTitleAnalysisAlternatives,
 } from "@/renderer/utils/scraperTitleAnalysis/text";
+import {
+  extractLeadingOrphanedTitleBracketBlock,
+  stripTrailingTitleTranslationMethod,
+} from "@/renderer/utils/scraperTitleAnalysis/metadata";
 
 export type MangaCorrespondenceTitleAnalysis = ScraperTitleAnalysisResult & {
   chapter?: string;
@@ -25,7 +29,7 @@ export type MangaCorrespondenceTitleAnalysis = ScraperTitleAnalysisResult & {
 };
 
 export type MangaCorrespondenceChapterDetection = {
-  source: "explicitChapter" | "explicitVolume" | "compoundTitle" | "bareTitleNumber" | "namedChapter" | "releaseDescriptor";
+  source: "explicitChapter" | "explicitVolume" | "explicitPart" | "corroboratedAlternative" | "compoundTitle" | "bareTitleNumber" | "namedChapter" | "releaseDescriptor";
   confidence: "high" | "medium" | "low";
   secondaryChapter?: string;
   secondaryLabel?: string;
@@ -78,10 +82,12 @@ const WRAPPED_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s+[-–—]\s*.+?\s*[-–—]
 const TILDE_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s*[~〜～]\s*.*$/iu;
 const NAMED_WRAPPED_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s+[-–—]\s*(?<subtitle>.+?)\s*[-–—]\s*$/iu;
 const NAMED_TILDE_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s*[~〜～]\s*(?<subtitle>.+?)\s*[~〜～]\s*$/iu;
+const NAMED_HORIZONTAL_BAR_SUBTITLE_PATTERN = /^(?<title>.+?\S)\s+―\s*(?<subtitle>.+?)\s*$/iu;
 const INLINE_RELEASE_STATUS_PATTERN = /\s*\[(?:ongoing|complete|completed)\]\s*/giu;
 const TRAILING_SUFFIX_PATTERN = /\s*(?:\[([^\]]*)\]|\{([^}]*)\}|=([^=]*)=)\s*$/u;
 const TRAILING_METADATA_PARENTHESES_PATTERN = /\s*\((uncensored|censured|censored|decensored|digital|translated|colou?red|textless|hq|lq|high[\s-]*quality|low[\s-]*quality)\)\s*$/iu;
 const LEADING_EVENT_PATTERN = /^\s*[\[(（](?:(?:c\d+|comitia\s*\d+|futaket\s*\d+|20\d{2}[^\])）]*)|(?:[^\])）]*(?:akihabara|comiket|comic|doujin|comitia|futaket)[^\])）]*))[\])）]\s*/iu;
+const LEADING_NUMBERED_EVENT_BEFORE_CREATOR_PATTERN = /^\s*[（(][^()（）]*\d+[^()（）]*[）)]\s*(?=\[[^\]]+\])/u;
 const LEADING_AUTHOR_PATTERN = /^\s*\[([^\]]*)\]\s*/u;
 const LEADING_NESTED_CREATOR_PATTERN = /^\s*[\[(（]\s*([^()[\]（）]+?)\s*[（(]\s*([^()（）]+?)\s*[）)]\s*[\]）)]\s*/u;
 const LEADING_SIMPLE_CREATOR_PATTERN = /^\s*\(([^()]*)\)\s*/u;
@@ -140,14 +146,14 @@ const stripDecoratedChapterSubtitle = (
   value: string,
 ): { title: string; chapter?: string } => {
   const labeledSequence = extractTitleSequenceMarkers(value);
-  if (!labeledSequence.sequenceMarkers.some((marker) => marker.kind === "chapter")) {
+  if (!labeledSequence.sequenceMarkers.length) {
     const trailingChapter = stripTrailingBareChapter(value);
     if (trailingChapter.chapter) {
       return trailingChapter;
     }
   }
 
-  const trailingSubtitleMatch = labeledSequence.sequenceMarkers.some((marker) => marker.kind === "chapter")
+  const trailingSubtitleMatch = labeledSequence.sequenceMarkers.length
     ? null
     : value.match(NUMBERED_TRAILING_SUBTITLE_PATTERN);
   const usableTrailingSubtitleMatch = trailingSubtitleMatch?.groups?.subtitle
@@ -172,6 +178,11 @@ const stripDecoratedChapterSubtitle = (
   const wrappedSubtitleMatch = value.match(WRAPPED_SUBTITLE_PATTERN);
   if (wrappedSubtitleMatch?.groups?.title) {
     return { title: normalizeTitleAnalysisText(wrappedSubtitleMatch.groups.title) };
+  }
+
+  const horizontalBarSubtitleMatch = value.match(NAMED_HORIZONTAL_BAR_SUBTITLE_PATTERN);
+  if (horizontalBarSubtitleMatch?.groups?.title) {
+    return { title: normalizeTitleAnalysisText(horizontalBarSubtitleMatch.groups.title) };
   }
 
   const subtitleMatch = value.match(TILDE_SUBTITLE_PATTERN);
@@ -230,9 +241,46 @@ type CorrespondenceTitleSegment = {
   chapterDetection?: MangaCorrespondenceChapterDetection;
 };
 
+const alignCorroboratedAlternativeChapters = (
+  entries: CorrespondenceTitleSegment[],
+): CorrespondenceTitleSegment[] => {
+  const corroboratedChapters = uniqueText(
+    entries.map((entry) => entry.chapter ?? "").filter(isNumericChapterValue),
+  );
+  if (corroboratedChapters.length !== 1) return entries;
+
+  const [corroboratedChapter] = corroboratedChapters;
+  return entries.map((entry) => {
+    if (entry.chapter) return entry;
+
+    const match = entry.title.match(
+      /^(?<title>.+?\S)\s+(?<chapter>[0-9０-９]{1,4}(?:[.,][0-9０-９]+)?)\s+(?<subtitle>\p{L}.+)$/iu,
+    );
+    if (
+      !match?.groups?.title
+      || !match.groups.chapter
+      || normalizeChapter(match.groups.chapter) !== corroboratedChapter
+    ) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      title: normalizeTitleBeforeChapter(match.groups.title),
+      chapter: corroboratedChapter,
+      sequenceMarkers: [...entry.sequenceMarkers, buildBareChapterMarker(corroboratedChapter)],
+      chapterDetection: {
+        source: "corroboratedAlternative",
+        confidence: "medium",
+      },
+    };
+  });
+};
+
 const extractNamedChapter = (value: string): string | undefined => {
   const match = value.match(NAMED_TILDE_SUBTITLE_PATTERN)
-    ?? value.match(NAMED_WRAPPED_SUBTITLE_PATTERN);
+    ?? value.match(NAMED_WRAPPED_SUBTITLE_PATTERN)
+    ?? value.match(NAMED_HORIZONTAL_BAR_SUBTITLE_PATTERN);
   const subtitle = normalizeTitleAnalysisText(match?.groups?.subtitle ?? "");
   return subtitle || undefined;
 };
@@ -272,11 +320,15 @@ const analyzeCorrespondenceTitleSegment = (
     .find((marker) => marker.kind === "chapter")?.value;
   const explicitVolume = explicitSequence.sequenceMarkers
     .find((marker) => marker.kind === "volume")?.value;
+  const explicitPart = explicitSequence.sequenceMarkers
+    .find((marker) => marker.kind === "part")?.value;
   const detectedChapter = explicitChapter
     ? normalizeChapter(explicitChapter)
     : explicitVolume
       ? normalizeChapter(explicitVolume)
-      : decorated.chapter ?? bareSequence.chapter;
+      : explicitPart
+        ? normalizeChapter(explicitPart)
+        : decorated.chapter ?? bareSequence.chapter;
 
   return {
     title: normalizeTitleAnalysisText(bareSequence.title),
@@ -290,11 +342,13 @@ const analyzeCorrespondenceTitleSegment = (
         ? { source: "explicitChapter", confidence: "high" }
         : explicitVolume
           ? { source: "explicitVolume", confidence: "high" }
-          : detectedChapter
-            ? { source: "bareTitleNumber", confidence: "medium" }
-            : namedChapter
-              ? { source: "namedChapter", confidence: "low" }
-              : undefined,
+          : explicitPart
+            ? { source: "explicitPart", confidence: "high" }
+            : detectedChapter
+              ? { source: "bareTitleNumber", confidence: "medium" }
+              : namedChapter
+                ? { source: "namedChapter", confidence: "low" }
+                : undefined,
   };
 };
 
@@ -444,19 +498,26 @@ const analyzeHeuristicCorrespondenceTitle = (
   rawTitle: string,
   config: ScraperTitleAnalysisConfig,
 ): HeuristicCorrespondenceAnalysis | null => {
-  let remaining = normalizeTitleAnalysisText(rawTitle);
-  while (LEADING_EVENT_PATTERN.test(remaining)) {
-    remaining = normalizeTitleAnalysisText(remaining.replace(LEADING_EVENT_PATTERN, ""));
+  let remaining = stripTrailingTitleTranslationMethod(rawTitle);
+  for (let guard = 0; guard < 4; guard += 1) {
+    const withoutEvent = normalizeTitleAnalysisText(
+      remaining
+        .replace(LEADING_EVENT_PATTERN, "")
+        .replace(LEADING_NUMBERED_EVENT_BEFORE_CREATOR_PATTERN, ""),
+    );
+    if (withoutEvent === remaining) break;
+    remaining = withoutEvent;
   }
 
   const { remaining: withoutSuffixes, suffixValues } = extractTrailingSuffixValues(remaining);
-  remaining = withoutSuffixes;
+  remaining = stripTrailingTitleTranslationMethod(withoutSuffixes);
 
   let circle: string | undefined;
   let authors: string[] = [];
   const nestedCreatorMatch = remaining.match(LEADING_NESTED_CREATOR_PATTERN);
   const authorMatch = remaining.match(LEADING_AUTHOR_PATTERN);
   const simpleCreatorMatch = remaining.match(LEADING_SIMPLE_CREATOR_PATTERN);
+  const orphanedAuthorBlock = extractLeadingOrphanedTitleBracketBlock(remaining);
   if (nestedCreatorMatch?.[1] && nestedCreatorMatch[2]) {
     circle = normalizeTitleAnalysisText(nestedCreatorMatch[1]);
     authors = splitCreatorNames(nestedCreatorMatch[2]);
@@ -474,17 +535,28 @@ const analyzeHeuristicCorrespondenceTitle = (
   } else if (simpleCreatorMatch?.[1]) {
     authors = splitCreatorNames(simpleCreatorMatch[1]);
     remaining = normalizeTitleAnalysisText(remaining.slice(simpleCreatorMatch[0].length));
+  } else if (orphanedAuthorBlock) {
+    const circleAuthorMatch = orphanedAuthorBlock.value.match(/^(.*?)\s*\(([^()]*)\)\s*$/u);
+    if (circleAuthorMatch) {
+      circle = normalizeTitleAnalysisText(circleAuthorMatch[1]);
+      authors = splitCreatorNames(circleAuthorMatch[2]);
+    } else {
+      authors = splitCreatorNames(orphanedAuthorBlock.value);
+    }
+    remaining = orphanedAuthorBlock.remaining;
   }
 
   const globalParentheses = stripTrailingParentheses(remaining);
   let parody = globalParentheses.values[globalParentheses.values.length - 1];
-  const analyzedTitles = splitTitleAnalysisAlternatives(globalParentheses.title)
+  const analyzedTitles = alignCorroboratedAlternativeChapters(
+    splitTitleAnalysisAlternatives(globalParentheses.title)
     .map((value) => {
       const parentheses = stripTrailingParentheses(value);
       parody ??= parentheses.values[parentheses.values.length - 1];
       return analyzeCorrespondenceTitleSegment(parentheses.title);
     })
-    .filter((entry) => Boolean(entry.title));
+      .filter((entry) => Boolean(entry.title)),
+  );
 
   const primary = analyzedTitles[0];
   if (!primary?.title) return null;

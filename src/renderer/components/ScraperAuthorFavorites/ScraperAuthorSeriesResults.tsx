@@ -19,8 +19,8 @@ type Props = {
 
 const renderChapterCount = (series: AuthorSeriesGroup): string => (
   series.kind === "oneShots"
-    ? `${series.chapters.length} œuvre(s) · ${series.sourceCount} source(s)`
-    : `${series.chapters.length} chapitre(s) · ${series.sourceCount} source(s)`
+    ? `${series.chapterCount} œuvre(s) · ${series.sourceCount} source(s)`
+    : `${series.chapterCount} chapitre(s) · ${series.sourceCount} source(s)`
 );
 
 export default function ScraperAuthorSeriesResults({

@@ -4,10 +4,12 @@ import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import type { ScraperBookmarkRecord, ScraperRecord } from "@/shared/scraper";
 import { getScraperBookmarkLanguageCodes } from "@/renderer/utils/scraperBookmarkMetadata";
 import type { ScraperBookmarkDuplicateGroup } from "@/renderer/components/ScraperBookmarks/bookmarkDuplicateDetection";
+import useScraperBookmarkDuplicateStats from "@/renderer/components/ScraperBookmarks/useScraperBookmarkDuplicateStats";
 import {
   getScraperBookmarkCoverUrl,
   getScraperBookmarkStableKey,
 } from "@/renderer/components/ScraperBookmarks/bookmarkPresentation";
+import { formatScraperPageCountForDisplay } from "@/renderer/utils/scraperRuntime";
 
 type DuplicateReviewModalContentProps = {
   groups: ScraperBookmarkDuplicateGroup[];
@@ -47,6 +49,7 @@ function ScraperBookmarkDuplicateReviewModalContent({
       };
     }) ?? []
   ), [currentGroup, scrapersById]);
+  const statsByBookmarkKey = useScraperBookmarkDuplicateStats(currentItems);
 
   const removeCurrentGroup = () => {
     const nextLength = Math.max(0, remainingGroups.length - 1);
@@ -103,6 +106,15 @@ function ScraperBookmarkDuplicateReviewModalContent({
         {currentItems.map(({ bookmark, scraper, coverUrl, languageCodes }) => {
           const bookmarkKey = getScraperBookmarkStableKey(bookmark);
           const isBusy = busyBookmarkKey === bookmarkKey;
+          const stats = statsByBookmarkKey.get(bookmarkKey);
+          const pageCountLabel = formatScraperPageCountForDisplay(
+            stats?.pageCount ?? bookmark.pageCount,
+          );
+          const chapterCountLabel = stats?.chapterCount === null
+            ? "Chapitres inconnus"
+            : stats?.chapterCount === 1
+              ? "1 chapitre"
+              : `${stats?.chapterCount} chapitres`;
 
           return (
             <article key={bookmarkKey} className="scraper-bookmark-duplicates-modal__card">
@@ -124,6 +136,13 @@ function ScraperBookmarkDuplicateReviewModalContent({
                     {bookmark.title}
                   </strong>
                   <span>{scraper?.name || `Scrapper ${bookmark.scraperId}`}</span>
+                  <span
+                    className="scraper-bookmark-duplicates-modal__stats"
+                    title={stats?.error ? "Certaines informations de la fiche sont indisponibles" : undefined}
+                  >
+                    <span>{pageCountLabel || (stats ? "Pages inconnues" : "Pages…")}</span>
+                    <span>{stats ? chapterCountLabel : "Chapitres…"}</span>
+                  </span>
                   {languageCodes.length ? (
                     <span className="scraper-bookmark-duplicates-modal__languages">
                       Langue <LanguageFlags languageCodes={languageCodes} />

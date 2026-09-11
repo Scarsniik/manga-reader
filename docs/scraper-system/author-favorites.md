@@ -98,7 +98,28 @@ La liste des mangas propose deux modes d'affichage :
 Le regroupement par serie reutilise l'analyse de titre, la construction des cards de chapitre et la
 grille `Chapitres fusionnes` des correspondances manga. Les chapitres d'une serie apparaissent donc
 directement cote a cote sous son en-tete. Les titres alternatifs d'une card fusionnee servent de pont
-entre les traductions d'une meme serie.
+entre les traductions d'une meme serie. Les marqueurs explicites `Part` sont conserves comme numeros
+de publication. Dans un titre bilingue, un numero suivi d'un sous-titre sans separateur peut aussi etre
+confirme par la traduction correctement structuree. Un prefixe d'evenement numerote place avant le
+bloc auteur est retire avant cette comparaison. Un sous-titre descriptif nomme ne suffit pas, a lui
+seul, a transformer une œuvre en serie : une publication isolee reste dans `One Shot`. Plusieurs
+sous-titres distincts sous un meme titre de base continuent en revanche de former une serie.
+
+Quand le reglage utilisateur `Utiliser la ressemblance visuelle pour fusionner les fiches et
+regrouper les series` est actif, les resultats calculent aussi une empreinte perceptuelle basse
+resolution des couvertures. Cette preuve complete d'abord la fusion des cards dans les recherches
+multi-sources, les nouveautes et les vues combinees auteur ou tag, puis elle est reutilisee par la
+vue `Par serie` pour rapprocher les publications restantes.
+
+Une ressemblance visuelle ne suffit jamais seule : les titres doivent conserver un
+prefixe commun significatif, sauf dans une vue auteur combinee ou l'auteur est deja considere comme
+valide et ou deux publications au meme emplacement de chapitre peuvent etre comparees directement.
+Une correction manuelle reste prioritaire. Cette preuve peut relier
+un titre descriptif a un chapitre numerote et fusionner leurs sources sous le numero explicite. Le
+rapprochement visuel ne fusionne jamais deux numeros de chapitre explicites incompatibles. Le
+calcul, le cache et la comparaison d'empreintes sont exposes par un service generique partage, afin
+que d'autres vues puissent reutiliser l'analyse sans dependre du regroupement des series. Le reglage
+est active par defaut et peut etre desactive dans `Settings > Scraping`.
 
 Une serie peut ouvrir un vrai job de correspondance manga pre-rempli avec ses cards, sans lancer de
 scraping. La vue complete permet de corriger les numeros, invalider ou ajouter des sources, puis de
@@ -115,6 +136,14 @@ Les œuvres isolees sans numero ni categorie de chapitre explicite sont reunies 
 Les cards de ce groupe sont affichees directement : le groupe ne propose pas de sous-vue serie.
 Si d'autres chapitres de la meme serie existent, l'œuvre sans numero reste inferee comme chapitre 1
 et demeure dans sa serie.
+
+Lancer la review rapide depuis le mode `Par serie` conserve cet ordre et affiche un bandeau compact
+pour chaque vraie serie. Il resume les langues disponibles avec leur couverture de chapitres, permet
+de choisir directement un chapitre, de passer a la serie precedente ou suivante et d'ouvrir la
+correspondance de la serie dans un nouvel onglet workspace en arriere-plan. Seule la fiche courante
+est prechargee afin de ne pas multiplier les requetes sur toutes les series. Le groupe `One Shot`
+reste une simple suite de fiches independantes dans la review et n'affiche aucun de ces controles de
+serie.
 
 La page auteur classique peut aussi utiliser cette vue combinee pour une seule source auteur.
 Elle utilise le meme reglage `Pages a charger a l'ouverture d'un auteur favori` pour son nombre de

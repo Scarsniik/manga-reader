@@ -14,6 +14,11 @@ import {
   hasSingleEditDifference,
   isFuzzyTitleCandidate,
 } from "@/renderer/utils/mangaMatching/titleFuzzy";
+import { splitTitleAnalysisAlternatives } from "@/renderer/utils/scraperTitleAnalysis/text";
+import {
+  stripLeadingOrphanedTitleBracketBlock,
+  stripTrailingTitleTranslationMethod,
+} from "@/renderer/utils/scraperTitleAnalysis/metadata";
 
 const SEQUENCE_VALUE_PATTERN = String.raw`(?:\d{1,3}|i|ii|iii|iv|v|vi|vii|viii|ix|x)`;
 const EXPLICIT_SEQUENCE_RANGE_PATTERN = new RegExp(
@@ -37,8 +42,8 @@ const DATE_PATTERN = /\b(?:19|20)\d{2}[-/.]\d{1,2}(?:[-/.]\d{1,2})?\b/g;
 const FIRST_PART_PATTERN = /(?:\b(?:zenpen|zen hen)\b|前編|上巻)/giu;
 const LAST_PART_PATTERN = /(?:\b(?:kouhen|kohen|kou hen|ko hen)\b|後編|下巻)/giu;
 const JAPANESE_SEQUENCE_PATTERN = /第\s*(\d{1,3})\s*(?:話|章|巻|部)/gu;
-const TITLE_ALTERNATIVE_SEPARATOR_PATTERN = /[|│┃¦/]+/gu;
 const SPACED_JAPANESE_DASH_PATTERN = /\s+ー+\s+/gu;
+const SPACED_ASCII_DASH_PATTERN = /\s+-\s+/gu;
 const ROMAN_SEQUENCE_VALUES: Record<string, number> = {
   i: 1,
   ii: 2,
@@ -51,6 +56,7 @@ const ROMAN_SEQUENCE_VALUES: Record<string, number> = {
   ix: 9,
   x: 10,
 };
+const ANALYZED_SEQUENCE_PATTERN = /^(\d{1,3})(?:-(\d{1,3}))?$/u;
 
 export type MangaMergeOptions = {
   enableRomajiPhoneticMerge: boolean;
@@ -80,6 +86,8 @@ type TitleAlternativeMergeProfile = {
 
 type MangaTitleMergeProfile = {
   alternatives: TitleAlternativeMergeProfile[];
+  dashAlternatives: TitleAlternativeMergeProfile[];
+  sequenceMarkers: Set<string>;
   normalizedAuthorNames: string[];
   normalizedContextualAuthorNames: string[];
 };
@@ -162,12 +170,20 @@ const replaceSequenceSyntax = (value: string): string => (
     )
 );
 
+const prepareTitleText = (value: string): string => (
+  stripTrailingTitleTranslationMethod(
+    stripLeadingOrphanedTitleBracketBlock(stripTitleLanguageMarkers(value))
+      .normalize("NFKC")
+      .replace(/(?:\[[^\]]*]|\{[^}]*})/g, " "),
+  )
+);
+
 const normalizeTitleText = (value: string, removeParentheses = false): string => (
-  replaceSequenceSyntax(stripTitleLanguageMarkers(value).normalize("NFKC"))
-    .replace(/(?:\[[^\]]*]|\{[^}]*})/g, " ")
+  replaceSequenceSyntax(prepareTitleText(value))
     .replace(removeParentheses ? /\([^)]*\)/g : /$^/g, " ")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFC")
     .replace(/['’`]/g, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
@@ -211,10 +227,10 @@ const normalizeTitleVariant = (
 };
 
 export const getMangaTitleAlternatives = (value: string): string[] => {
-  const alternatives = value
+  const alternatives = splitTitleAnalysisAlternatives(value
     .normalize("NFKC")
-    .replace(SPACED_JAPANESE_DASH_PATTERN, "|")
-    .split(TITLE_ALTERNATIVE_SEPARATOR_PATTERN)
+    .replace(/[│┃¦]/gu, "|")
+    .replace(SPACED_JAPANESE_DASH_PATTERN, " | "))
     .map((title) => title.trim())
     .filter(Boolean);
 
@@ -238,10 +254,10 @@ const addSequenceRange = (
 
 const getTitleSequenceMarkers = (value: string): Set<string> => {
   const markers = new Set<string>();
-  const normalizedValue = stripTitleLanguageMarkers(value)
-    .normalize("NFKC")
+  const normalizedValue = prepareTitleText(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFC")
     .toLowerCase();
   const valueWithoutExplicitRanges = normalizedValue.replace(
     EXPLICIT_SEQUENCE_RANGE_PATTERN,
@@ -513,6 +529,18 @@ const canUseFuzzyTitleProfileMatch = (
   return leftValues.some((author) => rightSet.has(author));
 };
 
+const haveConflictingNumericTokens = (leftValue: string, rightValue: string): boolean => {
+  const leftNumbers = leftValue.match(/\d+/gu) ?? [];
+  const rightNumbers = rightValue.match(/\d+/gu) ?? [];
+
+  return leftNumbers.length > 0
+    && rightNumbers.length > 0
+    && (
+      leftNumbers.length !== rightNumbers.length
+      || leftNumbers.some((number, index) => number !== rightNumbers[index])
+    );
+};
+
 const selectComparableAuthorNames = (
   normalizedAuthorNames: string[],
   normalizedContextualAuthorNames: string[],
@@ -611,15 +639,28 @@ const buildMangaTitleMergeProfile = (
   manga: MatchableManga,
   options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
 ): MangaTitleMergeProfile => {
+  const analyzedTitle = analyzeMangaCorrespondenceTitle(manga.title, undefined);
+  const analyzedSequenceMatch = analyzedTitle.chapter?.match(ANALYZED_SEQUENCE_PATTERN);
+  const sequenceMarkers = getTitleSequenceMarkers(manga.title);
+  if (analyzedSequenceMatch?.[1] && analyzedSequenceMatch[2]) {
+    addSequenceRange(sequenceMarkers, analyzedSequenceMatch[1], analyzedSequenceMatch[2]);
+  } else if (analyzedSequenceMatch?.[1]) {
+    sequenceMarkers.add(`number:${normalizeSequenceValue(analyzedSequenceMatch[1])}`);
+  }
   const alternatives = [
     ...buildMangaTitleAlternativeProfiles(manga.title, options),
     ...(manga.advancedRomanizedTitleVariants ?? []).map((title) => (
       buildTitleAlternativeMergeProfile(title, [title], options)
     )),
   ];
+  const dashSeparatedTitle = manga.title.replace(SPACED_ASCII_DASH_PATTERN, " | ");
 
   return {
     alternatives,
+    dashAlternatives: dashSeparatedTitle === manga.title
+      ? []
+      : buildMangaTitleAlternativeProfiles(dashSeparatedTitle, options),
+    sequenceMarkers,
     normalizedAuthorNames: options.assumeSameAuthor
       ? []
       : normalizeAuthorNames(
@@ -754,6 +795,33 @@ export const haveClearlyConflictingMangaAuthors = (
   ));
 };
 
+export const haveCompatibleMangaAuthors = (
+  left: MatchableManga,
+  right: MatchableManga,
+  options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
+): boolean => {
+  if (options.assumeSameAuthor) {
+    return true;
+  }
+
+  const leftProfile = getMangaTitleMergeProfile(left, options);
+  const rightProfile = getMangaTitleMergeProfile(right, options);
+  const leftAuthorNames = selectComparableAuthorNames(
+    leftProfile.normalizedAuthorNames,
+    leftProfile.normalizedContextualAuthorNames,
+  );
+  const rightAuthorNames = selectComparableAuthorNames(
+    rightProfile.normalizedAuthorNames,
+    rightProfile.normalizedContextualAuthorNames,
+  );
+
+  return leftAuthorNames.some((leftAuthor) => (
+    rightAuthorNames.some((rightAuthor) => (
+      areNormalizedAuthorLabelsCompatible(leftAuthor, rightAuthor)
+    ))
+  ));
+};
+
 const doTitleAlternativeProfilesMatch = (
   left: TitleAlternativeMergeProfile,
   right: TitleAlternativeMergeProfile,
@@ -793,6 +861,9 @@ const doTitleAlternativeProfilesMatch = (
       if (!hasSingleEditDifference(leftVariant, rightVariant)) {
         continue;
       }
+      if (haveConflictingNumericTokens(leftVariant, rightVariant)) {
+        continue;
+      }
 
       const leftKinds = left.variantKindSets.get(leftVariant);
       const rightKinds = right.variantKindSets.get(rightVariant);
@@ -820,6 +891,7 @@ const doTitleAlternativeProfilesMatch = (
 const doTitleProfilesMatch = (
   left: MangaTitleMergeProfile,
   right: MangaTitleMergeProfile,
+  assumeSameAuthor: boolean,
 ): MangaTitleMatchKind | null => {
   const leftAuthorNames = selectComparableAuthorNames(
     left.normalizedAuthorNames,
@@ -838,6 +910,12 @@ const doTitleProfilesMatch = (
   ) {
     return null;
   }
+  if (getSequenceMarkerCompatibility(
+    left.sequenceMarkers,
+    right.sequenceMarkers,
+  ) === "incompatible") {
+    return null;
+  }
 
   const allowFuzzyMatch = canUseFuzzyTitleProfileMatch(
     leftAuthorNames,
@@ -853,14 +931,88 @@ const doTitleProfilesMatch = (
     }
   }
 
-  return null;
+  if (!left.dashAlternatives.length && !right.dashAlternatives.length) {
+    return null;
+  }
+  if (
+    (left.sequenceMarkers.size || right.sequenceMarkers.size)
+    && getSequenceMarkerCompatibility(left.sequenceMarkers, right.sequenceMarkers) !== "equal"
+  ) {
+    return null;
+  }
+  if (
+    !assumeSameAuthor
+    && (
+      !leftAuthorNames.length
+      || !rightAuthorNames.length
+      || !leftAuthorNames.some((leftAuthor) => rightAuthorNames.some((rightAuthor) => (
+        areNormalizedAuthorLabelsCompatible(leftAuthor, rightAuthor)
+      )))
+    )
+  ) {
+    return null;
+  }
+
+  const leftDashAlternatives = left.dashAlternatives.length
+    ? left.dashAlternatives
+    : left.alternatives;
+  const rightDashAlternatives = right.dashAlternatives.length
+    ? right.dashAlternatives
+    : right.alternatives;
+  const findAlternativeMatch = (
+    source: TitleAlternativeMergeProfile,
+    targets: TitleAlternativeMergeProfile[],
+  ): MangaTitleMatchKind | null => {
+    for (const target of targets) {
+      const matchKind = doTitleAlternativeProfilesMatch(source, target, allowFuzzyMatch);
+      if (matchKind) return matchKind;
+    }
+    return null;
+  };
+  if (!left.dashAlternatives.length || !right.dashAlternatives.length) {
+    for (const leftAlternative of leftDashAlternatives) {
+      const matchKind = findAlternativeMatch(leftAlternative, rightDashAlternatives);
+      if (matchKind) return matchKind;
+    }
+    return null;
+  }
+
+  const leftMatches = leftDashAlternatives.map((alternative) => (
+    findAlternativeMatch(alternative, rightDashAlternatives)
+  ));
+  if (leftMatches.some((matchKind) => !matchKind)) {
+    return null;
+  }
+  if (rightDashAlternatives.some((alternative) => (
+    !findAlternativeMatch(alternative, leftDashAlternatives)
+  ))) {
+    return null;
+  }
+
+  return leftMatches.find((matchKind): matchKind is MangaTitleMatchKind => Boolean(matchKind)) ?? null;
+};
+
+const getIndexedTitleAlternatives = (
+  profile: MangaTitleMergeProfile,
+  options: MangaMergeOptions,
+): TitleAlternativeMergeProfile[] => {
+  const authorNames = selectComparableAuthorNames(
+    profile.normalizedAuthorNames,
+    profile.normalizedContextualAuthorNames,
+  );
+  return options.assumeSameAuthor || authorNames.length
+    ? [...profile.alternatives, ...profile.dashAlternatives]
+    : profile.alternatives;
 };
 
 export const getMangaTitleMergeExactKeys = (
   manga: MatchableManga,
   options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
 ): string[] => (
-  uniqueValues(getMangaTitleMergeProfile(manga, options).alternatives.flatMap((alternative) => alternative.variants))
+  uniqueValues(getIndexedTitleAlternatives(
+    getMangaTitleMergeProfile(manga, options),
+    options,
+  ).flatMap((alternative) => alternative.variants))
 );
 
 export const getMangaTitleMergeSequenceAgnosticKeys = (
@@ -888,8 +1040,7 @@ export const getMangaTitleMergeFuzzyLengths = (
   options: MangaMergeOptions = DEFAULT_MANGA_MERGE_OPTIONS,
 ): number[] => (
   Array.from(new Set(
-    getMangaTitleMergeProfile(manga, options)
-      .alternatives
+    getIndexedTitleAlternatives(getMangaTitleMergeProfile(manga, options), options)
       .flatMap((alternative) => alternative.fuzzyVariants)
       .map((variant) => Array.from(variant).length),
   ))
@@ -903,6 +1054,7 @@ export const getMangaTitleMergeMatchKind = (
   doTitleProfilesMatch(
     getMangaTitleMergeProfile(left, options),
     getMangaTitleMergeProfile(right, options),
+    options.assumeSameAuthor === true,
   )
 );
 

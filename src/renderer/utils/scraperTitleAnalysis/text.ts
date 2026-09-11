@@ -1,5 +1,11 @@
+const normalizeFullwidthAscii = (value: string): string => (
+  value.replace(/[！-～]/gu, (character) => (
+    String.fromCodePoint((character.codePointAt(0) ?? 0) - 0xfee0)
+  ))
+);
+
 export const normalizeTitleAnalysisText = (value: unknown): string => (
-  String(value ?? "")
+  normalizeFullwidthAscii(String(value ?? ""))
     .replace(/\s+/g, " ")
     .trim()
 );
@@ -68,7 +74,8 @@ export const splitTitleAnalysisAlternatives = (value: string): string[] => {
     const previous = characters[index - 1] ?? "";
     const next = characters[index + 1] ?? "";
     const isWrappedDash = "ー–—".includes(character) && /\s/u.test(previous) && /\s/u.test(next);
-    if (depth === 0 && ("|｜/".includes(character) || isWrappedDash)) {
+    const isSpacedSlash = character === "/" && /\s/u.test(previous) && /\s/u.test(next);
+    if (depth === 0 && ("|｜ㅣᅵ│┃¦".includes(character) || isSpacedSlash || isWrappedDash)) {
       flush();
       return;
     }

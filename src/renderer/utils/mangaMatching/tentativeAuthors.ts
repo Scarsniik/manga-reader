@@ -1,4 +1,5 @@
 import { isTitleLanguageMarker } from "@/renderer/utils/languageDetection";
+import { extractLeadingOrphanedTitleBracketBlock } from "@/renderer/utils/scraperTitleAnalysis/metadata";
 
 const TENTATIVE_AUTHOR_PREFIX_PATTERN = /^\s*(?:\([^)]*\)\s*)*(?:\[\s*([^\]]+?)\s*]\s*)+/;
 const TENTATIVE_AUTHOR_NAME_PATTERN = /\[\s*([^\]]+?)\s*]/g;
@@ -49,7 +50,8 @@ const collectTentativeAuthorNames = (value: string): string[] => {
 export const extractTentativeAuthorNamesFromTitle = (title: string): string[] => {
   const prefixMatch = title.match(TENTATIVE_AUTHOR_PREFIX_PATTERN);
   if (!prefixMatch) {
-    return [];
+    const orphanedBlock = extractLeadingOrphanedTitleBracketBlock(title);
+    return orphanedBlock ? collectTentativeAuthorNames(orphanedBlock.value) : [];
   }
 
   const seen = new Set<string>();

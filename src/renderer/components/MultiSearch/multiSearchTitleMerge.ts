@@ -9,6 +9,8 @@ import {
   getMangaTitleMergeFuzzyLengths,
   getMangaTitleMergeMatchKind,
   getMangaTitleRomanizationTargets,
+  haveClearlyConflictingMangaAuthors,
+  haveCompatibleMangaAuthors,
   type MatchableManga,
   type MangaTitleMatchKind,
 } from "@/renderer/utils/mangaMatching/titleProfiles";
@@ -29,6 +31,26 @@ const getSourceMatchableManga = (source: MultiSearchSourceResult): MatchableMang
       source.advancedRomanizedContextualAuthorNameVariants,
   };
 };
+
+export const haveClearlyConflictingMultiSearchAuthors = (
+  left: MultiSearchSourceResult,
+  right: MultiSearchSourceResult,
+  options: MultiSearchMergeOptions,
+): boolean => haveClearlyConflictingMangaAuthors(
+  getSourceMatchableManga(left),
+  getSourceMatchableManga(right),
+  options,
+);
+
+export const haveCompatibleMultiSearchAuthors = (
+  left: MultiSearchSourceResult,
+  right: MultiSearchSourceResult,
+  options: MultiSearchMergeOptions,
+): boolean => haveCompatibleMangaAuthors(
+  getSourceMatchableManga(left),
+  getSourceMatchableManga(right),
+  options,
+);
 
 export const getMultiSearchTitleAlternatives = (value: string): string[] => (
   getMangaTitleAlternatives(value)

@@ -1560,6 +1560,7 @@ export default function ScraperLatestView({ scrapers, backgroundSearchJobId, res
         hiddenBlacklistedCardCount={hiddenBlacklistedLatestCardCount}
         languageFilterModes={sourceResults.languageFilterModes}
         enableRomajiPhoneticMerge={params?.multiSearchEnableRomajiPhoneticMerge === true}
+        visualCoverMatchingEnabled={params?.scraperVisualCoverMatchingEnabled !== false}
         preferredTitleLanguageCodes={params?.multiSearchMergedTitleLanguagePriority ?? []}
         onShowBlacklistedCardsLocallyChange={activeTab === "scrapers" && !hasStoredBlacklistDecision
           ? setShowBlacklistedLatestCardsLocally

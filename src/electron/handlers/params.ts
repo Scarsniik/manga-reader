@@ -120,6 +120,11 @@ const defaultShortcutBindings = {
     quickReviewPrevious: ["ArrowLeft", "", ""],
     quickReviewNext: ["ArrowRight", "", ""],
     quickReviewBookmark: ["Hold+ArrowRight", "", ""],
+    quickReviewPotentialMatchesToggle: ["E", "", ""],
+    quickReviewMarkRead: ["R", "", ""],
+    quickReviewSeriesPrevious: ["Shift+ArrowLeft", "", ""],
+    quickReviewSeriesNext: ["Shift+ArrowRight", "", ""],
+    quickReviewOpenSeries: ["O", "", ""],
     quickReviewThumbnailsPrevious: ["ArrowUp", "", ""],
     quickReviewThumbnailsNext: ["ArrowDown", "", ""],
     readerScrollUp: ["Z", "ArrowUp", "U"],
@@ -727,6 +732,7 @@ const defaultSettings = {
     scraperScrapeDetailsWithCards: false,
     scraperHideBlacklistedTagCards: false,
     scraperCardPotentialMatchesEnabled: true,
+    scraperVisualCoverMatchingEnabled: true,
     scraperBlacklistedTagsByScraper: {} as Record<string, Array<{ value: string; label?: string; addedAt?: string }>>,
     scraperLatestResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
     scraperLatestScraperResultLimit: DEFAULT_SCRAPER_LATEST_RESULT_LIMIT,
@@ -1001,6 +1007,9 @@ const normalizeSettings = (value: unknown) => {
     merged.scraperCardPotentialMatchesEnabled = typeof merged.scraperCardPotentialMatchesEnabled === "boolean"
         ? merged.scraperCardPotentialMatchesEnabled
         : defaultSettings.scraperCardPotentialMatchesEnabled;
+    merged.scraperVisualCoverMatchingEnabled = typeof merged.scraperVisualCoverMatchingEnabled === "boolean"
+        ? merged.scraperVisualCoverMatchingEnabled
+        : defaultSettings.scraperVisualCoverMatchingEnabled;
     merged.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
         merged.scraperBlacklistedTagsByScraper,
     );
@@ -1395,6 +1404,9 @@ export async function saveSettings(event: any, settings: any) {
         nextSettings.scraperCardPotentialMatchesEnabled = typeof nextSettings.scraperCardPotentialMatchesEnabled === "boolean"
             ? nextSettings.scraperCardPotentialMatchesEnabled
             : defaultSettings.scraperCardPotentialMatchesEnabled;
+        nextSettings.scraperVisualCoverMatchingEnabled = typeof nextSettings.scraperVisualCoverMatchingEnabled === "boolean"
+            ? nextSettings.scraperVisualCoverMatchingEnabled
+            : defaultSettings.scraperVisualCoverMatchingEnabled;
         nextSettings.scraperBlacklistedTagsByScraper = normalizeScraperTagBlacklistByScraper(
             nextSettings.scraperBlacklistedTagsByScraper,
         );

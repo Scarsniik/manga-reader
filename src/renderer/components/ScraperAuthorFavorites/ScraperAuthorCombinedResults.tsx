@@ -59,6 +59,13 @@ import { buildMangaCorrespondenceInput } from "@/renderer/components/MangaCorres
 import useParams from "@/renderer/hooks/useParams";
 import useModal from "@/renderer/hooks/useModal";
 import AuthorSeriesAssignmentDialog from "@/renderer/components/ScraperAuthorFavorites/AuthorSeriesAssignmentDialog";
+import useAuthorSeriesChapterCoverages from "@/renderer/components/ScraperAuthorFavorites/useAuthorSeriesChapterCoverages";
+import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
+import {
+  buildAuthorSeriesQuickReview,
+} from "@/renderer/components/ScraperAuthorFavorites/authorSeriesQuickReview";
+import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
+import { BACKGROUND_SEARCH_RESULTS_VIEW_ID } from "@/renderer/utils/scraperBrowserNavigation";
 
 type ResultsViewMode = "cards" | "series";
 
@@ -192,9 +199,7 @@ export default function ScraperAuthorCombinedResults({
     seriesId: string;
     jobId: string;
   } | null>(null);
-  const [seriesJobsById, setSeriesJobsById] = React.useState<Map<string, string>>(
-    () => new Map(),
-  );
+  const seriesJobsByIdRef = React.useRef(new Map<string, string>());
   const [seriesSnapshots, setSeriesSnapshots] = React.useState<
     Map<string, AuthorSeriesCorrespondenceSnapshot>
   >(() => new Map());
@@ -204,6 +209,21 @@ export default function ScraperAuthorCombinedResults({
   const [seriesOpenError, setSeriesOpenError] = React.useState<string | null>(null);
   const { params } = useParams();
   const { openModal, closeModal } = useModal();
+  const seriesMergeOptions = React.useMemo(() => ({
+    enableRomajiPhoneticMerge: true,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: displayedResults[0]?.preferredTitleLanguageCodes ?? [],
+  }), [displayedResults]);
+  const visualCoverMatchingEnabled = params?.scraperVisualCoverMatchingEnabled !== false;
+  const {
+    mergedResults: visuallyMergedResults,
+    fingerprintsBySourceKey: seriesCoverFingerprints,
+    loading: seriesCoverFingerprintsLoading,
+  } = useVisualMultiSearchMerge(
+    displayedResults,
+    seriesMergeOptions,
+    visualCoverMatchingEnabled,
+  );
   const {
     active: showUnseenOnly,
     recordsById: unseenFilterRecordsById,
@@ -220,8 +240,8 @@ export default function ScraperAuthorCombinedResults({
     setShowBlacklistedCardsLocally,
   } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
   const manuallySplitResults = React.useMemo(
-    () => applyManualMultiSearchSplits(displayedResults, splitResultIds),
-    [displayedResults, splitResultIds],
+    () => applyManualMultiSearchSplits(visuallyMergedResults, splitResultIds),
+    [splitResultIds, visuallyMergedResults],
   );
   const originalFilteredResults = React.useMemo(
     () => filterMultiSearchMergedResultsByOriginal(manuallySplitResults, originalOnly),
@@ -260,14 +280,28 @@ export default function ScraperAuthorCombinedResults({
     () => buildQuickReviewItemsFromMergedResults(visibleDisplayedResults),
     [visibleDisplayedResults],
   );
-  const seriesMergeOptions = React.useMemo(() => ({
-    enableRomajiPhoneticMerge: true,
-    assumeSameAuthor: true,
-    preferredTitleLanguageCodes: displayedResults[0]?.preferredTitleLanguageCodes ?? [],
-  }), [displayedResults]);
+  const {
+    coveragesBySourceKey: seriesChapterCoverages,
+    loading: seriesChapterCoveragesLoading,
+  } = useAuthorSeriesChapterCoverages(
+    visibleDisplayedResults,
+    resultsViewMode === "series",
+  );
+  const seriesAnalysisLoading = seriesChapterCoveragesLoading || seriesCoverFingerprintsLoading;
   const automaticSeriesGroups = React.useMemo(
-    () => buildAuthorSeriesGroups(visibleDisplayedResults, seriesMergeOptions),
-    [seriesMergeOptions, visibleDisplayedResults],
+    () => buildAuthorSeriesGroups(
+      visibleDisplayedResults,
+      seriesMergeOptions,
+      new Map(),
+      seriesChapterCoverages,
+      seriesCoverFingerprints,
+    ),
+    [
+      seriesChapterCoverages,
+      seriesCoverFingerprints,
+      seriesMergeOptions,
+      visibleDisplayedResults,
+    ],
   );
   const synchronizedAutomaticSeriesGroups = React.useMemo(
     () => applyAuthorSeriesCorrespondenceSnapshots(
@@ -285,9 +319,17 @@ export default function ScraperAuthorCombinedResults({
         )),
         seriesMergeOptions,
         seriesAssignments,
+        seriesChapterCoverages,
+        seriesCoverFingerprints,
       )
       : synchronizedAutomaticSeriesGroups
-  ), [seriesAssignments, seriesMergeOptions, synchronizedAutomaticSeriesGroups]);
+  ), [
+    seriesAssignments,
+    seriesChapterCoverages,
+    seriesCoverFingerprints,
+    seriesMergeOptions,
+    synchronizedAutomaticSeriesGroups,
+  ]);
   const seriesGroups = React.useMemo(
     () => applyAuthorSeriesCorrespondenceSnapshots(
       assignedSeriesGroups,
@@ -296,52 +338,66 @@ export default function ScraperAuthorCombinedResults({
     ),
     [assignedSeriesGroups, seriesMergeOptions, seriesSnapshots],
   );
+  const seriesQuickReview = React.useMemo(
+    () => buildAuthorSeriesQuickReview(seriesGroups, title),
+    [seriesGroups, title],
+  );
+  const seriesGroupCount = React.useMemo(
+    () => seriesGroups.filter((series) => series.kind === "series").length,
+    [seriesGroups],
+  );
+  const oneShotCount = React.useMemo(
+    () => seriesGroups.find((series) => series.kind === "oneShots")?.chapters.length ?? 0,
+    [seriesGroups],
+  );
 
   React.useEffect(() => {
     setActiveSeriesJob(null);
     setOpeningSeriesId(null);
     setSeriesOpenError(null);
-    setSeriesJobsById(new Map());
+    const emptySeriesJobs = new Map<string, string>();
+    seriesJobsByIdRef.current = emptySeriesJobs;
     setSeriesSnapshots(new Map());
     setSeriesAssignments(new Map());
   }, [multiSearchQuery, title]);
 
-  const handleOpenSeries = React.useCallback(async (seriesId: string) => {
+  const ensureSeriesJobId = React.useCallback(async (seriesId: string): Promise<string | null> => {
     const series = seriesGroups.find((candidate) => candidate.id === seriesId);
-    if (!series || series.kind !== "series") return;
+    if (!series || series.kind !== "series") return null;
 
-    const existingJobId = seriesJobsById.get(seriesId);
-    if (existingJobId) {
-      setActiveSeriesJob({ seriesId, jobId: existingJobId });
-      return;
-    }
+    const existingJobId = seriesJobsByIdRef.current.get(seriesId);
+    if (existingJobId) return existingJobId;
 
+    const input = buildMangaCorrespondenceInput({
+      params,
+      reference: series.reference,
+      request: "otherChapters",
+      strategy: "balanced",
+      scrapers,
+    });
+    const result = buildAuthorSeriesPrefilledCorrespondenceResult(series);
+    const metadata = await createPrefilledBackgroundSearch({
+      input,
+      kind: "mangaCorrespondence",
+      params,
+      primaryTerm: series.title,
+      result,
+      resultCount: result.matches.length,
+      title: `Correspondances · ${series.title}`,
+    });
+    const nextJobs = new Map(seriesJobsByIdRef.current);
+    nextJobs.set(seriesId, metadata.id);
+    seriesJobsByIdRef.current = nextJobs;
+    return metadata.id;
+  }, [params, scrapers, seriesGroups]);
+
+  const handleOpenSeries = React.useCallback(async (seriesId: string) => {
     setOpeningSeriesId(seriesId);
     setSeriesOpenError(null);
     try {
-      const input = buildMangaCorrespondenceInput({
-        params,
-        reference: series.reference,
-        request: "otherChapters",
-        strategy: "balanced",
-        scrapers,
-      });
-      const result = buildAuthorSeriesPrefilledCorrespondenceResult(series);
-      const metadata = await createPrefilledBackgroundSearch({
-        input,
-        kind: "mangaCorrespondence",
-        params,
-        primaryTerm: series.title,
-        result,
-        resultCount: result.matches.length,
-        title: `Correspondances · ${series.title}`,
-      });
-      setSeriesJobsById((currentJobs) => {
-        const nextJobs = new Map(currentJobs);
-        nextJobs.set(seriesId, metadata.id);
-        return nextJobs;
-      });
-      setActiveSeriesJob({ seriesId, jobId: metadata.id });
+      const jobId = await ensureSeriesJobId(seriesId);
+      if (!jobId) return;
+      setActiveSeriesJob({ seriesId, jobId });
     } catch (openError) {
       setSeriesOpenError(openError instanceof Error
         ? openError.message
@@ -349,7 +405,21 @@ export default function ScraperAuthorCombinedResults({
     } finally {
       setOpeningSeriesId(null);
     }
-  }, [params, scrapers, seriesGroups, seriesJobsById]);
+  }, [ensureSeriesJobId]);
+
+  const handleOpenSeriesInWorkspace = React.useCallback(async (seriesId: string) => {
+    const series = seriesGroups.find((candidate) => candidate.id === seriesId);
+    if (!series || series.kind !== "series") return false;
+
+    const jobId = await ensureSeriesJobId(seriesId);
+    if (!jobId) return false;
+    return openWorkspaceTarget({
+      kind: "manga-manager.view",
+      viewId: BACKGROUND_SEARCH_RESULTS_VIEW_ID,
+      title: `Correspondances · ${series.title}`,
+      locationState: { backgroundSearchJobId: jobId },
+    }, { activate: false });
+  }, [ensureSeriesJobId, seriesGroups]);
 
   const handleSeriesSnapshot = React.useCallback((
     seriesId: string,
@@ -590,8 +660,12 @@ export default function ScraperAuthorCombinedResults({
             <div>
               <h3>{resultsSectionTitle}</h3>
               <p>
-                {resultsViewMode === "series" ? `${seriesGroups.length} série(s), ` : ""}
+                {resultsViewMode === "series" ? `${seriesGroupCount} série(s), ` : ""}
+                {resultsViewMode === "series" && oneShotCount
+                  ? `${oneShotCount} one-shot(s), `
+                  : ""}
                 {visibleDisplayedResults.length} carte(s), {loadedSourceCount} source(s) chargee(s)
+                {seriesAnalysisLoading ? ", analyse du classement…" : ""}
                 {shouldHideBlacklistedCards && blacklistedResultCount > 0
                   ? `, ${blacklistedResultCount} masquee(s)`
                   : ""}.
@@ -650,7 +724,18 @@ export default function ScraperAuthorCombinedResults({
                   Par série
                 </button>
               </div>
-              <QuickReviewLauncher items={quickReviewItems} />
+              <QuickReviewLauncher
+                disabled={resultsViewMode === "series" && seriesAnalysisLoading}
+                items={resultsViewMode === "series"
+                  ? seriesQuickReview.items
+                  : quickReviewItems}
+                onOpenSeries={resultsViewMode === "series"
+                  ? handleOpenSeriesInWorkspace
+                  : undefined}
+                seriesSession={resultsViewMode === "series"
+                  ? seriesQuickReview.seriesSession
+                  : undefined}
+              />
               <BlacklistedCardsDisplayToggle
                 blacklistedCardCount={blacklistedResultCount}
                 hideBlacklistedCards={hideBlacklistedCards}
@@ -661,13 +746,19 @@ export default function ScraperAuthorCombinedResults({
           </div>
 
           {resultsViewMode === "series" ? (
-            <ScraperAuthorSeriesResults
-              groups={seriesGroups}
-              openingSeriesId={openingSeriesId}
-              onOpenSeries={(seriesId) => void handleOpenSeries(seriesId)}
-              onCorrectAssignment={handleCorrectSeriesAssignment}
-              renderCard={renderResultCard}
-            />
+            seriesAnalysisLoading ? (
+              <div className="scraper-browser__message">
+                Analyse des chapitres et des couvertures…
+              </div>
+            ) : (
+              <ScraperAuthorSeriesResults
+                groups={seriesGroups}
+                openingSeriesId={openingSeriesId}
+                onOpenSeries={(seriesId) => void handleOpenSeries(seriesId)}
+                onCorrectAssignment={handleCorrectSeriesAssignment}
+                renderCard={renderResultCard}
+              />
+            )
           ) : renderResultCards(visibleDisplayedResults)}
           {!visibleDisplayedResults.length ? (
             <div className="scraper-browser__message">

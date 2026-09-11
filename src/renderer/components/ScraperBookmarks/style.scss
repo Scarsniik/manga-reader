@@ -523,6 +523,21 @@
   font-size: 12px;
 }
 
+.scraper-bookmark-duplicates-modal__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scraper-bookmark-duplicates-modal__stats > span {
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d5deeb;
+  font-weight: 700;
+}
+
 .scraper-bookmark-modal-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;

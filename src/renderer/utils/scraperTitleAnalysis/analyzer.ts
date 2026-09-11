@@ -17,6 +17,7 @@ import {
   splitTitleAnalysisAlternatives,
   splitTitleAnalysisListValue,
 } from "@/renderer/utils/scraperTitleAnalysis/text";
+import { stripTrailingTitleTranslationMethod } from "@/renderer/utils/scraperTitleAnalysis/metadata";
 import {
   appendTitleSequenceMarkers,
   extractTitleSequenceMarkers,
@@ -71,7 +72,9 @@ const applyFieldValue = (
   }
 
   if (field === "title") {
-    const titleAlternatives = splitTitleAnalysisAlternatives(normalizedValue)
+    const titleAlternatives = splitTitleAnalysisAlternatives(
+      stripTrailingTitleTranslationMethod(normalizedValue),
+    )
       .map((alternative) => extractTitleSequenceMarkers(alternative));
     const primaryAlternative = titleAlternatives[0] ?? extractTitleSequenceMarkers(normalizedValue);
 

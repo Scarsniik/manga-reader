@@ -371,6 +371,11 @@ export default function SettingsModalContent() {
           type: 'checkbox',
         },
         {
+          name: 'scraperVisualCoverMatchingEnabled',
+          label: 'Utiliser la ressemblance visuelle pour fusionner les fiches et regrouper les séries',
+          type: 'checkbox',
+        },
+        {
           name: 'scraperAuthorCombinedView',
           label: 'Afficher les pages auteur en vue combinée',
           type: 'checkbox',
@@ -649,6 +654,7 @@ export default function SettingsModalContent() {
         'scraperAuthorFavoriteCacheResults',
         'scraperHideBlacklistedTagCards',
         'scraperCardPotentialMatchesEnabled',
+        'scraperVisualCoverMatchingEnabled',
         'scraperAuthorCombinedView',
         'scraperTagCombinedView',
         'scraperTagFavoriteShowUnseenFirst',
@@ -887,6 +893,7 @@ export default function SettingsModalContent() {
       scraperScrapeDetailsWithCards: !!values.scraperScrapeDetailsWithCards,
       scraperHideBlacklistedTagCards: !!values.scraperHideBlacklistedTagCards,
       scraperCardPotentialMatchesEnabled: values.scraperCardPotentialMatchesEnabled !== false,
+      scraperVisualCoverMatchingEnabled: values.scraperVisualCoverMatchingEnabled !== false,
       scraperTagFavoriteShowUnseenFirst: values.scraperTagFavoriteShowUnseenFirst !== false,
       scraperLatestResultLimit: Number.isFinite(scraperLatestScraperResultLimit)
         ? scraperLatestScraperResultLimit

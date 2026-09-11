@@ -27,6 +27,8 @@ type Props = {
 const DETECTION_LABELS: Record<MangaCorrespondenceChapterDetection["source"], string> = {
   explicitChapter: "marqueur de chapitre explicite",
   explicitVolume: "marqueur de volume explicite",
+  explicitPart: "marqueur de partie explicite",
+  corroboratedAlternative: "numéro confirmé par le titre alternatif",
   compoundTitle: "premier numéro d’un titre à double numérotation",
   bareTitleNumber: "numéro placé dans le titre",
   namedChapter: "chapitre nommé dans le titre",

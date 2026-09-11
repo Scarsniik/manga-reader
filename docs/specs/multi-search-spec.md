@@ -469,7 +469,20 @@ La V1 retient une fusion déterministe et prudente :
 
 - même URL source si elle est disponible ;
 - ou même titre normalisé après découpe des titres alternatifs et suppression des contextes connus ;
+- ou titre court et variante traduite séparée par un tiret, uniquement dans un contexte de même auteur
+  et sans marqueur de chapitre, partie ou volume ;
 - ou titre quasi identique avec une seule difference de caractere, uniquement si les auteurs provisoires sont compatibles et si le titre est assez long.
+- ou couvertures perceptuellement equivalentes avec un radical de titre long en commun ; lorsque
+  l'auteur est deja confirme, des titres sans alphabet commun peuvent aussi etre compares s'ils
+  occupent le meme emplacement de chapitre. Un conflit d'auteur ou de chapitre explicite reste
+  bloquant. Cette verification est asynchrone, mise en cache et controlee par le reglage utilisateur
+  `scraperVisualCoverMatchingEnabled`.
+
+Les marqueurs techniques de traduction places en suffixe, comme `MTL` avec ou sans crochets, ne font
+pas partie du titre. Un marqueur de sequence trouve dans une des traductions s'applique a la carte
+entiere afin que deux parties distinctes ne fusionnent pas par l'intermediaire d'un alias sans numero.
+Les barres verticales ASCII, pleine chasse, typographiques et coreennes sont toutes reconnues comme
+separateurs de titres alternatifs lorsqu'elles sont hors parenthèses.
 
 Il n'y a pas de score de similarité réglable. Un doublon visible est moins grave qu'un mauvais regroupement.
 
@@ -617,12 +630,14 @@ La V1 du multi-search repose sur les choix suivants :
 - Le filtre de langue compare des codes normalises : les alias et variantes de casse comme `EN`, `eng` et `English` correspondent tous a `en`. Sur une card fusionnee, seules les sources compatibles sont conservees et la card reste visible tant qu'au moins une source correspond.
 - La normalisation de merge retire ensuite les blocs entre crochets et accolades, puis supprime les apostrophes avant comparaison. Une variante retire aussi les blocs entre parentheses pour comparer le titre coeur sans le contexte de serie.
 - Pour les titres japonais composes de kana sans kanji, le merge ajoute des variantes romaji legeres basees sur la lecture hiragana/katakana. Ces variantes couvrent aussi un repli prudent des voyelles longues et une cle compacte sans espaces pour rapprocher les sources japonaises et les sources romanisees.
-- Pour les titres avec kanji ou japonais mixte, le renderer demande aussi une romanisation avancee a Kuroshiro + Kuromoji via Electron. Les cibles envoyees a l'outil lourd utilisent le meme decoupage que le merge : alternatives separees par une barre verticale, une barre oblique, leurs variantes pleine largeur ou un tiret long japonais entoure d'espaces, blocs auteur/contexte retires, puis auteurs provisoires traites separement. Les variantes normales, espacees, issues des lectures/prononciations Kuromoji, avec macrons (`imōto`), sans macrons (`imouto`), et selon plusieurs systemes romaji (`hepburn`, `passport`, `nippon`) sont ajoutees aux cles de merge avant l'envoi au worker.
+- Pour les titres avec kanji ou japonais mixte, le renderer demande aussi une romanisation avancee a Kuroshiro + Kuromoji via Electron. Les cibles envoyees a l'outil lourd utilisent le meme decoupage que le merge : alternatives separees par une barre verticale, une barre oblique entouree d'espaces, leurs variantes pleine largeur ou un tiret long japonais entoure d'espaces, blocs auteur/contexte retires, puis auteurs provisoires traites separement. Une barre oblique compacte reste dans le titre afin de ne pas decouper les dates, fractions et franchises. La suppression des accents latins recompose ensuite les kana avant leur filtrage afin de préserver les dakuten de `ガ`, `バ`, `ジ` et des autres kana voisés. Les variantes normales, espacees, issues des lectures/prononciations Kuromoji, avec macrons (`imōto`), sans macrons (`imouto`), et selon plusieurs systemes romaji (`hepburn`, `passport`, `nippon`) sont ajoutees aux cles de merge avant l'envoi au worker.
 - Une option de parametres permet d'ajouter une cle phonétique romaji legere et bornee aux variantes normalisees pour reduire les faux negatifs entre conventions proches, par exemple voyelles longues, lettres latines differentes ou katakana de type gairaigo (`chiimu` / `team`). Elle n'est creee que sur des chaines romaji assez longues.
 - Les blocs entre crochets places au tout debut d'un titre sont extraits comme `tentativeAuthorNames`, meme lorsqu'ils sont precedes par un prefixe de convention entre parentheses comme `(SC37)`. Les marqueurs de langue evidents sont ignores. Cette information est exposee dans les exports et sert de veto faible : si deux sources ont des auteurs provisoires differents, elles ne fusionnent pas par titre. Une URL identique reste prioritaire.
 - Les auteurs utilisent une normalisation dediee et prudente. Elle rapproche notamment les voyelles longues et les ordres de nom courants (`Oshima Aki`, `Ooshima Aki`, `Ōshima Aki`, `Ohshima Aki`, `Aki Oshima`) sans appliquer le fuzzy de titre aux noms.
+- Dans une vue de même auteur, la clé phonétique rapproche aussi le voisement japonais courant de `tsuma`/`zuma`. Un bloc auteur initial auquel il manque seulement le crochet ouvrant reste extrait et retiré du titre comparé.
 - Les cards chargees depuis une page auteur conservent aussi les noms de cette page comme contexte auteur. Les alias des différentes sources d'un même auteur favori ou d'une même vue auteur combinée sont partagés entre leurs cards et romanisés séparément si nécessaire. Un auteur explicitement extrait du titre reste prioritaire sur ce contexte.
 - Les caractères `|`, `｜`, `│`, `┃`, `¦`, `/` et le tiret japonais `ー` entouré d'espaces dans un titre de résultat sont traités comme des séparateurs de titres alternatifs, souvent deux langues pour un même manga. Chaque alternative est comparée aux autres titres, et une alternative qui ne matche pas n'empêche pas la fusion si une autre alternative matche.
+- Un marqueur `MTL` nu placé entre le numéro de chapitre et les suffixes entre crochets est traité comme une métadonnée. Les titres découpés par un tiret peuvent fusionner lorsque leurs marqueurs de séquence structurés sont identiques, mais jamais lorsque leurs numéros sont différents.
 - Une card bilingue qui correspond exactement à plusieurs groupes monolingues déjà créés réunit ces groupes, quel que soit l'ordre d'arrivée des résultats. Ce pont ne s'applique qu'aux alternatives explicitement séparées et validées par les autres gardes de merge.
 - Le merge extrait des marqueurs de séquence structurés : nombres nus en suffixe, chiffres romains, `#`, `Part`, `Vol`, `Chapter`, `Episode`, ranges, `Zenpen`/`Kouhen`, `前編`/`後編` et `上巻`/`下巻`. Les notations équivalentes sont canonisées et deux profils portant des séquences différentes restent séparés. Une date de publication seule n'est pas interprétée comme un numéro de volume.
 - Quand les auteurs provisoires sont identiques ou manquants d'un cote, le merge accepte aussi une seule difference de caractere entre deux alternatives normalisees longues. Ce fallback ne s'applique pas si les deux sources ont des auteurs provisoires contradictoires.

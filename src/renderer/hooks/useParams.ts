@@ -102,6 +102,7 @@ export type AppParams = {
     scraperScrapeDetailsWithCards?: boolean;
     scraperHideBlacklistedTagCards?: boolean;
     scraperCardPotentialMatchesEnabled?: boolean;
+    scraperVisualCoverMatchingEnabled?: boolean;
     scraperBlacklistedTagsByScraper?: ScraperTagBlacklistByScraper;
     scraperTagListViewSettingsByScraper?: ScraperTagListViewSettingsByScraper;
     scraperLatestResultLimit?: number;

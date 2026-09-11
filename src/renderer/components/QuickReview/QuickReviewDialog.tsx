@@ -2,6 +2,7 @@ import React from "react";
 import LanguageFlags from "@/renderer/components/LanguageFlags/LanguageFlags";
 import QuickReviewActions from "@/renderer/components/QuickReview/QuickReviewActions";
 import QuickReviewLinks from "@/renderer/components/QuickReview/QuickReviewLinks";
+import QuickReviewSeriesHeader from "@/renderer/components/QuickReview/QuickReviewSeriesHeader";
 import QuickReviewThumbnails from "@/renderer/components/QuickReview/QuickReviewThumbnails";
 import ScraperPotentialMangaMatches from "@/renderer/components/ScraperBrowser/components/ScraperPotentialMangaMatches";
 import usePotentialMangaMatchBookmarkGuard from "@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchBookmarkGuard";
@@ -14,7 +15,11 @@ import {
   normalizeQuickReviewTextSlots,
   uniqueQuickReviewText,
 } from "@/renderer/components/QuickReview/quickReviewText";
-import type { QuickReviewItem } from "@/renderer/components/QuickReview/types";
+import type {
+  QuickReviewItem,
+  QuickReviewOpenSeries,
+  QuickReviewSeriesSession,
+} from "@/renderer/components/QuickReview/types";
 import useQuickReviewDetails from "@/renderer/components/QuickReview/useQuickReviewDetails";
 import useQuickReviewBookmark from "@/renderer/components/QuickReview/useQuickReviewBookmark";
 import useQuickReviewLayout from "@/renderer/components/QuickReview/useQuickReviewLayout";
@@ -44,9 +49,13 @@ import {
 import "@/renderer/components/QuickReview/scrollbars.scss";
 import "@/renderer/components/QuickReview/style.scss";
 
-type Props = { items: QuickReviewItem[] };
+type Props = {
+  items: QuickReviewItem[];
+  onOpenSeries?: QuickReviewOpenSeries;
+  seriesSession?: QuickReviewSeriesSession;
+};
 
-export default function QuickReviewDialog({ items }: Props) {
+export default function QuickReviewDialog({ items, onOpenSeries, seriesSession }: Props) {
   const { closeModal } = useModal();
   const { params } = useParams();
   const { shortcuts } = useShortcutSettings();
@@ -56,6 +65,7 @@ export default function QuickReviewDialog({ items }: Props) {
   const [previewedThumbnailIndex, setPreviewedThumbnailIndex] = React.useState<number | null>(null);
   const [markingRead, setMarkingRead] = React.useState(false);
   const [potentialMatchesToggleRequest, setPotentialMatchesToggleRequest] = React.useState(0);
+  const [openingSeriesId, setOpeningSeriesId] = React.useState<string | null>(null);
   const thumbnailSize = normalizeQuickReviewThumbnailSize(params?.quickReviewThumbnailSize);
   const thumbnailMaxColumns = normalizeQuickReviewThumbnailMaxColumns(
     params?.quickReviewThumbnailMaxColumns,
@@ -71,6 +81,21 @@ export default function QuickReviewDialog({ items }: Props) {
   );
   const currentItem = items[currentIndex] ?? null;
   const isComplete = currentIndex >= items.length;
+  const itemIndexById = React.useMemo(
+    () => new Map(items.map((item, index) => [item.id, index])),
+    [items],
+  );
+  const currentSeriesPosition = React.useMemo(() => {
+    if (!currentItem || !seriesSession) return null;
+
+    for (let seriesIndex = 0; seriesIndex < seriesSession.groups.length; seriesIndex += 1) {
+      const series = seriesSession.groups[seriesIndex];
+      const chapterIndex = series.chapters.findIndex((chapter) => chapter.itemId === currentItem.id);
+      if (chapterIndex >= 0) return { chapterIndex, series, seriesIndex };
+    }
+
+    return null;
+  }, [currentItem, seriesSession]);
   const primaryViewIdentity = React.useMemo(() => (
     currentItem
       ? buildSearchResultViewHistoryIdentity(
@@ -102,6 +127,7 @@ export default function QuickReviewDialog({ items }: Props) {
     currentItem,
     displaySettings.quickReviewShowCover,
     displaySettings.quickReviewShowThumbnails,
+    seriesSession ? 0 : undefined,
   );
 
   React.useLayoutEffect(() => {
@@ -173,6 +199,7 @@ export default function QuickReviewDialog({ items }: Props) {
     enabled: params?.scraperCardPotentialMatchesEnabled !== false,
     items,
     onOpenError: setOpenError,
+    prefetchCountOverride: seriesSession ? 0 : undefined,
   });
   const isBookmarked = bookmark.isBookmarked;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
@@ -213,6 +240,46 @@ export default function QuickReviewDialog({ items }: Props) {
     setCurrentIndex((index) => Math.min(items.length, index + 1));
   }, [bookmark.bookmarking, items.length]);
 
+  const goToItemId = React.useCallback((itemId: string) => {
+    if (bookmark.bookmarking) return;
+    const itemIndex = itemIndexById.get(itemId);
+    if (itemIndex !== undefined) setCurrentIndex(itemIndex);
+  }, [bookmark.bookmarking, itemIndexById]);
+
+  const goPreviousSeries = React.useCallback(() => {
+    if (!currentSeriesPosition || currentSeriesPosition.seriesIndex === 0) return;
+    const previousSeries = seriesSession?.groups[currentSeriesPosition.seriesIndex - 1];
+    const itemId = previousSeries?.chapters[0]?.itemId;
+    if (itemId) goToItemId(itemId);
+  }, [currentSeriesPosition, goToItemId, seriesSession]);
+
+  const goNextSeries = React.useCallback(() => {
+    if (!currentSeriesPosition) return;
+    const nextSeries = seriesSession?.groups[currentSeriesPosition.seriesIndex + 1];
+    const itemId = nextSeries?.chapters[0]?.itemId;
+    if (itemId) goToItemId(itemId);
+  }, [currentSeriesPosition, goToItemId, seriesSession]);
+
+  const handleOpenCurrentSeries = React.useCallback(async () => {
+    const series = currentSeriesPosition?.series;
+    if (!series || !onOpenSeries || openingSeriesId) return;
+
+    setOpenError(null);
+    setOpeningSeriesId(series.id);
+    try {
+      const opened = await onOpenSeries(series.id);
+      if (!opened) {
+        setOpenError("Impossible d'ouvrir cette série dans un nouvel onglet workspace.");
+      }
+    } catch (error) {
+      setOpenError(error instanceof Error
+        ? error.message
+        : "Impossible d'ouvrir cette série dans un nouvel onglet workspace.");
+    } finally {
+      setOpeningSeriesId(null);
+    }
+  }, [currentSeriesPosition, onOpenSeries, openingSeriesId]);
+
   const { scrollRef: thumbnailScrollRef, scrollThumbnails } = useQuickReviewThumbnailScroll({
     canLoadMore: canLoadMoreThumbnails,
     keyboardScrollSpeed,
@@ -247,16 +314,20 @@ export default function QuickReviewDialog({ items }: Props) {
     bookmarking: bookmark.bookmarking,
     closeModal,
     goNext,
+    goNextSeries,
     goPrevious,
+    goPreviousSeries,
     handleBookmark,
     isComplete,
     markingRead,
     onClosePreview: closeThumbnailPreview,
+    onOpenSeries: onOpenSeries ? handleOpenCurrentSeries : undefined,
     onTogglePotentialMatches: () => setPotentialMatchesToggleRequest((request) => request + 1),
     onToggleRead: handleToggleRead,
     potentialMatchesAvailable,
     previewOpen: previewedThumbnailIndex !== null,
     scrollThumbnails,
+    seriesActive: Boolean(currentSeriesPosition),
     shortcuts,
     thumbnailsVisible: displaySettings.quickReviewShowThumbnails,
   });
@@ -286,6 +357,9 @@ export default function QuickReviewDialog({ items }: Props) {
     shortcuts.quickReviewPotentialMatchesToggle,
   );
   const markReadShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewMarkRead);
+  const previousSeriesShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewSeriesPrevious);
+  const nextSeriesShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewSeriesNext);
+  const openSeriesShortcut = getQuickReviewShortcutLabel(shortcuts.quickReviewOpenSeries);
   const thumbnailsPanel = displaySettings.quickReviewShowThumbnails ? (
     <QuickReviewThumbnails
       large={wide}
@@ -317,6 +391,24 @@ export default function QuickReviewDialog({ items }: Props) {
         <div className="quick-review__progress-track" aria-hidden="true">
           <span style={{ width: `${((currentIndex + 1) / items.length) * 100}%` }} />
         </div>
+
+        {currentSeriesPosition && seriesSession ? (
+          <QuickReviewSeriesHeader
+            chapterIndex={currentSeriesPosition.chapterIndex}
+            contextLabel={seriesSession.contextLabel}
+            nextSeriesShortcut={nextSeriesShortcut}
+            onNextSeries={goNextSeries}
+            onOpenSeries={onOpenSeries ? () => void handleOpenCurrentSeries() : undefined}
+            onPreviousSeries={goPreviousSeries}
+            onSelectChapter={goToItemId}
+            openSeriesShortcut={openSeriesShortcut}
+            openingSeries={openingSeriesId === currentSeriesPosition.series.id}
+            previousSeriesShortcut={previousSeriesShortcut}
+            series={currentSeriesPosition.series}
+            seriesCount={seriesSession.groups.length}
+            seriesIndex={currentSeriesPosition.seriesIndex}
+          />
+        ) : null}
 
         <article className={[
           "quick-review__card",
@@ -446,11 +538,13 @@ export default function QuickReviewDialog({ items }: Props) {
           bookmarkVerificationLoading={bookmarkVerificationLoading}
           currentIndex={currentIndex}
           isBookmarked={isBookmarked}
+          nextLabel={currentSeriesPosition ? "Chapitre suivant" : undefined}
           nextShortcut={nextShortcut}
           onBookmark={() => void handleBookmark()}
           onNext={goNext}
           onPrevious={goPrevious}
           previousShortcut={previousShortcut}
+          previousLabel={currentSeriesPosition ? "Chapitre précédent" : undefined}
           sourceAvailable={Boolean(sourceUrl)}
         />
       </div>

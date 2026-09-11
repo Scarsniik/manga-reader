@@ -69,6 +69,10 @@ import type {
     SelectorAssistantPreviewMode,
     SelectorAssistantSessionSnapshot,
 } from "../shared/selectorAssistant";
+import type {
+    VisualImageFingerprintRequest,
+    VisualImageFingerprintResponse,
+} from "../shared/visualImageFingerprint";
 
 type WindowState = {
     isFocused: boolean;
@@ -371,6 +375,9 @@ contextBridge.exposeInMainWorld('api', {
     removeLink: (linkId: string) => ipcRenderer.invoke('remove-link', linkId),
     openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
     openJsonDocument: (request: { filename?: string; content: string }) => ipcRenderer.invoke("open-json-document", request),
+    getVisualImageFingerprints: (
+        request: VisualImageFingerprintRequest,
+    ): Promise<VisualImageFingerprintResponse> => ipcRenderer.invoke("visual-image-fingerprints", request),
     createBackgroundSearch: (request: CreateBackgroundSearchRequest) => ipcRenderer.invoke("background-search-create", request),
     getBackgroundSearchQueue: () => ipcRenderer.invoke("background-search-list"),
     getBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-get", jobId),

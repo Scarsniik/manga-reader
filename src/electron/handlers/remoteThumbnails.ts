@@ -100,7 +100,7 @@ const fetchRemoteImage = async (
   };
 };
 
-const buildRemoteThumbnail = async (
+export const buildRemoteThumbnail = async (
   sourceUrl: string,
   refererUrl: string,
   width: number,

@@ -18,6 +18,7 @@ import {
   type MultiSearchMergeState,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import MergeWorker from "@/renderer/components/MultiSearch/multiSearchMerge.worker?worker";
+import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
 
 type MergeCache = {
   mergeState: MultiSearchMergeState;
@@ -105,6 +106,7 @@ export default function useIncrementalMultiSearchMerge(
   sources: MultiSearchSourceResult[],
   refreshKey: number,
   optionsInput?: Partial<MultiSearchMergeOptions> | null,
+  visualCoverMatchingEnabled = false,
 ): IncrementalMultiSearchMergeResult {
   const options = normalizeMultiSearchMergeOptions(optionsInput);
   const preferredTitleLanguageCodesKey = options.preferredTitleLanguageCodes.join("|");
@@ -258,8 +260,14 @@ export default function useIncrementalMultiSearchMerge(
     sources,
   ]);
 
+  const visualMerge = useVisualMultiSearchMerge(
+    sources.length ? mergedResults : [],
+    options,
+    visualCoverMatchingEnabled,
+  );
+
   return {
-    mergedResults: sources.length ? mergedResults : [],
+    mergedResults: visualMerge.mergedResults,
     mergeProgress,
   };
 }

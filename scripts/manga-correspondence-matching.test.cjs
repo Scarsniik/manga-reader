@@ -26,8 +26,10 @@ const source = `
   export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
   export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
   export { getMangaTitleAlternatives } from "@/renderer/utils/mangaMatching/titleProfiles";
+  export { getMangaTitleRomanizationTargets } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getMangaTitleMergeMatchKind } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { haveClearlyConflictingMangaAuthors } from "@/renderer/utils/mangaMatching/titleProfiles";
+  export { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
   export { getTokenBasedRomanizationVariants } from "@/electron/handlers/japaneseRomanizationTokenVariants";
   export { applyCommonReadingAlternatives } from "@/electron/handlers/japaneseRomanizationStringVariants";
   export { isClearlyDerivativeMangaCorrespondenceTitle } from "@/renderer/backgroundSearch/mangaCorrespondenceSourceAnalysis";
@@ -103,8 +105,10 @@ const {
   mergeAuthorCorrespondenceSessionResults,
   selectMangaCorrespondenceRomanizedSearchTerms,
   getMangaTitleAlternatives,
+  getMangaTitleRomanizationTargets,
   getMangaTitleMergeMatchKind,
   haveClearlyConflictingMangaAuthors,
+  extractTentativeAuthorNamesFromTitle,
   getTokenBasedRomanizationVariants,
   applyCommonReadingAlternatives,
   isClearlyDerivativeMangaCorrespondenceTitle,
@@ -358,6 +362,51 @@ test("correspondence parsing uses the default structured parser when a scraper h
   assert.equal(result.chapter, "12");
 });
 
+test("correspondence parsing normalizes fullwidth Japanese metadata brackets", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "（C108）　［ゴールデンバズーカ　（ガガーリン吉）］　バツイチおばさんと説教人妻、ワケあり熟れまんオナホにします。　（オリジナル）　［DL版］",
+    null,
+  );
+
+  assert.equal(
+    result.title,
+    "バツイチおばさんと説教人妻、ワケあり熟れまんオナホにします。",
+  );
+  assert.equal(result.circle, "ゴールデンバズーカ");
+  assert.deepEqual(result.authors, ["ガガーリン吉"]);
+  assert.equal(result.parody, "オリジナル");
+  assert.deepEqual(result.unmatchedParts, ["DL版"]);
+});
+
+test("romanization targets preserve Japanese voiced kana after accent folding", () => {
+  assert.deepEqual(
+    getMangaTitleRomanizationTargets(
+      "［ゴールデンバズーカ （ガガーリン吉）］ バツイチおばさん",
+    ),
+    ["バツイチおばさん"],
+  );
+});
+
+test("a bare MTL marker before bracket suffixes does not hide the chapter", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "[Golden Bazooka (Gagarin Kichi)] Netorareta Bakunyuu Blonde Zuma Elena 3 MTL [English] [Digital]",
+    null,
+  );
+
+  assert.equal(result.title, "Netorareta Bakunyuu Blonde Zuma Elena");
+  assert.equal(result.chapter, "3");
+  assert.equal(result.chapterDetection?.source, "bareTitleNumber");
+});
+
+test("correspondence parsing tolerates a missing opening author bracket and a horizontal subtitle bar", () => {
+  const title = "Gagarin Kichi] Netorare ta bakunyū genki tsuma Yōko ― kaji daikō-saki de toshishita serebu no onaho tsuma ni sa remashita";
+  const result = analyzeMangaCorrespondenceTitle(title, null);
+
+  assert.equal(result.title, "Netorare ta bakunyū genki tsuma Yōko");
+  assert.deepEqual(result.authors, ["Gagarin Kichi"]);
+  assert.deepEqual(extractTentativeAuthorNamesFromTitle(title), ["Gagarin Kichi"]);
+});
+
 test("correspondence parsing separates translated titles and their bare chapter", () => {
   const result = analyzeMangaCorrespondenceTitle(
     "Rental Kanojo Osawari Shimasu 10 ー Grope-a-Girlfriend 10 (Kanojo, Okarishimasu) [English] [Digital]",
@@ -501,6 +550,28 @@ test("correspondence parsing uses explicit volume and Kan markers as release num
     assert.equal(result.chapter, expectedChapter);
     assert.equal(result.chapterDetection?.source, "explicitVolume");
   }
+});
+
+test("correspondence parsing uses explicit part markers as release numbers", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "Mom In The Middle of Midnight Part 2",
+    null,
+  );
+
+  assert.equal(result.title, "Mom In The Middle of Midnight");
+  assert.equal(result.chapter, "2");
+  assert.equal(result.chapterDetection?.source, "explicitPart");
+});
+
+test("a translated alternative corroborates a number before an unseparated subtitle", () => {
+  const result = analyzeMangaCorrespondenceTitle(
+    "(Kouroumu 10) [Nagiyamasugi (Nagiyama)] Hifuu Ryoujoku 5 Katei Kyoushi Renko | Secret Sex Assault 5 - Private Tutor Renko [English]",
+    null,
+  );
+
+  assert.equal(result.title, "Hifuu Ryoujoku");
+  assert.equal(result.chapter, "5");
+  assert.equal(result.chapterDetection?.source, "corroboratedAlternative");
 });
 
 test("correspondence parsing tolerates alternate titles with punctuated chapters", () => {
@@ -968,10 +1039,58 @@ test("advanced reference romanization matches a Japanese title to its romaji tit
   );
 });
 
+test("fullwidth C108 metadata and voiced kana still merge with the romaji title", () => {
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title: "（C108）　［ゴールデンバズーカ　（ガガーリン吉）］　バツイチおばさんと説教人妻、ワケあり熟れまんオナホにします。　（オリジナル）　［DL版］",
+        advancedRomanizedTitleVariants: [
+          "batsuichiobasantosekkyouhitozuma wakeariuremanonahonishimasu",
+        ],
+      },
+      {
+        title: "(C108) [Golden Bazooka (Gagarin Kichi)] Batsuichi Oba-san to Sekkyou Hitozuma, Wake Ari Ureman Onaho ni Shimasu. [Sample]",
+      },
+      { enableRomajiPhoneticMerge: true, assumeSameAuthor: true },
+    ),
+    "katakana",
+  );
+});
+
+test("same-author merge handles MTL after a chapter and compact subtitle spacing", () => {
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title: "[Golden Bazooka (Gagarin Kichi)] Netorareta Bakunyuu Blonde Zuma Elena 3 MTL [English] [Digital]",
+      },
+      {
+        title: "[Golden bazooka(Gagarin kichi)] Netorareta bakunyuublondezuma Elena 3 - tsumamo shinkyomo inaka oyajini  azukaremashita w-",
+      },
+      { enableRomajiPhoneticMerge: true, assumeSameAuthor: true },
+    ),
+    "katakana",
+  );
+});
+
+test("same-author merge tolerates orphaned author brackets and tsuma rendaku", () => {
+  assert.equal(
+    getMangaTitleMergeMatchKind(
+      {
+        title: "Gagarin Kichi] Netorare ta bakunyū genki tsuma Yōko ― kaji daikō-saki de toshishita serebu no onaho tsuma ni sa remashita",
+      },
+      {
+        title: "[Golden Bazooka (Gagarin Kichi)] Netorareta Bakunyuu Genki Zuma Youko -Kaji Daikou saki de Toshishita Celeb no Onaho Zuma ni Saremashita- [English] [Decensored]",
+      },
+      { enableRomajiPhoneticMerge: true, assumeSameAuthor: true },
+    ),
+    "katakana",
+  );
+});
+
 test("multi-search recognizes normalized bilingual title separators", () => {
   assert.deepEqual(
-    getMangaTitleAlternatives("Titre japonais｜English title │ Titre français ー Titolo italiano"),
-    ["Titre japonais", "English title", "Titre français", "Titolo italiano"],
+    getMangaTitleAlternatives("Titre japonais｜English title │ Titre français ㅣ 한국어 제목 ー Titolo italiano"),
+    ["Titre japonais", "English title", "Titre français", "한국어 제목", "Titolo italiano"],
   );
 });
 
@@ -1529,6 +1648,85 @@ test("same-author merge keeps sequence markers as separate works", () => {
     preferredTitleLanguageCodes: [],
   });
   assert.equal(merged.length, 2);
+});
+
+test("same-author merge keeps bilingual explicit parts as separate works", () => {
+  const first = buildMergeSource(
+    "~Who Cares About the Age Difference~ Part 1 The Wife Next Door (35) | Otonari no Hitozuma (35) ~Toshi no Sa Nante (Jou)~",
+    "en",
+    "https://example.test/bilingual-part-1",
+  );
+  const second = buildMergeSource(
+    "~Who Cares About the Age Difference~ Part 2 The Mature Woman Only For me (45) | Otonari no Hitozuma (45) ~Toshi no Sa Nante (Shimo)~",
+    "en",
+    "https://example.test/bilingual-part-2",
+  );
+
+  assert.equal(mergeMultiSearchResults([first, second], {
+    enableRomajiPhoneticMerge: false,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: [],
+  }).length, 2);
+});
+
+test("same-author merge ignores a bare trailing machine-translation marker", () => {
+  const bracketed = buildMergeSource(
+    "[gonza] Kotowarenai Haha - Mother who cannot refuse. [English] [MTL] [Digital]",
+    "en",
+    "https://example.test/bracketed-mtl",
+  );
+  const bare = buildMergeSource(
+    "[gonza] Kotowarenai Haha - Mother who cannot refuse. [Digital] MTL",
+    "en",
+    "https://example.test/bare-mtl",
+  );
+
+  const merged = mergeMultiSearchResults([bracketed, bare], {
+    enableRomajiPhoneticMerge: false,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: [],
+  });
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].sources.length, 2);
+});
+
+test("same-author merge connects a short title to an ASCII-dash translation", () => {
+  const shortTitle = buildMergeSource(
+    "[gonza] Kotowarenai Haha [Digital]",
+    "ja",
+    "https://example.test/short-title",
+  );
+  const translated = buildMergeSource(
+    "[gonza] Kotowarenai Haha - Mother who cannot refuse. [English]",
+    "en",
+    "https://example.test/translated-title",
+  );
+
+  assert.equal(mergeMultiSearchResults([shortTitle, translated], {
+    enableRomajiPhoneticMerge: false,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: [],
+  }).length, 1);
+});
+
+test("same-author dash matching keeps distinct subtitles separate", () => {
+  const whiteEdition = buildMergeSource(
+    "Long Series - White Edition",
+    "en",
+    "https://example.test/white-edition",
+  );
+  const blackEdition = buildMergeSource(
+    "Long Series - Black Edition",
+    "en",
+    "https://example.test/black-edition",
+  );
+
+  assert.equal(mergeMultiSearchResults([whiteEdition, blackEdition], {
+    enableRomajiPhoneticMerge: false,
+    assumeSameAuthor: true,
+    preferredTitleLanguageCodes: [],
+  }).length, 2);
 });
 
 test("compact romaji fuzzy matching is limited to same-author views", () => {

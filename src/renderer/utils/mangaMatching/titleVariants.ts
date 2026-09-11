@@ -65,7 +65,9 @@ export const getLooseRomajiPhoneticKey = (normalizedTitle: string): string => {
     return "";
   }
 
-  const compactValue = normalizedTitle.replace(/\s+/g, "");
+  const compactValue = normalizedTitle
+    .replace(/zuma/g, "tsuma")
+    .replace(/\s+/g, "");
   if (compactValue.length < MIN_PHONETIC_SOURCE_LENGTH) {
     return "";
   }

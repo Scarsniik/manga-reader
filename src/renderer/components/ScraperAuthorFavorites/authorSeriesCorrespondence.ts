@@ -10,7 +10,10 @@ import { getEffectiveMangaCorrespondenceMatches } from "@/renderer/components/Ma
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import type { MultiSearchMergeOptions, MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { MangaCorrespondenceBackgroundInput } from "@/shared/backgroundSearch";
-import type { AuthorSeriesGroup } from "@/renderer/components/ScraperAuthorFavorites/authorSeriesGroups";
+import {
+  countAuthorSeriesChapters,
+  type AuthorSeriesGroup,
+} from "@/renderer/components/ScraperAuthorFavorites/authorSeriesGroups";
 import {
   compareMangaCorrespondenceChapters,
   groupMangaCorrespondenceChapters,
@@ -117,7 +120,7 @@ const rebuildSeriesGroup = (
   const chapterGroups = groupMangaCorrespondenceChapters(
     [...baseEntries, ...correspondenceEntries].map((entry) => ({
       chapter: entry.chapter,
-      entry: entry.source,
+      entry,
     })),
   ).sort((left, right) => compareMangaCorrespondenceChapters(left.chapter, right.chapter));
   const chapters = chapterGroups.flatMap(({ chapter, entries }) => {
@@ -126,15 +129,18 @@ const rebuildSeriesGroup = (
       fallbackTitle: snapshot.input.reference.title,
       idPrefix: group.id,
       mergeOptions,
-      sources: entries,
+      sources: entries.map((entry) => entry.source),
     });
-    return result ? [{ chapter, result }] : [];
+    if (!result) return [];
+
+    return [{ chapter, result }];
   });
 
   return {
     ...group,
     title: snapshot.input.reference.title,
     reference: snapshot.input.reference,
+    chapterCount: countAuthorSeriesChapters(chapters.map((chapter) => chapter.chapter)),
     chapters,
     sourceCount: new Set(chapters.flatMap((chapter) => (
       chapter.result.sources.map(buildMultiSearchSourceIdentityKey)

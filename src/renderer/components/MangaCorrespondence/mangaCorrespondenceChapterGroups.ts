@@ -47,7 +47,8 @@ export const resolveMangaCorrespondenceChapterGroups = (
       ...(reference?.alternativeTitles ?? []),
     ]);
     const preferAnalyzedChapter = titleAnalysis.chapterDetection?.source === "compoundTitle"
-      || titleAnalysis.chapterDetection?.source === "explicitVolume";
+      || titleAnalysis.chapterDetection?.source === "explicitVolume"
+      || titleAnalysis.chapterDetection?.source === "explicitPart";
     const detectedChapter = resolveMangaCorrespondenceMatchChapter(
       match.chapter,
       titleAnalysis.chapter,

@@ -17,6 +17,7 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
+import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
 import {
   removeScraperTagFavorite,
   useScraperTagFavorites,
@@ -115,13 +116,18 @@ export default function ScraperTagFavoritesView({
     () => mergeMultiSearchResults(visibleSources, mergeOptions),
     [mergeOptions, visibleSources],
   );
+  const { mergedResults: visuallyMergedResults } = useVisualMultiSearchMerge(
+    mergedResults,
+    mergeOptions,
+    params?.scraperVisualCoverMatchingEnabled !== false,
+  );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],
   );
   const languageFilteredMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-    [languageFilterModes, mergedResults],
+    () => filterMultiSearchMergedResultsByLanguage(visuallyMergedResults, languageFilterModes),
+    [languageFilterModes, visuallyMergedResults],
   );
   const visibleMergedResults = useMemo(
     () => filterMultiSearchMergedResultsByText(

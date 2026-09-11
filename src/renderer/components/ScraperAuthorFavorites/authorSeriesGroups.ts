@@ -12,6 +12,8 @@ import type {
 import { normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
 import {
   compareMangaCorrespondenceChapters,
+  describeMangaCorrespondenceChapter,
+  doMangaCorrespondenceChaptersOverlap,
   groupMangaCorrespondenceChapters,
   inferMangaCorrespondenceFirstChapter,
 } from "@/renderer/utils/mangaCorrespondenceChapter";
@@ -20,6 +22,14 @@ import {
   getScraperFeature,
   getScraperTitleAnalysisFeatureConfig,
 } from "@/renderer/utils/scraperRuntime";
+import type {
+  AuthorSeriesSourceChapterCoverage,
+} from "@/renderer/components/ScraperAuthorFavorites/authorSeriesChapterCoverage";
+import {
+  areVisualImagesEquivalent,
+  type VisualImageFingerprint,
+} from "@/shared/visualImageFingerprint";
+import { haveSharedVisualTitleStem } from "@/renderer/utils/visualTitleMatching";
 
 export type AuthorSeriesChapterGroup = {
   chapter: string;
@@ -31,6 +41,7 @@ export type AuthorSeriesGroup = {
   kind: "series" | "oneShots";
   title: string;
   aliases: string[];
+  chapterCount: number;
   chapters: AuthorSeriesChapterGroup[];
   reference: MangaCorrespondenceReference;
   sourceCount: number;
@@ -50,6 +61,8 @@ type SeriesSourceCandidate = {
   chapter: string;
   chapterAliases: string[];
   hasExplicitChapter: boolean;
+  hasNamedChapter: boolean;
+  hasManualAssignment: boolean;
   seriesTitles: string[];
   seriesTitle: string;
   source: MultiSearchSourceResult;
@@ -66,6 +79,7 @@ const uniqueNormalizedTitles = (values: string[]): string[] => Array.from(new Se
 const analyzeSeriesSource = (
   source: MultiSearchSourceResult,
   assignment?: AuthorSeriesAssignmentOverride,
+  chapterCoverage?: AuthorSeriesSourceChapterCoverage,
 ): SeriesSourceCandidate => {
   const titleAnalysisFeature = Array.isArray(source.scraper.features)
     ? getScraperFeature(source.scraper, "titleAnalysis")
@@ -83,9 +97,13 @@ const analyzeSeriesSource = (
   const assignedSeriesTitle = assignment?.seriesTitle.trim();
   const effectiveSeriesTitles = assignedSeriesTitle ? [assignedSeriesTitle] : seriesTitles;
   const assignedChapter = assignment?.chapter.trim();
+  const hasNamedChapter = !assignment
+    && !chapterCoverage
+    && analysis.chapterDetection?.source === "namedChapter";
   const chapter = assignment
     ? assignedChapter || UNKNOWN_CHAPTER
-    : analysis.chapter
+    : chapterCoverage?.chapter
+      ?? analysis.chapter
       ?? inferMangaCorrespondenceFirstChapter(analysis, seriesTitles)
       ?? UNKNOWN_CHAPTER;
 
@@ -93,11 +111,77 @@ const analyzeSeriesSource = (
     aliases: uniqueNormalizedTitles(effectiveSeriesTitles),
     chapter,
     chapterAliases: assignment ? [] : analysis.namedChapterAliases,
-    hasExplicitChapter: assignment ? Boolean(assignedChapter) : Boolean(analysis.chapter),
+    hasExplicitChapter: assignment
+      ? Boolean(assignedChapter)
+      : Boolean(chapterCoverage || (analysis.chapter && !hasNamedChapter)),
+    hasNamedChapter,
+    hasManualAssignment: Boolean(assignment),
     seriesTitles: effectiveSeriesTitles,
     seriesTitle: assignedSeriesTitle || analysis.title || source.result.title,
     source,
   };
+};
+
+const connectVisualCandidates = (
+  candidates: SeriesSourceCandidate[],
+  parents: number[],
+  fingerprintsBySourceKey: ReadonlyMap<string, VisualImageFingerprint>,
+): void => {
+  const visualParents = candidates.map((_, index) => index);
+  const getVisualRoot = (index: number): number => {
+    while (visualParents[index] !== index) index = visualParents[index];
+    return index;
+  };
+  const canConnectVisualChapters = (leftIndex: number, rightIndex: number): boolean => {
+    const leftRoot = getVisualRoot(leftIndex);
+    const rightRoot = getVisualRoot(rightIndex);
+    const leftExplicitChapters = candidates.filter((candidate, index) => (
+      getVisualRoot(index) === leftRoot && candidate.hasExplicitChapter
+    ));
+    const rightExplicitChapters = candidates.filter((candidate, index) => (
+      getVisualRoot(index) === rightRoot && candidate.hasExplicitChapter
+    ));
+    return leftExplicitChapters.every((leftCandidate) => rightExplicitChapters.every((rightCandidate) => (
+      doMangaCorrespondenceChaptersOverlap(leftCandidate.chapter, rightCandidate.chapter)
+    )));
+  };
+
+  for (let leftIndex = 0; leftIndex < candidates.length; leftIndex += 1) {
+    const left = candidates[leftIndex];
+    if (left.hasManualAssignment) continue;
+    const leftFingerprint = fingerprintsBySourceKey.get(
+      buildMultiSearchSourceIdentityKey(left.source),
+    );
+    if (!leftFingerprint) continue;
+
+    for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
+      const right = candidates[rightIndex];
+      if (
+        right.hasManualAssignment
+        || !haveSharedVisualTitleStem(left.aliases, right.aliases)
+      ) continue;
+      const rightFingerprint = fingerprintsBySourceKey.get(
+        buildMultiSearchSourceIdentityKey(right.source),
+      );
+      if (!rightFingerprint || !areVisualImagesEquivalent(leftFingerprint, rightFingerprint)) continue;
+
+      connectCandidate(parents, leftIndex, rightIndex);
+      if (canConnectVisualChapters(leftIndex, rightIndex)) {
+        connectCandidate(visualParents, leftIndex, rightIndex);
+      }
+    }
+  }
+
+  const membersByRoot = new Map<number, number[]>();
+  candidates.forEach((_, index) => {
+    const root = getVisualRoot(index);
+    membersByRoot.set(root, [...(membersByRoot.get(root) ?? []), index]);
+  });
+  membersByRoot.forEach((indexes, root) => {
+    if (indexes.length < 2) return;
+    const visualAlias = `visual match ${root}`;
+    indexes.forEach((index) => candidates[index].chapterAliases.push(visualAlias));
+  });
 };
 
 const connectCandidate = (parents: number[], leftIndex: number, rightIndex: number): void => {
@@ -120,6 +204,8 @@ const connectCandidate = (parents: number[], leftIndex: number, rightIndex: numb
 const groupSeriesCandidates = (
   results: MultiSearchMergedResult[],
   assignments: ReadonlyMap<string, AuthorSeriesAssignmentOverride>,
+  chapterCoverages: ReadonlyMap<string, AuthorSeriesSourceChapterCoverage>,
+  fingerprintsBySourceKey: ReadonlyMap<string, VisualImageFingerprint>,
 ): SeriesSourceCandidate[][] => {
   const candidates: SeriesSourceCandidate[] = [];
   const resultCandidateIndexes: number[][] = [];
@@ -130,6 +216,7 @@ const groupSeriesCandidates = (
       candidates.push(analyzeSeriesSource(
         source,
         assignments.get(buildMultiSearchSourceIdentityKey(source)),
+        chapterCoverages.get(buildMultiSearchSourceIdentityKey(source)),
       ));
       return index;
     });
@@ -153,6 +240,7 @@ const groupSeriesCandidates = (
     if (firstIndex === undefined) return;
     indexes.slice(1).forEach((index) => connectCandidate(parents, firstIndex, index));
   });
+  connectVisualCandidates(candidates, parents, fingerprintsBySourceKey);
 
   const getRoot = (index: number): number => {
     while (parents[index] !== index) index = parents[index];
@@ -166,13 +254,53 @@ const groupSeriesCandidates = (
   return Array.from(groups.values());
 };
 
+export const countAuthorSeriesChapters = (chapters: string[]): number => {
+  const integerIntervals: Array<{ start: number; end: number }> = [];
+  const otherChapterKeys = new Set<string>();
+
+  chapters.forEach((chapter) => {
+    const descriptor = describeMangaCorrespondenceChapter(chapter);
+    if (
+      descriptor.kind !== "other"
+      && Number.isSafeInteger(descriptor.start)
+      && Number.isSafeInteger(descriptor.end)
+      && descriptor.end >= descriptor.start
+      && descriptor.end - descriptor.start < 10_000
+    ) {
+      integerIntervals.push({ start: descriptor.start, end: descriptor.end });
+      return;
+    }
+
+    otherChapterKeys.add(descriptor.value.toLocaleLowerCase());
+  });
+
+  integerIntervals.sort((left, right) => left.start - right.start || left.end - right.end);
+  const mergedIntervals: Array<{ start: number; end: number }> = [];
+  integerIntervals.forEach((interval) => {
+    const previous = mergedIntervals[mergedIntervals.length - 1];
+    if (!previous || interval.start > previous.end + 1) {
+      mergedIntervals.push({ ...interval });
+      return;
+    }
+
+    previous.end = Math.max(previous.end, interval.end);
+  });
+
+  return otherChapterKeys.size + mergedIntervals.reduce((count, interval) => (
+    count + interval.end - interval.start + 1
+  ), 0);
+};
+
 const buildSeriesGroup = (
   candidates: SeriesSourceCandidate[],
   mergeOptions: MultiSearchMergeOptions,
 ): BuiltAuthorSeriesGroup | null => {
   const sources = candidates.map((candidate) => candidate.source);
+  const explicitChapterSources = candidates
+    .filter((candidate) => candidate.hasExplicitChapter)
+    .map((candidate) => candidate.source);
   const preferredSource = selectPreferredMultiSearchTitleSource(
-    sources,
+    explicitChapterSources.length ? explicitChapterSources : sources,
     mergeOptions.preferredTitleLanguageCodes,
   ) ?? sources[0];
   if (!preferredSource) return null;
@@ -192,13 +320,19 @@ const buildSeriesGroup = (
     chapter: candidate.chapter,
     entry: candidate,
   })));
-  const isOneShot = groupedChapters.length === 1
-    && groupedChapters[0].entries.every((candidate) => !candidate.hasExplicitChapter);
-  const chapters = groupedChapters
-    .map((group) => ({
-      ...group,
-      chapter: isOneShot ? preferredCandidate.seriesTitle : group.chapter,
-    }))
+  const namedChapterGroupCount = groupMangaCorrespondenceChapters(
+    candidates.filter((candidate) => candidate.hasNamedChapter).map((candidate) => ({
+      aliases: candidate.chapterAliases,
+      chapter: candidate.chapter,
+      entry: candidate,
+    })),
+  ).length;
+  const isOneShot = candidates.every((candidate) => !candidate.hasExplicitChapter)
+    && namedChapterGroupCount <= 1;
+  const cardChapterGroups = isOneShot
+    ? [{ chapter: preferredCandidate.seriesTitle, entries: candidates }]
+    : groupedChapters;
+  const chapters = cardChapterGroups
     .sort((left, right) => compareMangaCorrespondenceChapters(left.chapter, right.chapter))
     .flatMap(({ chapter, entries }) => {
       const result = buildMangaChapterCard({
@@ -208,7 +342,9 @@ const buildSeriesGroup = (
         mergeOptions,
         sources: entries.map((entry) => entry.source),
       });
-      return result ? [{ chapter, result }] : [];
+      if (!result) return [];
+
+      return [{ chapter, result }];
     });
 
   return {
@@ -216,6 +352,7 @@ const buildSeriesGroup = (
     kind: "series",
     title: preferredCandidate.seriesTitle,
     aliases,
+    chapterCount: countAuthorSeriesChapters(chapters.map((chapter) => chapter.chapter)),
     chapters,
     reference: {
       scraperId: preferredSource.scraper.id,
@@ -260,6 +397,7 @@ const buildOneShotGroup = (groups: BuiltAuthorSeriesGroup[]): AuthorSeriesGroup 
     kind: "oneShots",
     title: ONE_SHOT_GROUP_TITLE,
     aliases: Array.from(new Set(oneShotGroups.flatMap((group) => group.aliases))),
+    chapterCount: oneShotGroups.reduce((count, group) => count + group.chapterCount, 0),
     chapters: oneShotGroups
       .flatMap((group) => group.chapters)
       .sort((left, right) => left.chapter.localeCompare(right.chapter, "fr", {
@@ -275,8 +413,15 @@ export const buildAuthorSeriesGroups = (
   results: MultiSearchMergedResult[],
   mergeOptions: MultiSearchMergeOptions,
   assignments: ReadonlyMap<string, AuthorSeriesAssignmentOverride> = new Map(),
+  chapterCoverages: ReadonlyMap<string, AuthorSeriesSourceChapterCoverage> = new Map(),
+  fingerprintsBySourceKey: ReadonlyMap<string, VisualImageFingerprint> = new Map(),
 ): AuthorSeriesGroup[] => {
-  const builtGroups = groupSeriesCandidates(results, assignments).flatMap((candidates) => {
+  const builtGroups = groupSeriesCandidates(
+    results,
+    assignments,
+    chapterCoverages,
+    fingerprintsBySourceKey,
+  ).flatMap((candidates) => {
     const group = buildSeriesGroup(candidates, mergeOptions);
     return group ? [group] : [];
   });

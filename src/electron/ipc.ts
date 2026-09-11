@@ -27,6 +27,7 @@ import * as voicevox from "./handlers/voicevox";
 import * as backgroundSearch from "./handlers/backgroundSearch";
 import * as authorCorrespondenceSessionCache from "./handlers/authorCorrespondenceSessionCache";
 import * as statistics from "./handlers/statistics";
+import * as visualImageFingerprints from "./handlers/visualImageFingerprints";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -114,6 +115,9 @@ ipcMain.handle("remove-link", async (event: IpcMainInvokeEvent, url: string) => 
 ipcMain.handle("open-external-url", async (event: IpcMainInvokeEvent, url: string) => links.openExternalUrl(event, url));
 ipcMain.handle("open-json-document", async (_event: IpcMainInvokeEvent, request: any) => (
     jsonDocuments.openJsonDocument(request)
+));
+ipcMain.handle("visual-image-fingerprints", async (_event: IpcMainInvokeEvent, request: any) => (
+    visualImageFingerprints.getVisualImageFingerprints(request)
 ));
 
 // Background searches
