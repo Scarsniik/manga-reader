@@ -8,19 +8,13 @@ import ScraperTagFavoriteResults from "@/renderer/components/ScraperTagFavorites
 import useTagFavoriteRuns from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
-  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
-import {
-  flattenMultiSearchSources,
-  mergeMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import useParams from "@/renderer/hooks/useParams";
-import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "@/renderer/components/ScraperAuthorFavorites/style.scss";
@@ -139,34 +133,15 @@ export default function ScraperTagCombinedView({
     params?.multiSearchEnableRomajiPhoneticMerge,
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
-  const mergedResults = useMemo(
-    () => mergeMultiSearchResults(visibleSources, mergeOptions),
-    [mergeOptions, visibleSources],
-  );
-  const { mergedResults: visuallyMergedResults } = useVisualMultiSearchMerge(
-    mergedResults,
+  const { mergedResults } = useIncrementalMultiSearchMerge(
+    visibleSources,
+    0,
     mergeOptions,
     params?.scraperVisualCoverMatchingEnabled !== false,
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],
-  );
-  const languageFilteredResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(visuallyMergedResults, languageFilterModes),
-    [languageFilterModes, visuallyMergedResults],
-  );
-  const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByText(
-      languageFilteredResults,
-      debouncedResultTextFilter,
-      getMultiSearchSourceLanguageValues,
-    ),
-    [debouncedResultTextFilter, languageFilteredResults],
-  );
-  const visibleSourceCount = useMemo(
-    () => visibleMergedResults.reduce((count, result) => count + result.sources.length, 0),
-    [visibleMergedResults],
   );
 
   useEffect(() => {
@@ -195,13 +170,13 @@ export default function ScraperTagCombinedView({
       runs={runs}
       pageIndex={pageIndex}
       visiblePageEndIndex={visiblePageEndIndex}
-      mergedResults={visibleMergedResults}
+      mergedResults={mergedResults}
       totalResultCount={mergedResults.length}
-      visibleSourceCount={visibleSourceCount}
       loadedSourceCount={loadedSources.length}
       resultLanguageCodes={resultLanguageCodes}
       languageFilterModes={languageFilterModes}
       textFilter={resultTextFilter}
+      debouncedTextFilter={debouncedResultTextFilter}
       loading={loading}
       message={message}
       error={error || openError}

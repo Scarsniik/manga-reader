@@ -6,22 +6,17 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type {
+  BackendMultiSearchMergeResponse,
   MultiSearchMergeWorkerRequest,
   MultiSearchMergeWorkerResponse,
 } from "@/renderer/components/MultiSearch/multiSearchMergeWorkerProtocol";
 import {
-  createMultiSearchMergeState,
   areMultiSearchMergeOptionsEqual,
-  mergeMultiSearchSourceIntoState,
   normalizeMultiSearchMergeOptions,
-  sortMultiSearchMergedResults,
-  type MultiSearchMergeState,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
-import MergeWorker from "@/renderer/components/MultiSearch/multiSearchMerge.worker?worker";
 import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
 
 type MergeCache = {
-  mergeState: MultiSearchMergeState;
   sourceCount: number;
   sourceRefs: WeakSet<MultiSearchSourceResult>;
   refreshKey: number;
@@ -47,31 +42,19 @@ const buildIdleMergeProgress = (
   durationMs,
 });
 
-const buildEmptyMergeCache = (
-  refreshKey: number,
-  options: MultiSearchMergeOptions,
-): MergeCache => ({
-  mergeState: createMultiSearchMergeState([], options),
-  sourceCount: 0,
-  sourceRefs: new WeakSet<MultiSearchSourceResult>(),
-  refreshKey,
-  options,
-});
-
 const buildMergeCache = (
   sources: MultiSearchSourceResult[],
   refreshKey: number,
   options: MultiSearchMergeOptions,
 ): MergeCache => {
-  const cache = buildEmptyMergeCache(refreshKey, options);
-
-  sources.forEach((source) => {
-    mergeMultiSearchSourceIntoState(cache.mergeState, source);
-    cache.sourceRefs.add(source);
-  });
-  cache.sourceCount = sources.length;
-
-  return cache;
+  const sourceRefs = new WeakSet<MultiSearchSourceResult>();
+  sources.forEach((source) => sourceRefs.add(source));
+  return {
+    sourceCount: sources.length,
+    sourceRefs,
+    refreshKey,
+    options,
+  };
 };
 
 const shouldRebuildMergeCache = (
@@ -90,17 +73,7 @@ const shouldRebuildMergeCache = (
   )
 );
 
-const createMergeWorker = (): Worker | null => {
-  if (typeof Worker === "undefined") {
-    return null;
-  }
-
-  try {
-    return new MergeWorker();
-  } catch {
-    return null;
-  }
-};
+let nextMergeSessionId = 0;
 
 export default function useIncrementalMultiSearchMerge(
   sources: MultiSearchSourceResult[],
@@ -110,62 +83,58 @@ export default function useIncrementalMultiSearchMerge(
 ): IncrementalMultiSearchMergeResult {
   const options = normalizeMultiSearchMergeOptions(optionsInput);
   const preferredTitleLanguageCodesKey = options.preferredTitleLanguageCodes.join("|");
-  const cacheRef = useRef<MergeCache>(buildEmptyMergeCache(refreshKey, options));
-  const workerRef = useRef<Worker | null>(null);
+  const cacheRef = useRef<MergeCache>(buildMergeCache([], refreshKey, options));
+  const sessionIdRef = useRef("");
+  if (!sessionIdRef.current) {
+    nextMergeSessionId += 1;
+    sessionIdRef.current = `multi-search-merge-${Date.now()}-${nextMergeSessionId}`;
+  }
   const requestIdRef = useRef(0);
+  const responseHandlerRef = useRef<(response: MultiSearchMergeWorkerResponse) => void>(() => undefined);
   const [mergedResults, setMergedResults] = useState<MultiSearchMergedResult[]>([]);
   const [mergeProgress, setMergeProgress] = useState<MultiSearchMergeProgress>(buildIdleMergeProgress());
 
-  useEffect(() => {
-    workerRef.current = createMergeWorker();
-    const worker = workerRef.current;
-    if (!worker) {
-      return undefined;
+  responseHandlerRef.current = (response) => {
+    if (response.refreshKey !== cacheRef.current.refreshKey) return;
+    if (response.type === "progress") {
+      setMergeProgress({
+        isActive: true,
+        phase: response.phase,
+        processedSourceCount: response.processedSourceCount,
+        totalSourceCount: Math.max(response.totalSourceCount, cacheRef.current.sourceCount),
+        sourceCount: response.sourceCount,
+        mergedGroupCount: response.mergedGroupCount,
+      });
+      return;
     }
+    if (response.requestId !== requestIdRef.current) return;
+    setMergedResults(response.mergedResults);
+    setMergeProgress(buildIdleMergeProgress(
+      response.sourceCount,
+      response.mergedResults.length,
+      response.durationMs,
+    ));
+  };
 
-    const handleMessage = (event: MessageEvent<MultiSearchMergeWorkerResponse>) => {
-      const response = event.data;
+  useEffect(() => {
+    const unsubscribe = window.api?.onMultiSearchMergeWorkerProgress?.((
+      message: BackendMultiSearchMergeResponse,
+    ) => {
       if (
-        response.refreshKey !== cacheRef.current.refreshKey
+        message.sessionId === sessionIdRef.current
+        && (message.response.type === "progress" || message.response.type === "merged")
       ) {
-        return;
+        responseHandlerRef.current(message.response);
       }
-
-      if (response.type === "progress") {
-        setMergeProgress({
-          isActive: true,
-          phase: response.phase,
-          processedSourceCount: response.processedSourceCount,
-          totalSourceCount: Math.max(response.totalSourceCount, cacheRef.current.sourceCount),
-          sourceCount: response.sourceCount,
-          mergedGroupCount: response.mergedGroupCount,
-        });
-        return;
-      }
-
-      if (response.requestId !== requestIdRef.current) {
-        return;
-      }
-
-      setMergedResults(response.mergedResults);
-      setMergeProgress(buildIdleMergeProgress(
-        response.sourceCount,
-        response.mergedResults.length,
-        response.durationMs,
-      ));
-    };
-
-    worker.addEventListener("message", handleMessage);
+    });
     return () => {
-      worker.removeEventListener("message", handleMessage);
-      worker.terminate();
-      workerRef.current = null;
+      if (typeof unsubscribe === "function") unsubscribe();
+      void window.api?.disposeMultiSearchMergeWorker?.(sessionIdRef.current);
     };
   }, []);
 
   useEffect(() => {
     const cache = cacheRef.current;
-    const worker = workerRef.current;
     const shouldClear = sources.length === 0;
     const shouldReset = shouldClear || shouldRebuildMergeCache(cache, sources, refreshKey, options);
     const newSources = shouldReset
@@ -175,66 +144,34 @@ export default function useIncrementalMultiSearchMerge(
       cache.sourceCount === 0
       && newSources.length === sources.length
     );
-
-    if (!shouldReset && !newSources.length && cache.sourceCount === sources.length) {
-      return;
-    }
-
-    if (!worker) {
-      const startedAt = Date.now();
-      const nextCache = shouldReset
-        ? buildMergeCache(sources, refreshKey, options)
-        : cache;
-
-      if (!shouldReset) {
-        newSources.forEach((source) => {
-          mergeMultiSearchSourceIntoState(nextCache.mergeState, source);
-          nextCache.sourceRefs.add(source);
-        });
-        nextCache.sourceCount = sources.length;
-      }
-
-      cacheRef.current = nextCache;
-      const nextMergedResults = sortMultiSearchMergedResults(nextCache.mergeState.groups);
-      const durationMs = Date.now() - startedAt;
-      setMergedResults(nextMergedResults);
-      setMergeProgress(buildIdleMergeProgress(
-        nextCache.sourceCount,
-        nextMergedResults.length,
-        durationMs,
-      ));
-      return;
-    }
-
-    if (startsFreshMerge) {
-      setMergedResults([]);
-    }
+    if (!shouldReset && !newSources.length && cache.sourceCount === sources.length) return;
+    if (startsFreshMerge) setMergedResults([]);
 
     const previousSourceCount = shouldReset ? 0 : cache.sourceCount;
     const nextCache = shouldReset
-      ? buildEmptyMergeCache(refreshKey, options)
+      ? buildMergeCache(newSources, refreshKey, options)
       : cache;
-
-    newSources.forEach((source) => nextCache.sourceRefs.add(source));
-    nextCache.sourceCount = sources.length;
-    nextCache.refreshKey = refreshKey;
-    nextCache.options = options;
+    if (!shouldReset) {
+      newSources.forEach((source) => nextCache.sourceRefs.add(source));
+      nextCache.sourceCount = sources.length;
+      nextCache.refreshKey = refreshKey;
+      nextCache.options = options;
+    }
     cacheRef.current = nextCache;
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setMergeProgress((currentProgress) => (
-      shouldClear
-        ? buildIdleMergeProgress()
-        : {
-          isActive: true,
-          phase: "queued",
-          processedSourceCount: Math.min(previousSourceCount, sources.length),
-          totalSourceCount: sources.length,
-          sourceCount: Math.min(previousSourceCount, sources.length),
-          mergedGroupCount: shouldReset ? 0 : currentProgress.mergedGroupCount,
-        }
-    ));
+    setMergeProgress((currentProgress) => shouldClear
+      ? buildIdleMergeProgress()
+      : {
+        isActive: true,
+        phase: "queued",
+        processedSourceCount: Math.min(previousSourceCount, sources.length),
+        totalSourceCount: sources.length,
+        sourceCount: Math.min(previousSourceCount, sources.length),
+        mergedGroupCount: shouldReset ? 0 : currentProgress.mergedGroupCount,
+      }
+    );
 
     const request: MultiSearchMergeWorkerRequest = shouldClear
       ? {
@@ -251,7 +188,18 @@ export default function useIncrementalMultiSearchMerge(
         options,
       };
 
-    worker.postMessage(request);
+    void window.api?.runMultiSearchMergeWorker?.(sessionIdRef.current, request)
+      .then((response: MultiSearchMergeWorkerResponse) => {
+        responseHandlerRef.current(response);
+      })
+      .catch((error: unknown) => {
+        if (requestId !== requestIdRef.current) return;
+        console.warn("Failed to merge multi-search results in the backend worker", error);
+        setMergeProgress((current) => buildIdleMergeProgress(
+          sources.length,
+          current.mergedGroupCount,
+        ));
+      });
   }, [
     options.assumeSameAuthor,
     options.enableRomajiPhoneticMerge,

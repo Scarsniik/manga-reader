@@ -14,6 +14,7 @@ export type VisualImageFingerprintInput = {
 
 export type VisualImageFingerprintRequest = {
   images: VisualImageFingerprintInput[];
+  executionId?: string;
 };
 
 export type VisualImageFingerprintResult = {

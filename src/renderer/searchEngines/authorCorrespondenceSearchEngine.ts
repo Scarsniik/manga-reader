@@ -20,7 +20,6 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSearchUtils";
-import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
 import { getFuzzyTextMatchScore, normalizeFuzzyText } from "@/renderer/utils/fuzzyText";
 import {
@@ -67,13 +66,9 @@ type Candidate = Omit<AuthorCorrespondenceMatch, "previewSources">;
 
 const PREVIEW_RESULT_LIMIT = 6;
 
-const selectScrapers = (input: AuthorCorrespondenceBackgroundInput): ScraperRecord[] => {
-  const filter = splitIncludeFilterValues(input.scraperFilterValues);
-  return input.scrapers.filter((scraper) => (
-    !filter.excludedValues.includes(scraper.id)
-    && (!filter.includedValues.length || filter.includedValues.includes(scraper.id))
-  ));
-};
+const selectScrapers = (input: AuthorCorrespondenceBackgroundInput): ScraperRecord[] => (
+  input.scrapers
+);
 
 const canUseAuthorModule = (scraper: ScraperRecord): boolean => {
   const feature = getScraperFeature(scraper, "author");

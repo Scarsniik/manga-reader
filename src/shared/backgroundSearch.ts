@@ -194,6 +194,11 @@ export type MangaCorrespondenceReference = {
   authors: string[];
   authorUrls: string[];
   chapter?: string;
+  thumbnailUrl?: string;
+  thumbnailCandidates?: string[];
+  summary?: string;
+  pageCount?: string;
+  languageCodes?: string[];
 };
 
 export type MangaCorrespondenceBackgroundInput = {

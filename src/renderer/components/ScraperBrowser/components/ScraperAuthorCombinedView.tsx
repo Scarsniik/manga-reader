@@ -9,16 +9,9 @@ import ScraperAuthorCombinedResults from "@/renderer/components/ScraperAuthorFav
 import useAuthorFavoriteRuns from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
-  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
+import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import {
-  flattenMultiSearchSources,
-  mergeMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchUtils";
-import {
-  filterMultiSearchMergedResultsByReadingStatus,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
 import type {
@@ -28,15 +21,12 @@ import type {
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import type { ScraperTemplateContext } from "@/renderer/utils/scraperTemplateContext";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
-import {
-  buildSearchResultViewHistoryIdentity,
-  sortByScraperViewHistoryNewState,
-} from "@/renderer/utils/scraperViewHistory";
 import "@/renderer/components/MultiSearch/style.scss";
 import "@/renderer/components/MultiSearch/card.scss";
 import "@/renderer/components/ScraperAuthorFavorites/style.scss";
 import useParams from "@/renderer/hooks/useParams";
 import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 
 type Props = {
   scraper: ScraperRecord;
@@ -166,49 +156,10 @@ export default function ScraperAuthorCombinedView({
   }), [
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
-  const mergedResults = useMemo(
-    () => mergeMultiSearchResults(loadedSources, mergeOptions),
-    [loadedSources, mergeOptions],
-  );
+  const { mergedResults } = useIncrementalMultiSearchMerge(loadedSources, 0, mergeOptions);
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
     [loadedSources],
-  );
-  const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByText(
-      filterMultiSearchMergedResultsByReadingStatus(
-        filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-        readingStatusFilters,
-        {
-          libraryMangas,
-          bookmarkedSourceKeys,
-          sourceProgressIndex,
-          viewHistoryRecordsById,
-        },
-      ),
-      debouncedResultTextFilter,
-      getMultiSearchSourceLanguageValues,
-    ),
-    [
-      bookmarkedSourceKeys,
-      debouncedResultTextFilter,
-      languageFilterModes,
-      libraryMangas,
-      mergedResults,
-      readingStatusFilters,
-      sourceProgressIndex,
-      viewHistoryRecordsById,
-    ],
-  );
-  const displayedMergedResults = useMemo(
-    () => sortByScraperViewHistoryNewState(
-      visibleMergedResults,
-      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-      viewHistoryRecordsById,
-      newSourceHistoryIds,
-      false,
-    ),
-    [newSourceHistoryIds, viewHistoryRecordsById, visibleMergedResults],
   );
 
   useEffect(() => {
@@ -247,13 +198,14 @@ export default function ScraperAuthorCombinedView({
       title={authorTitle || "Auteur"}
       description={`Vue combinee de ${scraper.name}.`}
       runs={runs}
-      displayedResults={displayedMergedResults}
-      visibleResultCount={visibleMergedResults.length}
+      displayedResults={mergedResults}
       loadedSourceCount={loadedSources.length}
       resultLanguageCodes={resultLanguageCodes}
       languageFilterModes={languageFilterModes}
       readingStatusFilters={readingStatusFilters}
       textFilter={resultTextFilter}
+      debouncedTextFilter={debouncedResultTextFilter}
+      showUnseenFirst={false}
       loading={loading}
       message={message}
       error={error || openError}

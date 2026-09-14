@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { normalizeScraperViewHistorySourceUrl } from "@/shared/scraper";
 import type { ScraperSearchResultItem } from "@/shared/scraper";
 import type { MangaMergeOptions, MatchableManga } from "@/renderer/utils/mangaMatching/titleProfiles";
 import type { ScraperTitleAnalysisConfigs } from "@/renderer/utils/scraperTitleAnalysisConfigs";
-import { enrichMatchableMangasWithJapaneseRomanization } from "@/renderer/utils/mangaMatching/advancedRomanization";
 import { extractTentativeAuthorNamesFromTitle } from "@/renderer/utils/mangaMatching/tentativeAuthors";
 import {
   getPotentialSeriesReadingState,
@@ -15,6 +13,9 @@ import type {
   ScraperPotentialMangaMatchState,
 } from "@/renderer/components/ScraperBrowser/utils/potentialMangaMatchTypes";
 import type { PotentialMangaMatchCandidateCollections } from "@/renderer/components/ScraperBrowser/hooks/usePotentialMangaMatchCandidates";
+import type {
+  BackendPotentialMatchResponse,
+} from "@/renderer/components/MultiSearch/multiSearchMergeWorkerProtocol";
 
 export type ScraperCardPotentialMatchInput = {
   key: string;
@@ -49,8 +50,6 @@ const EMPTY_STATE: State = {
   loading: false,
   loadingKeys: new Set(),
 };
-const MATCHING_CHUNK_SIZE = 12;
-
 const uniqueValues = (values: string[]): string[] => {
   const seen = new Set<string>();
   return values.filter((value) => {
@@ -202,46 +201,6 @@ export const matchScraperCardPotentialMatchInput = (
   };
 };
 
-const yieldToRenderer = (): Promise<void> => new Promise((resolve) => {
-  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-    window.requestAnimationFrame(() => resolve());
-    return;
-  }
-
-  setTimeout(resolve, 0);
-});
-
-const buildMatchesByKeyIncrementally = async (
-  inputs: ScraperCardPotentialMatchInput[],
-  currents: MatchableManga[],
-  readingCandidates: ScraperPotentialMangaMatch[],
-  bookmarkCandidates: ScraperPotentialMangaMatch[],
-  readingListCandidates: ScraperPotentialMangaMatch[],
-  mergeOptions: MangaMergeOptions,
-  titleAnalysisConfigs: ScraperTitleAnalysisConfigs,
-): Promise<Map<string, ScraperCardPotentialMatchResult>> => {
-  const matchesByKey = new Map<string, ScraperCardPotentialMatchResult>();
-  await yieldToRenderer();
-
-  for (let index = 0; index < inputs.length; index += 1) {
-    matchesByKey.set(inputs[index].key, matchScraperCardPotentialMatchInput(
-      inputs[index],
-      currents[index],
-      readingCandidates,
-      bookmarkCandidates,
-      readingListCandidates,
-      mergeOptions,
-      titleAnalysisConfigs,
-    ));
-
-    if ((index + 1) % MATCHING_CHUNK_SIZE === 0) {
-      await yieldToRenderer();
-    }
-  }
-
-  return matchesByKey;
-};
-
 export const retainScraperCardPotentialMatches = (
   matchesByKey: Map<string, ScraperCardPotentialMatchResult>,
   inputs: ScraperCardPotentialMatchInput[],
@@ -256,14 +215,7 @@ export const retainScraperCardPotentialMatches = (
   return retainedMatches;
 };
 
-type PreparedInput = {
-  input: ScraperCardPotentialMatchInput;
-  current: MatchableManga;
-  signature: string;
-};
-
 type MatchCacheEntry = {
-  phase: "enriched" | "stale" | "standard";
   result: ScraperCardPotentialMatchResult;
   signature: string;
 };
@@ -275,28 +227,15 @@ type MatchCacheRevision = {
   readingCandidates: ScraperPotentialMangaMatch[];
   readingListCandidates: ScraperPotentialMangaMatch[];
   titleAnalysisConfigs: ScraperTitleAnalysisConfigs;
-};
-
-type EnrichedCandidateCollections = {
-  bookmarkCandidates: ScraperPotentialMangaMatch[];
-  readingCandidates: ScraperPotentialMangaMatch[];
-  readingListCandidates: ScraperPotentialMangaMatch[];
-};
-
-type EnrichedCandidateCache = {
-  bookmarkCandidates: ScraperPotentialMangaMatch[];
-  promise: Promise<EnrichedCandidateCollections>;
-  readingCandidates: ScraperPotentialMangaMatch[];
-  readingListCandidates: ScraperPotentialMangaMatch[];
+  revision: number;
 };
 
 const hasSameMatchCacheRevision = (
-  revision: MatchCacheRevision | null,
+  revision: MatchCacheRevision,
   candidates: PotentialMangaMatchCandidateCollections,
   mergeOptions: MangaMergeOptions,
-): revision is MatchCacheRevision => Boolean(
-  revision
-  && revision.bookmarkCandidates === candidates.bookmarkCandidates
+): boolean => (
+  revision.bookmarkCandidates === candidates.bookmarkCandidates
   && revision.readingCandidates === candidates.readingCandidates
   && revision.readingListCandidates === candidates.readingListCandidates
   && revision.titleAnalysisConfigs === candidates.titleAnalysisConfigs
@@ -304,7 +243,7 @@ const hasSameMatchCacheRevision = (
 );
 
 const buildMatchesFromCache = (
-  preparedInputs: PreparedInput[],
+  preparedInputs: Array<{ input: ScraperCardPotentialMatchInput; signature: string }>,
   revision: MatchCacheRevision,
 ): Map<string, ScraperCardPotentialMatchResult> => {
   const matchesByKey = new Map<string, ScraperCardPotentialMatchResult>();
@@ -317,93 +256,7 @@ const buildMatchesFromCache = (
   return matchesByKey;
 };
 
-const carryForwardMatchCacheEntries = (
-  previousRevision: MatchCacheRevision | null,
-  preparedInputs: PreparedInput[],
-): Map<string, MatchCacheEntry> => {
-  const entries = new Map<string, MatchCacheEntry>();
-  if (!previousRevision) {
-    return entries;
-  }
-
-  // Keep stable badges visible while changed candidate collections are rechecked.
-  preparedInputs.forEach(({ input, signature }) => {
-    const previousEntry = previousRevision.entries.get(input.key);
-    if (previousEntry?.signature === signature) {
-      entries.set(input.key, {
-        ...previousEntry,
-        phase: "stale",
-      });
-    }
-  });
-  return entries;
-};
-
-const haveSameMatches = (
-  left: Map<string, ScraperCardPotentialMatchResult>,
-  right: Map<string, ScraperCardPotentialMatchResult>,
-): boolean => (
-  left.size === right.size
-  && Array.from(left).every(([key, value]) => right.get(key) === value)
-);
-
-const haveSameKeys = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean => (
-  left.size === right.size
-  && Array.from(left).every((key) => right.has(key))
-);
-
-const updateStateIfChanged = (
-  setState: Dispatch<SetStateAction<State>>,
-  nextState: State,
-): void => {
-  setState((current) => (
-    current.loading === nextState.loading
-    && haveSameMatches(current.matchesByKey, nextState.matchesByKey)
-    && haveSameKeys(current.loadingKeys, nextState.loadingKeys)
-      ? current
-      : nextState
-  ));
-};
-
-const getEnrichedCandidateCollections = (
-  cacheRef: MutableRefObject<EnrichedCandidateCache | null>,
-  candidates: PotentialMangaMatchCandidateCollections,
-): Promise<EnrichedCandidateCollections> => {
-  const cached = cacheRef.current;
-  if (
-    cached
-    && cached.bookmarkCandidates === candidates.bookmarkCandidates
-    && cached.readingCandidates === candidates.readingCandidates
-    && cached.readingListCandidates === candidates.readingListCandidates
-  ) {
-    return cached.promise;
-  }
-
-  const readingCount = candidates.readingCandidates.length;
-  const bookmarkCount = candidates.bookmarkCandidates.length;
-  const promise = enrichMatchableMangasWithJapaneseRomanization([
-    ...candidates.readingCandidates,
-    ...candidates.bookmarkCandidates,
-    ...candidates.readingListCandidates,
-  ]).then((enriched) => ({
-    readingCandidates: enriched.slice(0, readingCount) as ScraperPotentialMangaMatch[],
-    bookmarkCandidates: enriched.slice(
-      readingCount,
-      readingCount + bookmarkCount,
-    ) as ScraperPotentialMangaMatch[],
-    readingListCandidates: enriched.slice(
-      readingCount + bookmarkCount,
-    ) as ScraperPotentialMangaMatch[],
-  }));
-
-  cacheRef.current = {
-    bookmarkCandidates: candidates.bookmarkCandidates,
-    promise,
-    readingCandidates: candidates.readingCandidates,
-    readingListCandidates: candidates.readingListCandidates,
-  };
-  return promise;
-};
+let nextPotentialMatchSessionId = 0;
 
 export default function useScraperCardPotentialMatches({
   inputs,
@@ -412,182 +265,136 @@ export default function useScraperCardPotentialMatches({
   enabled = true,
 }: Options): State {
   const [state, setState] = useState<State>(EMPTY_STATE);
-  const matchCacheRef = useRef<MatchCacheRevision | null>(null);
-  const enrichedCandidateCacheRef = useRef<EnrichedCandidateCache | null>(null);
+  const sessionIdRef = useRef("");
+  if (!sessionIdRef.current) {
+    nextPotentialMatchSessionId += 1;
+    sessionIdRef.current = `potential-match-${Date.now()}-${nextPotentialMatchSessionId}`;
+  }
+  const requestIdRef = useRef(0);
+  const sentRevisionRef = useRef(-1);
+  const matchCacheRef = useRef<MatchCacheRevision>({
+    bookmarkCandidates: candidates.bookmarkCandidates,
+    enableRomajiPhoneticMerge: mergeOptions.enableRomajiPhoneticMerge,
+    entries: new Map(),
+    readingCandidates: candidates.readingCandidates,
+    readingListCandidates: candidates.readingListCandidates,
+    titleAnalysisConfigs: candidates.titleAnalysisConfigs,
+    revision: 0,
+  });
+  if (!hasSameMatchCacheRevision(matchCacheRef.current, candidates, mergeOptions)) {
+    matchCacheRef.current = {
+      bookmarkCandidates: candidates.bookmarkCandidates,
+      enableRomajiPhoneticMerge: mergeOptions.enableRomajiPhoneticMerge,
+      entries: new Map(),
+      readingCandidates: candidates.readingCandidates,
+      readingListCandidates: candidates.readingListCandidates,
+      titleAnalysisConfigs: candidates.titleAnalysisConfigs,
+      revision: matchCacheRef.current.revision + 1,
+    };
+    sentRevisionRef.current = -1;
+  }
   const validInputs = useMemo(() => inputs.filter((input) => Boolean(input.title.trim())), [inputs]);
-  const preparedInputs = useMemo(() => validInputs.reduce<PreparedInput[]>((prepared, input) => {
-    const current = buildScraperPotentialMatchable(input);
-    if (current) {
-      prepared.push({
-        input,
-        current,
-        signature: getScraperCardPotentialMatchInputSignature(input),
-      });
-    }
-    return prepared;
-  }, []), [validInputs]);
+  const preparedInputs = useMemo(() => validInputs.map((input) => ({
+    input,
+    signature: getScraperCardPotentialMatchInputSignature(input),
+  })), [validInputs]);
+
+  useEffect(() => () => {
+    requestIdRef.current += 1;
+    void window.api?.disposeMultiSearchMergeWorker?.(sessionIdRef.current);
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    if (!enabled || !preparedInputs.length || preparedInputs.length !== validInputs.length) {
-      updateStateIfChanged(setState, EMPTY_STATE);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!hasSameMatchCacheRevision(matchCacheRef.current, candidates, mergeOptions)) {
-      const previousRevision = matchCacheRef.current;
-      matchCacheRef.current = {
-        bookmarkCandidates: candidates.bookmarkCandidates,
-        enableRomajiPhoneticMerge: mergeOptions.enableRomajiPhoneticMerge,
-        entries: carryForwardMatchCacheEntries(previousRevision, preparedInputs),
-        readingCandidates: candidates.readingCandidates,
-        readingListCandidates: candidates.readingListCandidates,
-        titleAnalysisConfigs: candidates.titleAnalysisConfigs,
-      };
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (!enabled || !preparedInputs.length) {
+      setState(EMPTY_STATE);
+      return;
     }
     const revision = matchCacheRef.current;
     if (candidates.loading) {
-      updateStateIfChanged(setState, {
+      setState({
         matchesByKey: buildMatchesFromCache(preparedInputs, revision),
         loading: true,
         loadingKeys: new Set(preparedInputs.map(({ input }) => input.key)),
       });
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-
-    const inputsNeedingStandardPass = preparedInputs.filter(({ input, signature }) => {
+    const missingInputs = preparedInputs.filter(({ input, signature }) => {
       const cached = revision.entries.get(input.key);
-      return !cached || cached.signature !== signature || cached.phase === "stale";
+      return !cached || cached.signature !== signature;
     });
-    const inputsNeedingEnrichedPass = preparedInputs.filter(({ input, signature }) => {
-      const cached = revision.entries.get(input.key);
-      return !cached || cached.signature !== signature || cached.phase !== "enriched";
-    });
-    const loadingKeys = new Set([
-      ...inputsNeedingStandardPass,
-      ...inputsNeedingEnrichedPass,
-    ].map(({ input }) => input.key));
+    const loadingKeys = new Set(missingInputs.map(({ input }) => input.key));
 
     if (!loadingKeys.size) {
-      updateStateIfChanged(setState, {
+      setState({
         matchesByKey: buildMatchesFromCache(preparedInputs, revision),
         loading: false,
         loadingKeys,
       });
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-
-    updateStateIfChanged(setState, {
-      matchesByKey: buildMatchesFromCache(preparedInputs, revision),
-      loading: true,
-      loadingKeys,
-    });
-
-    const runMatching = async () => {
-      if (inputsNeedingStandardPass.length) {
-        const standardMatches = await buildMatchesByKeyIncrementally(
-          inputsNeedingStandardPass.map(({ input }) => input),
-          inputsNeedingStandardPass.map(({ current }) => current),
-          candidates.readingCandidates,
-          candidates.bookmarkCandidates,
-          candidates.readingListCandidates,
-          mergeOptions,
-          candidates.titleAnalysisConfigs,
-        );
-        if (cancelled || matchCacheRef.current !== revision) {
-          return;
-        }
-        inputsNeedingStandardPass.forEach(({ input, signature }) => {
-          const result = standardMatches.get(input.key);
-          if (result) {
-            revision.entries.set(input.key, {
-              phase: "standard",
-              result,
-              signature,
-            });
-          }
-        });
-        updateStateIfChanged(setState, {
-          matchesByKey: buildMatchesFromCache(preparedInputs, revision),
-          loading: true,
-          loadingKeys,
-        });
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      const enrichedPassInputs = preparedInputs.filter(({ input, signature }) => {
-        const cached = revision.entries.get(input.key);
-        return !cached || cached.signature !== signature || cached.phase !== "enriched";
-      });
-      if (!enrichedPassInputs.length) {
-        return;
-      }
-
-      const [enrichedCurrents, enrichedCandidates] = await Promise.all([
-        enrichMatchableMangasWithJapaneseRomanization(
-          enrichedPassInputs.map(({ current }) => current),
-        ),
-        getEnrichedCandidateCollections(enrichedCandidateCacheRef, candidates),
-      ]);
-      if (cancelled || matchCacheRef.current !== revision) {
-        return;
-      }
-
-      const enrichedMatches = await buildMatchesByKeyIncrementally(
-        enrichedPassInputs.map(({ input }) => input),
-        enrichedCurrents,
-        enrichedCandidates.readingCandidates,
-        enrichedCandidates.bookmarkCandidates,
-        enrichedCandidates.readingListCandidates,
-        mergeOptions,
-        candidates.titleAnalysisConfigs,
-      );
-      if (cancelled || matchCacheRef.current !== revision) {
-        return;
-      }
-      enrichedPassInputs.forEach(({ input, signature }) => {
-        const result = enrichedMatches.get(input.key);
-        if (result) {
-          revision.entries.set(input.key, {
-            phase: "enriched",
-            result,
-            signature,
-          });
-        }
-      });
-      updateStateIfChanged(setState, {
+    if (typeof window.api?.runPotentialMatchWorker !== "function") {
+      setState({
         matchesByKey: buildMatchesFromCache(preparedInputs, revision),
         loading: false,
         loadingKeys: new Set(),
       });
-    };
+      return;
+    }
 
-    void runMatching()
-      .catch(() => {
-        // The synchronous pass already produced usable matches.
-      })
-      .finally(() => {
-        if (!cancelled && matchCacheRef.current === revision) {
-          updateStateIfChanged(setState, {
-            matchesByKey: buildMatchesFromCache(preparedInputs, revision),
-            loading: false,
-            loadingKeys: new Set(),
-          });
-        }
+    const sendsCandidates = sentRevisionRef.current !== revision.revision;
+    if (sendsCandidates) sentRevisionRef.current = revision.revision;
+    setState({
+      matchesByKey: buildMatchesFromCache(preparedInputs, revision),
+      loading: true,
+      loadingKeys,
+    });
+    void window.api.runPotentialMatchWorker(sessionIdRef.current, {
+      type: "potentialMatches",
+      requestId,
+      dataRevision: revision.revision,
+      inputs: missingInputs.map(({ input }) => input),
+      ...(sendsCandidates ? {
+        candidates: {
+          readingCandidates: candidates.readingCandidates,
+          bookmarkCandidates: candidates.bookmarkCandidates,
+          readingListCandidates: candidates.readingListCandidates,
+          titleAnalysisConfigs: Array.from(candidates.titleAnalysisConfigs),
+          mergeOptions,
+        },
+      } : {}),
+    }).then((response: BackendPotentialMatchResponse) => {
+      if (
+        requestId !== requestIdRef.current
+        || response.dataRevision !== matchCacheRef.current.revision
+      ) return;
+      if (response.error) throw new Error(response.error);
+      const signaturesByKey = new Map(missingInputs.map(({ input, signature }) => [
+        input.key,
+        signature,
+      ]));
+      response.matches.forEach(([key, result]) => {
+        const signature = signaturesByKey.get(key);
+        if (signature) revision.entries.set(key, { result, signature });
       });
-
-    return () => {
-      cancelled = true;
-    };
+      setState({
+        matchesByKey: buildMatchesFromCache(preparedInputs, revision),
+        loading: false,
+        loadingKeys: new Set(),
+      });
+    }).catch((error: unknown) => {
+      if (requestId !== requestIdRef.current) return;
+      // Retry with a fresh candidate snapshot even when this request reused a
+      // candidate initialization started by an earlier request.
+      sentRevisionRef.current = -1;
+      console.warn("Failed to match scraper cards in the backend worker", error);
+      setState({
+        matchesByKey: buildMatchesFromCache(preparedInputs, revision),
+        loading: false,
+        loadingKeys: new Set(),
+      });
+    });
   }, [
     candidates.bookmarkCandidates,
     candidates.loading,
@@ -595,9 +402,7 @@ export default function useScraperCardPotentialMatches({
     candidates.readingListCandidates,
     candidates.titleAnalysisConfigs,
     enabled,
-    mergeOptions.enableRomajiPhoneticMerge,
     preparedInputs,
-    validInputs,
   ]);
 
   return state;

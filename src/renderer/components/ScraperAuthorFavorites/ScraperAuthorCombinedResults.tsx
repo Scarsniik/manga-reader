@@ -9,12 +9,9 @@ import type {
 import { MagnifyingGlassIcon } from "@/renderer/components/icons";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
 import MultiSearchReadingStatusFilterBar from "@/renderer/components/MultiSearch/MultiSearchReadingStatusFilterBar";
+import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
 import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
-import {
-  countBlacklistedMultiSearchResults,
-  filterBlacklistedMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
 import type {
   MultiSearchLanguageFilterMode,
@@ -26,18 +23,12 @@ import type {
 import type { Manga } from "@/renderer/types";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
-import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
-import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
-import {
-  buildSearchResultViewHistoryIdentity,
-  filterByScraperViewHistoryNewState,
-} from "@/renderer/utils/scraperViewHistory";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
 import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
@@ -66,20 +57,27 @@ import {
 } from "@/renderer/components/ScraperAuthorFavorites/authorSeriesQuickReview";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import { BACKGROUND_SEARCH_RESULTS_VIEW_ID } from "@/renderer/utils/scraperBrowserNavigation";
+import useAdaptiveMultiSearchListProcessing from "@/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing";
 
 type ResultsViewMode = "cards" | "series";
+
+// Deep cover/chapter enrichment is useful for ambiguous small result sets, but
+// it is counterproductive for very large authors: grouping by parsed titles is
+// immediate and avoids hundreds of network requests just to change the view.
+const AUTHOR_SERIES_DEEP_ANALYSIS_LIMIT = 300;
 
 type Props = {
   title: string;
   description: string;
   runs: AuthorFavoriteSourceRun[];
   displayedResults: MultiSearchMergedResult[];
-  visibleResultCount: number;
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
   readingStatusFilters: MultiSearchReadingStatusFilter[];
   textFilter: string;
+  debouncedTextFilter: string;
+  showUnseenFirst: boolean;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -140,12 +138,13 @@ export default function ScraperAuthorCombinedResults({
   description,
   runs,
   displayedResults,
-  visibleResultCount,
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
   readingStatusFilters,
   textFilter,
+  debouncedTextFilter,
+  showUnseenFirst,
   loading,
   message,
   error,
@@ -215,6 +214,8 @@ export default function ScraperAuthorCombinedResults({
     preferredTitleLanguageCodes: displayedResults[0]?.preferredTitleLanguageCodes ?? [],
   }), [displayedResults]);
   const visualCoverMatchingEnabled = params?.scraperVisualCoverMatchingEnabled !== false;
+  const seriesDeepAnalysisEnabled = resultsViewMode === "series"
+    && displayedResults.length <= AUTHOR_SERIES_DEEP_ANALYSIS_LIMIT;
   const {
     mergedResults: visuallyMergedResults,
     fingerprintsBySourceKey: seriesCoverFingerprints,
@@ -222,7 +223,7 @@ export default function ScraperAuthorCombinedResults({
   } = useVisualMultiSearchMerge(
     displayedResults,
     seriesMergeOptions,
-    visualCoverMatchingEnabled,
+    visualCoverMatchingEnabled && seriesDeepAnalysisEnabled,
   );
   const {
     active: showUnseenOnly,
@@ -239,43 +240,48 @@ export default function ScraperAuthorCombinedResults({
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
   } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
-  const manuallySplitResults = React.useMemo(
-    () => applyManualMultiSearchSplits(visuallyMergedResults, splitResultIds),
-    [splitResultIds, visuallyMergedResults],
-  );
-  const originalFilteredResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByOriginal(manuallySplitResults, originalOnly),
-    [manuallySplitResults, originalOnly],
-  );
-  const blacklistFilteredResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      originalFilteredResults,
+  const displayListFilters = React.useMemo(() => ({
+    languageFilterModes,
+    readingStatusFilters,
+    textFilter: debouncedTextFilter,
+    readingStatusContext: {
+      libraryMangas,
+      bookmarkedSourceKeys,
+      sourceProgressIndex,
+      viewHistoryRecordsById,
+    },
+    display: {
+      originalOnly,
       tagBlacklistByScraper,
-      shouldHideBlacklistedCards,
-    ),
-    [originalFilteredResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
-  );
-  const visibleDisplayedResults = React.useMemo(
-    () => filterByScraperViewHistoryNewState(
-      blacklistFilteredResults,
-      (result) => result.sources.map((source) => (
-        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
-      )),
-      unseenFilterRecordsById,
-      unseenFilterNewCardIds,
+      hideBlacklistedCards: shouldHideBlacklistedCards,
+      viewHistoryRecordsById: unseenFilterRecordsById,
+      newViewHistoryIds: unseenFilterNewCardIds,
+      showUnseenFirst,
       showUnseenOnly,
-    ),
-    [
-      blacklistFilteredResults,
-      showUnseenOnly,
-      unseenFilterNewCardIds,
-      unseenFilterRecordsById,
-    ],
-  );
-  const blacklistedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(originalFilteredResults, tagBlacklistByScraper),
-    [originalFilteredResults, tagBlacklistByScraper],
-  );
+      splitResultIds,
+    },
+  }), [
+    bookmarkedSourceKeys,
+    debouncedTextFilter,
+    languageFilterModes,
+    libraryMangas,
+    originalOnly,
+    readingStatusFilters,
+    shouldHideBlacklistedCards,
+    showUnseenFirst,
+    showUnseenOnly,
+    sourceProgressIndex,
+    splitResultIds,
+    tagBlacklistByScraper,
+    unseenFilterNewCardIds,
+    unseenFilterRecordsById,
+    viewHistoryRecordsById,
+  ]);
+  const {
+    results: visibleDisplayedResults,
+    blacklistedResultCount,
+    loading: listProcessingLoading,
+  } = useAdaptiveMultiSearchListProcessing(visuallyMergedResults, [], displayListFilters);
   const quickReviewItems = React.useMemo(
     () => buildQuickReviewItemsFromMergedResults(visibleDisplayedResults),
     [visibleDisplayedResults],
@@ -285,9 +291,11 @@ export default function ScraperAuthorCombinedResults({
     loading: seriesChapterCoveragesLoading,
   } = useAuthorSeriesChapterCoverages(
     visibleDisplayedResults,
-    resultsViewMode === "series",
+    seriesDeepAnalysisEnabled,
   );
-  const seriesAnalysisLoading = seriesChapterCoveragesLoading || seriesCoverFingerprintsLoading;
+  const seriesAnalysisLoading = listProcessingLoading
+    || seriesChapterCoveragesLoading
+    || seriesCoverFingerprintsLoading;
   const automaticSeriesGroups = React.useMemo(
     () => buildAuthorSeriesGroups(
       visibleDisplayedResults,
@@ -510,6 +518,31 @@ export default function ScraperAuthorCombinedResults({
       tagBlacklistByScraper={tagBlacklistByScraper}
       tagFavorites={tagFavorites}
       viewHistoryRecordingDisabled={loading}
+      selectedCoverUrl={selectedCoverUrl}
+      onSelectCover={onSelectCover}
+      onOpenSource={onOpenSource}
+      onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+      onOpenProgressReader={onOpenProgressReader}
+      onSetSourcesRead={onSetSourcesRead}
+      onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.add(resultId);
+        return nextIds;
+      })}
+    />
+  );
+
+  const renderResultCards = (results: MultiSearchMergedResult[]) => (
+    <MultiSearchVirtualizedResultsGrid
+      results={results}
+      libraryMangas={libraryMangas}
+      bookmarkedSourceKeys={bookmarkedSourceKeys}
+      sourceProgressIndex={sourceProgressIndex}
+      viewHistoryRecordsById={viewHistoryRecordsById}
+      newViewHistoryIds={newViewHistoryIds}
+      tagBlacklistByScraper={tagBlacklistByScraper}
+      tagFavorites={tagFavorites}
+      viewHistoryRecordingDisabled={loading}
       onOpenSource={onOpenSource}
       onOpenSourceInWorkspace={onOpenSourceInWorkspace}
       onOpenProgressReader={onOpenProgressReader}
@@ -523,19 +556,6 @@ export default function ScraperAuthorCombinedResults({
       })}
     />
   );
-
-  const renderResultCards = (results: MultiSearchMergedResult[]) => {
-    const visibleResults = applyManualMultiSearchSplits(results, splitResultIds);
-    return (
-      <div className="multi-search__results-grid">
-        {visibleResults.map((result) => (
-          <React.Fragment key={result.id}>
-            {renderResultCard(result)}
-          </React.Fragment>
-        ))}
-      </div>
-    );
-  };
 
   if (activeSeriesJob) {
     return (
@@ -746,11 +766,12 @@ export default function ScraperAuthorCombinedResults({
           </div>
 
           {resultsViewMode === "series" ? (
-            seriesAnalysisLoading ? (
+            <>
+              {seriesAnalysisLoading && visibleDisplayedResults.length ? (
               <div className="scraper-browser__message">
-                Analyse des chapitres et des couvertures…
+                  Groupes affichés · analyse des chapitres et des couvertures en cours…
               </div>
-            ) : (
+              ) : null}
               <ScraperAuthorSeriesResults
                 groups={seriesGroups}
                 openingSeriesId={openingSeriesId}
@@ -758,9 +779,9 @@ export default function ScraperAuthorCombinedResults({
                 onCorrectAssignment={handleCorrectSeriesAssignment}
                 renderCard={renderResultCard}
               />
-            )
+            </>
           ) : renderResultCards(visibleDisplayedResults)}
-          {!visibleDisplayedResults.length ? (
+          {!listProcessingLoading && !visibleDisplayedResults.length ? (
             <div className="scraper-browser__message">
               {showUnseenOnly
                 ? "Aucune card non vue ne correspond aux filtres actifs."

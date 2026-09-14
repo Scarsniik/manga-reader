@@ -31,6 +31,9 @@ import {
   type VisualImageFingerprint,
   type VisualImageFingerprintInput,
 } from "@/shared/visualImageFingerprint";
+import type {
+  BackendVisualMultiSearchResponse,
+} from "@/renderer/components/MultiSearch/multiSearchMergeWorkerProtocol";
 
 type VisualSourceTitleEvidence = {
   aliases: string[];
@@ -186,7 +189,7 @@ export const mergeMultiSearchResultsByVisualFingerprint = (
   return sortMultiSearchMergedResults(clusters.map((cluster) => cluster.result));
 };
 
-const buildCandidateFingerprintInputs = (
+export const buildCandidateFingerprintInputs = (
   results: MultiSearchMergedResult[],
   options: MultiSearchMergeOptions,
 ): VisualImageFingerprintInput[] => {
@@ -218,6 +221,15 @@ const buildCandidateFingerprintInputs = (
   });
 };
 
+type VisualCandidateBatch = {
+  results: MultiSearchMergedResult[];
+  options: MultiSearchMergeOptions;
+  inputs: VisualImageFingerprintInput[];
+};
+
+const EMPTY_FINGERPRINT_INPUTS: VisualImageFingerprintInput[] = [];
+let nextVisualMergeSessionId = 0;
+
 export default function useVisualMultiSearchMerge(
   results: MultiSearchMergedResult[],
   options: MultiSearchMergeOptions,
@@ -227,20 +239,94 @@ export default function useVisualMultiSearchMerge(
     options.assumeSameAuthor ? "same-author" : "check-author",
     options.enableRomajiPhoneticMerge ? "phonetic" : "standard",
   ].join(":");
-  const fingerprintInputs = React.useMemo(
-    () => enabled ? buildCandidateFingerprintInputs(results, options) : [],
-    [enabled, results, visualCandidateOptionsKey],
-  );
+  const preferredTitleLanguageCodesKey = options.preferredTitleLanguageCodes.join("|");
+  const sessionIdRef = React.useRef("");
+  if (!sessionIdRef.current) {
+    nextVisualMergeSessionId += 1;
+    sessionIdRef.current = `multi-search-visual-${Date.now()}-${nextVisualMergeSessionId}`;
+  }
+  const candidateRequestIdRef = React.useRef(0);
+  const mergeRequestIdRef = React.useRef(0);
+  const [candidateBatch, setCandidateBatch] = React.useState<VisualCandidateBatch | null>(null);
+  const [processedResults, setProcessedResults] = React.useState(results);
+  const [candidateLoading, setCandidateLoading] = React.useState(false);
+  const [mergeLoading, setMergeLoading] = React.useState(false);
+  const fingerprintInputs = candidateBatch?.inputs ?? EMPTY_FINGERPRINT_INPUTS;
   const { fingerprintsByKey, loading } = useVisualImageFingerprints(fingerprintInputs, enabled);
-  const mergedResults = React.useMemo(() => (
-    enabled && fingerprintsByKey.size
-      ? mergeMultiSearchResultsByVisualFingerprint(results, options, fingerprintsByKey)
-      : results
-  ), [enabled, fingerprintsByKey, options, results]);
+
+  React.useEffect(() => () => {
+    void window.api?.disposeMultiSearchMergeWorker?.(sessionIdRef.current);
+  }, []);
+
+  React.useEffect(() => {
+    const requestId = candidateRequestIdRef.current + 1;
+    candidateRequestIdRef.current = requestId;
+    mergeRequestIdRef.current += 1;
+    setProcessedResults(results);
+    setCandidateBatch(null);
+    setMergeLoading(false);
+    if (!enabled || !results.length) {
+      setCandidateBatch(null);
+      setCandidateLoading(false);
+      return;
+    }
+    setCandidateLoading(true);
+    void window.api?.runMultiSearchVisualWorker?.(sessionIdRef.current, {
+      type: "visualCandidates",
+      requestId,
+      results,
+      options,
+    }).then((response: BackendVisualMultiSearchResponse) => {
+      if (
+        candidateRequestIdRef.current !== requestId
+        || response.type !== "visualCandidates"
+      ) return;
+      setCandidateBatch({ results, options, inputs: response.inputs });
+      setCandidateLoading(false);
+    }).catch((error: unknown) => {
+      if (candidateRequestIdRef.current !== requestId) return;
+      console.warn("Failed to select visual matching candidates in the backend worker", error);
+      setCandidateBatch(null);
+      setCandidateLoading(false);
+    });
+  }, [
+    enabled,
+    preferredTitleLanguageCodesKey,
+    results,
+    visualCandidateOptionsKey,
+  ]);
+
+  React.useEffect(() => {
+    if (!enabled || !candidateBatch || loading) return;
+    if (!candidateBatch.inputs.length || !fingerprintsByKey.size) {
+      setProcessedResults(candidateBatch.results);
+      setMergeLoading(false);
+      return;
+    }
+    const requestId = mergeRequestIdRef.current + 1;
+    mergeRequestIdRef.current = requestId;
+    setMergeLoading(true);
+    void window.api?.runMultiSearchVisualWorker?.(sessionIdRef.current, {
+      type: "visualMerge",
+      requestId,
+      results: candidateBatch.results,
+      options: candidateBatch.options,
+      fingerprints: Array.from(fingerprintsByKey.entries()),
+    }).then((response: BackendVisualMultiSearchResponse) => {
+      if (mergeRequestIdRef.current !== requestId || response.type !== "visualMerge") return;
+      setProcessedResults(response.mergedResults);
+      setMergeLoading(false);
+    }).catch((error: unknown) => {
+      if (mergeRequestIdRef.current !== requestId) return;
+      console.warn("Failed to merge visual matches in the backend worker", error);
+      setProcessedResults(candidateBatch.results);
+      setMergeLoading(false);
+    });
+  }, [candidateBatch, enabled, fingerprintsByKey, loading]);
 
   return {
-    mergedResults,
+    mergedResults: enabled ? processedResults : results,
     fingerprintsBySourceKey: fingerprintsByKey,
-    loading,
+    loading: candidateLoading || loading || mergeLoading,
   };
 }

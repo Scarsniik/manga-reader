@@ -130,7 +130,11 @@ export default function useAuthorSeriesChapterCoverages(
       }
     });
 
-    void runTasksWithConcurrency(tasks, CHAPTER_COVERAGE_CONCURRENCY).then(() => {
+    void runTasksWithConcurrency(
+      tasks,
+      CHAPTER_COVERAGE_CONCURRENCY,
+      () => !disposed,
+    ).then(() => {
       if (disposed) return;
       setCoveragesBySourceKey(resolvedCoverages);
       setLoading(false);

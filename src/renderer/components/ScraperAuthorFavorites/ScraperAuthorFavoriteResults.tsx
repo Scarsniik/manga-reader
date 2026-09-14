@@ -24,12 +24,13 @@ type Props = {
   favorite: ScraperAuthorFavoriteRecord;
   runs: AuthorFavoriteSourceRun[];
   displayedResults: MultiSearchMergedResult[];
-  visibleResultCount: number;
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
   readingStatusFilters: MultiSearchReadingStatusFilter[];
   textFilter: string;
+  debouncedTextFilter: string;
+  showUnseenFirst: boolean;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -86,12 +87,13 @@ export default function ScraperAuthorFavoriteResults({
   favorite,
   runs,
   displayedResults,
-  visibleResultCount,
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
   readingStatusFilters,
   textFilter,
+  debouncedTextFilter,
+  showUnseenFirst,
   loading,
   message,
   error,
@@ -140,12 +142,13 @@ export default function ScraperAuthorFavoriteResults({
       description={description ?? `${favorite.sources.length} source(s) auteur associee(s).`}
       runs={runs}
       displayedResults={displayedResults}
-      visibleResultCount={visibleResultCount}
       loadedSourceCount={loadedSourceCount}
       resultLanguageCodes={resultLanguageCodes}
       languageFilterModes={languageFilterModes}
       readingStatusFilters={readingStatusFilters}
       textFilter={textFilter}
+      debouncedTextFilter={debouncedTextFilter}
+      showUnseenFirst={showUnseenFirst}
       loading={loading}
       message={message}
       error={error}

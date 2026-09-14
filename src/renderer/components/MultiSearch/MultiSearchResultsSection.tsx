@@ -43,6 +43,7 @@ import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultF
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
 import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
+import useAdaptiveMultiSearchListProcessing from "@/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing";
 
 type Props = {
   viewMode: MultiSearchViewMode;
@@ -151,7 +152,7 @@ export default function MultiSearchResultsSection({
   runs,
   mergedResults,
   mergeProgress,
-  visibleSourceCount,
+  visibleSourceCount: unfilteredSourceCount,
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
@@ -214,41 +215,51 @@ export default function MultiSearchResultsSection({
       showUnseenFirst,
     )
   ), [newViewHistoryIds, showUnseenFirst, viewHistoryRecordsById]);
-  const sortedMergedResults = React.useMemo(
-    () => sortMergedResultsByUnseen(mergedResults),
-    [mergedResults, sortMergedResultsByUnseen],
-  );
-  const originalFilteredMergedResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByOriginal(sortedMergedResults, originalOnly),
-    [originalOnly, sortedMergedResults],
-  );
-  const blacklistFilteredMergedResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      originalFilteredMergedResults,
+  const listFilters = React.useMemo(() => ({
+    languageFilterModes,
+    readingStatusFilters,
+    textFilter,
+    readingStatusContext: {
+      libraryMangas,
+      bookmarkedSourceKeys,
+      sourceProgressIndex,
+      viewHistoryRecordsById,
+    },
+    display: {
+      originalOnly,
       tagBlacklistByScraper,
-      shouldHideBlacklistedCards,
-    ),
-    [originalFilteredMergedResults, shouldHideBlacklistedCards, tagBlacklistByScraper],
-  );
-  const displayedMergedResults = React.useMemo(
-    () => filterByScraperViewHistoryNewState(
-      blacklistFilteredMergedResults,
-      getResultViewHistoryIdentities,
-      unseenFilterRecordsById,
-      unseenFilterNewCardIds,
+      hideBlacklistedCards: shouldHideBlacklistedCards,
+      viewHistoryRecordsById: unseenFilterRecordsById,
+      newViewHistoryIds: unseenFilterNewCardIds,
+      showUnseenFirst,
       showUnseenOnly,
-    ),
-    [
-      blacklistFilteredMergedResults,
-      showUnseenOnly,
-      unseenFilterNewCardIds,
-      unseenFilterRecordsById,
-    ],
-  );
-  const blacklistedMergedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(originalFilteredMergedResults, tagBlacklistByScraper),
-    [originalFilteredMergedResults, tagBlacklistByScraper],
-  );
+    },
+  }), [
+    bookmarkedSourceKeys,
+    languageFilterModes,
+    libraryMangas,
+    originalOnly,
+    readingStatusFilters,
+    shouldHideBlacklistedCards,
+    showUnseenFirst,
+    showUnseenOnly,
+    sourceProgressIndex,
+    tagBlacklistByScraper,
+    textFilter,
+    unseenFilterNewCardIds,
+    unseenFilterRecordsById,
+    viewHistoryRecordsById,
+  ]);
+  const {
+    results: displayedMergedResults,
+    runs: filteredRuns,
+    blacklistedResultCount: blacklistedMergedResultCount,
+  } = useAdaptiveMultiSearchListProcessing(mergedResults, runs, listFilters);
+  const visibleSourceCount = React.useMemo(() => (
+    viewMode === "merged"
+      ? displayedMergedResults.reduce((count, result) => count + result.sources.length, 0)
+      : filteredRuns.reduce((count, run) => count + run.results.length, 0)
+  ), [displayedMergedResults, filteredRuns, viewMode]);
   const mergeProgressMax = Math.max(mergeProgress.totalSourceCount, 1);
   const mergeProgressClassName = [
     "multi-search__merge-progress",
@@ -258,7 +269,7 @@ export default function MultiSearchResultsSection({
   const isWaitingForMergedCards = isMergePending && displayedMergedResults.length === 0;
   const scraperResultGroups = React.useMemo(() => (
     viewMode === "byScraper"
-      ? runs.map((run) => {
+      ? filteredRuns.map((run) => {
         const sortedResults = filterMultiSearchMergedResultsByOriginal(
           sortMergedResultsByUnseen(run.results.map(buildSingleSourceMergedResult)),
           originalOnly,
@@ -287,7 +298,7 @@ export default function MultiSearchResultsSection({
       : []
   ), [
     originalOnly,
-    runs,
+    filteredRuns,
     shouldHideBlacklistedCards,
     showUnseenOnly,
     sortMergedResultsByUnseen,

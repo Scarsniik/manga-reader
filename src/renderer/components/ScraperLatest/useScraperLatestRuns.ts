@@ -14,7 +14,7 @@ import {
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
 import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
-import { runScraperLatestSearch } from "@/renderer/searchEngines/listingSearchEngine";
+import type { ForegroundSearchSnapshotEvent } from "@/shared/searchWorker";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
 import {
   splitIncludeFilterValues,
@@ -218,14 +218,17 @@ export default function useScraperLatestRuns() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const runsRef = useRef<ScraperLatestRun[]>([]);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeExecutionIdRef = useRef<string | null>(null);
   const executionTokenRef = useRef(0);
 
   useEffect(() => {
     runsRef.current = runs;
   }, [runs]);
 
-  useEffect(() => () => abortControllerRef.current?.abort(), []);
+  useEffect(() => () => {
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+  }, []);
 
   const start = useCallback(async (
     scrapers: ScraperRecord[],
@@ -234,11 +237,12 @@ export default function useScraperLatestRuns() {
     includedLanguageCodeValues: string[] = [],
     options: StartOptions = {},
   ) => {
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const previousExecutionId = activeExecutionIdRef.current;
+    if (previousExecutionId) void window.api?.cancelSearchWorker?.(previousExecutionId);
     const executionToken = executionTokenRef.current + 1;
     executionTokenRef.current = executionToken;
+    const executionId = `foreground-latest-${Date.now()}-${executionToken}`;
+    activeExecutionIdRef.current = executionId;
 
     const storedContinuation = options.storedContinuation;
     const requestedSearchMode = storedContinuation?.input.searchMode ?? options.searchMode;
@@ -291,6 +295,7 @@ export default function useScraperLatestRuns() {
       ]);
 
     if (!sources.length) {
+      activeExecutionIdRef.current = null;
       setRuns([]);
       setLoading(false);
       setMessage(null);
@@ -354,24 +359,24 @@ export default function useScraperLatestRuns() {
     setMessage(null);
     setError(null);
 
+    const unsubscribe = window.api?.onSearchWorkerSnapshot?.((event: ForegroundSearchSnapshotEvent) => {
+      if (event.executionId !== executionId || executionToken !== executionTokenRef.current) return;
+      const snapshot = event.result as { runs?: BackgroundListingRun[] };
+      if (!Array.isArray(snapshot.runs)) return;
+      setRuns(snapshot.runs.map((run) => toForegroundRun(
+        run,
+        metadataByKey.get(run.key) ?? { sourceKind: "scraper", module: "homepage" },
+        searchMode,
+      )));
+    });
     try {
-      const result = await runScraperLatestSearch(
+      const result = await window.api.runForegroundListingSearchWorker({
+        executionId,
+        kind: "latestSources",
         input,
-        controller.signal,
-        async (snapshot) => {
-          if (executionToken !== executionTokenRef.current) return;
-          setRuns(snapshot.runs.map((run) => toForegroundRun(
-            run,
-            metadataByKey.get(run.key) ?? { sourceKind: "scraper", module: "homepage" },
-            searchMode,
-          )));
-        },
-        {
-          mode: "foreground",
-          initialRuns,
-          appendToExistingResults: preserveCurrentResults,
-        },
-      );
+        initialRuns,
+        appendToExistingResults: preserveCurrentResults,
+      }) as { runs: BackgroundListingRun[] };
       if (executionToken !== executionTokenRef.current) return;
       setRuns(result.runs.map((run) => toForegroundRun(
         run,
@@ -386,16 +391,21 @@ export default function useScraperLatestRuns() {
           ? `${resultLimit} résultat(s) demandés au total pour les scrappers et ${tagResultLimit} par tag favori.`
           : `${resultLimit} résultat(s) demandés par scrapper et ${tagResultLimit} par source de tag favori.`);
     } catch (runError) {
-      if (controller.signal.aborted || executionToken !== executionTokenRef.current) return;
+      if (executionToken !== executionTokenRef.current) return;
       setError(runError instanceof Error ? runError.message : "Échec de la recherche des nouveautés.");
     } finally {
-      if (executionToken === executionTokenRef.current) setLoading(false);
+      if (typeof unsubscribe === "function") unsubscribe();
+      if (executionToken === executionTokenRef.current) {
+        activeExecutionIdRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 
   const reset = useCallback(() => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     executionTokenRef.current += 1;
     setRuns([]);
     setLoading(false);

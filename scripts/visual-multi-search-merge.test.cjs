@@ -8,6 +8,7 @@ const built = esbuild.buildSync({
     contents: `
       export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
       export { mergeMultiSearchResultsByVisualFingerprint } from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
+      export { processMultiSearchLists } from "@/renderer/components/MultiSearch/multiSearchListProcessing";
     `,
     resolveDir: process.cwd(),
     sourcefile: "visual-multi-search-merge-test.ts",
@@ -28,6 +29,7 @@ new Function("module", "exports", "require", built.outputFiles[0].text)(
 const {
   mergeMultiSearchResults,
   mergeMultiSearchResultsByVisualFingerprint,
+  processMultiSearchLists,
 } = bundledModule.exports;
 
 const scraper = {
@@ -41,18 +43,62 @@ const options = {
   assumeSameAuthor: true,
   preferredTitleLanguageCodes: ["en"],
 };
-const buildSource = (title, detailUrl) => ({
+const buildSource = (title, detailUrl, sourceLanguageCodes = ["en"]) => ({
   scraper,
   result: { title, detailUrl, thumbnailUrl: `${detailUrl}.jpg` },
   searchTerm: "author",
   pageIndex: 0,
-  sourceLanguageCodes: ["en"],
+  sourceLanguageCodes,
   detectedLanguageCodes: [],
   tentativeAuthorNames: ["Gagarin Kichi"],
   advancedRomanizedTitleVariants: [],
   advancedRomanizedTentativeAuthorNameVariants: [],
   contentTypes: [],
   canOpenDetails: true,
+});
+
+test("large card lists share the backend-compatible filter and display pipeline", () => {
+  const results = Array.from({ length: 1500 }, (_, index) => {
+    const isEnglish = index % 2 === 0;
+    const source = buildSource(
+      isEnglish ? `English title ${index}` : `日本語 タイトル ${index}`,
+      `https://example.test/list-${index}`,
+      [isEnglish ? "en" : "ja"],
+    );
+    return {
+      id: `result-${index}`,
+      title: source.result.title,
+      coverUrl: source.result.thumbnailUrl,
+      sources: [source],
+      sourceLanguageCodes: source.sourceLanguageCodes,
+      tentativeAuthorNames: [],
+      contentTypes: [],
+    };
+  });
+  const processed = processMultiSearchLists(results, [], {
+    languageFilterModes: { en: "only" },
+    readingStatusFilters: [],
+    textFilter: "English",
+    readingStatusContext: {
+      libraryMangas: [],
+      bookmarkedSourceKeys: new Set(),
+      sourceProgressIndex: { recordsById: new Map(), recordsBySourceKey: new Map() },
+      viewHistoryRecordsById: new Map(),
+    },
+    display: {
+      originalOnly: false,
+      hideBlacklistedCards: false,
+      viewHistoryRecordsById: new Map(),
+      newViewHistoryIds: new Set(),
+      showUnseenFirst: false,
+      showUnseenOnly: false,
+    },
+  });
+
+  assert.equal(processed.results.length, 750);
+  assert.ok(processed.results.every((result) => result.sourceLanguageCodes.includes("en")));
+  assert.equal(processed.splitResultCount, 1500);
+  assert.equal(processed.languageResultCount, 750);
 });
 const buildFingerprint = (value) => ({
   version: 1,

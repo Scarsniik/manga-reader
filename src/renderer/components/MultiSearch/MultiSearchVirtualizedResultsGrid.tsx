@@ -49,6 +49,8 @@ type Props = {
   tagBlacklistByScraper?: ScraperTagBlacklistByScraper;
   tagFavorites?: ScraperTagFavoriteRecord[];
   viewHistoryRecordingDisabled?: boolean;
+  selectedCoverUrl?: string;
+  onSelectCover?: (coverUrl: string) => void;
   onOpenSource: (source: MultiSearchSourceResult) => void;
   onOpenSourceInWorkspace: (source: MultiSearchSourceResult) => void;
   onOpenProgressReader: (
@@ -82,6 +84,8 @@ function MeasuredMultiSearchResultCard({
   tagBlacklistByScraper,
   tagFavorites,
   viewHistoryRecordingDisabled,
+  selectedCoverUrl,
+  onSelectCover,
   potentialMatches,
   potentialMatchesLoading,
   onOpenPotentialMatch,
@@ -180,6 +184,8 @@ function MeasuredMultiSearchResultCard({
         tagBlacklistByScraper={tagBlacklistByScraper}
         tagFavorites={tagFavorites}
         viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
+        selectedCoverUrl={selectedCoverUrl}
+        onSelectCover={onSelectCover}
         potentialMatches={potentialMatches}
         potentialMatchesLoading={potentialMatchesLoading}
         onOpenPotentialMatch={onOpenPotentialMatch}
@@ -204,6 +210,8 @@ export default function MultiSearchVirtualizedResultsGrid({
   tagBlacklistByScraper,
   tagFavorites = [],
   viewHistoryRecordingDisabled = false,
+  selectedCoverUrl,
+  onSelectCover,
   onOpenSource,
   onOpenSourceInWorkspace,
   onOpenProgressReader,
@@ -564,6 +572,8 @@ export default function MultiSearchVirtualizedResultsGrid({
               tagBlacklistByScraper={tagBlacklistByScraper}
               tagFavorites={tagFavorites}
               viewHistoryRecordingDisabled={viewHistoryRecordingDisabled}
+              selectedCoverUrl={selectedCoverUrl}
+              onSelectCover={onSelectCover}
               potentialMatches={potentialMatches.matchesByKey.get(result.id)}
               potentialMatchesLoading={potentialMatches.loadingKeys.has(result.id)}
               onOpenPotentialMatch={potentialMatches.openMatch}

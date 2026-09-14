@@ -27,7 +27,8 @@ import * as voicevox from "./handlers/voicevox";
 import * as backgroundSearch from "./handlers/backgroundSearch";
 import * as authorCorrespondenceSessionCache from "./handlers/authorCorrespondenceSessionCache";
 import * as statistics from "./handlers/statistics";
-import * as visualImageFingerprints from "./handlers/visualImageFingerprints";
+import * as searchWorker from "./handlers/searchWorker";
+import * as multiSearchMergeWorker from "./handlers/multiSearchMergeWorker";
 import { dataDir, ensureDataDir, migrateExistingFiles } from "./utils";
 
 // Run migration at module load
@@ -117,7 +118,7 @@ ipcMain.handle("open-json-document", async (_event: IpcMainInvokeEvent, request:
     jsonDocuments.openJsonDocument(request)
 ));
 ipcMain.handle("visual-image-fingerprints", async (_event: IpcMainInvokeEvent, request: any) => (
-    visualImageFingerprints.getVisualImageFingerprints(request)
+    searchWorker.runVisualFingerprintWorker(_event, request)
 ));
 
 // Background searches
@@ -131,6 +132,54 @@ ipcMain.handle("background-search-get", async (_event: IpcMainInvokeEvent, jobId
 ipcMain.handle("background-search-claim", async (_event: IpcMainInvokeEvent, jobId: string) => (
     backgroundSearch.claimBackgroundSearchJob(jobId)
 ));
+ipcMain.handle("background-search-worker-run", async (event: IpcMainInvokeEvent, jobId: string) => (
+    searchWorker.runBackgroundSearchWorker(event, jobId)
+));
+ipcMain.handle("foreground-multi-search-worker-run", async (event: IpcMainInvokeEvent, request: any) => (
+    searchWorker.runForegroundMultiSearchWorker(event, request)
+));
+ipcMain.handle("foreground-listing-search-worker-run", async (event: IpcMainInvokeEvent, request: any) => (
+    searchWorker.runForegroundListingSearchWorker(event, request)
+));
+ipcMain.handle("search-listing-page-worker-run", async (event: IpcMainInvokeEvent, request: any) => (
+    searchWorker.runListingPageWorker(event, request)
+));
+ipcMain.handle("background-search-automation-worker-run", async (
+    event: IpcMainInvokeEvent,
+    request: any,
+) => searchWorker.runBackgroundSearchAutomationWorker(event, request));
+ipcMain.handle("search-worker-cancel", async (_event: IpcMainInvokeEvent, executionId: string) => (
+    searchWorker.cancelSearchWorker(executionId)
+));
+ipcMain.handle("search-worker-cancel-scraper", async (
+    _event: IpcMainInvokeEvent,
+    executionId: string,
+    scraperId: string,
+) => searchWorker.cancelSearchWorkerScraper(executionId, scraperId));
+ipcMain.handle("multi-search-merge-worker-run", async (
+    event: IpcMainInvokeEvent,
+    sessionId: string,
+    request: any,
+) => multiSearchMergeWorker.runMultiSearchMergeWorker(event, sessionId, request));
+ipcMain.handle("multi-search-visual-worker-run", async (
+    event: IpcMainInvokeEvent,
+    sessionId: string,
+    request: any,
+) => multiSearchMergeWorker.runMultiSearchVisualWorker(event, sessionId, request));
+ipcMain.handle("multi-search-list-worker-run", async (
+    event: IpcMainInvokeEvent,
+    sessionId: string,
+    request: any,
+) => multiSearchMergeWorker.runMultiSearchListWorker(event, sessionId, request));
+ipcMain.handle("potential-match-worker-run", async (
+    event: IpcMainInvokeEvent,
+    sessionId: string,
+    request: any,
+) => multiSearchMergeWorker.runPotentialMatchWorker(event, sessionId, request));
+ipcMain.handle("multi-search-merge-worker-dispose", async (
+    _event: IpcMainInvokeEvent,
+    sessionId: string,
+) => multiSearchMergeWorker.disposeMultiSearchMergeSession(sessionId));
 ipcMain.handle("background-search-update", async (_event: IpcMainInvokeEvent, request: any) => (
     backgroundSearch.updateBackgroundSearch(request)
 ));
@@ -149,9 +198,10 @@ ipcMain.handle("background-search-replay", async (_event: IpcMainInvokeEvent, re
 ipcMain.handle("background-search-fail", async (_event: IpcMainInvokeEvent, jobId: string, error: string) => (
     backgroundSearch.failBackgroundSearch(jobId, error)
 ));
-ipcMain.handle("background-search-cancel", async (_event: IpcMainInvokeEvent, jobId: string) => (
-    backgroundSearch.cancelBackgroundSearch(jobId)
-));
+ipcMain.handle("background-search-cancel", async (_event: IpcMainInvokeEvent, jobId: string) => {
+    searchWorker.cancelSearchWorker(jobId);
+    return backgroundSearch.cancelBackgroundSearch(jobId);
+});
 ipcMain.handle("background-search-retry", async (_event: IpcMainInvokeEvent, jobId: string) => (
     backgroundSearch.retryBackgroundSearch(jobId)
 ));

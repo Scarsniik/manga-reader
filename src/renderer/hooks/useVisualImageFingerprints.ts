@@ -11,6 +11,7 @@ type VisualImageFingerprintState = {
 };
 
 const EMPTY_FINGERPRINTS = new Map<string, VisualImageFingerprint>();
+let nextVisualFingerprintExecutionId = 0;
 
 export default function useVisualImageFingerprints(
   images: VisualImageFingerprintInput[],
@@ -31,8 +32,10 @@ export default function useVisualImageFingerprints(
       };
     }
 
+    nextVisualFingerprintExecutionId += 1;
+    const executionId = `visual-fingerprint-renderer-${Date.now()}-${nextVisualFingerprintExecutionId}`;
     setLoading(true);
-    void window.api.getVisualImageFingerprints({ images })
+    void window.api.getVisualImageFingerprints({ images, executionId })
       .then((response: VisualImageFingerprintResponse) => {
         if (cancelled) return;
         const nextFingerprints = new Map<string, VisualImageFingerprint>();
@@ -55,6 +58,7 @@ export default function useVisualImageFingerprints(
 
     return () => {
       cancelled = true;
+      void window.api?.cancelSearchWorker?.(executionId);
     };
   }, [enabled, images]);
 

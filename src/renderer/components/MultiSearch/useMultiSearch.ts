@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MultiSearchBackgroundInput } from "@/shared/backgroundSearch";
+import type { ForegroundSearchSnapshotEvent } from "@/shared/searchWorker";
 import type { MultiSearchScraperRun } from "@/renderer/components/MultiSearch/types";
 import {
   buildInitialRun,
@@ -7,8 +8,6 @@ import {
   isMultiSearchRunActive,
 } from "@/renderer/components/MultiSearch/multiSearchRunState";
 import { parseMultiSearchTerms } from "@/renderer/components/MultiSearch/multiSearchUtils";
-import { createScraperCardDetailsCache } from "@/renderer/utils/scraperRuntime";
-import { runMultiSearchEngine } from "@/renderer/searchEngines/multiSearchEngine";
 
 type RunSearchOptions = MultiSearchBackgroundInput;
 
@@ -26,10 +25,9 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchTokenRef = useRef(0);
-  const searchAbortControllerRef = useRef<AbortController | null>(null);
+  const activeExecutionIdRef = useRef<string | null>(null);
   const cancelledScraperIdsRef = useRef(new Set<string>());
   const lastInputRef = useRef<MultiSearchBackgroundInput | null>(null);
-  const detailsCacheRef = useRef(createScraperCardDetailsCache());
   const canLoadMore = useMemo(
     () => runs.some((run) => run.hasNextPage && run.status !== "loading"),
     [runs],
@@ -44,15 +42,19 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     if (!hasActiveRuns) setIsSearching(false);
   }, [hasActiveRuns]);
 
-  useEffect(() => () => searchAbortControllerRef.current?.abort(), []);
+  useEffect(() => () => {
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+  }, []);
 
   const beginExecution = useCallback(() => {
-    searchAbortControllerRef.current?.abort();
-    const controller = new AbortController();
-    searchAbortControllerRef.current = controller;
+    const previousExecutionId = activeExecutionIdRef.current;
+    if (previousExecutionId) void window.api?.cancelSearchWorker?.(previousExecutionId);
     const token = searchTokenRef.current + 1;
     searchTokenRef.current = token;
-    return { controller, token };
+    const executionId = `foreground-multi-${Date.now()}-${token}`;
+    activeExecutionIdRef.current = executionId;
+    return { executionId, token };
   }, []);
 
   const restoreRuns = useCallback((
@@ -62,7 +64,9 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     restoredScrapeDetailsWithCards: boolean,
     restoredOriginalOnly = false,
   ) => {
-    searchAbortControllerRef.current?.abort();
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     lastInputRef.current = {
@@ -84,7 +88,9 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
   }, []);
 
   const replaceRuns = useCallback((nextRuns: MultiSearchScraperRun[]) => {
-    searchAbortControllerRef.current?.abort();
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     setRuns(nextRuns);
@@ -105,36 +111,45 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
       return;
     }
 
-    const { controller, token } = beginExecution();
+    const { executionId, token } = beginExecution();
     cancelledScraperIdsRef.current.clear();
-    detailsCacheRef.current = createScraperCardDetailsCache();
     lastInputRef.current = input;
     setRuns(input.scrapers.map((scraper) => buildInitialRun(scraper, searchTerms)));
     setIsSearching(true);
     setError(null);
     setMessage(null);
 
+    const unsubscribe = window.api?.onSearchWorkerSnapshot?.((event: ForegroundSearchSnapshotEvent) => {
+      if (event.executionId !== executionId || token !== searchTokenRef.current) return;
+      const result = event.result as { runs?: MultiSearchScraperRun[] };
+      if (Array.isArray(result.runs)) setRuns(result.runs);
+    });
     try {
-      await runMultiSearchEngine(input, controller.signal, async (result) => {
-        if (token === searchTokenRef.current) setRuns(result.runs);
-      }, {
-        detailsCache: detailsCacheRef.current,
-        shouldContinueScraper: (scraperId) => !cancelledScraperIdsRef.current.has(scraperId),
-      });
+      const result = await window.api.runForegroundMultiSearchWorker({
+        executionId,
+        input,
+      }) as { runs?: MultiSearchScraperRun[] };
       if (token === searchTokenRef.current) {
+        if (Array.isArray(result.runs)) setRuns(result.runs);
         setMessage("Recherche multi-sources terminee sur les pages chargees.");
       }
     } catch (runError) {
-      if (token === searchTokenRef.current && !controller.signal.aborted) {
+      if (token === searchTokenRef.current) {
         setError(runError instanceof Error ? runError.message : "Echec temporaire de la recherche.");
       }
     } finally {
-      if (token === searchTokenRef.current) setIsSearching(false);
+      if (typeof unsubscribe === "function") unsubscribe();
+      if (token === searchTokenRef.current) {
+        activeExecutionIdRef.current = null;
+        setIsSearching(false);
+      }
     }
   }, [beginExecution]);
 
   const stopSearch = useCallback(() => {
-    searchAbortControllerRef.current?.abort();
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     searchTokenRef.current += 1;
     cancelledScraperIdsRef.current.clear();
     setRuns((currentRuns) => currentRuns.map((run) => (
@@ -147,6 +162,8 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
 
   const stopScraperSearch = useCallback((scraperId: string) => {
     cancelledScraperIdsRef.current.add(scraperId);
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorkerScraper?.(executionId, scraperId);
     setRuns((currentRuns) => currentRuns.map((run) => (
       run.scraper.id === scraperId && isMultiSearchRunActive(run)
         ? cancelMultiSearchRun(run)
@@ -164,7 +181,7 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
     if (!sourceRuns.length) return;
     const previousInput = lastInputRef.current;
     if (!previousInput) return;
-    const { controller, token } = beginExecution();
+    const { executionId, token } = beginExecution();
     cancelledScraperIdsRef.current.clear();
     setIsSearching(true);
     setError(null);
@@ -177,24 +194,36 @@ export default function useMultiSearch(scrapeDetailsWithCards: boolean) {
       scrapeDetailsWithCards,
     };
 
+    const unsubscribe = window.api?.onSearchWorkerSnapshot?.((event: ForegroundSearchSnapshotEvent) => {
+      if (event.executionId !== executionId || token !== searchTokenRef.current) return;
+      const result = event.result as { runs?: MultiSearchScraperRun[] };
+      if (Array.isArray(result.runs)) {
+        setRuns((currentRuns) => replaceRunsByScraper(currentRuns, result.runs!));
+      }
+    });
     try {
-      await runMultiSearchEngine(input, controller.signal, async (result) => {
-        if (token === searchTokenRef.current) {
-          setRuns((currentRuns) => replaceRunsByScraper(currentRuns, result.runs));
-        }
-      }, {
+      const result = await window.api.runForegroundMultiSearchWorker({
+        executionId,
+        input,
         initialRuns: sourceRuns,
         pageCount: 1,
-        detailsCache: detailsCacheRef.current,
-        shouldContinueScraper: (scraperId) => !cancelledScraperIdsRef.current.has(scraperId),
-      });
-      if (token === searchTokenRef.current) setMessage(successMessage);
+      }) as { runs?: MultiSearchScraperRun[] };
+      if (token === searchTokenRef.current) {
+        if (Array.isArray(result.runs)) {
+          setRuns((currentRuns) => replaceRunsByScraper(currentRuns, result.runs!));
+        }
+        setMessage(successMessage);
+      }
     } catch (loadError) {
-      if (token === searchTokenRef.current && !controller.signal.aborted) {
+      if (token === searchTokenRef.current) {
         setError(loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.");
       }
     } finally {
-      if (token === searchTokenRef.current) setIsSearching(false);
+      if (typeof unsubscribe === "function") unsubscribe();
+      if (token === searchTokenRef.current) {
+        activeExecutionIdRef.current = null;
+        setIsSearching(false);
+      }
     }
   }, [beginExecution, scrapeDetailsWithCards]);
 

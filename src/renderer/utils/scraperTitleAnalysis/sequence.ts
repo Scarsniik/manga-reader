@@ -14,7 +14,7 @@ const SEQUENCE_PATTERNS: Array<{
   },
   {
     kind: "chapter",
-    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep|track)\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)(?:\s*(?::|[-–—])\s*.+|\s*\([^)]*\)(?:\s*\+.*)?)?\s*[\])}.]*$/i,
+    pattern: /(?:^|[\s()[\]{}_\-–—:;,.])(?<label>chap(?:it(?:re)?)?|chapter|ch|cap(?:itulo)?|episode|ep|track)(?![a-z])\s*\.?\s*(?:n(?:o|°)?\s*)?[#:]?\s*(?<value>[0-9０-９]+(?:[.,][0-9０-９]+)?(?:\s*[-–—~〜～]\s*[0-9０-９]+(?:[.,][0-9０-９]+)?)?|[ivxlcdm]+)(?:\s*(?::|[-–—])\s*.+|\s*\([^)]*\)(?:\s*\+.*)?)?\s*[\])}.]*$/i,
   },
   {
     kind: "chapter",

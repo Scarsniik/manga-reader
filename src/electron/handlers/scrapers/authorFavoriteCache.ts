@@ -123,7 +123,7 @@ const sanitizeCachedResult = (value: unknown): ScraperAuthorFavoriteCachedResult
 
   const raw = value as Partial<ScraperAuthorFavoriteCachedResult>;
   const result = sanitizeSearchResult(raw.result);
-  if (!result) {
+  if (!result?.detailUrl) {
     return null;
   }
 

@@ -75,6 +75,8 @@
 
 .quick-review__thumbnail {
   display: flex;
+  content-visibility: auto;
+  contain-intrinsic-size: var(--quick-review-thumbnail-size, 112px) 168px;
   align-items: flex-start;
   justify-content: center;
   align-self: start;

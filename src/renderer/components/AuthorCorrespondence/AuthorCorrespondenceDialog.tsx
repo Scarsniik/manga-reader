@@ -82,7 +82,7 @@ export default function AuthorCorrespondenceDialog({
         referenceName: name.trim(),
         names: Array.from(new Set([name.trim(), ...normalizeList(otherNames)])),
         referenceSources,
-        scraperFilterValues: params?.multiSearchSelectedScraperIds ?? [],
+        scraperFilterValues: [],
         scrapers,
         maxPages: getDepthPages(depthMode, advancedPages),
         authorPageCount: Math.max(1, Math.floor(params?.scraperAuthorFavoritePageCount ?? 1)),

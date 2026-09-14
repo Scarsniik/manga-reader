@@ -45,7 +45,7 @@ export const buildMangaCorrespondenceInput = ({
     reference,
     request,
     strategy,
-    scraperFilterValues: params?.multiSearchSelectedScraperIds ?? [],
+    scraperFilterValues: [],
     scrapers,
     maxPages: getDepthPages(depthMode, advancedPages),
     paceMode,

@@ -6,19 +6,10 @@ import type {
   ScraperViewHistoryCardIdentity,
   ScraperViewHistoryRecord,
 } from "@/shared/scraper";
-import {
-  buildSearchResultViewHistoryIdentity,
-  filterByScraperViewHistoryNewState,
-  sortByScraperViewHistoryNewState,
-} from "@/renderer/utils/scraperViewHistory";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/MultiSearchLanguageFilterBar";
-import MultiSearchResultCard from "@/renderer/components/MultiSearch/MultiSearchResultCard";
+import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
 import MultiSearchTextFilterBar from "@/renderer/components/MultiSearch/MultiSearchTextFilterBar";
-import {
-  countBlacklistedMultiSearchResults,
-  filterBlacklistedMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import type {
   MultiSearchLanguageFilterMode,
   MultiSearchLanguageFilterModes,
@@ -29,7 +20,6 @@ import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch
 import type { Manga } from "@/renderer/types";
 import type { TagFavoriteSourceRun } from "@/renderer/components/ScraperTagFavorites/useTagFavoriteRuns";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
-import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import BlacklistedCardsDisplayToggle, {
   useLocalBlacklistedCardsDisplay,
 } from "@/renderer/components/BlacklistedCardsDisplayToggle";
@@ -37,6 +27,7 @@ import ScraperPageAppendControl from "@/renderer/components/ScraperPageAppendCon
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
 import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
+import useAdaptiveMultiSearchListProcessing from "@/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing";
 
 type Props = {
   favorite: ScraperTagFavoriteRecord;
@@ -45,11 +36,11 @@ type Props = {
   visiblePageEndIndex: number;
   mergedResults: MultiSearchMergedResult[];
   totalResultCount: number;
-  visibleSourceCount: number;
   loadedSourceCount: number;
   resultLanguageCodes: string[];
   languageFilterModes: MultiSearchLanguageFilterModes;
   textFilter: string;
+  debouncedTextFilter: string;
   loading: boolean;
   message: string | null;
   error: string | null;
@@ -138,11 +129,11 @@ export default function ScraperTagFavoriteResults({
   visiblePageEndIndex,
   mergedResults,
   totalResultCount,
-  visibleSourceCount,
   loadedSourceCount,
   resultLanguageCodes,
   languageFilterModes,
   textFilter,
+  debouncedTextFilter,
   loading,
   message,
   error,
@@ -193,57 +184,48 @@ export default function ScraperTagFavoriteResults({
     showBlacklistedCardsLocally,
     setShowBlacklistedCardsLocally,
   } = useLocalBlacklistedCardsDisplay(hideBlacklistedCards);
-  const manuallySplitMergedResults = React.useMemo(
-    () => applyManualMultiSearchSplits(mergedResults, splitResultIds),
-    [mergedResults, splitResultIds],
-  );
-  const sortedMergedResults = React.useMemo(
-    () => sortByScraperViewHistoryNewState(
-      manuallySplitMergedResults,
-      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-      unseenFilterRecordsById,
-      unseenFilterNewCardIds,
-      showUnseenFirst,
-    ),
-    [
-      manuallySplitMergedResults,
-      newViewHistoryIds,
-      showUnseenFirst,
+  const listFilters = React.useMemo(() => ({
+    languageFilterModes,
+    readingStatusFilters: [],
+    textFilter: debouncedTextFilter,
+    readingStatusContext: {
+      libraryMangas,
+      bookmarkedSourceKeys,
+      sourceProgressIndex,
       viewHistoryRecordsById,
-    ],
-  );
-  const blacklistFilteredMergedResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      sortedMergedResults,
+    },
+    display: {
+      originalOnly: false,
       tagBlacklistByScraper,
-      shouldHideBlacklistedCards,
-    ),
-    [
-      shouldHideBlacklistedCards,
-      sortedMergedResults,
-      tagBlacklistByScraper,
-    ],
-  );
-  const displayedMergedResults = React.useMemo(
-    () => filterByScraperViewHistoryNewState(
-      blacklistFilteredMergedResults,
-      (result) => result.sources.map((source) => (
-        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
-      )),
-      unseenFilterRecordsById,
-      unseenFilterNewCardIds,
+      hideBlacklistedCards: shouldHideBlacklistedCards,
+      viewHistoryRecordsById: unseenFilterRecordsById,
+      newViewHistoryIds: unseenFilterNewCardIds,
+      showUnseenFirst,
       showUnseenOnly,
-    ),
-    [
-      blacklistFilteredMergedResults,
-      showUnseenOnly,
-      unseenFilterNewCardIds,
-      unseenFilterRecordsById,
-    ],
-  );
-  const blacklistedMergedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(sortedMergedResults, tagBlacklistByScraper),
-    [sortedMergedResults, tagBlacklistByScraper],
+      splitResultIds,
+    },
+  }), [
+    bookmarkedSourceKeys,
+    languageFilterModes,
+    libraryMangas,
+    shouldHideBlacklistedCards,
+    showUnseenFirst,
+    showUnseenOnly,
+    sourceProgressIndex,
+    splitResultIds,
+    tagBlacklistByScraper,
+    debouncedTextFilter,
+    unseenFilterNewCardIds,
+    unseenFilterRecordsById,
+    viewHistoryRecordsById,
+  ]);
+  const {
+    results: displayedMergedResults,
+    blacklistedResultCount: blacklistedMergedResultCount,
+  } = useAdaptiveMultiSearchListProcessing(mergedResults, [], listFilters);
+  const visibleSourceCount = React.useMemo(
+    () => displayedMergedResults.reduce((count, result) => count + result.sources.length, 0),
+    [displayedMergedResults],
   );
   const visiblePageLabel = pageIndex === visiblePageEndIndex
     ? `Page ${pageIndex + 1}`
@@ -384,31 +366,26 @@ export default function ScraperTagFavoriteResults({
         </div>
 
         {displayedMergedResults.length ? (
-          <div className="multi-search__results-grid">
-            {displayedMergedResults.map((result) => (
-              <MultiSearchResultCard
-                key={result.id}
-                result={result}
-                libraryMangas={libraryMangas}
-                bookmarkedSourceKeys={bookmarkedSourceKeys}
-                sourceProgressIndex={sourceProgressIndex}
-                viewHistoryRecordsById={viewHistoryRecordsById}
-                newViewHistoryIds={newViewHistoryIds}
-                tagBlacklistByScraper={tagBlacklistByScraper}
-                tagFavorites={tagFavorites}
-                viewHistoryRecordingDisabled={loading}
-                onOpenSource={onOpenSource}
-                onOpenSourceInWorkspace={onOpenSourceInWorkspace}
-                onOpenProgressReader={onOpenProgressReader}
-                onSetSourcesRead={onSetSourcesRead}
-                onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
-                  const nextIds = new Set(currentIds);
-                  nextIds.add(resultId);
-                  return nextIds;
-                })}
-              />
-            ))}
-          </div>
+          <MultiSearchVirtualizedResultsGrid
+            results={displayedMergedResults}
+            libraryMangas={libraryMangas}
+            bookmarkedSourceKeys={bookmarkedSourceKeys}
+            sourceProgressIndex={sourceProgressIndex}
+            viewHistoryRecordsById={viewHistoryRecordsById}
+            newViewHistoryIds={newViewHistoryIds}
+            tagBlacklistByScraper={tagBlacklistByScraper}
+            tagFavorites={tagFavorites}
+            viewHistoryRecordingDisabled={loading}
+            onOpenSource={onOpenSource}
+            onOpenSourceInWorkspace={onOpenSourceInWorkspace}
+            onOpenProgressReader={onOpenProgressReader}
+            onSetSourcesRead={onSetSourcesRead}
+            onSplitResult={(resultId) => setSplitResultIds((currentIds) => {
+              const nextIds = new Set(currentIds);
+              nextIds.add(resultId);
+              return nextIds;
+            })}
+          />
         ) : loading ? (
           <div className="scraper-browser__message">Chargement du tag combine...</div>
         ) : totalResultCount > 0 ? (

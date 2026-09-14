@@ -423,6 +423,7 @@ export const completeBackgroundSearch = async (
   };
   replaceMetadata(next);
   await persistJobPayload({ ...job, metadata: next, result: request.result });
+  memoryJobs.delete(request.jobId);
   await persistMetadata();
   broadcastChange(next, true);
   notifyFinished(next);

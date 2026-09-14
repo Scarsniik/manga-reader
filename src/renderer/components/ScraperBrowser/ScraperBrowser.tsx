@@ -529,6 +529,11 @@ export default function ScraperBrowser({
       authors: detailsAuthorNameCandidates,
       authorUrls: currentDetails.authorUrls,
       chapter: correspondenceTitleAnalysis.chapter,
+      thumbnailUrl: currentDetails.cover,
+      thumbnailCandidates: currentDetails.coverCandidates,
+      summary: currentDetails.description,
+      pageCount: currentDetails.pageCount,
+      languageCodes: currentDetails.languageCodes,
     };
   }, [correspondenceTitleAnalysis, detailsAuthorNameCandidates, detailsResult, scraper.id]);
   const potentialMatchMergeOptions = useMemo(() => ({

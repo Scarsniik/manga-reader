@@ -171,6 +171,10 @@ function Build-ElectronForDevelopment {
         if ($LASTEXITCODE -ne 0) {
             throw "La compilation Electron a echoue avec le code $LASTEXITCODE."
         }
+        & $NodePath (Join-Path $repoRoot 'scripts\build-search-worker.cjs')
+        if ($LASTEXITCODE -ne 0) {
+            throw "La compilation du worker de recherche a echoue avec le code $LASTEXITCODE."
+        }
     }
     finally {
         Pop-Location

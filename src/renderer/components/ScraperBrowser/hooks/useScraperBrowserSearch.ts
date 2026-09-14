@@ -30,7 +30,6 @@ import {
 } from '@/renderer/components/ScraperBrowser/utils/scraperBrowserHelpers';
 import {
   buildScraperListingPaginationEndPage,
-  createScraperCardDetailsCache,
   fetchResolvedScraperListingPage,
   formatScraperValueForDisplay,
   hasAuthorPagePlaceholder,
@@ -55,9 +54,9 @@ import {
 } from '@/renderer/utils/scraperBrowserNavigation';
 import type { ScraperTemplateContext } from '@/renderer/utils/scraperTemplateContext';
 import type { BackgroundListingRun } from '@/renderer/backgroundSearch/types';
-import { runScraperAuthorSearchEngine } from '@/renderer/searchEngines/listingSearchEngine';
 import { buildScraperAuthorListingSearchInput } from '@/renderer/searchEngines/authorListingSearchInput';
 import { resolveCachedScraperAuthorTarget } from '@/renderer/utils/scraperAuthorListCache';
+import type { ForegroundSearchSnapshotEvent } from '@/shared/searchWorker';
 
 export type ListingLookupOptions = {
   pageIndex?: number;
@@ -390,8 +389,8 @@ export function useScraperBrowserSearch({
 }: UseScraperBrowserSearchOptions) {
   const authorEngineRunRef = useRef<BackgroundListingRun | null>(null);
   const authorEnginePageUrlsRef = useRef(new Map<number, string>());
-  const authorEngineAbortControllerRef = useRef<AbortController | null>(null);
-  const authorDetailsCacheRef = useRef(createScraperCardDetailsCache());
+  const authorEngineExecutionIdRef = useRef<string | null>(null);
+  const authorEngineExecutionCountRef = useRef(0);
   const authorEngineOriginalOnlyRef = useRef(authorOriginalOnly);
   const authorEngineTargetRef = useRef<{ displayQuery: string; target: string } | null>(null);
 
@@ -402,7 +401,10 @@ export function useScraperBrowserSearch({
     setLoadingStatus(buildListingLoadingStatus(listingMode, progress));
   }, [setLoadingStatus]);
 
-  useEffect(() => () => authorEngineAbortControllerRef.current?.abort(), []);
+  useEffect(() => () => {
+    const executionId = authorEngineExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+  }, []);
   const fetchListingPage = useCallback(async (
     listingMode: ScraperListingMode,
     targetUrl: string,
@@ -621,14 +623,15 @@ export function useScraperBrowserSearch({
       };
     }
 
-    authorEngineAbortControllerRef.current?.abort();
-    const controller = new AbortController();
-    authorEngineAbortControllerRef.current = controller;
+    const previousExecutionId = authorEngineExecutionIdRef.current;
+    if (previousExecutionId) void window.api?.cancelSearchWorker?.(previousExecutionId);
+    authorEngineExecutionCountRef.current += 1;
+    const executionId = `foreground-browser-author-${Date.now()}-${authorEngineExecutionCountRef.current}`;
+    authorEngineExecutionIdRef.current = executionId;
     if (!currentRun) {
       authorEngineOriginalOnlyRef.current = authorOriginalOnly;
       authorEngineTargetRef.current = { displayQuery: nextQuery, target: cachedTarget };
       authorEnginePageUrlsRef.current = new Map();
-      authorDetailsCacheRef.current = createScraperCardDetailsCache();
     }
     const pageCount = currentRun
       ? Math.max(1, normalizedTargetPageIndex + 1 - currentRun.loadedPages)
@@ -640,12 +643,9 @@ export function useScraperBrowserSearch({
       originalOnly: authorOriginalOnly,
       templateContext,
     });
-    const result = await runScraperAuthorSearchEngine(
-      input,
-      controller.signal,
-      async (snapshot) => {
+    const applySnapshot = (snapshot: { runs: BackgroundListingRun[] }) => {
         if (!canCommit()) {
-          controller.abort();
+          void window.api?.cancelSearchWorker?.(executionId);
           return;
         }
         const snapshotRun = snapshot.runs[0];
@@ -654,12 +654,26 @@ export function useScraperBrowserSearch({
         if (snapshotRun.currentPageUrl && snapshotRun.loadedPages > 0) {
           authorEnginePageUrlsRef.current.set(snapshotRun.loadedPages - 1, snapshotRun.currentPageUrl);
         }
-      },
-      {
+    };
+    const unsubscribe = window.api?.onSearchWorkerSnapshot?.((event: ForegroundSearchSnapshotEvent) => {
+      if (event.executionId !== executionId) return;
+      const snapshot = event.result as { runs?: BackgroundListingRun[] };
+      if (Array.isArray(snapshot.runs)) applySnapshot({ runs: snapshot.runs });
+    });
+    let result: { runs: BackgroundListingRun[] };
+    try {
+      result = await window.api.runForegroundListingSearchWorker({
+        executionId,
+        kind: "scraperAuthor",
+        input,
         initialRuns: currentRun ? [currentRun] : undefined,
-        detailsCache: authorDetailsCacheRef.current,
-      },
-    );
+      }) as { runs: BackgroundListingRun[] };
+    } finally {
+      if (typeof unsubscribe === "function") unsubscribe();
+      if (authorEngineExecutionIdRef.current === executionId) {
+        authorEngineExecutionIdRef.current = null;
+      }
+    }
     const run = result.runs[0];
     if (!run) throw new Error('La recherche auteur ne contient aucune source exploitable.');
     authorEngineRunRef.current = run;

@@ -370,6 +370,79 @@ test("a standalone author search can be linked to a manga without changing its o
   assert.equal(replayRequest.input.linkedAuthorImports[0].autoRefreshOnCompletion, true);
 });
 
+test("manga correspondence ignores the multi-source scraper selection", async () => {
+  const secondScraper = {
+    ...scraper,
+    id: "source-b",
+    name: "Source B",
+    baseUrl: "https://second.test/",
+  };
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: targetUrl.startsWith(secondScraper.baseUrl)
+            ? '<article class="card"><a class="title" href="/details/two">Series One 2</a></article>'
+            : "<main></main>",
+        };
+      },
+    },
+  };
+
+  const result = await runMangaCorrespondenceSearch(buildCorrespondenceInput({
+    scraperFilterValues: [scraper.id],
+    scrapers: [scraper, secondScraper],
+    maxPages: 1,
+  }), new AbortController().signal, async () => {});
+
+  assert.ok(result.matches.some((match) => match.source.scraper.id === secondScraper.id));
+});
+
+test("author correspondence ignores the multi-source scraper selection", async () => {
+  const secondScraper = {
+    ...scraper,
+    id: "source-b",
+    name: "Source B",
+    baseUrl: "https://second.test/",
+  };
+  global.window = {
+    setTimeout,
+    api: {
+      fetchScraperDocument: async (request) => {
+        const targetUrl = String(request.targetUrl);
+        return {
+          ok: true,
+          requestedUrl: targetUrl,
+          finalUrl: targetUrl,
+          html: targetUrl.startsWith(secondScraper.baseUrl)
+            ? '<article class="card"><a class="title" href="/details/two">[Author A] Series Two</a></article>'
+            : "<main></main>",
+        };
+      },
+    },
+  };
+
+  const result = await runAuthorCorrespondenceSearch({
+    referenceName: "Author A",
+    names: ["Author A"],
+    referenceSources: [],
+    scraperFilterValues: [scraper.id],
+    scrapers: [scraper, secondScraper],
+    maxPages: 1,
+    authorPageCount: 1,
+    paceMode: "fast",
+    scrapingConcurrency: 2,
+    scrapeDetailsWithCards: false,
+  }, new AbortController().signal, async () => {});
+
+  assert.ok(result.nameSearchSources.some((source) => source.scraper.id === secondScraper.id));
+});
+
 test("correspondence stops a paginated source after the configured unproductive streak", async () => {
   let searchRequestCount = 0;
   global.window = {
@@ -2909,5 +2982,5 @@ test("advanced author orchestration reuses the canonical search engines", () => 
   assert.match(advancedStatus, /role="progressbar"/);
   assert.match(advancedButton, /<ScraperPageAppendControl/);
   assert.match(advancedButton, /requestedProcessedMangaCount/);
-  assert.match(backgroundRunner, /authorResultChanged/);
+  assert.match(backgroundRunner, /runBackgroundSearchWorker\s*\(/);
 });

@@ -50,8 +50,12 @@ test("foreground and background latest searches call the same engine", () => {
     path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"),
     "utf8",
   );
-
-  assert.match(foregroundSource, /runScraperLatestSearch\s*\(/);
+  const executionWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/searchExecutionWorker.ts"),
+    "utf8",
+  );
+  assert.match(foregroundSource, /runForegroundListingSearchWorker\s*\(/);
+  assert.match(executionWorker, /runScraperLatestSearch\s*\(/);
   assert.match(engineRegistry, /return runScraperLatestSearch\(input, signal, onSnapshot/);
   assert.match(listingEngine, /export const runScraperLatestSearch/);
   assert.equal((foregroundSource.match(/fetchHomepagePageWithRetry/g) ?? []).length, 0);
@@ -63,15 +67,19 @@ test("every search with foreground and background execution calls one canonical 
     multi: fs.readFileSync(path.resolve("src/renderer/components/MultiSearch/useMultiSearch.ts"), "utf8"),
     browser: fs.readFileSync(path.resolve("src/renderer/components/ScraperBrowser/hooks/useScraperBrowserSearch.ts"), "utf8"),
     authors: fs.readFileSync(path.resolve("src/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns.ts"), "utf8"),
+    worker: fs.readFileSync(path.resolve("src/electron/workers/searchExecutionWorker.ts"), "utf8"),
   };
 
-  assert.match(sources.multi, /runMultiSearchEngine\s*\(/);
+  assert.match(sources.multi, /runForegroundMultiSearchWorker\s*\(/);
+  assert.match(sources.worker, /runMultiSearchEngine\s*\(/);
   assert.match(sources.registry, /multiSearch:\s*\(\) => runMultiSearchEngine\s*\(/);
-  assert.match(sources.browser, /runScraperAuthorSearchEngine\s*\(/);
+  assert.match(sources.browser, /runForegroundListingSearchWorker\s*\(/);
+  assert.match(sources.worker, /runScraperAuthorSearchEngine\s*\(/);
   assert.match(sources.registry, /scraperAuthor:\s*\(\) => runScraperAuthorSearchEngine\s*\(/);
-  assert.match(sources.authors, /runLatestAuthorsSearchEngine/);
+  assert.match(sources.authors, /runForegroundListingSearchWorker/);
+  assert.match(sources.worker, /runLatestAuthorsSearchEngine/);
   assert.match(sources.registry, /latestAuthors:\s*\(\) => runLatestAuthorsSearchEngine\s*\(/);
-  assert.match(sources.authors, /runAuthorFavoriteRefreshSearchEngine/);
+  assert.match(sources.worker, /runAuthorFavoriteRefreshSearchEngine/);
   assert.match(sources.registry, /authorFavoriteRefresh:\s*\(\) => runAuthorFavoriteRefreshSearchEngine\s*\(/);
 });
 
@@ -121,6 +129,10 @@ test("foreground and background searches keep the shared runtime boundaries", ()
     path.resolve("src/renderer/components/MultiSearch/useMultiSearch.ts"),
     "utf8",
   );
+  const executionWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/searchExecutionWorker.ts"),
+    "utf8",
+  );
   const engineRegistry = fs.readFileSync(
     path.resolve("src/renderer/searchEngines/searchEngineRegistry.ts"),
     "utf8",
@@ -155,16 +167,123 @@ test("foreground and background searches keep the shared runtime boundaries", ()
   );
 
   assert.match(browserSource, /fetchResolvedScraperListingPage\s*\(/);
-  assert.match(foregroundMultiSearch, /runMultiSearchEngine\s*\(/);
+  assert.match(foregroundMultiSearch, /runForegroundMultiSearchWorker\s*\(/);
+  assert.match(executionWorker, /runMultiSearchEngine\s*\(/);
   assert.doesNotMatch(foregroundMultiSearch, /executeMultiSearchTermPage\s*\(/);
   assert.match(multiEngine, /executeMultiSearchTermPage\s*\(/);
   assert.match(listingEngine, /processScraperListingPage\s*\(/);
   assert.doesNotMatch(authorFavorites, /processScraperListingPage\s*\(/);
-  assert.match(tagFavorites, /processScraperListingPage\s*\(/);
+  assert.match(tagFavorites, /runForegroundListingSearchWorker\s*\(/);
+  assert.match(executionWorker, /runTagFavoriteSearchEngine\s*\(/);
   assert.match(authorExtraction, /resolveScraperCardDetails\s*\(/);
   assert.doesNotMatch(authorExtraction, /extractScraperDetailsFromDocumentWithImageFallbacks/);
   assert.match(workspaceAuthor, /fetchResolvedScraperListingPage\s*\(/);
   assert.match(workspaceTag, /fetchResolvedScraperListingPage\s*\(/);
+});
+
+test("heavy search orchestration stays in backend workers", () => {
+  const rendererSources = [
+    "src/renderer/backgroundSearch/BackgroundSearchRunner.tsx",
+    "src/renderer/components/MultiSearch/useMultiSearch.ts",
+    "src/renderer/components/ScraperLatest/useScraperLatestRuns.ts",
+    "src/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns.ts",
+    "src/renderer/components/ScraperTagFavorites/useTagFavoriteRuns.ts",
+  ].map((filePath) => fs.readFileSync(path.resolve(filePath), "utf8"));
+  const executionWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/searchExecutionWorker.ts"),
+    "utf8",
+  );
+  const searchWorkerHandler = fs.readFileSync(
+    path.resolve("src/electron/handlers/searchWorker.ts"),
+    "utf8",
+  );
+  const mergeWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/multiSearchMergeWorker.ts"),
+    "utf8",
+  );
+  const potentialMatchWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/potentialMatchWorker.ts"),
+    "utf8",
+  );
+  const listingPageExecution = fs.readFileSync(
+    path.resolve("src/renderer/utils/scraperRuntime/listingPageExecution.ts"),
+    "utf8",
+  );
+  const adaptiveListProcessing = fs.readFileSync(
+    path.resolve("src/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing.ts"),
+    "utf8",
+  );
+  const listProcessing = fs.readFileSync(
+    path.resolve("src/renderer/components/MultiSearch/multiSearchListProcessing.ts"),
+    "utf8",
+  );
+  const mergeWorkerHandler = fs.readFileSync(
+    path.resolve("src/electron/handlers/multiSearchMergeWorker.ts"),
+    "utf8",
+  );
+  const authorCombinedResults = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/ScraperAuthorCombinedResults.tsx"),
+    "utf8",
+  );
+  const authorSeriesCoverages = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperAuthorFavorites/useAuthorSeriesChapterCoverages.ts"),
+    "utf8",
+  );
+  const visualFingerprints = fs.readFileSync(
+    path.resolve("src/renderer/hooks/useVisualImageFingerprints.ts"),
+    "utf8",
+  );
+  const potentialMatches = fs.readFileSync(
+    path.resolve("src/renderer/components/ScraperBrowser/hooks/useScraperCardPotentialMatches.ts"),
+    "utf8",
+  );
+  const quickReviewDetails = fs.readFileSync(
+    path.resolve("src/renderer/components/QuickReview/useQuickReviewDetails.ts"),
+    "utf8",
+  );
+
+  rendererSources.forEach((sourceText) => {
+    assert.doesNotMatch(sourceText, /from ["']@\/renderer\/searchEngines\/(?:multiSearchEngine|listingSearchEngine|searchEngineRegistry)/);
+  });
+  assert.match(executionWorker, /executeBackgroundSearch\s*\(/);
+  assert.match(executionWorker, /runForegroundListingSearch/);
+  assert.match(executionWorker, /runVisualFingerprinting/);
+  assert.match(executionWorker, /property === "runSearchListingPageWorker"/);
+  assert.match(searchWorkerHandler, /case "getScraperLatestCheckpoints"/);
+  assert.match(searchWorkerHandler, /case "saveScraperLatestCheckpoint"/);
+  assert.match(mergeWorker, /mergeMultiSearchSourceIntoState\s*\(/);
+  assert.match(mergeWorker, /mergeMultiSearchResultsByVisualFingerprint\s*\(/);
+  assert.match(mergeWorker, /processMultiSearchLists\s*\(/);
+  assert.match(adaptiveListProcessing, /LIST_WORKER_RESULT_THRESHOLD = 400/);
+  assert.match(adaptiveListProcessing, /const stableRuns = runs\.length \? runs : EMPTY_MULTI_SEARCH_RUNS/);
+  assert.match(adaptiveListProcessing, /runMultiSearchListWorker/);
+  assert.match(listProcessing, /filterMultiSearchMergedResultsByLanguage\s*\(/);
+  assert.match(listProcessing, /sortByScraperViewHistoryNewState\s*\(/);
+  assert.match(listProcessing, /filterBlacklistedMultiSearchResults\s*\(/);
+  assert.match(mergeWorkerHandler, /getMergeWorker\("merge"\)/);
+  assert.match(mergeWorkerHandler, /getMergeWorker\("visual"\)/);
+  assert.match(mergeWorkerHandler, /getMergeWorker\("list"\)/);
+  assert.match(authorCombinedResults, /AUTHOR_SERIES_DEEP_ANALYSIS_LIMIT = 300/);
+  assert.match(authorSeriesCoverages, /\(\) => !disposed/);
+  assert.match(visualFingerprints, /cancelSearchWorker\?\.\(executionId\)/);
+  assert.match(potentialMatchWorker, /processPotentialMatchRequest/);
+  assert.match(potentialMatches, /runPotentialMatchWorker/);
+  assert.match(quickReviewDetails, /scheduleQuickReviewIdleTask/);
+  assert.match(quickReviewDetails, /QUICK_REVIEW_IMAGE_PRELOAD_CONCURRENCY = 2/);
+  assert.match(quickReviewDetails, /preloadController\.abort\(\)/);
+  assert.match(listingPageExecution, /runSearchListingPageWorker/);
+});
+
+test("the search worker exposes the DOM constructors required by scraper extraction", () => {
+  const executionWorker = fs.readFileSync(
+    path.resolve("src/electron/workers/searchExecutionWorker.ts"),
+    "utf8",
+  );
+
+  assert.match(executionWorker, /const \{ DOMParser, Document, Element \} = require\("linkedom"\)/);
+  assert.match(executionWorker, /workerGlobal\.DOMParser = DOMParser/);
+  assert.match(executionWorker, /workerGlobal\.Document = Document/);
+  assert.match(executionWorker, /workerGlobal\.Element = Element/);
 });
 
 test("all paginated engines share execution context preloading, diagnostics and checkpoint fingerprints", () => {
@@ -235,6 +354,39 @@ test("latest listing thumbnails keep fallbacks without validating images during 
     "https://example.test/missing.jpg",
     "https://example.test/cover.jpg",
   ]);
+});
+
+test("listing extraction rejects cards missing their configured details link", async () => {
+  const { document } = parseHTML(`
+    <section class="results">
+      <article class="card">
+        <div class="title">Popular gallery without a details link</div>
+        <img class="thumb" src="/popular.jpg">
+      </article>
+      <article class="card">
+        <a class="details" href="/gallery/2">
+          <span class="title">Real author result</span>
+        </a>
+        <img class="thumb" src="/real.jpg">
+      </article>
+    </section>
+  `);
+  const page = await extractScraperSearchPageFromDocumentWithImageFallbacks(
+    document,
+    {
+      resultListSelector: ".results",
+      resultItemSelector: ".card",
+      titleSelector: { kind: "css", value: ".title" },
+      detailUrlSelector: { kind: "css", value: ".details@href" },
+      thumbnailSelector: { kind: "css", value: ".thumb@src" },
+      languageDetection: { detectFromTitle: false },
+    },
+    { requestedUrl: "https://example.test/author/example" },
+  );
+
+  assert.equal(page.items.length, 1);
+  assert.equal(page.items[0].title, "Real author result");
+  assert.equal(page.items[0].detailUrl, "https://example.test/gallery/2");
 });
 
 test("image fallback selectors keep the current image source first", async () => {

@@ -71,7 +71,7 @@ const getFetchScraperDocument = (): ScraperDocumentFetcher => {
   return fetchScraperDocument as ScraperDocumentFetcher;
 };
 
-export const fetchResolvedScraperListingPage = async ({
+export const fetchResolvedScraperListingPageLocally = async ({
   scraper,
   config,
   targetUrl,
@@ -136,6 +136,48 @@ export const fetchResolvedScraperListingPage = async ({
       ...progress,
     }),
   });
+};
+
+let nextListingPageWorkerExecutionId = 0;
+
+export const fetchResolvedScraperListingPage = async (
+  options: FetchResolvedScraperListingPageOptions,
+): Promise<ScraperRuntimeSearchPageResult> => {
+  const api = (window as unknown as {
+    api?: {
+      runSearchListingPageWorker?: (request: {
+        executionId: string;
+        options: unknown;
+      }) => Promise<ScraperRuntimeSearchPageResult>;
+      onSearchListingPageProgress?: (callback: (event: {
+        executionId: string;
+        progress: ScraperListingPageProgress;
+      }) => void) => (() => void) | void;
+    };
+  }).api;
+  if (options.fetchDocument || typeof api?.runSearchListingPageWorker !== "function") {
+    return fetchResolvedScraperListingPageLocally(options);
+  }
+
+  nextListingPageWorkerExecutionId += 1;
+  const executionId = `listing-page-${Date.now()}-${nextListingPageWorkerExecutionId}`;
+  const unsubscribe = api.onSearchListingPageProgress?.((event) => {
+    if (event.executionId === executionId) options.onProgress?.(event.progress);
+  });
+  const {
+    detailsCache: _detailsCache,
+    fetchDocument: _fetchDocument,
+    onProgress: _onProgress,
+    ...serializableOptions
+  } = options;
+  try {
+    return await api.runSearchListingPageWorker({
+      executionId,
+      options: serializableOptions,
+    });
+  } finally {
+    if (typeof unsubscribe === "function") unsubscribe();
+  }
 };
 
 export type ScraperPageRetryOptions = {

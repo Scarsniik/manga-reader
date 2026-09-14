@@ -20,7 +20,6 @@ import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSe
 import { extractMultiSearchAuthors } from "@/renderer/components/MultiSearch/multiSearchAuthors";
 import { isSearchableScraper } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import { splitIncludeFilterValues } from "@/renderer/components/IncludeFilterBar/includeFilterValues";
 import { loadAdvancedJapaneseRomanizationVariants } from "@/renderer/utils/advancedJapaneseRomanization";
 import {
   getMangaTitleMergeMatchKind,
@@ -89,6 +88,7 @@ import { appendScraperLatestDiagnosticEvent } from "@/renderer/utils/scraperLate
 import { normalizeMangaCorrespondenceSafetySettings } from "@/shared/mangaCorrespondenceSafetySettings";
 import { hydrateAuthorCorrespondenceSessionCache } from "@/renderer/backgroundSearch/authorCorrespondenceSessionCache";
 import { collectAuthorCorrespondenceSessionSources } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
+import { buildMangaCorrespondenceReferenceMatch } from "@/renderer/backgroundSearch/mangaCorrespondenceReferenceMatch";
 import {
   advanceSearchProductivity,
   EMPTY_SEARCH_PRODUCTIVITY_STATE,
@@ -145,13 +145,9 @@ const buildDirectTargetKey = (target: NonNullable<DiscoveryTask["directTargets"]
   `${target.scraper.id}:${target.url.trim()}`
 );
 
-const selectScrapers = (input: MangaCorrespondenceBackgroundInput): ScraperRecord[] => {
-  const filter = splitIncludeFilterValues(input.scraperFilterValues);
-  return input.scrapers.filter((scraper) => (
-    !filter.excludedValues.includes(scraper.id)
-    && (!filter.includedValues.length || filter.includedValues.includes(scraper.id))
-  ));
-};
+const selectScrapers = (input: MangaCorrespondenceBackgroundInput): ScraperRecord[] => (
+  input.scrapers
+);
 
 const canSearchAuthors = (scraper: ScraperRecord): boolean => {
   const feature = getScraperFeature(scraper, "author");
@@ -389,6 +385,9 @@ export const runMangaCorrespondenceSearch = async (
     ? safety.retainedPotentialCount
     : Number.MAX_SAFE_INTEGER;
   const authorDiscoveryOnly = input.purpose === "authorDiscovery";
+  const visibleReferenceMatch = authorDiscoveryOnly
+    ? null
+    : buildMangaCorrespondenceReferenceMatch(input);
   const authorPropagationReferenceNames = uniqueText(input.authorPropagationReferenceNames ?? []);
   const resolvePropagatedAuthorName = (authorName: string): string | undefined => (
     authorPropagationReferenceNames.length
@@ -1047,7 +1046,9 @@ export const runMangaCorrespondenceSearch = async (
     {
       completedUnits: processedTasks,
       totalUnits: processedTasks + queue.length + (activeTask ? 1 : 0),
-      resultCount: matches.size,
+      resultCount: matches.size + (
+        visibleReferenceMatch && !matches.has(visibleReferenceMatch.key) ? 1 : 0
+      ),
       currentLabel: label,
     },
   );

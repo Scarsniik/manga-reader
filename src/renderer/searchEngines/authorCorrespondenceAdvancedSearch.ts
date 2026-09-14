@@ -28,6 +28,8 @@ import {
 import { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
 import {
+  isUsableAuthorCorrespondenceAdvancedMangaSource,
+  isUsableAuthorCorrespondenceMangaTitle,
   resolveAuthorCorrespondenceAdvancedBatchSize,
   selectAuthorCorrespondenceAdvancedSeeds,
   type AuthorCorrespondenceAdvancedSeed,
@@ -90,11 +92,16 @@ export const buildAuthorCorrespondenceManualMangaSources = (
         detailsSourceUrl: reference.sourceUrl,
         authorNames: reference.authors,
         authorUrls: reference.authorUrls,
+        thumbnailUrl: reference.thumbnailUrl,
+        thumbnailCandidates: reference.thumbnailCandidates,
+        summary: reference.summary,
+        pageCount: reference.pageCount,
+        languageCodes: reference.languageCodes,
       },
       searchTerm: reference.title,
       pageIndex: 1,
-      sourceLanguageCodes: [],
-      detectedLanguageCodes: [],
+      sourceLanguageCodes: reference.languageCodes ?? [],
+      detectedLanguageCodes: reference.languageCodes ?? [],
       tentativeAuthorNames: reference.authors,
       contextualAuthorNames: reference.authors,
       advancedRomanizedTitleVariants: [],
@@ -267,8 +274,12 @@ export const buildAuthorCorrespondenceAdvancedMangaInput = (
   const parsedTitles = uniqueText(seed.result.sources.flatMap((source) => {
     const analysis = analyzeAdvancedSeedSourceTitle(source);
     return [analysis.title, ...analysis.alternativeTitles];
-  }));
-  const referenceTitle = referenceAnalysis.title || seed.result.title;
+  })).filter((title) => isUsableAuthorCorrespondenceMangaTitle(title, referenceNames));
+  const referenceTitle = [referenceAnalysis.title, ...referenceAnalysis.alternativeTitles]
+    .find((title) => isUsableAuthorCorrespondenceMangaTitle(title, referenceNames))
+    ?? parsedTitles[0]
+    ?? referenceAnalysis.title
+    ?? seed.result.title;
   const referenceChapter = referenceAnalysis.chapter
     ?? inferMangaCorrespondenceFirstChapter(referenceAnalysis, parsedTitles);
   const resolveAuthorName = (authorName: string): string | undefined => (
@@ -572,6 +583,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       refreshedAuthorSourceKeys,
       new Set(cache.processedMangaKeys),
       Number.MAX_SAFE_INTEGER,
+      (source) => isUsableAuthorCorrespondenceAdvancedMangaSource(source, referenceNames),
     ).length;
     const discoveredMangaSourceCount = new Set(cache.mangaEnrichments.flatMap((enrichment) => (
       enrichment.sources.map(buildMultiSearchSourceIdentityKey)
@@ -619,6 +631,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       authorSourceKeys,
       processedMangaKeys,
       selectionSize,
+      (source) => isUsableAuthorCorrespondenceAdvancedMangaSource(source, referenceNames),
     )
     : [];
   const scheduledMangaSourceKeys = new Set(seeds.flatMap((seed) => seed.anchorSourceKeys));
@@ -644,6 +657,7 @@ export const runAuthorCorrespondenceAdvancedSearch = async (
       refreshedAuthorSourceKeys,
       new Set(cache.processedMangaKeys),
       0,
+      (source) => isUsableAuthorCorrespondenceAdvancedMangaSource(source, referenceNames),
     ).forEach((seed) => {
       if (seed.anchorSourceKeys.some((sourceKey) => scheduledMangaSourceKeys.has(sourceKey))) {
         return;

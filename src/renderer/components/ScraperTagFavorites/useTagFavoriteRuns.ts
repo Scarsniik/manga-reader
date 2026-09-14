@@ -5,20 +5,12 @@ import type {
   ScraperTagFavoriteSource,
 } from "@/shared/scraper";
 import {
-  fetchTagPageWithRetry,
   getPaceConfig,
-  getTagConfig,
-  resolveHasNextTagPage,
   runWithConcurrency,
   type PaceConfig,
 } from "@/renderer/components/MultiSearch/multiSearchRuntime";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import {
-  createScraperCardDetailsCache,
-  isScraperListingPaginationEndError,
-} from "@/renderer/utils/scraperRuntime";
-import { keepNewSourceResults } from "@/renderer/components/MultiSearch/multiSearchRunState";
-import { processScraperListingPage } from "@/renderer/components/MultiSearch/listingSourcePageProcessing";
+import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
 
 export type TagFavoriteSourceRunStatus = "waiting" | "loading" | "done" | "error";
 
@@ -69,7 +61,8 @@ export default function useTagFavoriteRuns(
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
-  const detailsCacheRef = useRef(createScraperCardDetailsCache());
+  const executionCountRef = useRef(0);
+  const activeExecutionIdsRef = useRef(new Set<string>());
   const paceConfigRef = useRef<PaceConfig>(getPaceConfig("careful"));
   const runsRef = useRef<TagFavoriteSourceRun[]>([]);
   const visibleSources = useMemo(
@@ -97,6 +90,15 @@ export default function useTagFavoriteRuns(
   useEffect(() => {
     runsRef.current = runs;
   }, [runs]);
+
+  const cancelActiveExecutions = useCallback(() => {
+    activeExecutionIdsRef.current.forEach((executionId) => {
+      void window.api?.cancelSearchWorker?.(executionId);
+    });
+    activeExecutionIdsRef.current.clear();
+  }, []);
+
+  useEffect(() => cancelActiveExecutions, [cancelActiveExecutions]);
 
   const patchRun = useCallback((
     token: number,
@@ -129,42 +131,57 @@ export default function useTagFavoriteRuns(
       }));
     }
 
+    executionCountRef.current += 1;
+    const executionId = `foreground-tag-favorite-${Date.now()}-${executionCountRef.current}`;
+    activeExecutionIdsRef.current.add(executionId);
     try {
-      const tagConfig = getTagConfig(run.scraper);
-      const nextPageIndex = run.loadedPages;
-      const page = await fetchTagPageWithRetry(
-        run.scraper,
-        tagConfig,
-        run.favoriteSource.tagUrl,
-        nextPageIndex,
-        run.nextPageUrl,
-        paceConfigRef.current,
-        {
-          scrapeDetailsWithCards,
-          detailsCache: detailsCacheRef.current,
-        },
-      );
-      const { sources: pageResults } = await processScraperListingPage({
+      const initialRun: BackgroundListingRun = {
+        key: run.key,
+        name: run.favoriteSource.name,
         scraper: run.scraper,
-        page,
-        pageIndex: nextPageIndex,
-        searchTerm: run.favoriteSource.name,
-        resultTag: {
-          name: run.favoriteSource.name,
-          url: run.favoriteSource.tagUrl,
+        query: run.favoriteSource.tagUrl,
+        status: run.status,
+        results: run.results,
+        loadedPages: run.loadedPages,
+        hasNextPage: run.hasNextPage,
+        currentPageUrl: run.currentPageUrl,
+        nextPageUrl: run.nextPageUrl,
+        error: run.error,
+      };
+      const result = await window.api.runForegroundListingSearchWorker({
+        executionId,
+        kind: "tagFavorites",
+        input: {
+          sources: [{
+            id: run.key,
+            name: run.favoriteSource.name,
+            scraper: run.scraper,
+            query: run.favoriteSource.tagUrl,
+            mode: "tag",
+            resultTag: {
+              name: run.favoriteSource.name,
+              url: run.favoriteSource.tagUrl,
+            },
+          }],
+          maxPages: 1,
+          paceMode: "careful",
+          concurrency: 1,
+          includedLanguageCodes: [],
+          scrapeDetailsWithCards,
         },
-      });
-      const newPageResults = keepNewSourceResults(run.results, pageResults);
-      const hasOnlyDuplicateUrls = pageResults.length > 0 && newPageResults.length === 0;
+        initialRuns: [initialRun],
+      }) as { runs: BackgroundListingRun[] };
+      const loadedRun = result.runs[0];
+      if (!loadedRun) return null;
       const nextRun: TagFavoriteSourceRun = {
         ...run,
-        status: "done",
-        results: [...run.results, ...newPageResults],
-        loadedPages: nextPageIndex + 1,
-        hasNextPage: !hasOnlyDuplicateUrls && resolveHasNextTagPage(tagConfig, page),
-        currentPageUrl: page.currentPageUrl,
-        nextPageUrl: page.nextPageUrl,
-        error: undefined,
+        status: loadedRun.status === "cancelled" ? "done" : loadedRun.status,
+        results: loadedRun.results,
+        loadedPages: loadedRun.loadedPages,
+        hasNextPage: loadedRun.hasNextPage,
+        currentPageUrl: loadedRun.currentPageUrl,
+        nextPageUrl: loadedRun.nextPageUrl,
+        error: loadedRun.error,
       };
 
       if (updateState) {
@@ -172,20 +189,19 @@ export default function useTagFavoriteRuns(
       }
       return nextRun;
     } catch (loadError) {
-      const isPaginationEnd = isScraperListingPaginationEndError(loadError);
       const failedRun: TagFavoriteSourceRun = {
         ...run,
-        status: run.results.length || isPaginationEnd ? "done" : "error",
+        status: run.results.length ? "done" : "error",
         hasNextPage: false,
-        error: isPaginationEnd
-          ? undefined
-          : loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
+        error: loadError instanceof Error ? loadError.message : "Echec temporaire du chargement.",
       };
 
       if (updateState) {
         patchRun(token, run.key, () => failedRun);
       }
       return failedRun;
+    } finally {
+      activeExecutionIdsRef.current.delete(executionId);
     }
   }, [patchRun, scrapeDetailsWithCards]);
 
@@ -228,6 +244,7 @@ export default function useTagFavoriteRuns(
   }, [loadPageForRun]);
 
   const loadPage = useCallback(async (targetPageIndex: number, forceReset = false) => {
+    cancelActiveExecutions();
     if (!favorite) {
       setRuns([]);
       setPageIndex(0);
@@ -275,10 +292,9 @@ export default function useTagFavoriteRuns(
         setLoading(false);
       }
     }
-  }, [favorite, loadPageForRuns, scrapersById]);
+  }, [cancelActiveExecutions, favorite, loadPageForRuns, scrapersById]);
 
   const start = useCallback(async () => {
-    detailsCacheRef.current = createScraperCardDetailsCache();
     await loadPage(0, true);
   }, [loadPage]);
 

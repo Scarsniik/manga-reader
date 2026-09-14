@@ -19,6 +19,19 @@ export const normalizeCorrespondenceTitle = (value: string): string => (
     .replace(/\s+/g, " ")
 );
 
+const GENERIC_CONTAINMENT_TITLE_KEYS = new Set([
+  "artist",
+  "artists",
+  "author",
+  "authors",
+  "cartoonist",
+  "creator",
+  "creators",
+  "illustrator",
+  "illustrators",
+  "mangaka",
+]);
+
 export const isUsableCorrespondenceDiscoveredTitle = (title: string): boolean => {
   const key = normalizeCorrespondenceTitle(title);
   if (!key) return false;
@@ -43,6 +56,7 @@ export const doesCorrespondenceTitleContainKnownTitle = (
   const known = normalizeCorrespondenceTitle(knownTitle);
   if (!candidate || !known) return false;
   if (candidate === known) return true;
+  if (GENERIC_CONTAINMENT_TITLE_KEYS.has(known)) return false;
 
   // Avoid accepting incidental occurrences for very short titles while still
   // supporting compact CJK titles when the whole normalized value matches.

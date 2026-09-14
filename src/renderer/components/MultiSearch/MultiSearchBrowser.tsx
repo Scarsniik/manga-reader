@@ -42,22 +42,10 @@ import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/us
 import { buildMultiSearchHistorySettings } from "@/renderer/components/MultiSearch/multiSearchHistory";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
-  filterMultiSearchRunsByLanguage,
-  getMultiSearchSourceLanguageValues,
   getMultiSearchLanguageFilterMode,
-  hasActiveMultiSearchLanguageFilter,
   toggleMultiSearchLanguageFilterMode,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import {
-  filterMultiSearchMergedResultsByText,
-  filterMultiSearchRunsByText,
-  hasActiveMultiSearchTextFilter,
-} from "@/renderer/components/MultiSearch/multiSearchResultFilters";
-import {
-  filterMultiSearchMergedResultsByReadingStatus,
-  filterMultiSearchRunsByReadingStatus,
-  hasActiveMultiSearchReadingStatusFilter,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
 import {
@@ -617,71 +605,7 @@ export default function MultiSearchBrowser({
     () => buildMultiSearchProgressIndex(readerProgressRecords),
     [readerProgressRecords],
   );
-  const hasActiveResultLanguageFilter = useMemo(
-    () => hasActiveMultiSearchLanguageFilter(resultLanguageFilterModes),
-    [resultLanguageFilterModes],
-  );
-  const hasActiveResultReadingStatusFilter = useMemo(
-    () => hasActiveMultiSearchReadingStatusFilter(resultReadingStatusFilters),
-    [resultReadingStatusFilters],
-  );
-  const hasActiveResultTextFilter = useMemo(
-    () => hasActiveMultiSearchTextFilter(debouncedResultTextFilter),
-    [debouncedResultTextFilter],
-  );
-  const readingStatusFilterContext = useMemo(() => ({
-    libraryMangas,
-    bookmarkedSourceKeys,
-    sourceProgressIndex,
-    viewHistoryRecordsById,
-  }), [bookmarkedSourceKeys, libraryMangas, sourceProgressIndex, viewHistoryRecordsById]);
-  const languageFilteredMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(mergedResults, resultLanguageFilterModes),
-    [mergedResults, resultLanguageFilterModes],
-  );
-  const readingStatusFilteredMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByReadingStatus(
-      languageFilteredMergedResults,
-      resultReadingStatusFilters,
-      readingStatusFilterContext,
-    ),
-    [languageFilteredMergedResults, readingStatusFilterContext, resultReadingStatusFilters],
-  );
-  const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByText(
-      readingStatusFilteredMergedResults,
-      debouncedResultTextFilter,
-      getMultiSearchSourceLanguageValues,
-    ),
-    [debouncedResultTextFilter, readingStatusFilteredMergedResults],
-  );
-  const visibleRuns = useMemo(() => {
-    const filteredRuns = filterMultiSearchRunsByText(
-      filterMultiSearchRunsByReadingStatus(
-        filterMultiSearchRunsByLanguage(runs, resultLanguageFilterModes),
-        resultReadingStatusFilters,
-        readingStatusFilterContext,
-      ),
-      debouncedResultTextFilter,
-    );
-    return hasActiveResultLanguageFilter || hasActiveResultTextFilter || hasActiveResultReadingStatusFilter
-      ? filteredRuns.filter((run) => run.results.length)
-      : filteredRuns;
-  }, [
-    debouncedResultTextFilter,
-    hasActiveResultLanguageFilter,
-    hasActiveResultReadingStatusFilter,
-    hasActiveResultTextFilter,
-    readingStatusFilterContext,
-    resultLanguageFilterModes,
-    resultReadingStatusFilters,
-    runs,
-  ]);
-  const visibleSourceCount = useMemo(() => (
-    viewMode === "merged"
-      ? visibleMergedResults.reduce((count, result) => count + result.sources.length, 0)
-      : flattenMultiSearchSources(visibleRuns).length
-  ), [viewMode, visibleMergedResults, visibleRuns]);
+  const visibleSourceCount = allSources.length;
   const statusCounts = useMemo(() => (
     runs.reduce<Record<MultiSearchScraperRun["status"], number>>((counts, run) => {
       counts[run.status] += 1;
@@ -1186,8 +1110,8 @@ export default function MultiSearchBrowser({
 
       <MultiSearchResultsSection
         viewMode={viewMode}
-        runs={visibleRuns}
-        mergedResults={visibleMergedResults}
+        runs={runs}
+        mergedResults={mergedResults}
         mergeProgress={mergeProgress}
         visibleSourceCount={visibleSourceCount}
         loadedSourceCount={allSources.length}

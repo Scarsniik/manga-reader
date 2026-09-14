@@ -127,7 +127,6 @@ export default function QuickReviewDialog({ items, onOpenSeries, seriesSession }
     currentItem,
     displaySettings.quickReviewShowCover,
     displaySettings.quickReviewShowThumbnails,
-    seriesSession ? 0 : undefined,
   );
 
   React.useLayoutEffect(() => {
@@ -199,7 +198,6 @@ export default function QuickReviewDialog({ items, onOpenSeries, seriesSession }
     enabled: params?.scraperCardPotentialMatchesEnabled !== false,
     items,
     onOpenError: setOpenError,
-    prefetchCountOverride: seriesSession ? 0 : undefined,
   });
   const isBookmarked = bookmark.isBookmarked;
   const { confirmBookmark } = usePotentialMangaMatchBookmarkGuard(potentialMatches);
@@ -435,7 +433,7 @@ export default function QuickReviewDialog({ items, onOpenSeries, seriesSession }
                   key={`${currentItem?.id}:${activeCoverUrl}`}
                   src={activeCoverUrl}
                   alt={title}
-                  decoding="sync"
+                  decoding="async"
                   fetchPriority="high"
                   onError={() => setCoverIndex((index) => index + 1)}
                 />

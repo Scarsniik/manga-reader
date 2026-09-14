@@ -7,17 +7,11 @@ import {
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
-  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
-import {
-  flattenMultiSearchSources,
-  mergeMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchUtils";
+import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import { useModal } from "@/renderer/hooks/useModal";
 import useParams from "@/renderer/hooks/useParams";
-import useVisualMultiSearchMerge from "@/renderer/components/MultiSearch/useVisualMultiSearchMerge";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 import {
   removeScraperTagFavorite,
   useScraperTagFavorites,
@@ -112,34 +106,15 @@ export default function ScraperTagFavoritesView({
     params?.multiSearchEnableRomajiPhoneticMerge,
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
-  const mergedResults = useMemo(
-    () => mergeMultiSearchResults(visibleSources, mergeOptions),
-    [mergeOptions, visibleSources],
-  );
-  const { mergedResults: visuallyMergedResults } = useVisualMultiSearchMerge(
-    mergedResults,
+  const { mergedResults } = useIncrementalMultiSearchMerge(
+    visibleSources,
+    0,
     mergeOptions,
     params?.scraperVisualCoverMatchingEnabled !== false,
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(visibleSources),
     [visibleSources],
-  );
-  const languageFilteredMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(visuallyMergedResults, languageFilterModes),
-    [languageFilterModes, visuallyMergedResults],
-  );
-  const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByText(
-      languageFilteredMergedResults,
-      debouncedResultTextFilter,
-      getMultiSearchSourceLanguageValues,
-    ),
-    [debouncedResultTextFilter, languageFilteredMergedResults],
-  );
-  const visibleMergedResultSourceCount = useMemo(
-    () => visibleMergedResults.reduce((count, result) => count + result.sources.length, 0),
-    [visibleMergedResults],
   );
 
   useEffect(() => {
@@ -229,13 +204,13 @@ export default function ScraperTagFavoritesView({
         runs={runs}
         pageIndex={pageIndex}
         visiblePageEndIndex={visiblePageEndIndex}
-        mergedResults={visibleMergedResults}
+        mergedResults={mergedResults}
         totalResultCount={mergedResults.length}
-        visibleSourceCount={visibleMergedResultSourceCount}
         loadedSourceCount={loadedSources.length}
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={languageFilterModes}
         textFilter={resultTextFilter}
+        debouncedTextFilter={debouncedResultTextFilter}
         loading={loadingRuns}
         message={runMessage}
         error={runError || openError}

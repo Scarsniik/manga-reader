@@ -52,6 +52,8 @@ export default function ScraperRuntimeThumbnailImage({
       alt={alt}
       className={className}
       style={style}
+      loading="lazy"
+      decoding="async"
     />
   );
 }

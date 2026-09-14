@@ -8,7 +8,6 @@ import MultiSearchLanguageFilterBar from "@/renderer/components/MultiSearch/Mult
 import MultiSearchVirtualizedResultsGrid from "@/renderer/components/MultiSearch/MultiSearchVirtualizedResultsGrid";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 import type {
@@ -18,26 +17,17 @@ import type {
   MultiSearchSourceResult,
 } from "@/renderer/components/MultiSearch/types";
 import type { MultiSearchProgressIndex } from "@/renderer/components/MultiSearch/multiSearchSourceState";
-import {
-  buildSearchResultViewHistoryIdentity,
-  filterByScraperViewHistoryNewState,
-} from "@/renderer/utils/scraperViewHistory";
 import type { Manga } from "@/renderer/types";
 import type { ScraperTagBlacklistByScraper } from "@/renderer/utils/scraperTagBlacklist";
-import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
-import {
-  countBlacklistedMultiSearchResults,
-  filterBlacklistedMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchTagBlacklist";
 import BlacklistedCardsDisplayToggle from "@/renderer/components/BlacklistedCardsDisplayToggle";
 import ScraperLatestScanActions from "@/renderer/components/ScraperLatest/ScraperLatestScanActions";
 import ScraperLatestScanTools from "@/renderer/components/ScraperLatest/ScraperLatestScanTools";
 import OriginalWorksFilterToggle from "@/renderer/components/OriginalWorksFilterToggle/OriginalWorksFilterToggle";
-import { filterMultiSearchMergedResultsByOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import ResultFilterToggle from "@/renderer/components/ResultFilterToggle/ResultFilterToggle";
 import useFrozenScraperUnseenFilter from "@/renderer/hooks/useFrozenScraperUnseenFilter";
 import QuickReviewLauncher from "@/renderer/components/QuickReview/QuickReviewLauncher";
 import { buildQuickReviewItemsFromMergedResults } from "@/renderer/components/QuickReview/quickReviewItems";
+import useAdaptiveMultiSearchListProcessing from "@/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing";
 
 type StatusItem = {
   key: string;
@@ -259,52 +249,51 @@ export default function ScraperLatestResults({
     () => buildMultiSearchResultLanguageFilterCodes(sources),
     [sources],
   );
-  const manuallySplitResults = React.useMemo(
-    () => applyManualMultiSearchSplits(mergedResults, splitResultIds),
-    [mergedResults, splitResultIds],
-  );
-  const languageFilteredResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(manuallySplitResults, languageFilterModes),
-    [languageFilterModes, manuallySplitResults],
-  );
-  const originalFilteredResults = React.useMemo(
-    () => filterMultiSearchMergedResultsByOriginal(languageFilteredResults, originalOnly),
-    [languageFilteredResults, originalOnly],
-  );
-  const visibleResults = React.useMemo(
-    () => filterByScraperViewHistoryNewState(
-      originalFilteredResults,
-      (result) => result.sources.map((source) => (
-        buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)
-      )),
-      unseenFilterRecordsById,
-      unseenFilterNewCardIds,
-      showUnseenOnly,
-    ),
-    [
-      originalFilteredResults,
-      showUnseenOnly,
-      unseenFilterNewCardIds,
-      unseenFilterRecordsById,
-    ],
-  );
-  const visibleBlacklistedResultCount = React.useMemo(
-    () => countBlacklistedMultiSearchResults(visibleResults, tagBlacklistByScraper),
-    [tagBlacklistByScraper, visibleResults],
-  );
   const shouldHideBlacklistedCards = hideBlacklistedCards && !showBlacklistedCardsLocally;
-  const displayedResults = React.useMemo(
-    () => filterBlacklistedMultiSearchResults(
-      visibleResults,
+  const listFilters = React.useMemo(() => ({
+    languageFilterModes,
+    readingStatusFilters: [],
+    textFilter: "",
+    readingStatusContext: {
+      libraryMangas,
+      bookmarkedSourceKeys,
+      sourceProgressIndex,
+      viewHistoryRecordsById,
+    },
+    display: {
+      originalOnly,
       tagBlacklistByScraper,
-      shouldHideBlacklistedCards,
-    ),
-    [shouldHideBlacklistedCards, tagBlacklistByScraper, visibleResults],
-  );
+      hideBlacklistedCards: shouldHideBlacklistedCards,
+      viewHistoryRecordsById: unseenFilterRecordsById,
+      newViewHistoryIds: unseenFilterNewCardIds,
+      showUnseenFirst: false,
+      showUnseenOnly,
+      splitResultIds,
+    },
+  }), [
+    bookmarkedSourceKeys,
+    languageFilterModes,
+    libraryMangas,
+    originalOnly,
+    shouldHideBlacklistedCards,
+    showUnseenOnly,
+    sourceProgressIndex,
+    splitResultIds,
+    tagBlacklistByScraper,
+    unseenFilterNewCardIds,
+    unseenFilterRecordsById,
+    viewHistoryRecordsById,
+  ]);
+  const {
+    results: displayedResults,
+    blacklistedResultCount: visibleBlacklistedResultCount,
+    splitResultCount: mergedCardCount,
+    languageResultCount,
+    originalResultCount,
+  } = useAdaptiveMultiSearchListProcessing(mergedResults, [], listFilters);
   const blacklistedCardCount = Math.max(0, hiddenBlacklistedCardCount) + visibleBlacklistedResultCount;
-  const mergedCardCount = manuallySplitResults.length;
-  const languageHiddenCardCount = Math.max(0, mergedCardCount - languageFilteredResults.length);
-  const originalHiddenCardCount = Math.max(0, languageFilteredResults.length - originalFilteredResults.length);
+  const languageHiddenCardCount = Math.max(0, mergedCardCount - languageResultCount);
+  const originalHiddenCardCount = Math.max(0, languageResultCount - originalResultCount);
   const visibleSourceCount = React.useMemo(
     () => displayedResults.reduce((count, result) => count + result.sources.length, 0),
     [displayedResults],
@@ -572,7 +561,7 @@ export default function ScraperLatestResults({
         <div className="multi-search__message is-info">
           {shouldHideBlacklistedCards && blacklistedCardCount > 0
             ? "Toutes les nouveautes visibles sont masquees par la blacklist."
-            : showUnseenOnly && originalFilteredResults.length > 0
+            : showUnseenOnly && originalResultCount > 0
               ? "Aucune card non vue ne correspond aux filtres actifs."
               : emptyLabel}
         </div>

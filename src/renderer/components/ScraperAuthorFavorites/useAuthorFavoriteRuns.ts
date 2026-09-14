@@ -11,14 +11,10 @@ import { buildSourceResultsFromItems } from "@/renderer/components/MultiSearch/m
 import { enrichSourceResultsWithJapaneseRomanization } from "@/renderer/components/MultiSearch/multiSearchSourceRomanization";
 import { doesMultiSearchSourceMatchIncludedLanguages } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import type { MultiSearchSourceResult } from "@/renderer/components/MultiSearch/types";
-import { createScraperCardDetailsCache } from "@/renderer/utils/scraperRuntime";
 import { findAuthorFavoriteCachedSource } from "@/renderer/utils/scraperAuthorFavoriteCache";
 import { isMultiSearchSourceOriginal } from "@/renderer/utils/scraperOriginalWorks";
 import type { BackgroundListingRun } from "@/renderer/backgroundSearch/types";
-import {
-  runAuthorFavoriteRefreshSearchEngine,
-  runLatestAuthorsSearchEngine,
-} from "@/renderer/searchEngines/listingSearchEngine";
+import type { ForegroundSearchSnapshotEvent } from "@/shared/searchWorker";
 import {
   buildAuthorListingSearchInput,
   buildAuthorListingSources,
@@ -229,8 +225,8 @@ export default function useAuthorFavoriteRuns(
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const detailsCacheRef = useRef(createScraperCardDetailsCache());
+  const activeExecutionIdRef = useRef<string | null>(null);
+  const executionIdCounterRef = useRef(0);
   const concurrency = normalizeConcurrency(options.concurrency);
   const contextualAuthorNames = useMemo(() => Array.from(new Set(
     favorite?.sources.map((source) => source.name.trim()).filter(Boolean) ?? [],
@@ -240,7 +236,10 @@ export default function useAuthorFavoriteRuns(
     [runs],
   );
 
-  useEffect(() => () => abortControllerRef.current?.abort(), []);
+  useEffect(() => () => {
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+  }, []);
 
   const loadPagesForRuns = useCallback(async (
     sourceRuns: AuthorFavoriteSourceRun[],
@@ -249,9 +248,11 @@ export default function useAuthorFavoriteRuns(
     updateState = true,
   ): Promise<AuthorFavoriteSourceRun[]> => {
     if (!sourceRuns.length || token !== tokenRef.current) return sourceRuns;
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const previousExecutionId = activeExecutionIdRef.current;
+    if (previousExecutionId) void window.api?.cancelSearchWorker?.(previousExecutionId);
+    executionIdCounterRef.current += 1;
+    const executionId = `foreground-author-${Date.now()}-${executionIdCounterRef.current}`;
+    activeExecutionIdRef.current = executionId;
     const previousRunsByKey = new Map(sourceRuns.map((run) => [run.key, run]));
     const favoriteRecords = sourceFavorites.length
       ? sourceFavorites
@@ -293,7 +294,7 @@ export default function useAuthorFavoriteRuns(
     });
     input.sources = sources;
     let loadedRuns = sourceRuns;
-    const onSnapshot = async (result: { runs: BackgroundListingRun[] }) => {
+    const onSnapshot = (result: { runs: BackgroundListingRun[] }) => {
       if (token !== tokenRef.current) return;
       loadedRuns = result.runs.map((run) => fromBackgroundListingRun(run, previousRunsByKey));
       if (updateState) {
@@ -301,15 +302,24 @@ export default function useAuthorFavoriteRuns(
       }
     };
     const initialRuns = sourceRuns.map(toBackgroundListingRun);
-    const engine = searchKind === "latestAuthors"
-      ? runLatestAuthorsSearchEngine
-      : runAuthorFavoriteRefreshSearchEngine;
-    const result = await engine(input, controller.signal, onSnapshot, {
-      initialRuns,
-      detailsCache: detailsCacheRef.current,
+    const unsubscribe = window.api?.onSearchWorkerSnapshot?.((event: ForegroundSearchSnapshotEvent) => {
+      if (event.executionId !== executionId) return;
+      const result = event.result as { runs?: BackgroundListingRun[] };
+      if (Array.isArray(result.runs)) onSnapshot({ runs: result.runs });
     });
-    loadedRuns = result.runs.map((run) => fromBackgroundListingRun(run, previousRunsByKey));
-    return loadedRuns;
+    try {
+      const result = await window.api.runForegroundListingSearchWorker({
+        executionId,
+        kind: searchKind,
+        input,
+        initialRuns,
+      }) as { runs: BackgroundListingRun[] };
+      loadedRuns = result.runs.map((run) => fromBackgroundListingRun(run, previousRunsByKey));
+      return loadedRuns;
+    } finally {
+      if (typeof unsubscribe === "function") unsubscribe();
+      if (activeExecutionIdRef.current === executionId) activeExecutionIdRef.current = null;
+    }
   }, [
     concurrency,
     contextualAuthorNames,
@@ -376,8 +386,9 @@ export default function useAuthorFavoriteRuns(
   }, [cacheResults, favorite]);
 
   const start = useCallback(async () => {
-    abortControllerRef.current?.abort();
-    detailsCacheRef.current = createScraperCardDetailsCache();
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     if (!favorite) {
       setRuns([]);
       setMessage(null);
@@ -544,7 +555,9 @@ export default function useAuthorFavoriteRuns(
   }, [loadPagesForRuns, runs]);
 
   const reset = useCallback(() => {
-    abortControllerRef.current?.abort();
+    const executionId = activeExecutionIdRef.current;
+    if (executionId) void window.api?.cancelSearchWorker?.(executionId);
+    activeExecutionIdRef.current = null;
     tokenRef.current += 1;
     setRuns([]);
     setLoading(false);

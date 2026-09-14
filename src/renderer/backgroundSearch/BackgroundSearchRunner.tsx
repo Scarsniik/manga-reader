@@ -2,169 +2,18 @@ import React from "react";
 import type {
   BackgroundSearchChangeEvent,
   BackgroundSearchJob,
-  BackgroundSearchProgress,
   BackgroundSearchQueueSummary,
 } from "@/shared/backgroundSearch";
-import { executeBackgroundSearch } from "@/renderer/searchEngines/searchEngineRegistry";
-import type { BackgroundSearchExecutionResult, ListingBackgroundResult } from "@/renderer/backgroundSearch/types";
-import type { ListingBackgroundInput } from "@/shared/backgroundSearch";
-import type { ScraperAuthorFavoriteCacheRecord } from "@/shared/scraper";
-import {
-  buildCompleteAuthorFavoriteCache,
-  buildLatestAuthorCacheUpdates,
-  mergeAuthorFavoriteCacheUpdate,
-} from "@/renderer/utils/scraperAuthorFavoriteCache";
-import {
-  automaticallyReuseExistingAuthorSearch,
-  importLinkedAuthorSearchIntoManga,
-  refreshMangaSearchesUsingAuthor,
-} from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
-const PROGRESS_UPDATE_THROTTLE_MS = 1000;
-const RESULT_CHECKPOINT_THROTTLE_MS = 5000;
-
-const buildAuthorResultCheckpointSignature = (
-  result: BackgroundSearchExecutionResult,
-): string | null => {
-  if (!("searchedNames" in result)) return null;
-  return [
-    result.matches.length,
-    result.searchedNames.length,
-    result.rejectedAuthorCandidates?.length ?? 0,
-  ].join(":");
-};
-
-type PendingSnapshot = {
-  progress: BackgroundSearchProgress;
-  result?: BackgroundSearchExecutionResult;
-};
-
-const persistAuthorFavoriteCache = async (
-  job: BackgroundSearchJob,
-  result: BackgroundSearchExecutionResult,
-): Promise<void> => {
-  if (
-    (job.metadata.kind !== "authorFavoriteRefresh" && job.metadata.kind !== "latestAuthors")
-    || !("runs" in result)
-  ) {
-    return;
-  }
-  const input = job.input as ListingBackgroundInput;
-  const listingResult = result as ListingBackgroundResult;
-  const api = window.api ?? {};
-  if (typeof api.saveScraperAuthorFavoriteCache !== "function") return;
-
-  if (job.metadata.kind === "authorFavoriteRefresh") {
-    const cache = buildCompleteAuthorFavoriteCache(input, listingResult);
-    if (cache) {
-      await api.saveScraperAuthorFavoriteCache({ favoriteId: cache.favoriteId, cache });
-    }
-    return;
-  }
-
-  if (typeof api.getScraperAuthorFavoriteCache !== "function") return;
-  const updates = buildLatestAuthorCacheUpdates(input, listingResult);
-  await Promise.all(Array.from(updates.entries()).map(async ([favoriteId, update]) => {
-    const existingCache = await api.getScraperAuthorFavoriteCache(
-      favoriteId,
-    ) as ScraperAuthorFavoriteCacheRecord | null;
-    const cache = mergeAuthorFavoriteCacheUpdate(existingCache, update);
-    await api.saveScraperAuthorFavoriteCache({ favoriteId, cache });
-  }));
-};
-
 const isBackgroundSearchRunnerWindow = (): boolean => (
   window.location.hash.startsWith("#/background-search-runner")
 );
 
-const getCompletedProgress = (result: BackgroundSearchExecutionResult): BackgroundSearchProgress => {
-  if ("runs" in result) {
-    const resultCount = result.runs.reduce((count, run) => count + run.results.length, 0);
-    return {
-      completedUnits: result.runs.length,
-      totalUnits: result.runs.length,
-      resultCount,
-      excludedResultCount: result.runs.reduce(
-        (count, run) => count
-          + ("excludedByBlacklistedTagCount" in run
-            ? run.excludedByBlacklistedTagCount ?? 0
-            : 0)
-          + ("excludedByOriginalCount" in run
-            ? run.excludedByOriginalCount ?? 0
-            : 0),
-        0,
-      ),
-    };
-  }
-  const completedUnits = "searchedNames" in result
-    ? result.searchedNames.length
-    : result.searchedTitles.length + result.searchedAuthors.length;
-  return {
-    completedUnits,
-    totalUnits: completedUnits,
-    resultCount: result.matches.length,
-  };
-};
-
 export default function BackgroundSearchRunner() {
   const controllersRef = React.useRef(new Map<string, AbortController>());
   const runningRef = React.useRef(new Set<string>());
-  const pendingSnapshotsRef = React.useRef(new Map<string, PendingSnapshot>());
-  const latestResultsRef = React.useRef(new Map<string, BackgroundSearchExecutionResult>());
-  const updateTimersRef = React.useRef(new Map<string, number>());
-  const lastResultCheckpointAtRef = React.useRef(new Map<string, number>());
-  const lastAuthorResultSignatureRef = React.useRef(new Map<string, string>());
   const maxConcurrentRef = React.useRef(3);
   const processingRelationsRef = React.useRef(new Set<string>());
   const processingCompletedAutomationsRef = React.useRef(new Set<string>());
-
-  const flushSnapshot = React.useCallback(async (jobId: string, forceLatestResult = false) => {
-    const snapshot = pendingSnapshotsRef.current.get(jobId);
-    pendingSnapshotsRef.current.delete(jobId);
-    const timer = updateTimersRef.current.get(jobId);
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      updateTimersRef.current.delete(jobId);
-    }
-    if (!snapshot || typeof window.api?.updateBackgroundSearch !== "function") return;
-    await window.api.updateBackgroundSearch({
-      jobId,
-      ...snapshot,
-      ...(forceLatestResult ? { result: latestResultsRef.current.get(jobId) ?? snapshot.result } : {}),
-    });
-  }, []);
-
-  const queueSnapshot = React.useCallback((
-    jobId: string,
-    result: BackgroundSearchExecutionResult,
-    progress: BackgroundSearchProgress,
-  ): Promise<void> => {
-    latestResultsRef.current.set(jobId, result);
-    const now = Date.now();
-    const lastCheckpointAt = lastResultCheckpointAtRef.current.get(jobId) ?? 0;
-    const authorResultSignature = buildAuthorResultCheckpointSignature(result);
-    const authorResultChanged = authorResultSignature !== null
-      && lastAuthorResultSignatureRef.current.get(jobId) !== authorResultSignature;
-    const shouldCheckpointResult = authorResultChanged
-      || now - lastCheckpointAt >= RESULT_CHECKPOINT_THROTTLE_MS;
-    const previous = pendingSnapshotsRef.current.get(jobId);
-    pendingSnapshotsRef.current.set(jobId, {
-      progress,
-      result: shouldCheckpointResult ? result : previous?.result,
-    });
-    if (shouldCheckpointResult) {
-      lastResultCheckpointAtRef.current.set(jobId, now);
-      if (authorResultSignature !== null) {
-        lastAuthorResultSignatureRef.current.set(jobId, authorResultSignature);
-      }
-    }
-    if (!updateTimersRef.current.has(jobId)) {
-      const timer = window.setTimeout(() => {
-        void flushSnapshot(jobId);
-      }, PROGRESS_UPDATE_THROTTLE_MS);
-      updateTimersRef.current.set(jobId, timer);
-    }
-    return Promise.resolve();
-  }, [flushSnapshot]);
 
   const runClaimedJob = React.useCallback(async (job: BackgroundSearchJob) => {
     const jobId = job.metadata.id;
@@ -172,35 +21,15 @@ export default function BackgroundSearchRunner() {
     controllersRef.current.set(jobId, controller);
     runningRef.current.add(jobId);
     try {
-      const result = await executeBackgroundSearch(
-        job,
-        controller.signal,
-        (snapshot, progress) => queueSnapshot(jobId, snapshot, progress),
-      );
-      await flushSnapshot(jobId, controller.signal.aborted);
-      if ("runs" in result && result.runs.length > 0 && result.runs.every((run) => run.status === "error")) {
-        throw new Error(result.runs.find((run) => run.error)?.error || "Toutes les sources ont échoué.");
-      }
-      const progress = getCompletedProgress(result);
-      await persistAuthorFavoriteCache(job, result);
-      await window.api.completeBackgroundSearch({ jobId, result, progress });
+      await window.api.runBackgroundSearchWorker(jobId);
     } catch (error) {
-      await flushSnapshot(jobId, controller.signal.aborted);
-      if (!controller.signal.aborted) {
-        await window.api.failBackgroundSearch(
-          jobId,
-          error instanceof Error ? error.message : "Echec de la recherche en arriere-plan.",
-        );
-      }
+      if (!controller.signal.aborted) console.warn("Background search worker failed", error);
     } finally {
       controllersRef.current.delete(jobId);
       runningRef.current.delete(jobId);
-      latestResultsRef.current.delete(jobId);
-      lastResultCheckpointAtRef.current.delete(jobId);
-      lastAuthorResultSignatureRef.current.delete(jobId);
       window.dispatchEvent(new CustomEvent("background-search-runner-slot-available"));
     }
-  }, [flushSnapshot, queueSnapshot]);
+  }, []);
 
   const claimAvailableJobs = React.useCallback(async () => {
     if (!isBackgroundSearchRunnerWindow() || typeof window.api?.getBackgroundSearchQueue !== "function") return;
@@ -220,9 +49,12 @@ export default function BackgroundSearchRunner() {
     for (const linkedJob of pendingRelations) {
       processingRelationsRef.current.add(linkedJob.id);
       try {
-        await importLinkedAuthorSearchIntoManga({
-          authorJobId: linkedJob.id,
-          automatic: true,
+        await window.api.runBackgroundSearchAutomationWorker({
+          action: "importLinkedAuthorSearchIntoManga",
+          options: {
+            authorJobId: linkedJob.id,
+            automatic: true,
+          },
         });
       } catch (error) {
         console.warn("Failed to import a linked author search", error);
@@ -257,9 +89,15 @@ export default function BackgroundSearchRunner() {
       const job = await window.api.getBackgroundSearchJob(jobId) as BackgroundSearchJob | null;
       if (!job || job.metadata.status !== "completed") return;
       if (job.metadata.kind === "mangaCorrespondence" && job.metadata.prefilled !== true) {
-        await automaticallyReuseExistingAuthorSearch(jobId);
+        await window.api.runBackgroundSearchAutomationWorker({
+          action: "automaticallyReuseExistingAuthorSearch",
+          jobId,
+        });
       } else if (job.metadata.kind === "authorCorrespondence") {
-        await refreshMangaSearchesUsingAuthor(jobId);
+        await window.api.runBackgroundSearchAutomationWorker({
+          action: "refreshMangaSearchesUsingAuthor",
+          jobId,
+        });
       }
     } catch (error) {
       console.warn("Failed to process reusable correspondence search automation", error);

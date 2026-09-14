@@ -38,51 +38,82 @@ type QuickReviewDetailsState = {
   loadMoreThumbnails: () => Promise<void>;
 };
 
+type RetainedImagePreload = {
+  image: HTMLImageElement;
+  promise: Promise<boolean>;
+};
+
+type RetainedImagePreloads = Map<string, RetainedImagePreload>;
+
+const QUICK_REVIEW_BACKGROUND_THUMBNAIL_LIMIT = 6;
+const QUICK_REVIEW_FOREGROUND_THUMBNAIL_LIMIT = 12;
+const QUICK_REVIEW_IMAGE_PRELOAD_CONCURRENCY = 2;
+
+const scheduleQuickReviewIdleTask = (task: () => void): (() => void) => {
+  const idleWindow = window as typeof window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  if (typeof idleWindow.requestIdleCallback === "function") {
+    const handle = idleWindow.requestIdleCallback(task, { timeout: 1_000 });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+  const timeoutId = window.setTimeout(task, 250);
+  return () => window.clearTimeout(timeoutId);
+};
+
 export default function useQuickReviewDetails(
   items: QuickReviewItem[],
   currentIndex: number,
   currentItem: QuickReviewItem | null,
   preloadCover: boolean,
   preloadThumbnails: boolean,
-  prefetchCountOverride?: number,
 ): QuickReviewDetailsState {
   const { params } = useParams();
-  const prefetchCount = prefetchCountOverride
-    ?? normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
+  const prefetchCount = normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
   const [revision, setRevision] = React.useState(0);
   const [loadingItemId, setLoadingItemId] = React.useState<string | null>(null);
   const [loadingMoreItemId, setLoadingMoreItemId] = React.useState<string | null>(null);
   const detailsCacheRef = React.useRef(createScraperCardDetailsCache());
   const detailsStatesRef = React.useRef(new Map<string, QuickReviewDetailsLoadState>());
   const detailsPromisesRef = React.useRef(new Map<string, Promise<QuickReviewDetailsLoadState>>());
-  const imagePreloadPromisesRef = React.useRef(new Map<string, Promise<boolean>>());
-  const retainedCoverPreloadsRef = React.useRef(new Map<string, {
-    image: HTMLImageElement;
-    promise: Promise<boolean>;
-  }>());
+  const retainedCoverPreloadsRef = React.useRef<RetainedImagePreloads>(new Map());
+  const retainedThumbnailPreloadsRef = React.useRef(new Map<string, RetainedImagePreloads>());
 
-  const preloadImage = React.useCallback((url: string, retain = false): Promise<boolean> => {
+  const preloadImage = React.useCallback((
+    url: string,
+    retainedPreloads: RetainedImagePreloads,
+    priority: "high" | "low",
+    signal?: AbortSignal,
+  ): Promise<boolean> => {
     const normalizedUrl = url.trim();
-    if (!normalizedUrl) return Promise.resolve(false);
-    const retainedPreload = retainedCoverPreloadsRef.current.get(normalizedUrl);
+    if (!normalizedUrl || signal?.aborted) return Promise.resolve(false);
+    const retainedPreload = retainedPreloads.get(normalizedUrl);
     if (retainedPreload) return retainedPreload.promise;
-    const storedPromise = retain ? undefined : imagePreloadPromisesRef.current.get(normalizedUrl);
-    if (storedPromise) return storedPromise;
 
     const image = new Image();
     image.decoding = "async";
-    image.setAttribute("fetchpriority", retain ? "high" : "low");
+    image.setAttribute("fetchpriority", priority);
     const promise = new Promise<boolean>((resolve) => {
       let completed = false;
+      let timeoutId: number | undefined;
       const finish = (loaded: boolean) => {
         if (completed) return;
         completed = true;
-        window.clearTimeout(timeoutId);
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         image.onload = null;
         image.onerror = null;
+        signal?.removeEventListener("abort", abort);
+        if (!loaded && retainedPreloads.get(normalizedUrl)?.image === image) {
+          retainedPreloads.delete(normalizedUrl);
+        }
         resolve(loaded);
       };
-      const timeoutId = window.setTimeout(() => finish(false), 12_000);
+      const abort = () => {
+        image.src = "";
+        finish(false);
+      };
+      timeoutId = window.setTimeout(() => finish(false), 12_000);
       image.onload = () => {
         if (typeof image.decode !== "function") {
           finish(true);
@@ -94,38 +125,56 @@ export default function useQuickReviewDetails(
         );
       };
       image.onerror = () => finish(false);
+      signal?.addEventListener("abort", abort, { once: true });
       image.src = normalizedUrl;
     });
-    if (retain) {
-      retainedCoverPreloadsRef.current.set(normalizedUrl, { image, promise });
-    } else {
-      imagePreloadPromisesRef.current.set(normalizedUrl, promise);
-    }
+    retainedPreloads.set(normalizedUrl, { image, promise });
     return promise;
   }, []);
 
   const preloadItemCover = React.useCallback(async (
     item: QuickReviewItem,
     details: ScraperRuntimeDetailsResult | null,
+    signal?: AbortSignal,
   ): Promise<void> => {
     if (!preloadCover) return;
     const urls = buildQuickReviewCoverUrls(item, details);
     for (const url of urls) {
-      if (await preloadImage(url, true)) return;
+      if (await preloadImage(url, retainedCoverPreloadsRef.current, "high", signal)) return;
     }
   }, [preloadCover, preloadImage]);
 
   const preloadItemThumbnails = React.useCallback(async (
+    itemId: string,
     details: ScraperRuntimeDetailsResult | null,
+    priority: "high" | "low" = "low",
+    signal?: AbortSignal,
   ): Promise<void> => {
     if (!preloadThumbnails || !details) return;
+    let retainedPreloads = retainedThumbnailPreloadsRef.current.get(itemId);
+    if (!retainedPreloads) {
+      retainedPreloads = new Map();
+      retainedThumbnailPreloadsRef.current.set(itemId, retainedPreloads);
+    }
+    const limit = priority === "high"
+      ? QUICK_REVIEW_FOREGROUND_THUMBNAIL_LIMIT
+      : QUICK_REVIEW_BACKGROUND_THUMBNAIL_LIMIT;
     const urls = Array.from(new Set(
       (details.thumbnails ?? [])
         .map(getScraperRuntimeThumbnailUrl)
         .map((url) => url.trim())
         .filter(Boolean),
-    ));
-    await Promise.all(urls.map((url) => preloadImage(url)));
+    )).slice(0, limit);
+    let nextIndex = 0;
+    await Promise.all(Array.from({
+      length: Math.min(QUICK_REVIEW_IMAGE_PRELOAD_CONCURRENCY, urls.length),
+    }, async () => {
+      while (nextIndex < urls.length && !signal?.aborted) {
+        const index = nextIndex;
+        nextIndex += 1;
+        await preloadImage(urls[index], retainedPreloads, priority, signal);
+      }
+    }));
   }, [preloadImage, preloadThumbnails]);
 
   const loadItemDetails = React.useCallback(async (
@@ -203,38 +252,65 @@ export default function useQuickReviewDetails(
   React.useEffect(() => {
     if (!currentItem) return;
     let cancelled = false;
+    const preloadController = new AbortController();
+    let cancelIdleTask: () => void = () => undefined;
     const queuedItems = items.slice(currentIndex + 1, currentIndex + prefetchCount + 1);
+    const retainedThumbnailItemIds = new Set([
+      currentItem.id,
+      ...queuedItems.map((item) => item.id),
+    ]);
+    for (const itemId of retainedThumbnailPreloadsRef.current.keys()) {
+      if (!retainedThumbnailItemIds.has(itemId)) {
+        retainedThumbnailPreloadsRef.current.delete(itemId);
+      }
+    }
+    const retainedCoverUrls = new Set(
+      [currentItem, ...queuedItems].flatMap((item) => buildQuickReviewCoverUrls(item, null)),
+    );
+    for (const coverUrl of retainedCoverPreloadsRef.current.keys()) {
+      if (!retainedCoverUrls.has(coverUrl)) retainedCoverPreloadsRef.current.delete(coverUrl);
+    }
 
     // The listing covers are already known and must not wait for details or page thumbnails.
-    const preliminaryCoverPreload = Promise.all(
-      queuedItems.map((item) => preloadItemCover(item, null)),
-    );
+    const immediatelyQueuedItem = queuedItems[0];
+    if (immediatelyQueuedItem) {
+      void preloadItemCover(immediatelyQueuedItem, null, preloadController.signal);
+    }
 
-    const loadQueue = async () => {
-      const currentState = await loadItemDetails(currentItem, true);
-      await preloadItemCover(currentItem, currentState.details);
-      await preliminaryCoverPreload;
-      if (cancelled) return;
-
-      const prefetchedDetails: ScraperRuntimeDetailsResult[] = [];
-      for (const nextItem of queuedItems) {
-        if (cancelled) return;
-        const nextState = await loadItemDetails(nextItem, false);
-        await preloadItemCover(nextItem, nextState.details);
-        if (nextState.details) prefetchedDetails.push(nextState.details);
-      }
-
-      if (cancelled) return;
-      await preloadItemThumbnails(currentState.details);
-      for (const nextDetails of prefetchedDetails) {
-        if (cancelled) return;
-        await preloadItemThumbnails(nextDetails);
-      }
+    const preloadQueuedItem = async (itemOffset: number): Promise<void> => {
+      const nextItem = queuedItems[itemOffset];
+      if (!nextItem || cancelled || preloadController.signal.aborted) return;
+      const nextState = await loadItemDetails(nextItem, false);
+      if (cancelled || preloadController.signal.aborted) return;
+      await Promise.all([
+        preloadItemCover(nextItem, nextState.details, preloadController.signal),
+        preloadItemThumbnails(
+          nextItem.id,
+          nextState.details,
+          "low",
+          preloadController.signal,
+        ),
+      ]);
+      if (cancelled || preloadController.signal.aborted || !queuedItems[itemOffset + 1]) return;
+      cancelIdleTask = scheduleQuickReviewIdleTask(() => {
+        if (!cancelled) void preloadQueuedItem(itemOffset + 1);
+      });
     };
 
-    void loadQueue();
+    const loadCurrentItem = async () => {
+      const currentState = await loadItemDetails(currentItem, true);
+      void preloadItemCover(currentItem, currentState.details, preloadController.signal);
+      if (cancelled) return;
+      cancelIdleTask = scheduleQuickReviewIdleTask(() => {
+        if (!cancelled) void preloadQueuedItem(0);
+      });
+    };
+
+    void loadCurrentItem();
     return () => {
       cancelled = true;
+      cancelIdleTask();
+      preloadController.abort();
     };
   }, [
     currentIndex,
@@ -292,7 +368,7 @@ export default function useQuickReviewDetails(
         chapterCount: storedState.chapterCount,
         error: null,
       });
-      await preloadItemThumbnails(nextDetails);
+      await preloadItemThumbnails(currentItem.id, nextDetails, "high");
       setRevision((revision) => revision + 1);
     } catch (error) {
       detailsStatesRef.current.set(currentItem.id, {

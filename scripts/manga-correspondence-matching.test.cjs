@@ -22,8 +22,17 @@ const source = `
   export { filterIncludedMangaCorrespondenceChapters } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceChapterExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
   export { toggleMangaCorrespondenceSourceExclusion } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceReadingListSelection";
+  export { buildMultiSearchSourceIdentityKey } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { mergeMultiSearchResults } from "@/renderer/components/MultiSearch/multiSearchMerge";
   export { mergeAuthorCorrespondenceSessionResults } from "@/renderer/backgroundSearch/authorCorrespondenceSessionResults";
+  export {
+    buildMangaCorrespondenceReferenceMatch,
+    includeMangaCorrespondenceReferenceMatch,
+  } from "@/renderer/backgroundSearch/mangaCorrespondenceReferenceMatch";
+  export {
+    isUsableAuthorCorrespondenceAdvancedMangaSource,
+    isUsableAuthorCorrespondenceAutomaticTitle,
+  } from "@/renderer/searchEngines/authorCorrespondenceAdvancedSelection";
   export { selectMangaCorrespondenceRomanizedSearchTerms } from "@/renderer/backgroundSearch/mangaCorrespondenceRomanization";
   export { getMangaTitleAlternatives } from "@/renderer/utils/mangaMatching/titleProfiles";
   export { getMangaTitleRomanizationTargets } from "@/renderer/utils/mangaMatching/titleProfiles";
@@ -101,8 +110,13 @@ const {
   filterIncludedMangaCorrespondenceChapters,
   toggleMangaCorrespondenceChapterExclusion,
   toggleMangaCorrespondenceSourceExclusion,
+  buildMultiSearchSourceIdentityKey,
   mergeMultiSearchResults,
   mergeAuthorCorrespondenceSessionResults,
+  buildMangaCorrespondenceReferenceMatch,
+  includeMangaCorrespondenceReferenceMatch,
+  isUsableAuthorCorrespondenceAdvancedMangaSource,
+  isUsableAuthorCorrespondenceAutomaticTitle,
   selectMangaCorrespondenceRomanizedSearchTerms,
   getMangaTitleAlternatives,
   getMangaTitleRomanizationTargets,
@@ -206,6 +220,21 @@ test("correspondence containment does not accept unrelated or incidental short t
     false,
   );
   assert.equal(doesCorrespondenceTitleContainKnownTitle("The Gal Story", "Gal"), false);
+  assert.equal(
+    doesCorrespondenceTitleContainKnownTitle("The Daily Life of a Manga Artist", "Artist"),
+    false,
+  );
+});
+
+test("chapter labels are not extracted from the start of ordinary words", () => {
+  const title = "AFTER SCHOOL CHILD-BEARING SEX EDUCATION -Pure and Naughty Development-";
+  const extracted = extractTitleSequenceMarkers(title);
+  const analyzed = analyzeMangaCorrespondenceTitle(title, null);
+
+  assert.equal(extracted.title, title);
+  assert.deepEqual(extracted.sequenceMarkers, []);
+  assert.notEqual(analyzed.title, "AFTER SCHOOL");
+  assert.notEqual(analyzed.chapter, "ILD");
 });
 
 test("title alternatives never split a franchise slash inside parentheses", () => {
@@ -1534,7 +1563,7 @@ test("replay is blocked without an active title and reactivation restores it", (
 });
 
 const buildMergeSource = (title, languageCode, detailUrl, thumbnailUrl) => ({
-  scraper: { id: "test", name: "Test" },
+  scraper: { id: "test", name: "Test", features: [] },
   result: { title, detailUrl, thumbnailUrl },
   searchTerm: "test",
   pageIndex: 0,
@@ -1626,6 +1655,107 @@ test("author correspondence merge ignores conflicting author labels for the same
   );
   assert.equal(merged.length, 1);
   assert.equal(merged[0].sources.length, 2);
+});
+
+test("manga correspondence always includes its originating card", () => {
+  const referenceScraper = {
+    id: "reference-scraper",
+    name: "Reference scraper",
+    baseUrl: "https://reference.test",
+    globalConfig: {
+      sourceLanguages: ["en"],
+      contentTypes: ["Manga"],
+    },
+  };
+  const input = {
+    reference: {
+      scraperId: referenceScraper.id,
+      sourceUrl: "https://reference.test/manga/origin",
+      rawTitle: "[Original Author] Origin Manga 2 [English]",
+      title: "Origin Manga",
+      alternativeTitles: ["Manga d'origine"],
+      authors: ["Original Author"],
+      authorUrls: [],
+      chapter: "2",
+    },
+    scrapers: [referenceScraper],
+  };
+
+  const referenceMatch = buildMangaCorrespondenceReferenceMatch(input);
+  assert.ok(referenceMatch);
+  assert.equal(referenceMatch.source.result.detailUrl, input.reference.sourceUrl);
+  assert.equal(referenceMatch.source.result.title, input.reference.rawTitle);
+  assert.equal(referenceMatch.chapter, "2");
+  assert.deepEqual(referenceMatch.source.contentTypes, ["Manga"]);
+
+  const displayed = includeMangaCorrespondenceReferenceMatch(input, []);
+  assert.equal(displayed.length, 1);
+  assert.equal(displayed[0].key, referenceMatch.key);
+  assert.strictEqual(
+    includeMangaCorrespondenceReferenceMatch(input, displayed),
+    displayed,
+  );
+});
+
+test("author correspondence rejects profile cards as advanced manga seeds", () => {
+  const profileCard = buildMergeSource(
+    "Artist | sage joh",
+    "en",
+    "https://example.test/artist-profile",
+  );
+  profileCard.tentativeAuthorNames = [];
+  profileCard.contextualAuthorNames = ["sage joh"];
+  const mangaCard = buildMergeSource(
+    "A Real Manga Title",
+    "en",
+    "https://example.test/real-manga",
+  );
+  mangaCard.contextualAuthorNames = ["sage joh"];
+
+  assert.equal(
+    isUsableAuthorCorrespondenceAdvancedMangaSource(profileCard, ["sage joh"]),
+    false,
+  );
+  assert.equal(
+    isUsableAuthorCorrespondenceAdvancedMangaSource(mangaCard, ["sage joh"]),
+    true,
+  );
+});
+
+test("author correspondence discards cached matches produced by generic title searches", () => {
+  const profileCard = buildMergeSource(
+    "Artist | sage joh",
+    "en",
+    "https://example.test/artist-profile",
+  );
+  profileCard.tentativeAuthorNames = [];
+  profileCard.contextualAuthorNames = ["sage joh"];
+  const unrelatedArtist = buildMergeSource(
+    "The Story of a Male Manga Artist",
+    "en",
+    "https://example.test/unrelated-artist",
+  );
+  unrelatedArtist.searchTerm = "Artist";
+  const enrichment = {
+    seedKey: buildMultiSearchSourceIdentityKey(profileCard),
+    anchorSourceKeys: [buildMultiSearchSourceIdentityKey(profileCard)],
+    sources: [unrelatedArtist],
+  };
+
+  const merged = mergeAuthorCorrespondenceSessionResults(
+    [profileCard],
+    [enrichment],
+    { enableRomajiPhoneticMerge: true, preferredTitleLanguageCodes: [] },
+  );
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].sources.map((source) => source.result.title), [profileCard.result.title]);
+  assert.equal(isUsableAuthorCorrespondenceAutomaticTitle("Artist"), false);
+  assert.equal(isUsableAuthorCorrespondenceAutomaticTitle("After School"), false);
+  assert.equal(
+    isUsableAuthorCorrespondenceAutomaticTitle("A sufficiently specific translated manga title"),
+    true,
+  );
 });
 
 test("same-author merge keeps sequence markers as separate works", () => {

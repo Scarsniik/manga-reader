@@ -26,7 +26,6 @@ import {
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
 import {
   buildMultiSearchSourceIdentityKey,
-  mergeMultiSearchResults,
 } from "@/renderer/components/MultiSearch/multiSearchMerge";
 import { applyManualMultiSearchSplits } from "@/renderer/components/MultiSearch/multiSearchManualSplit";
 import type {
@@ -65,6 +64,8 @@ import {
   getEffectiveMangaCorrespondenceMatches,
   updateMangaCorrespondenceRejectedReview,
 } from "@/renderer/components/MangaCorrespondence/mangaCorrespondenceRejectedReview";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
+import useAdaptiveMultiSearchListProcessing from "@/renderer/components/MultiSearch/useAdaptiveMultiSearchListProcessing";
 import {
   resetMangaCorrespondenceChapterOverrides,
   updateMangaCorrespondenceChapterOverrides,
@@ -92,6 +93,10 @@ import {
 import useRelatedBackgroundSearchJobs from "@/renderer/backgroundSearch/useRelatedBackgroundSearchJobs";
 import { importLinkedAuthorSearchIntoManga } from "@/renderer/backgroundSearch/linkedAuthorSearchOrchestration";
 import { requestBackgroundSearchOpenInCurrentView } from "@/renderer/backgroundSearch/backgroundSearchNavigation";
+import {
+  buildMangaCorrespondenceReferenceMatch,
+  includeMangaCorrespondenceReferenceMatch,
+} from "@/renderer/backgroundSearch/mangaCorrespondenceReferenceMatch";
 import "@/renderer/components/MultiSearch/style.scss";
 import "./view.scss";
 
@@ -194,18 +199,26 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     enableRomajiPhoneticMerge: true,
     preferredTitleLanguageCodes: params?.multiSearchMergedTitleLanguagePriority ?? [],
   }), [params?.multiSearchMergedTitleLanguagePriority]);
+  const referenceMatch = useMemo(
+    () => buildMangaCorrespondenceReferenceMatch(input),
+    [input],
+  );
   const effectiveMatches = useMemo(
-    () => getEffectiveMangaCorrespondenceMatches(
-      result,
-      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    () => includeMangaCorrespondenceReferenceMatch(
+      input,
+      getEffectiveMangaCorrespondenceMatches(
+        result,
+        input?.reference.title || job?.metadata.primaryTerm || "Manga",
+      ),
     ),
-    [input?.reference.title, job?.metadata.primaryTerm, result],
+    [input, job?.metadata.primaryTerm, result],
   );
   const correspondenceMatches = useMemo(
     () => effectiveMatches.filter((match) => (
-      !isClearlyDerivativeMangaCorrespondenceTitle(match.source.result.title)
+      match.key === referenceMatch?.key
+      || !isClearlyDerivativeMangaCorrespondenceTitle(match.source.result.title)
     )),
-    [effectiveMatches],
+    [effectiveMatches, referenceMatch?.key],
   );
   const chapterGroupResolution = useMemo(
     () => resolveMangaCorrespondenceChapterGroups(correspondenceMatches, input?.reference),
@@ -225,7 +238,11 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     [correspondenceMatches, excludedSourceKeys],
   );
   const allSources = useMemo(() => eligibleMatches.map((match) => match.source), [eligibleMatches]);
-  const classicGroups = useMemo(() => mergeMultiSearchResults(allSources, mergeOptions), [allSources, mergeOptions]);
+  const { mergedResults: classicGroups } = useIncrementalMultiSearchMerge(
+    allSources,
+    0,
+    mergeOptions,
+  );
   const allChapterMatchGroups = chapterGroupResolution.groups;
   const chapterMatchGroups = useMemo<MangaCorrespondenceChapterMatchGroup[]>(() => (
     allChapterMatchGroups.flatMap((group) => {
@@ -298,9 +315,21 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     ),
     [correspondenceMatches],
   );
-  const visibleClassicGroups = useMemo(
-    () => filterMultiSearchMergedResultsByLanguage(classicGroups, languageFilterModes),
-    [classicGroups, languageFilterModes],
+  const correspondenceListFilters = useMemo(() => ({
+    languageFilterModes,
+    readingStatusFilters: [],
+    textFilter: "",
+    readingStatusContext: {
+      libraryMangas: [],
+      bookmarkedSourceKeys: EMPTY_SOURCE_KEYS,
+      sourceProgressIndex: EMPTY_PROGRESS_INDEX,
+      viewHistoryRecordsById: EMPTY_HISTORY,
+    },
+  }), [languageFilterModes]);
+  const { results: visibleClassicGroups } = useAdaptiveMultiSearchListProcessing(
+    classicGroups,
+    [],
+    correspondenceListFilters,
   );
   const visibleChapterCards = useMemo(
     () => filterMultiSearchMergedResultsByLanguage(chapterCards, languageFilterModes),
@@ -332,15 +361,25 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
     ),
     [categoryFilteredRejectedCandidates, rejectedTextFilter],
   );
+  const rejectedSources = useMemo(
+    () => filteredRejectedCandidates.map((candidate) => candidate.source),
+    [filteredRejectedCandidates],
+  );
+  const { mergedResults: rejectedMergedResults } = useIncrementalMultiSearchMerge(
+    rejectedSources,
+    0,
+    mergeOptions,
+  );
+  const { results: visibleRejectedMergedResults } = useAdaptiveMultiSearchListProcessing(
+    rejectedMergedResults,
+    [],
+    correspondenceListFilters,
+  );
   const rejectedCardGroups = useMemo<RejectedCardGroup[]>(() => {
     const candidatesBySourceKey = new Map(filteredRejectedCandidates.map((candidate) => (
       [buildMultiSearchSourceIdentityKey(candidate.source), candidate]
     )));
-    const merged = mergeMultiSearchResults(
-      filteredRejectedCandidates.map((candidate) => candidate.source),
-      mergeOptions,
-    );
-    return filterMultiSearchMergedResultsByLanguage(merged, languageFilterModes).map((mergedResult) => {
+    return visibleRejectedMergedResults.map((mergedResult) => {
       const candidates = mergedResult.sources.flatMap((source) => {
         const candidate = candidatesBySourceKey.get(buildMultiSearchSourceIdentityKey(source));
         return candidate ? [candidate] : [];
@@ -354,7 +393,7 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       right.score - left.score
       || left.result.title.localeCompare(right.result.title)
     ));
-  }, [filteredRejectedCandidates, languageFilterModes, mergeOptions]);
+  }, [filteredRejectedCandidates, visibleRejectedMergedResults]);
   const visibleRejectedCardGroups = rejectedCardGroups.slice(0, rejectedVisibleLimit);
   const acceptedRejectedCount = countAcceptedMangaCorrespondenceRejections(result);
   const acceptedSearchSeedCount = rejectedCandidates.filter((candidate) => (
@@ -474,9 +513,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       scope: mode,
       preserveMatchOverrides: mode === "group" && !replaceMatchOverrides,
     });
-    const resultCount = getEffectiveMangaCorrespondenceMatches(
-      nextResult,
-      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    const resultCount = includeMangaCorrespondenceReferenceMatch(
+      input,
+      getEffectiveMangaCorrespondenceMatches(
+        nextResult,
+        input?.reference.title || job?.metadata.primaryTerm || "Manga",
+      ),
     ).length;
     const saved = await window.api?.saveBackgroundSearchResult?.({
       jobId: backgroundSearchJobId,
@@ -558,9 +600,12 @@ export default function MangaCorrespondenceView({ backgroundSearchJobId, resultO
       chapter,
       useAsSearchSeed,
     });
-    const resultCount = getEffectiveMangaCorrespondenceMatches(
-      nextResult,
-      input?.reference.title || job?.metadata.primaryTerm || "Manga",
+    const resultCount = includeMangaCorrespondenceReferenceMatch(
+      input,
+      getEffectiveMangaCorrespondenceMatches(
+        nextResult,
+        input?.reference.title || job?.metadata.primaryTerm || "Manga",
+      ),
     ).length;
     const saved = await window.api?.saveBackgroundSearchResult?.({
       jobId: backgroundSearchJobId,

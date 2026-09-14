@@ -18,6 +18,7 @@ Les filtres de bibliothèque, favoris, historique et tags similaires sont des re
 - `fetchResolvedScraperListingPage` exécute une page Accueil/Recherche/Auteur/Tag : requête, fin de pagination, parsing, candidates de miniatures et enrichissement optionnel des fiches.
 - `fetchScraperPageWithRetry` applique l'attente et les retries de façon identique.
 - `processScraperListingPage` construit les cards, ajoute leur tag de provenance, détecte et filtre les langues puis calcule les variantes romanisées.
+- Lorsqu'un module de listing configure un sélecteur de lien de fiche, une card qui ne fournit pas ce lien est rejetée. Cela empêche notamment une page générique ou redirigée de faire remonter des encarts éditoriaux impossibles à ouvrir comme résultats d'auteur.
 - `enrichScraperListingSourcesWithCardDetails` applique l'enrichissement de fiche et recalcule les métadonnées romanisées. Les nouveautés et les correspondances manga l'utilisent après leur propre présélection légère.
 - `buildScraperSearchResultIdentity` et les helpers associés assurent la même déduplication dans la multi-recherche, les favoris et l'arrière-plan.
 - `resolveScraperCardDetails` charge et extrait une fiche sans valider ses images. Son cache de promesses fusionne les demandes simultanées et réutilise les fiches entre termes, tags et sources pendant une exécution.
@@ -31,6 +32,10 @@ Tous les moteurs paginés utilisent le préchargeur du contexte avec au plus une
 ## Parité premier plan / arrière-plan
 
 Les moteurs réseau complets vivent dans `src/renderer/searchEngines/`. `searchEngineRegistry.ts` ne fait que sélectionner le moteur canonique d'un job d'arrière-plan, tandis que les hooks de premier plan appellent directement ce même moteur :
+
+Le worker Electron installe `DOMParser`, `Document` et `Element` depuis LinkeDOM avant d'exécuter
+ces moteurs. Les sélecteurs CSS et regex disposent ainsi des mêmes primitives DOM que dans le
+renderer, notamment lors de l'enrichissement des cards par leur fiche.
 
 - `runMultiSearchEngine` pour la multi-recherche ;
 - `runScraperAuthorSearchEngine` pour une page auteur directe ;

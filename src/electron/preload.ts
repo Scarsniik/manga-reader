@@ -48,6 +48,21 @@ import type {
     UpdateBackgroundSearchRequest,
 } from "../shared/backgroundSearch";
 import type {
+    ForegroundSearchSnapshotEvent,
+    RunForegroundListingSearchRequest,
+    RunForegroundMultiSearchRequest,
+} from "../shared/searchWorker";
+import type {
+    BackendMultiSearchListRequest,
+    BackendMultiSearchListResponse,
+    BackendMultiSearchMergeResponse,
+    BackendPotentialMatchRequest,
+    BackendPotentialMatchResponse,
+    BackendVisualMultiSearchRequest,
+    BackendVisualMultiSearchResponse,
+    MultiSearchMergeWorkerRequest,
+} from "../renderer/components/MultiSearch/multiSearchMergeWorkerProtocol";
+import type {
     ScraperLatestDiagnosticEventRequest,
     ScraperLatestDiagnosticFinishRequest,
     ScraperLatestDiagnosticStartRequest,
@@ -382,6 +397,61 @@ contextBridge.exposeInMainWorld('api', {
     getBackgroundSearchQueue: () => ipcRenderer.invoke("background-search-list"),
     getBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-get", jobId),
     claimBackgroundSearchJob: (jobId: string) => ipcRenderer.invoke("background-search-claim", jobId),
+    runBackgroundSearchWorker: (jobId: string) => ipcRenderer.invoke("background-search-worker-run", jobId),
+    runForegroundMultiSearchWorker: (request: RunForegroundMultiSearchRequest) => (
+        ipcRenderer.invoke("foreground-multi-search-worker-run", request)
+    ),
+    runForegroundListingSearchWorker: (request: RunForegroundListingSearchRequest) => (
+        ipcRenderer.invoke("foreground-listing-search-worker-run", request)
+    ),
+    runSearchListingPageWorker: (request: { executionId: string; options: unknown }) => (
+        ipcRenderer.invoke("search-listing-page-worker-run", request)
+    ),
+    onSearchListingPageProgress: (
+        callback: (event: { executionId: string; progress: unknown }) => void,
+    ) => createIpcSubscription("search-listing-page-progress", callback),
+    runBackgroundSearchAutomationWorker: (request: {
+        action:
+          | "importLinkedAuthorSearchIntoManga"
+          | "automaticallyReuseExistingAuthorSearch"
+          | "refreshMangaSearchesUsingAuthor";
+        options?: unknown;
+        jobId?: string;
+    }) => ipcRenderer.invoke("background-search-automation-worker-run", request),
+    cancelSearchWorker: (executionId: string) => ipcRenderer.invoke("search-worker-cancel", executionId),
+    cancelSearchWorkerScraper: (executionId: string, scraperId: string) => (
+        ipcRenderer.invoke("search-worker-cancel-scraper", executionId, scraperId)
+    ),
+    onSearchWorkerSnapshot: (callback: (event: ForegroundSearchSnapshotEvent) => void) => (
+        createIpcSubscription("search-worker-snapshot", callback)
+    ),
+    runMultiSearchMergeWorker: (sessionId: string, request: MultiSearchMergeWorkerRequest) => (
+        ipcRenderer.invoke("multi-search-merge-worker-run", sessionId, request)
+    ),
+    disposeMultiSearchMergeWorker: (sessionId: string) => (
+        ipcRenderer.invoke("multi-search-merge-worker-dispose", sessionId)
+    ),
+    onMultiSearchMergeWorkerProgress: (
+        callback: (event: BackendMultiSearchMergeResponse) => void,
+    ) => createIpcSubscription("multi-search-merge-worker-progress", callback),
+    runMultiSearchVisualWorker: (
+        sessionId: string,
+        request: BackendVisualMultiSearchRequest,
+    ): Promise<BackendVisualMultiSearchResponse> => (
+        ipcRenderer.invoke("multi-search-visual-worker-run", sessionId, request)
+    ),
+    runMultiSearchListWorker: (
+        sessionId: string,
+        request: BackendMultiSearchListRequest,
+    ): Promise<BackendMultiSearchListResponse> => (
+        ipcRenderer.invoke("multi-search-list-worker-run", sessionId, request)
+    ),
+    runPotentialMatchWorker: (
+        sessionId: string,
+        request: BackendPotentialMatchRequest,
+    ): Promise<BackendPotentialMatchResponse> => (
+        ipcRenderer.invoke("potential-match-worker-run", sessionId, request)
+    ),
     updateBackgroundSearch: (request: UpdateBackgroundSearchRequest) => ipcRenderer.invoke("background-search-update", request),
     completeBackgroundSearch: (request: CompleteBackgroundSearchRequest) => ipcRenderer.invoke("background-search-complete", request),
     saveBackgroundSearchResult: (request: SaveBackgroundSearchResultRequest) => ipcRenderer.invoke("background-search-save-result", request),

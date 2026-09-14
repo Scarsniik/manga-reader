@@ -51,13 +51,16 @@ Cliquer sur une miniature l'agrandit dans une surcouche sans ouvrir ni initialis
 Cette surcouche repose sur le composant réutilisable `ImageLightbox`, dont le zoom initial, les
 bornes de zoom, le pas, la molette, les contrôles et les comportements de fermeture sont paramétrables.
 
-Les métadonnées de la fiche détaillée sont chargées à la demande. Les couvertures déjà connues des
-fiches suivantes sont préchargées en priorité, décodées puis conservées en mémoire pendant la session ;
-les détails, les miniatures et les correspondances potentielles suivent ensuite. Les correspondances
-sont d'abord calculées avec les informations de la card, puis affinées dès que les détails préchargés
-sont disponibles. Le réglage `Fiches suivantes à précharger` choisit cette profondeur de `0` à `20`
-(`2` par défaut). Si un chargement échoue, les informations déjà présentes dans la card restent
-utilisables.
+Les métadonnées de la fiche détaillée sont chargées à la demande. Seule la couverture déjà connue de
+la fiche immédiatement suivante est préchargée sans attendre. Chaque fiche supplémentaire attend un
+nouveau créneau d'inactivité du renderer ; sa galerie est bornée à six miniatures préchargées avec au
+plus deux décodages simultanés. Les images hors écran utilisent le chargement et le décodage différés.
+Changer de fiche annule la file précédente et libère les images qui ne sont plus dans la fenêtre de
+préchargement. Les correspondances potentielles et leur romanisation sont calculées dans un worker
+backend persistant : les collections de lecture, bookmarks et listes ne lui sont transmises qu'une fois
+par révision, puis seules les fiches nouvelles ou enrichies sont traitées. Le réglage
+`Fiches suivantes à précharger` choisit cette profondeur de `0` à `20` (`2` par défaut). Si un
+chargement échoue, les informations déjà présentes dans la card restent utilisables.
 
 ### Review depuis une vue auteur par série
 
@@ -69,9 +72,10 @@ chapitres dans leur ordre d'affichage. Des actions séparées permettent de pass
 précédente ou suivante et d'ouvrir sa correspondance dans un nouvel onglet workspace en
 arrière-plan.
 
-Le résumé des langues est construit à partir des cards déjà chargées. Dans ce mode, seule la fiche
-courante charge ses détails, sa couverture, ses miniatures et ses correspondances potentielles ; les
-fiches suivantes ne sont pas préchargées, quelle que soit la profondeur configurée. Une fiche déjà
+Le résumé des langues est construit à partir des cards déjà chargées. Dans ce mode, les fiches
+suivantes utilisent la même profondeur de préchargement configurable que la review classique. La
+couverture connue du prochain chapitre est lancée immédiatement, puis les détails, les miniatures et
+les correspondances potentielles sont chargés pendant les créneaux d'inactivité. Une fiche déjà
 visitée reste en cache pendant la session.
 
 Le groupe racine `One Shot` n'est pas une série. Ses œuvres sont injectées comme fiches indépendantes

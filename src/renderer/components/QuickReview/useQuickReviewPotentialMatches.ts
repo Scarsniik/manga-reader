@@ -19,7 +19,6 @@ type Options = {
   enabled: boolean;
   items: QuickReviewItem[];
   onOpenError: (message: string | null) => void;
-  prefetchCountOverride?: number;
 };
 
 type Result = ScraperPotentialMangaMatchState & {
@@ -41,14 +40,12 @@ export default function useQuickReviewPotentialMatches({
   enabled,
   items,
   onOpenError,
-  prefetchCountOverride,
 }: Options): Result {
   const { params } = useParams();
   const item = items[currentIndex] ?? null;
   const scraper = item?.primarySource.scraper ?? null;
   const candidates = usePotentialMangaMatchCandidates({ scraper, enabled });
-  const prefetchCount = prefetchCountOverride
-    ?? normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
+  const prefetchCount = normalizeQuickReviewPrefetchCount(params?.quickReviewPrefetchCount);
   const inputs = React.useMemo(() => buildQuickReviewPotentialMatchInputs({
     currentIndex,
     detailsByItemId,

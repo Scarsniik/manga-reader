@@ -239,7 +239,7 @@ export type ListingSearchExecutionOptions = {
 export type ListingSearchEngineKind = Extract<
   BackgroundSearchKind,
   "scraperAuthor" | "latestSources" | "latestAuthors" | "authorFavoriteRefresh"
->;
+> | "tagFavorites";
 
 export type ListingSearchSnapshotCallback = (
   result: ListingBackgroundResult,
@@ -1421,4 +1421,13 @@ export const runAuthorFavoriteRefreshSearchEngine = (
   options: ListingSearchExecutionOptions = {},
 ): Promise<ListingBackgroundResult> => runListingEngineWithOptionalDiagnostics(
   "authorFavoriteRefresh", input, signal, onSnapshot, options,
+);
+
+export const runTagFavoriteSearchEngine = (
+  input: ListingBackgroundInput,
+  signal: AbortSignal,
+  onSnapshot: ScraperLatestSnapshotCallback,
+  options: ListingSearchExecutionOptions = {},
+): Promise<ListingBackgroundResult> => runListingEngineWithOptionalDiagnostics(
+  "tagFavorites", input, signal, onSnapshot, options,
 );

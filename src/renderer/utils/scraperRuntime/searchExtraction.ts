@@ -88,6 +88,9 @@ const buildSearchResultItem = (
   const detailUrlValue = config.detailUrlSelector
     ? extractUrlFieldSelectorValuesFromRoot(item, config.detailUrlSelector)[0]
     : undefined;
+  if (config.detailUrlSelector && !detailUrlValue) {
+    return null;
+  }
   const authorUrlValues = config.authorUrlSelector
     ? uniqueValues(extractUrlFieldSelectorValuesFromRoot(item, config.authorUrlSelector))
     : [];

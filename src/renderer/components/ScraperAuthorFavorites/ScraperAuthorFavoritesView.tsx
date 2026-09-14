@@ -7,16 +7,9 @@ import {
 import buildConfirmActionModal from "@/renderer/components/Modal/modales/ConfirmActionModal";
 import {
   buildMultiSearchResultLanguageFilterCodes,
-  filterMultiSearchMergedResultsByLanguage,
-  getMultiSearchSourceLanguageValues,
 } from "@/renderer/components/MultiSearch/multiSearchLanguageFilters";
-import { filterMultiSearchMergedResultsByText } from "@/renderer/components/MultiSearch/multiSearchResultFilters";
+import { flattenMultiSearchSources } from "@/renderer/components/MultiSearch/multiSearchUtils";
 import {
-  flattenMultiSearchSources,
-  mergeMultiSearchResults,
-} from "@/renderer/components/MultiSearch/multiSearchUtils";
-import {
-  filterMultiSearchMergedResultsByReadingStatus,
   toggleMultiSearchReadingStatusFilter,
 } from "@/renderer/components/MultiSearch/multiSearchReadingStatusFilters";
 import type {
@@ -37,10 +30,6 @@ import {
   writeScraperAuthorFavoriteRouteState,
   writeScraperRouteState,
 } from "@/renderer/utils/scraperBrowserNavigation";
-import {
-  buildSearchResultViewHistoryIdentity,
-  sortByScraperViewHistoryNewState,
-} from "@/renderer/utils/scraperViewHistory";
 import ScraperSourceFavoritesList from "@/renderer/components/ScraperSourceFavorites/ScraperSourceFavoritesList";
 import useScraperSourceFavoriteResults from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteResults";
 import useScraperSourceFavoriteSelection from "@/renderer/components/ScraperSourceFavorites/useScraperSourceFavoriteSelection";
@@ -68,6 +57,7 @@ import type { ScraperAuthorWorkspaceTarget } from "@/renderer/types/workspace";
 import { openWorkspaceTarget } from "@/renderer/utils/workspaceTargets";
 import { buildAuthorListingSearchInput } from "@/renderer/searchEngines/authorListingSearchInput";
 import type { AuthorFavoriteSourceRun } from "@/renderer/components/ScraperAuthorFavorites/useAuthorFavoriteRuns";
+import useIncrementalMultiSearchMerge from "@/renderer/components/MultiSearch/useIncrementalMultiSearchMerge";
 
 type Props = {
   scrapers: ScraperRecord[];
@@ -305,6 +295,11 @@ export default function ScraperAuthorFavoritesView({
   }), [
     params?.multiSearchMergedTitleLanguagePriority,
   ]);
+  const { mergedResults: workerMergedResults } = useIncrementalMultiSearchMerge(
+    loadedSources,
+    0,
+    mergeOptions,
+  );
   const mergedResults = useMemo(
     () => hasSessionEnrichments
       ? mergeAuthorCorrespondenceSessionResults(
@@ -312,48 +307,12 @@ export default function ScraperAuthorFavoritesView({
         favoriteOverrideMangaEnrichments,
         mergeOptions,
       )
-      : mergeMultiSearchResults(loadedSources, mergeOptions),
-    [combinedBaseSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments, loadedSources, mergeOptions],
+      : workerMergedResults,
+    [combinedBaseSources, favoriteOverrideMangaEnrichments, hasSessionEnrichments, mergeOptions, workerMergedResults],
   );
   const resultLanguageCodes = useMemo(
     () => buildMultiSearchResultLanguageFilterCodes(loadedSources),
     [loadedSources],
-  );
-  const visibleMergedResults = useMemo(
-    () => filterMultiSearchMergedResultsByText(
-      filterMultiSearchMergedResultsByReadingStatus(
-        filterMultiSearchMergedResultsByLanguage(mergedResults, languageFilterModes),
-        readingStatusFilters,
-        {
-          libraryMangas,
-          bookmarkedSourceKeys,
-          sourceProgressIndex,
-          viewHistoryRecordsById,
-        },
-      ),
-      debouncedResultTextFilter,
-      getMultiSearchSourceLanguageValues,
-    ),
-    [
-      bookmarkedSourceKeys,
-      debouncedResultTextFilter,
-      languageFilterModes,
-      libraryMangas,
-      mergedResults,
-      readingStatusFilters,
-      sourceProgressIndex,
-      viewHistoryRecordsById,
-    ],
-  );
-  const displayedMergedResults = useMemo(
-    () => sortByScraperViewHistoryNewState(
-      visibleMergedResults,
-      (result) => result.sources.map((source) => buildSearchResultViewHistoryIdentity(source.scraper.id, source.result)),
-      viewHistoryRecordsById,
-      newSourceHistoryIds,
-      showUnseenFirst,
-    ),
-    [newSourceHistoryIds, showUnseenFirst, viewHistoryRecordsById, visibleMergedResults],
   );
 
   useEffect(() => {
@@ -668,13 +627,14 @@ export default function ScraperAuthorFavoritesView({
         favorite={selectedFavorite}
         scrapers={scrapers}
         runs={effectiveRuns}
-        displayedResults={displayedMergedResults}
-        visibleResultCount={visibleMergedResults.length}
+        displayedResults={mergedResults}
         loadedSourceCount={loadedSources.length}
         resultLanguageCodes={resultLanguageCodes}
         languageFilterModes={languageFilterModes}
         readingStatusFilters={readingStatusFilters}
         textFilter={resultTextFilter}
+        debouncedTextFilter={debouncedResultTextFilter}
+        showUnseenFirst={showUnseenFirst}
         loading={attachedSearch.attached
           ? attachedSearch.status === "queued" || attachedSearch.status === "running"
           : sessionOverrideActive
